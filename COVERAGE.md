@@ -30,7 +30,7 @@ Features and pass tests are defined in docs/PRD.md §6; this file only tracks ev
 | CC-22 | GitHub Actions (claude-code-action) | todo | |
 | CC-23 | Agent SDK (Python) | todo | |
 | CC-24 | Scheduled tasks | todo | |
-| CC-25 | Settings and permissions | todo | FOUND-0 proposes .claude/settings.json (deny .env read/edit/write, allow make/uv/pnpm/compose, ask before push). It is pending your review: Claude cannot write its own permission settings |
+| CC-25 | Settings and permissions | partial | 2026-11-03: project `.claude/settings.json` (deny .env read/edit/write, allow make/uv/pnpm/compose, ask before push). In auto mode, Claude's Read of `.env` and Write of `.env.probe` were refused ("denied by your permission settings"). Separately, the auto-mode classifier blocked Claude from writing its own settings file, so the user added it. Still to do: test in the other modes, a precedence demo with a local override, bypassPermissions in a sandbox only |
 | CC-26 | Checkpointing and /rewind | todo | |
 | CC-27 | Sandboxed Bash | todo | |
 | CC-28 | Bundled review skills | todo | |
