@@ -46,17 +46,26 @@ docs/            PRD.md, images/, decisions/
 .github/workflows/
 ```
 
-## Commands (filled in by the scaffolding task FOUND-0; keep this list current)
+## Commands (keep this list current; `make` lists them)
 ```
-make up | make down   # docker compose stack (postgres+pgvector)
-make test             # all unit/contract tests (py + ts)
-make lint             # ruff, mypy, eslint, tsc
-make data             # regenerate synthetic data (seeded, deterministic)
-make ingest           # (re)ingest corpus into the index; idempotent
-make eval             # retrieval + answer evals, writes evals/reports/
-make eval-gate        # fails if any metric regresses beyond tolerance
-make e2e              # Playwright journeys against the local stack
+make setup            # uv sync + pnpm install; creates .env from env.example
+make up | make down   # docker compose stack (Postgres 16 + pgvector), waits for healthy
+make dev              # gateway on :8000 + portal on :5173 (Vite proxies /api)
+make fmt              # ruff format + autofix
+make lint             # ruff, ruff format --check, mypy (strict), eslint, tsc
+make test             # unit tests: pytest (excludes integration) + vitest
+make test-integration # pytest -m integration (needs `make up`)
+make ci               # lint + test + test-integration, the same steps as GitHub CI
 ```
+Added later: `make data` (FOUND-1), `make ingest` (RAG-01), `make eval` / `make eval-gate`
+(RAG-12), `make e2e` with Playwright (SA-02 crude).
+
+Toolchain notes:
+- pnpm runs through corepack (`corepack pnpm …`, pinned in package.json); there is no global pnpm.
+- TypeScript is pinned to 6.0.x because typescript-eslint does not support TS 7 yet.
+- A new Python service under services/ must also be added to the root pyproject's
+  `dependencies` and `[tool.uv.sources]`, otherwise `uv sync` uninstalls it.
+- Docker Desktop's CLI is in `~/.docker/bin`; add it to PATH if `docker` isn't found.
 
 ## Hard rules (never break; tests enforce them)
 1. Card data never enters the model. No PAN/CVV in prompts, model context, tool

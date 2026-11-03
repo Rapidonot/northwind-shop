@@ -1,0 +1,1 @@
+"""Northwind portal API gateway."""

@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: pgvector/pgvector:pg16
+        env:
+          # Throwaway credentials for an ephemeral CI database; not a secret.
+          POSTGRES_USER: northwind
+          POSTGRES_PASSWORD: northwind-ci
+          POSTGRES_DB: northwind
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U northwind -d northwind"
+          --health-interval 2s --health-timeout 3s --health-retries 30
+    env:
+      DATABASE_URL: postgresql://northwind:northwind-ci@localhost:5432/northwind
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
+      - run: uv sync --locked
+      - name: Install pgvector extension (compose does this via infra/db/init)
+        run: psql "$DATABASE_URL" -f infra/db/init/001-extensions.sql
+      - run: uv run ruff check
+      - run: uv run ruff format --check
+      - run: uv run mypy services
+      - run: uv run pytest
+      - run: uv run pytest -m integration
+
+  portal:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -r lint
+      - run: pnpm -r typecheck
+      - run: pnpm -r test
