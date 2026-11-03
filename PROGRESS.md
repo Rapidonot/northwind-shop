@@ -17,7 +17,7 @@ from PRD P5 because hard rules 2 and 7 are cheaper to build in than to retrofit.
 
 | # | ID | Scope in Phase 1 | Status | Evidence |
 |---|----|------------------|--------|----------|
-| 0 | FOUND-0 (no PRD ID) | Walking skeleton: uv workspace, pnpm portal shell, docker compose (pg16+pgvector), Makefile, CI running lint+test, .gitignore/.env.example, deny-.env permission | todo | |
+| 0 | FOUND-0 (no PRD ID) | Walking skeleton: uv workspace, pnpm portal shell, docker compose (pg16+pgvector), Makefile, CI running lint+test, .gitignore/.env.example, deny-.env permission | done | 2026-11-03: `make ci` passes locally (ruff, mypy strict, eslint, tsc, pytest 1 unit + 1 integration, vitest 3); `/api/healthz` reports db ok + pgvector 0.8.7 through the Vite proxy, and db unavailable with the stack down. Fresh clone passes `make setup && make up && make ci`. GitHub CI green: https://github.com/Rapidonot/northwind-shop/actions/runs/41657414233 (PR #1). Template is `env.example` (no dot, so the .env deny rule doesn't block it). `.claude/settings.json` was added by the user (Claude may not write its own permissions); Claude's Read of `.env` and Write of `.env.probe` were both refused by it |
 | 1 | FOUND-1 (no PRD ID) | Synthetic data generator (seeded): ~200 products / ~800 variants (apparel+home), reviews (some containing injection text), size & care guides, returns/shipping policies per region, FAQs, a few internal-only docs; live price/stock tables | todo | |
 | 2 | RAG-01 | Versioned, idempotent ingestion; metadata on 100% of chunks (category, brand, size, colour, material, price band, region, updated, visibility); no exact prices in chunk text | todo | |
 | 3 | RAG-12 (partial) | Harness: recall@k, MRR, groundedness, answer relevance. Starter set of ~100 labelled queries, including unanswerable and adversarial ones. Every item has `reviewed_by: human \| model`; ≥25 are human-reviewed, and all unanswerable and adversarial items must be among them (a schema test enforces both). Record the dense-only baseline; add `make eval-gate` and a CI job. Rest: grow to 300 queries, calibrate the judge on human labels | todo | |
@@ -63,3 +63,4 @@ portal = Vite + React; follow-up backlog = this file.
 ## Log
 
 - 2026-11-03: PRD converted to docs/PRD.md (figures in docs/images/); CLAUDE.md and Phase 1 scope written.
+- 2026-11-03: FOUND-0 walking skeleton: uv workspace + gateway healthz, Vite/React portal shell, compose Postgres+pgvector, Makefile, GitHub CI, COVERAGE.md.

@@ -1,0 +1,49 @@
+[project]
+name = "northwind-shop"
+version = "0.0.0"
+requires-python = ">=3.12,<3.13"
+# Every workspace service is listed here so `uv sync` installs all of them.
+# When you add services/<name>/, add it here and under [tool.uv.sources].
+dependencies = ["northwind-gateway"]
+
+[tool.uv.sources]
+northwind-gateway = { workspace = true }
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = ["services/*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "S"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["northwind_*"]
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**" = ["S101"]  # assert is how pytest works
+
+[tool.mypy]
+strict = true
+python_version = "3.12"
+
+[tool.pytest.ini_options]
+testpaths = ["services"]
+addopts = ["--strict-markers", "-m", "not integration", "--import-mode=importlib"]
+markers = [
+    "req(id): the PRD requirement ID (e.g. RAG-03) whose acceptance criterion this test proves",
+    "integration: needs the local stack (make up); run with `make test-integration`",
+]
+
+[dependency-groups]
+dev = [
+    "httpx2>=2.16.0",
+    "mypy>=2.4.1",
+    "pytest>=9.2.0",
+    "ruff>=0.17.3",
+]
