@@ -46,6 +46,7 @@ from northwind_llm_replay.ledger import BudgetExceededError, Ledger, Reservation
 from northwind_llm_replay.pricing import UnpricedModelError, price_for, worst_case_usd
 from northwind_llm_replay.scrub import match_key, request_hash, scrub
 
+MODES = ("replay", "record", "live")
 DEFAULT_UPSTREAM = "https://api.anthropic.com"
 # Paths the proxy will send upstream. Anything else is refused until a task needs it.
 PRICED_PATH = "/v1/messages"
@@ -54,6 +55,9 @@ FREE_PATHS = frozenset({"/v1/messages/count_tokens"})
 FORWARD_HEADERS = ("anthropic-version", "anthropic-beta", "content-type", "accept", "user-agent")
 # Inbound header values written to the request log. Names of all headers are logged.
 LOGGED_HEADER_VALUES = ("anthropic-version", "anthropic-beta", "content-type", "user-agent")
+# Failures that prove the request never left: the only ones released at zero cost. After the
+# connection opens the request may have been billed, so anything else is charged the worst case.
+NOT_SENT_ERRORS = (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout)
 
 
 def load_api_key(env_file: Path) -> str:
@@ -76,6 +80,11 @@ class ProxyConfig:
     match: str = "hash"  # hash | sequence
     key_loader: Callable[[], str] | None = None
     secret_for_scan: str | None = None  # the real key, if known, for fragment scanning
+
+    def __post_init__(self) -> None:
+        # handle() sends anything but replay upstream, so a typo must not get that far.
+        if self.mode not in MODES:
+            raise ValueError(f"LLM_MODE must be one of {MODES}, not {self.mode!r}")
 
 
 @dataclass
@@ -197,7 +206,10 @@ class Proxy:
 
     def _client_get(self) -> httpx.AsyncClient:
         if self._client is None:
-            self._client = httpx.AsyncClient(timeout=httpx.Timeout(600.0, connect=10.0))
+            # trust_env=False: the real key must not route through an HTTPS_PROXY from the env.
+            self._client = httpx.AsyncClient(
+                timeout=httpx.Timeout(600.0, connect=10.0), trust_env=False
+            )
         return self._client
 
     def _replay(self, c: Cassette) -> Response:
@@ -359,14 +371,7 @@ class Proxy:
         try:
             resp = await client.send(upstream, stream=True)
         except httpx.HTTPError as e:
-            if reservation is not None:
-                await self._settle(reservation, {})  # connection never produced a response
-            entry["outcome"] = "upstream-error"
-            entry["error"] = type(e).__name__
-            self._log(entry)
-            return error_response(
-                502, "transient", True, f"upstream request failed: {type(e).__name__}"
-            )
+            return await self._upstream_failed(e, reservation, entry)
 
         content_type = resp.headers.get("content-type", "application/json")
         if "text/event-stream" in content_type:
@@ -375,8 +380,12 @@ class Proxy:
                 status_code=resp.status_code,
                 media_type="text/event-stream",
             )
-        data = await resp.aread()
-        await resp.aclose()
+        try:
+            data = await resp.aread()
+        except httpx.HTTPError as e:
+            return await self._upstream_failed(e, reservation, entry)
+        finally:
+            await resp.aclose()
         text = data.decode("utf-8", errors="replace")
         usage: dict[str, Any] | None = None
         try:
@@ -385,10 +394,8 @@ class Proxy:
         except json.JSONDecodeError:
             parsed = None
         if reservation is not None:
-            # A clean error response (4xx/5xx with a body) is not billed; a 200 without usage
-            # is charged at the worst case.
-            settle_usage = usage if resp.status_code == 200 else (usage or {})
-            entry["cost_usd"] = await self._settle(reservation, settle_usage)
+            # Any response without usage, error statuses included, is charged the worst case.
+            entry["cost_usd"] = await self._settle(reservation, usage or None)
         entry["status"] = resp.status_code
         entry["outcome"] = "live"
         if self.cfg.mode == "record" and resp.status_code == 200:
@@ -397,6 +404,19 @@ class Proxy:
             )
         self._log(entry)
         return Response(content=data, status_code=resp.status_code, media_type=content_type)
+
+    async def _upstream_failed(
+        self, e: httpx.HTTPError, reservation: Reservation | None, entry: dict[str, Any]
+    ) -> Response:
+        if reservation is not None:
+            usage: dict[str, Any] | None = {} if isinstance(e, NOT_SENT_ERRORS) else None
+            entry["cost_usd"] = await self._settle(reservation, usage)
+        entry["outcome"] = "upstream-error"
+        entry["error"] = type(e).__name__
+        self._log(entry)
+        return error_response(
+            502, "transient", True, f"upstream request failed: {type(e).__name__}"
+        )
 
     async def _settle(self, res: Reservation, usage: dict[str, Any] | None) -> float:
         ledger = self.cfg.ledger

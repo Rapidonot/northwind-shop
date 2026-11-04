@@ -7,7 +7,7 @@ would load from the key file.
 from __future__ import annotations
 
 import json
-from collections.abc import Iterator
+from collections.abc import AsyncIterator, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -16,6 +16,7 @@ import httpx2 as httpx
 import pytest
 
 from northwind_common.llm import PLACEHOLDER_API_KEY, anthropic_client
+from northwind_llm_replay import cli
 from northwind_llm_replay.ledger import Ledger
 from northwind_llm_replay.proxy import ProxyConfig, RunningProxy, encode_test_id
 from northwind_llm_replay.scripted import ScriptedLLM
@@ -177,15 +178,126 @@ def test_stream_without_final_usage_is_charged_worst_case_and_not_recorded(rig: 
 
 
 @pytest.mark.req("FOUND-2")
-def test_upstream_error_response_is_not_billed_or_recorded(rig: Rig) -> None:
+def test_upstream_error_response_is_charged_worst_case_and_not_recorded(rig: Rig) -> None:
     rig.upstream.reply_raw(
         529, json.dumps({"type": "error", "error": {"type": "overloaded_error"}})
     )
     with rig.proxy("record") as p:
         r = post(p.url, req_body())
+        reserved = p.proxy.state.calls[-1]["reserved_usd"]
     assert r.status_code == 529
-    assert rig.ledger.totals().spent_usd == 0
+    totals = rig.ledger.totals()
+    assert totals.spent_usd == reserved > 0
+    assert totals.outstanding_usd == 0
     assert not list((rig.tmp / "cassettes").rglob("*.json"))
+
+
+@pytest.mark.req("FOUND-2")
+@pytest.mark.parametrize("status", [200, 529])
+def test_empty_usage_is_charged_worst_case(rig: Rig, status: int) -> None:
+    """An empty `usage` says nothing about the cost, so it must not settle at $0."""
+    rig.upstream.reply_raw(status, json.dumps({"type": "message", "usage": {}}))
+    with rig.proxy("live") as p:
+        post(p.url, req_body())
+        reserved = p.proxy.state.calls[-1]["reserved_usd"]
+    assert rig.ledger.totals().spent_usd == reserved > 0
+
+
+class BrokenBody(httpx.AsyncByteStream):
+    async def __aiter__(self) -> AsyncIterator[bytes]:
+        yield b'{"id":'
+        raise httpx.ReadError("connection lost mid-body")
+
+
+def failing_upstream(error: type[httpx.RequestError] | None) -> httpx.AsyncClient:
+    """An upstream client that raises `error`, or with None a 200 whose body breaks off."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if error is not None:
+            raise error("scripted failure", request=request)
+        return httpx.Response(
+            200, headers={"content-type": "application/json"}, stream=BrokenBody()
+        )
+
+    return httpx.AsyncClient(transport=httpx.MockTransport(handler))
+
+
+@pytest.mark.req("FOUND-2")
+@pytest.mark.req("NFR-16")
+@pytest.mark.parametrize(
+    ("error", "charged"),
+    [
+        (httpx.ConnectError, False),
+        (httpx.ConnectTimeout, False),
+        (httpx.PoolTimeout, False),
+        (httpx.ReadTimeout, True),
+        (httpx.ReadError, True),
+        (httpx.WriteError, True),
+        (httpx.RemoteProtocolError, True),
+        (None, True),
+    ],
+    ids=lambda v: v.__name__ if isinstance(v, type) else None,
+)
+def test_failed_upstream_call_is_charged_worst_case_unless_it_never_connected(
+    rig: Rig, error: type[httpx.RequestError] | None, charged: bool
+) -> None:
+    """Review #4: these all settled at $0, so billed retries went uncounted."""
+    with rig.proxy("record") as p:
+        p.proxy._client = failing_upstream(error)
+        r = post(p.url, req_body())
+        reserved = p.proxy.state.calls[-1]["reserved_usd"]
+    assert r.status_code == 502
+    assert r.json()["errorCategory"] == "transient"
+    assert r.json()["isRetryable"] is True
+    totals = rig.ledger.totals()
+    assert reserved > 0
+    assert totals.spent_usd == (reserved if charged else 0)
+    assert totals.outstanding_usd == 0
+    assert not list((rig.tmp / "cassettes").rglob("*.json"))
+
+
+@pytest.mark.req("FOUND-2")
+def test_upstream_client_ignores_proxy_settings_in_the_environment(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review A: with trust_env on, this call would go to the dead proxy and never arrive."""
+    for name in ("NO_PROXY", "no_proxy", "http_proxy", "https_proxy", "all_proxy"):
+        monkeypatch.delenv(name, raising=False)
+    for name in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"):
+        monkeypatch.setenv(name, "http://127.0.0.1:9")
+    rig.upstream.reply("direct")
+    with rig.proxy("record") as p:
+        r = httpx.post(
+            p.url + "/v1/messages",
+            json=req_body(),
+            headers=OK_HEADERS,
+            timeout=30,
+            trust_env=False,
+        )
+    assert r.status_code == 200
+    assert len(rig.upstream.requests) == 1
+
+
+@pytest.mark.req("FOUND-2")
+@pytest.mark.parametrize("mode", ["reply", "REPLAY", "", "off"])
+def test_unknown_llm_mode_is_an_error(
+    rig: Rig,
+    mode: str,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Review #3: anything but replay or record used to go upstream."""
+    with pytest.raises(ValueError, match="LLM_MODE must be one of"):
+        rig.proxy(mode)
+
+    def never_serve(*args: object, **kwargs: object) -> None:
+        raise AssertionError("the dev proxy started on an unknown LLM_MODE")
+
+    monkeypatch.setattr("northwind_llm_replay.proxy.RunningProxy", never_serve)
+    monkeypatch.setenv("LLM_MODE", mode)
+    monkeypatch.setenv("LLM_LEDGER_PATH", str(rig.tmp / "ledger.jsonl"))
+    assert cli.main(["serve"]) == 2
+    assert "LLM_MODE must be one of" in capsys.readouterr().err
 
 
 @pytest.mark.req("FOUND-2")
