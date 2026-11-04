@@ -19,9 +19,9 @@ import pytest
 from northwind_common.llm import anthropic_client
 from northwind_evals import cli
 from northwind_evals.answerers import Answerer, SingleShotAnswerer
-from northwind_evals.contexts import ContextChunk, SavedContext, save_contexts
+from northwind_evals.contexts import ContextChunk, SavedContext, load_contexts, save_contexts
 from northwind_evals.gate import Baseline, load_baseline, save_baseline
-from northwind_evals.items import MIN_HUMAN_REVIEWED, EvalItem
+from northwind_evals.items import MIN_HUMAN_REVIEWED, EvalItem, load_items
 from northwind_evals.judge import Judge
 from northwind_llm_replay.proxy import ProxyState
 from northwind_llm_replay.scripted import ScriptedLLM
@@ -501,7 +501,7 @@ def test_a_run_whose_cassette_the_scanner_refused_writes_no_candidate(
     monkeypatch.setenv("LLM_MODE", "record")
     monkeypatch.delenv("CI", raising=False)
     monkeypatch.setattr(cli, "LAST_RUN", rig.tmp / "last.json")
-    monkeypatch.setattr(cli, "_context_leaks", lambda contexts: [])
+    monkeypatch.setattr(cli, "_context_leaks", lambda contexts, items: [])
 
     @contextmanager
     def clients(mode: str) -> Iterator[tuple[Answerer, Judge, ProxyState]]:
@@ -518,3 +518,42 @@ def test_a_run_whose_cassette_the_scanner_refused_writes_no_candidate(
     monkeypatch.setattr(cli, "_clients", clients)
     assert cli.main(["run", "--slice", "all"]) == 1
     assert not cli.CANDIDATE.exists()
+
+
+@pytest.mark.parametrize(
+    "unsafe",
+    [
+        {"query": "my card is 4242424242424242"},
+        {"reference_facts": ("card 4242424242424242",)},
+    ],
+)
+def test_run_refuses_card_data_in_an_item_before_any_client_exists(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch, unsafe: dict[str, Any]
+) -> None:
+    rig.setup_one_item()
+    rig.write_items([item(**unsafe)])
+    monkeypatch.setenv("LLM_MODE", "record")
+    monkeypatch.delenv("CI", raising=False)
+    monkeypatch.setattr(cli, "_clients", None)
+    assert cli.main(["run", "--slice", "all"]) == 1
+    assert not cli.CANDIDATE.exists()
+
+
+def test_run_refuses_card_data_or_an_internal_source_in_a_context(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    rig.setup_one_item()
+    monkeypatch.setenv("LLM_MODE", "record")
+    monkeypatch.delenv("CI", raising=False)
+    monkeypatch.setattr(cli, "_clients", None)
+    chunk = ContextChunk("review:R1:0", "R1", "review", "email card 4242424242424242 now")
+    save_contexts(cli.CONTEXTS, [SavedContext("EV-1", "r", "idx", (chunk,))])
+    assert cli.main(["run", "--slice", "all"]) == 1
+    internal = ContextChunk("variant:P0009-BLK-REG-L:0", "P0009-BLK-REG-L", "variant", "text")
+    save_contexts(cli.CONTEXTS, [SavedContext("EV-1", "r", "idx", (internal,))])
+    assert cli.main(["run", "--slice", "all"]) == 1
+
+
+def test_the_committed_set_is_safe_to_send() -> None:
+    items = load_items(cli.ITEMS)
+    assert cli._context_leaks(load_contexts(cli.CONTEXTS), items) == []

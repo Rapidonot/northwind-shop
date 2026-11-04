@@ -57,6 +57,8 @@ FORWARD_HEADERS = ("anthropic-version", "anthropic-beta", "content-type", "accep
 LOGGED_HEADER_VALUES = ("anthropic-version", "anthropic-beta", "content-type", "user-agent")
 # Failures that prove the request never left: the only ones released at zero cost. After the
 # connection opens the request may have been billed, so anything else is charged the worst case.
+# Enough to find a cassette by prefix, and too short to hold a 13-digit run the PAN check flags.
+LOG_HASH_CHARS = 12
 NOT_SENT_ERRORS = (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout)
 
 
@@ -242,7 +244,7 @@ class Proxy:
             else ("bearer" if "authorization" in headers else None),
             "headers": {k: headers[k] for k in LOGGED_HEADER_VALUES if k in headers},
             "auth": auth_verdict(headers),
-            "hash": h,
+            "hash": h[:LOG_HASH_CHARS],
             "model": body.get("model") if isinstance(body, dict) else None,
             "max_tokens": body.get("max_tokens") if isinstance(body, dict) else None,
             "stream": bool(body.get("stream")) if isinstance(body, dict) else False,

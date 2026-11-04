@@ -14,6 +14,8 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Protocol
 
+from northwind_llm_replay.scan import scan_text
+
 ANSWER_CONTEXT_K = 5
 _VISIBILITY_FILES = (
     ("documents.jsonl", "doc_id"),
@@ -89,12 +91,13 @@ def internal_sources(fixtures: Path) -> frozenset[str]:
 def leaks(
     contexts: Mapping[str, SavedContext], internal: frozenset[str], canaries: frozenset[str]
 ) -> list[str]:
-    """Items whose saved context holds an internal source or a canary (hard rule 7)."""
+    """Items whose saved context holds an internal source, a canary, a card number or a key shape
+    (hard rules 1, 4, 7). Decoded text is scanned, so this sees what the model would see."""
     return [
         item_id
         for item_id, context in contexts.items()
         if any(
-            chunk.source_id in internal or any(canary in chunk.text for canary in canaries)
+            chunk.source_id in internal or scan_text(chunk.text, canaries=canaries)
             for chunk in context.chunks
         )
     ]

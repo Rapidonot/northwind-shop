@@ -68,7 +68,7 @@ def cmd_scan(args: argparse.Namespace) -> int:
         roots = [*EVAL_ROOTS, Path("cassettes"), localenv.ledger_path(), PROXY_LOG_DIR]
     secret = _secret(args.env_file)
     canaries = load_canaries(localenv.worktree_root(), required=True)
-    findings = scan_paths(roots, secret=secret, canaries=canaries)
+    findings = scan_paths(roots, secret=secret, canaries=canaries, ledger=localenv.ledger_path())
     for f in findings:
         print(f, file=sys.stderr)
     mode = "regex + key-fragment" if secret else "regex only (no key file)"

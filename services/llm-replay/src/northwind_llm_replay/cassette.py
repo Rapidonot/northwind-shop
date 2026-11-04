@@ -16,7 +16,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
-from northwind_llm_replay.scan import load_canaries, scan_text, without_known_ids
+from northwind_llm_replay.scan import load_canaries, scan_text, without_request_hash
 from northwind_llm_replay.scrub import canonical
 
 FORMAT = 1
@@ -94,7 +94,10 @@ class CassetteStore:
     def put(self, cassette: Cassette) -> Path:
         text = cassette.to_json()
         findings = scan_text(
-            without_known_ids(text), str(self.path_for(cassette.hash)), self._secret, self._canaries
+            without_request_hash(text),
+            str(self.path_for(cassette.hash)),
+            self._secret,
+            self._canaries,
         )
         if findings:
             kinds = sorted({f.kind for f in findings})

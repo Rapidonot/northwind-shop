@@ -20,14 +20,16 @@ from northwind_llm_replay import cli
 from northwind_llm_replay.cassette import Cassette, CassetteStore, DirtyCassetteError
 from northwind_llm_replay.ledger import Ledger
 from northwind_llm_replay.pricing import COST_DECIMALS, cost_usd, worst_case_usd
+from northwind_llm_replay.proxy import LOG_HASH_CHARS
 from northwind_llm_replay.scan import (
     ANSWER_KEY,
     load_canaries,
     luhn_ok,
     scan_paths,
     scan_text,
-    without_known_ids,
+    without_ledger_ids,
 )
+from northwind_llm_replay.scrub import request_hash
 
 pytestmark = pytest.mark.req("RAG-12")
 
@@ -269,13 +271,14 @@ def test_every_committed_cassette_cost_is_at_fixed_precision() -> None:
 
 # 32 hex characters holding a Luhn-valid 14-digit run, the shape that failed on the shared ledger.
 RUN = next(f"{n:014d}" for n in range(10**13, 10**13 + 100) if luhn_ok(f"{n:014d}"))
-HEX_ID = f"abcdef{RUN}abcdefabcdef"[:32]
+HEX_ID = f"abcdef{RUN}abcdefabcdef"
 HEX_HASH = (HEX_ID * 2)[:64]
 PAN = "4242424242424242"
+PADDED_PAN = f"{PAN}abcdefabcdefabcd"  # a card number padded to the exact shape of an ID
 
 
-def ledger_file(tmp_path: Path, record: dict[str, object]) -> Path:
-    path = tmp_path / "ledger.jsonl"
+def records_file(tmp_path: Path, record: dict[str, object], name: str = "ledger.jsonl") -> Path:
+    path = tmp_path / name
     path.write_text(json.dumps(record, sort_keys=True) + "\n", encoding="utf-8")
     return path
 
@@ -292,8 +295,9 @@ def test_the_fixture_id_really_trips_the_content_check() -> None:
         {"id": HEX_ID, "request_hash": HEX_HASH, "type": "reserve"},
     ],
 )
-def test_ledger_id_fields_pass(tmp_path: Path, record: dict[str, object]) -> None:
-    assert scan_paths([ledger_file(tmp_path, record)]) == []
+def test_generated_ids_in_the_ledger_file_pass(tmp_path: Path, record: dict[str, object]) -> None:
+    ledger = records_file(tmp_path, record)
+    assert scan_paths([ledger], ledger=ledger) == []
 
 
 @pytest.mark.parametrize(
@@ -303,22 +307,30 @@ def test_ledger_id_fields_pass(tmp_path: Path, record: dict[str, object]) -> Non
         {"id": f"{HEX_ID}0"},  # one character too long
         {"id": HEX_ID.upper()},  # generated IDs are lowercase
         {"request_hash": HEX_ID},  # right shape for another field
+        {"hash": HEX_HASH},  # not a ledger field
         {"note": HEX_ID},  # the same value outside an ID field
         {"usage": {"id": HEX_ID}},  # nested: not a top-level ID
         {"id": HEX_ID, "note": PAN},  # an ID does not excuse the rest of its line
         {"note": f"card {PAN} ok"},
     ],
 )
-def test_everything_else_in_a_record_stays_content(
+def test_everything_else_in_a_ledger_record_stays_content(
     tmp_path: Path, record: dict[str, object]
 ) -> None:
-    findings = scan_paths([ledger_file(tmp_path, record)])
-    assert [f.kind for f in findings] == ["luhn-valid-pan"]
+    ledger = records_file(tmp_path, record)
+    assert {f.kind for f in scan_paths([ledger], ledger=ledger)} == {"luhn-valid-pan"}
 
 
-def test_plain_text_gets_no_exception(tmp_path: Path) -> None:
-    path = tmp_path / "notes.txt"
-    path.write_text(json.dumps({"id": HEX_ID}), encoding="utf-8")
+@pytest.mark.parametrize("name", ["contexts.jsonl", "starter_set.jsonl", "eval-answers.jsonl"])
+@pytest.mark.parametrize("value", [HEX_ID, PADDED_PAN])
+def test_only_the_ledger_file_gets_the_exemption(tmp_path: Path, name: str, value: str) -> None:
+    ledger = records_file(tmp_path, {"id": "a" * 32})
+    other = records_file(tmp_path, {"id": value}, name)
+    assert [f.kind for f in scan_paths([other], ledger=ledger)] == ["luhn-valid-pan"]
+
+
+def test_without_a_named_ledger_nothing_is_exempt(tmp_path: Path) -> None:
+    path = records_file(tmp_path, {"id": HEX_ID})
     assert [f.kind for f in scan_paths([path])] == ["luhn-valid-pan"]
 
 
@@ -326,33 +338,69 @@ def test_a_card_number_in_a_long_hex_looking_string_is_still_found() -> None:
     assert [f.kind for f in scan_text(f"abcdef{PAN}abcdefabcdefabcdefabcdef")] == ["luhn-valid-pan"]
 
 
-def test_without_known_ids_keeps_every_other_byte() -> None:
+def test_without_ledger_ids_keeps_every_other_byte() -> None:
     document = json.dumps({"id": HEX_ID, "note": "x", "cost": 0.1})
-    assert without_known_ids(document) == json.dumps({"id": "", "note": "x", "cost": 0.1})
-    assert without_known_ids("not json") == "not json"
-    assert without_known_ids("[1, 2]") == "[1, 2]"
+    assert without_ledger_ids(document) == json.dumps({"id": "", "note": "x", "cost": 0.1})
+    assert without_ledger_ids("not json") == "not json"
+    assert without_ledger_ids("[1, 2]") == "[1, 2]"
 
 
-def test_a_real_ledger_id_never_fails_the_scan(tmp_path: Path) -> None:
-    """Many reserve and settle pairs from the real ledger, through the real scan."""
+def test_a_real_ledger_never_fails_the_scan(tmp_path: Path) -> None:
+    """Reserve and settle pairs written by the real ledger, through the real scan."""
     path = tmp_path / "ledger.jsonl"
     ledger = Ledger(path, budget_usd=1000.0, run_budget_usd=None, run_id="r", suite="s")
     for n in range(400):
-        request_hash = hashlib.sha256(str(n).encode()).hexdigest()
+        digest = hashlib.sha256(str(n).encode()).hexdigest()
         reservation = ledger.reserve(
-            model="claude-sonnet-5-5", worst_case_usd=0.01, request_hash=request_hash
+            model="claude-sonnet-5-5", worst_case_usd=0.01, request_hash=digest
         )
         ledger.settle(reservation, {"input_tokens": 10, "output_tokens": 5})
-    assert scan_paths([path]) == []
+    assert scan_paths([path], ledger=path) == []
 
 
-def test_the_cassette_store_accepts_a_hash_with_a_luhn_run(tmp_path: Path) -> None:
+def request_with_a_luhn_run() -> tuple[dict[str, object], str]:
+    """A real request whose real SHA-256 holds a digit run the PAN check flags."""
+    for n in range(200_000):
+        match: dict[str, object] = {"method": "POST", "path": "/v1/messages", "body": {"n": n}}
+        digest = request_hash(match)
+        if scan_text(digest):
+            return match, digest
+    raise AssertionError("no such digest found")
+
+
+def test_a_cassette_whose_real_hash_holds_a_luhn_run_is_written_and_scans_clean(
+    tmp_path: Path,
+) -> None:
+    match, digest = request_with_a_luhn_run()
     store = CassetteStore(tmp_path / "cassettes", "s", canaries=frozenset())
-    assert store.put(replace(cassette(), hash=HEX_HASH)).exists()
+    assert store.put(replace(cassette(), hash=digest, match=match)).exists()
     assert scan_paths([tmp_path / "cassettes"]) == []
 
 
-def test_the_cassette_store_still_refuses_a_card_number_in_the_body(tmp_path: Path) -> None:
+def test_a_cassette_hash_that_is_not_its_requests_digest_stays_content(tmp_path: Path) -> None:
+    store = CassetteStore(tmp_path / "cassettes", "s", canaries=frozenset())
+    forged = (PADDED_PAN * 2)[:64]
+    with pytest.raises(DirtyCassetteError):
+        store.put(replace(cassette(), hash=forged))
+
+
+def test_a_cassette_with_a_real_hash_still_refuses_a_card_number_in_the_body(
+    tmp_path: Path,
+) -> None:
+    match, digest = request_with_a_luhn_run()
     store = CassetteStore(tmp_path / "cassettes", "s", canaries=frozenset())
     with pytest.raises(DirtyCassetteError):
-        store.put(replace(cassette(body=f"card {PAN}"), hash=HEX_HASH))
+        store.put(replace(cassette(body=f"card {PAN}"), hash=digest, match=match))
+
+
+def test_every_committed_cassette_hash_is_its_requests_digest() -> None:
+    root = Path(__file__).resolve().parents[3] / "cassettes"
+    paths = sorted(root.rglob("*.json"))
+    assert paths
+    for path in paths:
+        record = json.loads(path.read_text(encoding="utf-8"))
+        assert record["hash"] == request_hash(record["match"]) == path.stem
+
+
+def test_the_proxy_log_hash_is_too_short_to_hold_a_flagged_run() -> None:
+    assert LOG_HASH_CHARS < 13

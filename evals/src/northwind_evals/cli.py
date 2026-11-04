@@ -53,7 +53,7 @@ from northwind_evals.judge import Judge
 from northwind_evals.metrics import aggregate
 from northwind_llm_replay.ledger import Ledger
 from northwind_llm_replay.proxy import ProxyConfig, ProxyState, RunningProxy, encode_test_id
-from northwind_llm_replay.scan import load_canaries
+from northwind_llm_replay.scan import load_canaries, scan_text
 from northwind_rag.cli import DEFAULT_DATABASE_URL
 from northwind_rag.embedding import Embedder, FastEmbedEmbedder
 from northwind_rag.retrieval import RetrievedChunk, dense_search, retriever_id
@@ -112,9 +112,14 @@ def _stale_ids(
     return [item.id for item in items if is_stale(contexts.get(item.id), live[item.id], retriever)]
 
 
-def _context_leaks(contexts: dict[str, SavedContext]) -> list[str]:
-    """Checked before contexts are saved or sent: scanning a recording afterwards is too late."""
-    return leaks(contexts, internal_sources(FIXTURES), load_canaries(Path("."), required=True))
+def _context_leaks(contexts: dict[str, SavedContext], items: Sequence[EvalItem]) -> list[str]:
+    """Checked before anything is saved or sent: scanning a recording afterwards is too late."""
+    canaries = load_canaries(Path("."), required=True)
+    unsafe = leaks(contexts, internal_sources(FIXTURES), canaries)
+    for item in items:
+        if scan_text("\n".join((item.query, *item.reference_facts)), canaries=canaries):
+            unsafe.append(item.id)
+    return unsafe
 
 
 @contextmanager
@@ -182,7 +187,7 @@ def cmd_snapshot(_: argparse.Namespace) -> int:
         )
         for item in items
     ]
-    leaked = _context_leaks({context.item_id: context for context in saved})
+    leaked = _context_leaks({context.item_id: context for context in saved}, items)
     if leaked:
         print(f"not saving: internal content in {leaked}", file=sys.stderr)
         return 1
@@ -204,7 +209,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         return 2
     items = load_items(ITEMS)
     contexts = load_contexts(CONTEXTS)
-    leaked = _context_leaks(contexts)
+    leaked = _context_leaks(contexts, items)
     if leaked:
         print(f"refusing to send: internal content in {leaked}", file=sys.stderr)
         return 1
@@ -219,12 +224,12 @@ def cmd_run(args: argparse.Namespace) -> int:
     chosen = items if args.slice == "all" else slice_items(items, int(args.slice))
     with _clients("record") as (answerer, judge, state):
         results = run_answers(chosen, contexts, answerer, judge, _progress)
-    LAST_RUN.parent.mkdir(exist_ok=True)
-    LAST_RUN.write_text(json.dumps([asdict(r) for r in results], indent=2), encoding="utf-8")
-
     if state.scan_failures:
         print(f"not writing a candidate: scanner refused {state.scan_failures}", file=sys.stderr)
         return 1
+    LAST_RUN.parent.mkdir(exist_ok=True)
+    LAST_RUN.write_text(json.dumps([asdict(r) for r in results], indent=2), encoding="utf-8")
+
     failed = [r.item_id for r in results if r.status != "ok"]
     if failed:
         print(f"not writing a candidate: {len(failed)} item(s) failed: {failed}", file=sys.stderr)
