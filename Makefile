@@ -16,7 +16,7 @@ endif
 override ANTHROPIC_API_KEY :=
 unexport ANTHROPIC_API_KEY
 
-.PHONY: help setup up down dev dev-gateway dev-portal data fmt lint test test-integration ci \
+.PHONY: help setup up down dev dev-gateway dev-portal data ingest fmt lint test test-integration ci \
 	scan-cassettes llm-spend llm-proxy record eval-live
 
 # Linked git worktrees never get a .env: the LLM proxy reads the key from the main checkout's
@@ -52,6 +52,9 @@ dev-portal:
 
 data: ## Generate synthetic fixtures into data/fixtures (deterministic; FOUND-1)
 	uv run python -m northwind_data.cli --out data/fixtures
+
+ingest: ## Load data/fixtures into the RAG index (needs `make up`; idempotent; RAG-01)
+	uv run python -m northwind_rag.cli --fixtures data/fixtures
 
 fmt: ## Auto-format and auto-fix Python
 	uv run ruff format
