@@ -1,0 +1,55 @@
+[
+  {
+    "code": "US",
+    "currency": "USD",
+    "express_shipping_fee": "19.00",
+    "free_shipping_threshold": "75.00",
+    "name": "United States",
+    "price_multiplier": "1.00",
+    "return_shipping_fee": "0.00",
+    "standard_shipping_fee": "6.95",
+    "stock_nodes": [
+      "DC-EAST",
+      "DC-WEST"
+    ]
+  },
+  {
+    "code": "CA",
+    "currency": "CAD",
+    "express_shipping_fee": "24.00",
+    "free_shipping_threshold": "99.00",
+    "name": "Canada",
+    "price_multiplier": "1.36",
+    "return_shipping_fee": "9.00",
+    "standard_shipping_fee": "9.95",
+    "stock_nodes": [
+      "DC-CA"
+    ]
+  },
+  {
+    "code": "UK",
+    "currency": "GBP",
+    "express_shipping_fee": "12.00",
+    "free_shipping_threshold": "60.00",
+    "name": "United Kingdom",
+    "price_multiplier": "0.82",
+    "return_shipping_fee": "0.00",
+    "standard_shipping_fee": "4.95",
+    "stock_nodes": [
+      "DC-UK"
+    ]
+  },
+  {
+    "code": "EU",
+    "currency": "EUR",
+    "express_shipping_fee": "15.00",
+    "free_shipping_threshold": "70.00",
+    "name": "European Union",
+    "price_multiplier": "0.94",
+    "return_shipping_fee": "7.50",
+    "standard_shipping_fee": "5.95",
+    "stock_nodes": [
+      "DC-EU"
+    ]
+  }
+]

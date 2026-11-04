@@ -3,17 +3,19 @@ name = "northwind-shop"
 version = "0.0.0"
 requires-python = ">=3.12,<3.13"
 # Every workspace service is listed here so `uv sync` installs all of them.
-# When you add services/<name>/, add it here and under [tool.uv.sources].
-dependencies = ["northwind-gateway"]
+# When you add services/<name>/, add it here and under [tool.uv.sources]. data/ (FOUND-1) is
+# a workspace member too.
+dependencies = ["northwind-data", "northwind-gateway"]
 
 [tool.uv.sources]
+northwind-data = { workspace = true }
 northwind-gateway = { workspace = true }
 
 [tool.uv]
 package = false
 
 [tool.uv.workspace]
-members = ["services/*"]
+members = ["services/*", "data"]
 
 [tool.ruff]
 line-length = 100
@@ -33,7 +35,7 @@ strict = true
 python_version = "3.12"
 
 [tool.pytest.ini_options]
-testpaths = ["services"]
+testpaths = ["services", "data"]
 addopts = ["--strict-markers", "-m", "not integration", "--import-mode=importlib"]
 markers = [
     "req(id): the PRD requirement ID (e.g. RAG-03) whose acceptance criterion this test proves",

@@ -32,7 +32,7 @@ jobs:
         run: psql "$DATABASE_URL" -f infra/db/init/001-extensions.sql
       - run: uv run ruff check
       - run: uv run ruff format --check
-      - run: uv run mypy services
+      - run: uv run mypy services data
       - run: uv run pytest
       - run: uv run pytest -m integration
 

@@ -12,7 +12,7 @@ include .env
 export
 endif
 
-.PHONY: help setup up down dev dev-gateway dev-portal fmt lint test test-integration ci
+.PHONY: help setup up down dev dev-gateway dev-portal data fmt lint test test-integration ci
 
 help: ## List targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  make %-18s %s\n", $$1, $$2}'
@@ -37,6 +37,9 @@ dev-gateway:
 dev-portal:
 	$(PNPM) --filter @northwind/portal dev
 
+data: ## Generate synthetic fixtures into data/fixtures (deterministic; FOUND-1)
+	uv run python -m northwind_data.cli --out data/fixtures
+
 fmt: ## Auto-format and auto-fix Python
 	uv run ruff format
 	uv run ruff check --fix
@@ -44,7 +47,7 @@ fmt: ## Auto-format and auto-fix Python
 lint: ## Lint + type-check Python and TypeScript
 	uv run ruff check
 	uv run ruff format --check
-	uv run mypy services
+	uv run mypy services data
 	$(PNPM) -r lint
 	$(PNPM) -r typecheck
 
