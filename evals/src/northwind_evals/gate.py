@@ -83,7 +83,7 @@ class GateResult:
     errors: list[str] = field(default_factory=list)
     problems: list[str] = field(default_factory=list)
     containment: list[str] = field(default_factory=list)
-    # Scored now but absent from the baseline: the gate cannot compare it, so it fails, and promoting
+    # Scored now but absent from the baseline: the gate cannot compare it, so it fails. Promoting
     # is what brings it in, so promotion accepts it.
     new_metrics: list[str] = field(default_factory=list)
 
