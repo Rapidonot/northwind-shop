@@ -3,64 +3,131 @@
 Spec: docs/PRD.md · Status: todo | in-progress | partial | done | deferred
 Update this file at the end of every task (status, date, evidence, notes).
 
-## Phase 1: thin vertical slice (portal + chat + synthetic catalog + basic RAG + evals)
+## Ordering: LLM work first (decision 0001)
 
-Goal: shopper browses, asks grounded questions with citations, sees live price/stock,
-adds to cart. RAG quality is measured by a starter eval set (~100 queries) with a CI gate.
+$100 of API credits expire around **2026-11-24**. Everything that calls Claude (assistant,
+judge, RAG-02 enrichment, query understanding, backend crew) comes as early as dependencies
+allow. Payments, A2A and hardening come after. Every LLM call goes through the record/replay
+layer (FOUND-2), so tests and evals keep passing in **replay** once there is no API access.
+Rationale, the PRD §9 deviation and replay limits: docs/decisions/0001-llm-first-order-and-record-replay.md.
 
-Order: foundations → RAG-01 → eval baseline → **a crude end-to-end chat (item 4)** so the
-whole path works early → retrieval quality, MCP servers and portal polish afterwards.
+Recordings only replay if the model's input is unchanged. So the non-LLM changes that alter what
+the model sees (hybrid retrieval, access filtering, the move to MCP tools) land *inside* the
+window, before RECORD-ALL.
 
-Phase 1 cuts across PRD phases P0–P2 and does **not** pass Gate 1 by itself; Gate 1 also
-needs RAG-02/04–07 and the 300-query set. RAG-09 (partial) and RAG-11 are pulled forward
-from PRD P5 because hard rules 2 and 7 are cheaper to build in than to retrofit.
+- **Tier A:** must be finished by **Nov 19** (pace ~7 days/week, ≈16 days of work estimated).
+- **RECORD-ALL (#18):** Nov 20–22, whatever the state of the rest.
+- **Tier B:** done live only if time is left (including Nov 22–24, recorded item by item);
+  otherwise built later on scripted fakes + replay.
+- **Slip rule:** if Tier A runs late, drop from the bottom (#17, then #16, then #11) rather than
+  move RECORD-ALL past Nov 20.
 
-| # | ID | Scope in Phase 1 | Status | Evidence |
-|---|----|------------------|--------|----------|
-| 0 | FOUND-0 (no PRD ID) | Walking skeleton: uv workspace, pnpm portal shell, docker compose (pg16+pgvector), Makefile, CI running lint+test, .gitignore/.env.example, deny-.env permission | done | 2026-11-03: `make ci` passes locally (ruff, mypy strict, eslint, tsc, pytest 1 unit + 1 integration, vitest 3); `/api/healthz` reports db ok + pgvector 0.8.7 through the Vite proxy, and db unavailable with the stack down. Fresh clone passes `make setup && make up && make ci`. GitHub CI green: https://github.com/Rapidonot/northwind-shop/actions/runs/41657414233 (PR #1). Template is `env.example` (no dot, so the .env deny rule doesn't block it). `.claude/settings.json` was added by the user (Claude may not write its own permissions); Claude's Read of `.env` and Write of `.env.probe` were both refused by it |
-| 1 | FOUND-1 (no PRD ID) | Synthetic data generator (seeded): ~200 products / ~800 variants (apparel+home), reviews (some containing injection text), size & care guides, returns/shipping policies per region, FAQs, a few internal-only docs; live price/stock tables | todo | |
-| 2 | RAG-01 | Versioned, idempotent ingestion; metadata on 100% of chunks (category, brand, size, colour, material, price band, region, updated, visibility); no exact prices in chunk text | todo | |
-| 3 | RAG-12 (partial) | Harness: recall@k, MRR, groundedness, answer relevance. Starter set of ~100 labelled queries, including unanswerable and adversarial ones. Every item has `reviewed_by: human \| model`; ≥25 are human-reviewed, and all unanswerable and adversarial items must be among them (a schema test enforces both). Record the dense-only baseline; add `make eval-gate` and a CI job. Rest: grow to 300 queries, calibrate the judge on human labels | todo | |
-| 4 | SA-02 (crude) | **Early end-to-end slice, ugly is fine.** Bare portal page with a chat box → gateway SSE endpoint → assistant (Agent SDK) calling `retrieve_context` as an in-process tool (dense-only) → streamed answer with source IDs shown as citations. No prices or stock quoted: there are no live tools yet, so the assistant points to the product page instead (hard rule 2). One smoke test: Playwright asks a question and sees streamed text plus at least one citation | todo | |
-| 5 | RAG-03 | Hybrid dense (pgvector) + FTS fused by RRF; beats dense-only and keyword-only on recall@5. The crude slice switches to hybrid | todo | |
-| 6 | RAG-11 | Shopper callers never get internal-only docs; regional policies match the shopper's region; red-team queries in evals/adversarial | todo | |
-| 7 | (CC-10 partial) | mcp-catalog (search_products, get_product, get_variant, check_stock, get_price) + mcp-rag (retrieve_context, index-manifest resource); structured errors; contract tests. The assistant moves from the in-process tool to mcp-rag | todo | |
-| 8 | RAG-09 (partial) | Price/stock/promotions only via tools; a test changes price & stock and the assistant quotes the new values. Rest: 10-minute catalog→index freshness (with BE-03) | todo | |
-| 9 | SA-01 (partial) | Pages: home, search results, product detail, cart, chat panel; Playwright covers each without error. Rest: checkout, order history | todo | |
-| 10 | SA-02 (complete) | Polish the crude slice: inline product cards, a visible source link on every product claim, first token < 2 s (measured) | todo | |
-| 11 | RAG-08 | Grounded answers with citations; says so or asks when evidence is thin; zero fabricated attributes on the adversarial subset. Groundedness measured on the starter set (95% target enforced at Gate 1) | todo | |
-| 12 | CHK-01 | Cart tools add/remove/change qty with live stock check; out-of-stock add refused with alternatives | todo | |
-| 13 | SA-03 (partial) | Intents: product question, comparison, recommendation, availability, policy; ≥10 labelled conversations each, pass rate reported. Rest: delivery, order status, return | todo | |
-| 14 | NFR-08 | AI disclosure visible in every chat session; journey test asserts it | todo | |
+## Window A: credit window (Nov 3 → ~Nov 24)
+
+LLM column: what calls Claude. Models: Sonnet 5.5 for the assistant and the judge, Haiku 5.5 for
+routine steps. Days are estimates.
+
+### Tier A
+
+| # | ID | Scope | LLM | Days | Status | Evidence |
+|---|----|-------|-----|------|--------|----------|
+| 0 | FOUND-0 (no PRD ID) | Walking skeleton: uv workspace, pnpm portal shell, docker compose (pg16+pgvector), Makefile, CI running lint+test, .gitignore/.env.example, deny-.env permission | – | – | done | 2026-11-03: `make ci` passes locally (ruff, mypy strict, eslint, tsc, pytest 1 unit + 1 integration, vitest 3); `/api/healthz` reports db ok + pgvector 0.8.7 through the Vite proxy, and db unavailable with the stack down. Fresh clone passes `make setup && make up && make ci`. GitHub CI green: https://github.com/Rapidonot/northwind-shop/actions/runs/41657414233 (PR #1). Template is `env.example` (no dot, so the .env deny rule doesn't block it). `.claude/settings.json` was added by the user (Claude may not write its own permissions); Claude's Read of `.env` and Write of `.env.probe` were both refused by it |
+| 1 | FOUND-1 (no PRD ID) | Synthetic data generator (seeded): ~200 products / ~800 variants (apparel+home), reviews (some containing injection text), size & care guides, returns/shipping policies per region, FAQs, a few internal-only docs; live price/stock tables. Deterministic, no LLM | – | 1 | todo | |
+| 2 | FOUND-2 (no PRD ID) + NFR-16 (partial) | **Open item, resolve before the first live call:** is Claude Code (and so any `claude` CLI subprocess the Agent SDK starts) billed to the user's subscription or to the API key whose credit this plan budgets? Decision 0001 does not say; the answer decides which spend the ledger and `LLM_BUDGET_USD` actually cover. LLM seam + record/replay + spend guard. One factory for all clients (`northwind_common.llm`); proxy via `ANTHROPIC_BASE_URL` in `services/llm-replay/`; `LLM_MODE=replay\|record\|live` (replay default, forced in CI) + `scripted_llm` fixture; scrubbed-request hash matching with a miss diff; cassettes under `cassettes/<suite>/`; secret/PAN scanner over cassettes; ledger + `LLM_BUDGET_USD` (default 90) / `LLM_RUN_BUDGET_USD` caps (NFR-16 partial: budget-breach test); `make record`, `make llm-spend`, `make eval-live`. **Time-box: spike ≤ 1 day** (does the Agent SDK CLI honour `ANTHROPIC_BASE_URL`, and do two identical runs hash the same?). If not stable by end of day 1, **switch immediately** to message-stream recording for the Agent SDK. **FOUND-2 total ≤ 3 days**; anything unfinished → `partial` with the rest listed | spike | 3 | todo | |
+| 3 | RAG-01 | Versioned, idempotent ingestion; metadata on 100% of chunks (category, brand, size, colour, material, price band, region, updated, visibility); no exact prices in chunk text | – | 1 | todo | |
+| 4 | RAG-12 (partial) | Harness: recall@k, MRR, groundedness, answer relevance; **judge = Sonnet 5.5**. Starter set of ~100 labelled queries, including unanswerable and adversarial ones. Every item has `reviewed_by: human \| model`; ≥25 are human-reviewed, and all unanswerable and adversarial items must be among them (a schema test enforces both). Record the dense-only baseline; add `make eval-gate` (replay) and a CI job. **20-call ledger checkpoint lands here or in #5.** Rest: #32 and Window B | judge | 1.5 | todo | |
+| 5 | SA-02 (crude) | **Early end-to-end slice, ugly is fine.** Bare portal page with a chat box → gateway SSE endpoint → assistant (Agent SDK) calling `retrieve_context` as an in-process tool (dense-only) → streamed answer with source IDs shown as citations. No prices or stock quoted: there are no live tools yet, so the assistant points to the product page instead (hard rule 2). One smoke test: Playwright asks a question and sees streamed text plus at least one citation (replayed) | Sonnet | 1 | todo | |
+| 6 | RAG-13 | Prompt caching on the stable prefix (tools + system); tokens and cost per answer reported from usage; cache-hit rate visible. Pulled forward because it makes every later call cheaper | Sonnet | 0.5 | todo | |
+| 7 | RAG-02 | Contextual chunk enrichment with Haiku via the Batches API; results cached in data/ keyed by chunk hash + prompt version, so re-ingest makes no calls; recall@5 delta vs the plain-chunk baseline reported | Haiku | 0.5 | todo | |
+| 8 | RAG-03 | Hybrid dense (pgvector) + FTS fused by RRF; beats dense-only and keyword-only on recall@5. The crude slice switches to hybrid | – | 0.5 | todo | |
+| 9 | RAG-11 | Shopper callers never get internal-only docs; regional policies match the shopper's region; red-team queries in evals/adversarial, run through the assistant and recorded | Sonnet | 0.5 | todo | |
+| 10 | (CC-10 partial) | mcp-catalog (search_products, get_product, get_variant, check_stock, get_price) + mcp-rag (retrieve_context, index-manifest resource); structured errors; contract tests. The assistant moves from the in-process tool to mcp-rag. This freezes the assistant's tool surface before RECORD-ALL | – | 1.5 | todo | |
+| 11 | RAG-04 | Query understanding (Haiku): rewrite, split multi-part questions, extract structured filters (price, size, colour, availability); ≥95% filter accuracy on 100 labelled queries | Haiku | 1 | todo | |
+| 12 | RAG-09 (partial) | Price/stock/promotions only via tools; a test changes price & stock and the assistant quotes the new values. Rest: 10-minute catalog→index freshness (with BE-03) | Sonnet | 0.5 | todo | |
+| 13 | RAG-08 + NFR-03 (partial) | Grounded answers with citations; says so or asks when evidence is thin; zero fabricated attributes on the adversarial subset. Groundedness measured on the starter set (95% target enforced at Gate 1). NFR-03 partial: the adversarial corpus run is recorded now; the rest of NFR-03 is in Window B | Sonnet + judge | 1 | todo | |
+| 14 | NFR-08 | AI disclosure visible in every chat session; journey test asserts it | Sonnet | 0.25 | todo | |
+| 15 | A2A-05 prep (no PRD ID) | Fix the partner test client's script now: 5–10 product questions, 1 out-of-scope request, the scoped-order turn (`evals/fixtures/a2a-05-partner/`). Record the assistant's answers to exactly those messages as **named fixtures**. A2A-05 itself is in Window B under decision 0002 | Sonnet | 0.5 | todo | |
+| 16 | CHK-01 | Cart tools add/remove/change qty with live stock check; out-of-stock add refused with alternatives (cart shown in the chat panel; the cart page is SA-01, Window B) | Sonnet | 1 | todo | |
+| 17 | SA-02 (complete) + NFR-13 (partial) | Polish the crude slice: inline product cards, a visible source link on every product claim, first token < 2 s measured live (first-token p95 recorded as NFR-13 partial) | Sonnet | 1 | todo | |
+| 18 | RECORD-ALL (no PRD ID) | **Nov 20–22.** Freeze prompts, tools and model IDs; re-record every cassette suite, full evals, adversarial set, A2A-05 fixtures and any finished Tier B items; run the cassette audit (secrets/PAN scan); write the spend report. ~$25 kept for it. If #17 slipped, take a live first-token measurement here | all | 2 | todo | |
+
+### Tier B (in the window if time allows; otherwise after, on scripted fakes + replay)
+
+| # | ID | Scope | LLM | Days | Status | Evidence |
+|---|----|-------|-----|------|--------|----------|
+| 19 | FOUND-3 (no PRD ID) | Backend scaffolding: PaymentPort / FraudPort / CarrierPort interfaces with deterministic fakes (PAY-01 interface only, not its contract suite); minimal mcp-orders / mcp-policy / mcp-cases; synthetic shoppers, orders and tracking fixtures | – | 1.5 | todo | |
+| 20 | BE-08 + BE-02 | Audit event per agent action (actor, action, inputs by reference, outcome, correlation ID); structured errors between agents, local recovery of transient failures, injected timeouts give annotated partial results | Haiku | 1 | todo | |
+| 21 | BE-05 (partial) + CHK-05 | Orders agent run standalone on the fakes: validate, fraud score, payment port, confirm; routine exceptions resolved, the rest escalated with context; replaying a request 10 times yields one order. 1,000-order backend replay recorded if done before expiry. Rest: real payment/fraud adapters (P4/P5), orchestrator wiring (BE-01) | Haiku | 1.5 | todo | |
+| 22 | SA-03 (partial) | Intents: product question, comparison, recommendation, availability, policy; ≥10 labelled conversations each, pass rate reported. Rest: delivery, order status, return | Sonnet | 1 | todo | |
+| 23 | SA-06 | Human handoff with structured summary (identity, intent, root cause, amounts, recommended action); explicit request for a person honoured immediately | Sonnet | 0.75 | todo | |
+| 24 | BE-01 | Orchestrator splits a multi-concern request, runs subagents in parallel, aggregates one result | Sonnet + Haiku | 1.5 | todo | |
+| 25 | BE-04 | Inventory & fulfilment agent: reserve stock, substitutes on stock-out, node selection; last-unit race tests never oversell | Haiku | 1 | todo | |
+| 26 | BE-07 | Care agent builds an escalation case (summary, root cause, amounts, recommended action) staff can act on without the transcript | Haiku | 1 | todo | |
+| 27 | CHK-06 + CHK-07 | Order status and tracking in chat (matches order store + carrier fake); return initiation with eligibility from the policy resource, labelled eligible/ineligible/ambiguous cases | Sonnet | 1.5 | todo | |
+| 28 | BE-06 (partial) | Returns agent on fakes: eligibility, label via carrier fake, refund via payment port fake under the cap, defective-goods flag; ≥95% on labelled cases. Rest: real carrier/payment adapters | Haiku | 1 | todo | |
+| 29 | BE-03 | Catalog agent: attribute enrichment from supplier feeds, merchandiser review queue, re-index trigger; unreviewed changes never publish | Haiku | 1 | todo | |
+| 30 | SA-04 | Clarifying question on 20 deliberately ambiguous prompts (≥90% ask first) | Sonnet | 0.5 | todo | |
+| 31 | RAG-10 + RAG-07 | Agentic retrieval within a 3-round step cap (test-enforced); intent router choosing specs/reviews/policy indexes (≥90% routing accuracy) | Sonnet / Haiku | 1 | todo | |
+| 32 | RAG-12 (more) | Grow the set to 300 queries (`reviewed_by: model`); judge outputs recorded so calibration against human labels can run offline later | judge | 1 | todo | |
 
 **Eval review rule (RAG-12):** Claude writes eval items with `reviewed_by: model` and never
-sets `human`. Only the user does that, after writing or checking the item. Item 3 is done
+sets `human`. Only the user does that, after writing or checking the item. Item 4 is done
 only once ≥25 items are human-reviewed, including every unanswerable and adversarial item.
 Until then it stays `in-progress`, with a list of items waiting for review.
 
+### LLM budget ($100 credit, runtime calls only; Claude Code sessions are billed separately)
+
+`LLM_BUDGET_USD` = 90 (hard cap in the proxy, $10 margin). Prices used: Sonnet 5.5 $2 / $10 per
+MTok in/out (cache read $0.20), Haiku 5.5 $0.10 / $0.50, Batches −50%.
+
+| Bucket | Estimate | Measured |
+|---|---|---|
+| Dev iteration (live calls while building) | ~$20 | |
+| Answer evals: ~4 full starter-set runs (assistant ≈ $0.03–0.05/question cached + judge ≈ $0.01) | ~$15 | |
+| RAG-02 enrichment (Haiku, Batches) + RAG-04 | ~$2 | |
+| Conversations, adversarial, red-team, A2A-05 fixtures | ~$8 | |
+| Backend crew dev + 1,000-order replay (only if Tier B items run before expiry) | ~$10–15 | |
+| RECORD-ALL final pass | ~$15 | |
+| Reserve | ~$25 | |
+
+Rules: dev runs use 10–20-item slices; full eval runs only at milestones; unchanged items replay
+for free. **20-call checkpoint:** after the first 20 live calls, replace the estimates with
+measured costs from the ledger, re-project the remaining spend and report it to the user. If the
+projection exceeds $90, stop live calls and propose cuts first.
+
+## Window B: after the credits (replay + scripted fakes only), PRD order
+
+Answer-level evals become stale when a prompt, tool schema, retrieval output or model ID changes
+(cassette misses need API access to re-record). Retrieval metrics stay live because embeddings
+are local.
+
+- **Portal (P2):** SA-01 (home, search results, product detail, cart, checkout, order history, chat panel; Playwright covers each), SA-05, SA-07, SA-08 (changes the prompt, so answer evals go stale; portal copy only unless pulled into Window A)
+- **RAG rest (P1):** RAG-05 (reranker), RAG-06 (parent-child), RAG-09 rest (10-minute freshness, with BE-03); RAG-12 rest (judge calibration on human labels, offline against recorded judge outputs)
+- **P4 Payments:** PAY-01 (contract suite on every adapter), PAY-02 – PAY-08, CHK-02, CHK-03, A2A-04, A2A-07. LLM-facing crew tests keep the fakes; PAY-01's shared contract suite proves the real adapters behave the same
+- **P5 A2A:** A2A-01, A2A-02, A2A-03, A2A-05, A2A-06, A2A-08, CHK-04. **A2A-05 (decision 0002):** discovery, auth/scopes, out-of-scope rejection and the scoped order run for real and must pass. Out-of-scope rejection is enforced by scope checks, not the model. Only the assistant's answer text comes from the #15 named fixtures. A2A-05 is **done** when the protocol checks pass
+- **P6 Hardening:** NFR-01, NFR-03 rest, NFR-04 – NFR-07, NFR-09 – NFR-12, NFR-13 rest (load test), NFR-14, NFR-15, NFR-16 rest, NFR-17
+- Any Tier B item not finished in Window A
+
+Gate 1 (RAG quality) also needs RAG-05/06 and the human-labelled 300-query set, so it is passed in
+Window B on replayed answers plus live retrieval metrics.
+
 Also covered by the hard rules from day one: NFR-02 (secrets in env, .env deny rule).
 Claude Code features exercised along the way (record in COVERAGE.md): CC-01, CC-04, CC-10 (partial).
-
-## Deferred (by PRD phase)
-
-- **P1 / Gate 1 (RAG quality):** RAG-02, RAG-04 (Must), RAG-05, RAG-06, RAG-07, RAG-10, RAG-13; RAG-12 rest (300 queries, judge calibration)
-- **P2 (portal & assistant):** SA-01 rest (checkout, order history), SA-03 rest, SA-04, SA-05, SA-06 (Must), SA-07, SA-08, CHK-06, CHK-07
-- **P3 (backend crew):** BE-01 – BE-08, CHK-05
-- **P4 (payments):** PAY-01 – PAY-08, CHK-02, CHK-03, A2A-04, A2A-07
-- **P5 (A2A & partner):** A2A-01, A2A-02, A2A-03, A2A-05, A2A-06, A2A-08, CHK-04, RAG-09 rest
-- **P6 (hardening):** NFR-01, NFR-03 – NFR-07, NFR-09 – NFR-17
-- **Claude Code matrix:** CC-02, CC-03, CC-05 – CC-09, CC-11 – CC-30 tracked in COVERAGE.md per PRD phases
+Claude Code matrix: CC-02, CC-03, CC-05 – CC-09, CC-11 – CC-30 tracked in COVERAGE.md per PRD phases.
 
 ## Open questions (from PRD §11, still open)
 
+- **Before the first live call (FOUND-2):** is Claude Code / the Agent SDK's CLI billed to the subscription or to the API key? Not recorded in decision 0001
 - Payment provider sandbox + MCP server (needed by P4)
 - Can a2a-protocol.org be reached to confirm the release, card discovery path and method names? (P4/P5)
 - Agent-payment extensions / mandates on A2A: later version?
 
 Resolved 2026-11-03: embeddings = local fastembed + PostgreSQL/pgvector; runtime agents = Python Agent SDK;
-portal = Vite + React; follow-up backlog = this file.
+portal = Vite + React; follow-up backlog = this file; judge = Sonnet 5.5; LLM-first order + record/replay (decision 0001);
+A2A-05 replayed answers (decision 0002).
 
 ## Log
 
 - 2026-11-03: PRD converted to docs/PRD.md (figures in docs/images/); CLAUDE.md and Phase 1 scope written.
 - 2026-11-03: FOUND-0 walking skeleton: uv workspace + gateway healthz, Vite/React portal shell, compose Postgres+pgvector, Makefile, GitHub CI, COVERAGE.md.
+- 2026-11-03: Reordered for the $100 API credit expiring ~2026-11-24: LLM work first (Tier A by Nov 19, RECORD-ALL Nov 20–22), payments/A2A/hardening after; FOUND-2 record/replay added; decisions 0001 and 0002.
