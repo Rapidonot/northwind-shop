@@ -2,10 +2,12 @@
 
 - One ledger for every worktree: `LLM_LEDGER_PATH`, default `~/.northwind/ledger.jsonl`. Budget
   reservations take a file lock on it, so worktrees cannot jointly overspend.
-- One key file: `LLM_ENV_FILE`, default the **main checkout's** `.env`, found from git's common
-  dir. `.env` is never copied into worktrees, and only the proxy reads this file.
+- One key file, outside every checkout: `LLM_ENV_FILE`, default
+  `~/.northwind/secrets/anthropic.env`. Only the runner reads the key from it (decision 0005).
 - A dev proxy port per worktree: `LLM_PROXY_PORT`, default derived from the worktree's path, so
   two worktrees' dev proxies never collide and each stays on a stable port. Tests use random ports.
+- One runner: a clean clone at `~/.northwind/runner`, on `LLM_RUNNER_PORT` (default 19990, below
+  the dev proxy span).
 """
 
 from __future__ import annotations
@@ -17,6 +19,7 @@ from pathlib import Path
 
 PORT_BASE = 20000
 PORT_SPAN = 10000
+RUNNER_PORT = 19990
 
 
 def _git(args: list[str], cwd: Path) -> str | None:
@@ -52,14 +55,32 @@ def is_linked_worktree(cwd: Path | None = None) -> bool:
     return worktree_root(cwd) != main_checkout(cwd)
 
 
-def env_file(cwd: Path | None = None) -> Path:
+def northwind_home() -> Path:
+    return Path.home() / ".northwind"
+
+
+def env_file() -> Path:
     override = os.environ.get("LLM_ENV_FILE")
-    return Path(override).expanduser() if override else main_checkout(cwd) / ".env"
+    if override:
+        return Path(override).expanduser()
+    return northwind_home() / "secrets" / "anthropic.env"
 
 
 def ledger_path() -> Path:
     override = os.environ.get("LLM_LEDGER_PATH")
-    return Path(override).expanduser() if override else Path.home() / ".northwind" / "ledger.jsonl"
+    return Path(override).expanduser() if override else northwind_home() / "ledger.jsonl"
+
+
+def runner_checkout() -> Path:
+    return northwind_home() / "runner"
+
+
+def runner_port() -> int:
+    return int(os.environ.get("LLM_RUNNER_PORT") or RUNNER_PORT)
+
+
+def runner_url() -> str:
+    return f"http://127.0.0.1:{runner_port()}"
 
 
 def proxy_port(cwd: Path | None = None) -> int:

@@ -35,19 +35,37 @@ def repo_with_worktree(tmp_path: Path) -> tuple[Path, Path]:
 
 
 @pytest.mark.req("FOUND-2")
-def test_key_file_is_the_main_checkouts_also_from_a_worktree(
-    repo_with_worktree: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_a_worktree_knows_its_main_checkout(repo_with_worktree: tuple[Path, Path]) -> None:
     main, wt = repo_with_worktree
-    monkeypatch.delenv("LLM_ENV_FILE", raising=False)
     assert localenv.main_checkout(wt) == main
     assert localenv.worktree_root(wt) == wt
     assert localenv.is_linked_worktree(wt)
     assert not localenv.is_linked_worktree(main)
-    assert localenv.env_file(wt) == main / KEY_FILE
-    assert localenv.env_file(main) == main / KEY_FILE
+
+
+@pytest.mark.req("CC-27")
+def test_key_file_is_outside_every_checkout(
+    repo_with_worktree: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    main, wt = repo_with_worktree
+    monkeypatch.delenv("LLM_ENV_FILE", raising=False)
+    monkeypatch.chdir(wt)
+    assert localenv.env_file().parent == Path.home() / ".northwind" / "secrets"
+    assert localenv.env_file() != main / KEY_FILE
     monkeypatch.setenv("LLM_ENV_FILE", str(main / "keys" / "llm"))
-    assert localenv.env_file(wt) == main / "keys" / "llm"
+    assert localenv.env_file() == main / "keys" / "llm"
+
+
+@pytest.mark.req("CC-27")
+def test_the_runner_is_one_clean_clone_on_a_port_outside_the_dev_span(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("LLM_RUNNER_PORT", raising=False)
+    assert localenv.runner_checkout() == Path.home() / ".northwind" / "runner"
+    assert localenv.runner_url() == f"http://127.0.0.1:{localenv.RUNNER_PORT}"
+    assert localenv.RUNNER_PORT < localenv.PORT_BASE
+    monkeypatch.setenv("LLM_RUNNER_PORT", "12345")
+    assert localenv.runner_url() == "http://127.0.0.1:12345"
 
 
 @pytest.mark.req("FOUND-2")

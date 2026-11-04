@@ -56,15 +56,15 @@ make setup            # uv sync + pnpm install; creates .env from env.example (m
 make up | make down   # docker compose stack (Postgres 16 + pgvector), waits for healthy
 make dev              # gateway on :8000 + portal on :5173 (Vite proxies /api)
 make data             # regenerate data/fixtures (seeded, byte-identical; bump DATA_VERSION if output changes)
-make model            # pre-fetch the embedding model into FASTEMBED_CACHE_PATH (own terminal; CC-27)
+make model            # pre-fetch the embedding model into FASTEMBED_CACHE_PATH (own terminal, from the runner clone; CC-27)
 make ingest           # load data/fixtures into the RAG index (needs `make up`; idempotent, no LLM)
 make fmt              # ruff format + autofix
 make lint             # ruff, ruff format --check, mypy (strict), eslint, tsc
 make test             # unit tests: pytest (excludes integration) + vitest
 make test-integration # pytest -m integration (needs `make up`)
 make ci               # lint + scan-cassettes + test + test-integration, the same steps as GitHub CI
-make record SUITE=…   # SPENDS: re-record one cassette suite (new requests live, under LLM_RUN_BUDGET_USD)
-make eval-live EVAL_SLICE=<n>  # SPENDS: record answers + verdicts into a baseline candidate (digits only; n >= item count is a full run)
+make record SUITE=…   # SPENDS through an open runner window: re-record one cassette suite
+make eval-live EVAL_SLICE=<n>  # SPENDS through an open runner window (SUITE=eval-answers): record answers + verdicts into a baseline candidate (digits only; n >= item count is a full run)
 make eval-rescore     # rebuild the candidate from the recordings after a scoring change (never spends)
 make eval-promote     # replace the baseline with the candidate (refuses a regression)
 make eval-integrity   # refuse edited cassettes and lost overrides, against origin/main
@@ -72,18 +72,24 @@ make eval-gate        # regression gate: live retrieval + replayed answers vs th
 make eval-snapshot    # save each eval item's retrieved context, the input for answers (no LLM)
 make eval-review-list # write the list of eval items waiting for human review
 make llm-spend        # shared ledger: total, per suite/model, 20-call checkpoint
-make scan-cassettes   # secret/PAN scan of cassettes, ledger and proxy log
+make scan-cassettes   # secret/PAN scan of cassettes, ledger and proxy log (CASSETTES_DIR=/abs/path to scan a worktree's)
 make llm-proxy        # dev LLM proxy on this worktree's port (LLM_MODE, default replay)
+make llm-runner SUITE=… RUN_BUDGET=<usd>  # USER ONLY, own terminal, `make -C ~/.northwind/runner`: open one spending window
+make runner-sync      # USER ONLY, in the runner clone: show what changed, ask, fast-forward to origin/main
+make runner-check     # from the sandbox, in each checkout: measure that nothing the runner loads is writable
 ```
-Added later: `make e2e` with Playwright (SA-02 crude). Only `make record` and `make eval-live` spend API credit; everything
-else runs in replay.
+Added later: `make e2e` with Playwright (SA-02 crude). Only `make record` and `make eval-live` spend API credit, and only
+through a window the user opened with `make llm-runner`; everything else runs in replay. Everything Claude runs stays in
+the sandbox. Run `model`, `up`, `down` and the key-fragment scan from your own terminal as `make -C ~/.northwind/runner …`
+(decision 0005).
 
 LLM clients (FOUND-2): build every client with `northwind_common.llm` (`anthropic_client()`,
 `agent_options()`); never construct `anthropic.Anthropic` or `ClaudeAgentOptions` directly. LLM
 tests use the `llm_proxy` fixture with `@pytest.mark.llm_suite("<suite>")`, or `scripted_llm`.
 Shared across worktrees: ledger `LLM_LEDGER_PATH` (default `~/.northwind/ledger.jsonl`); key file
-`LLM_ENV_FILE` (default the main checkout's `.env`, never copied into worktrees). Per worktree: the
-dev proxy port `LLM_PROXY_PORT` (derived from the path). Details: decision 0001,
+`LLM_ENV_FILE` (default `~/.northwind/secrets/anthropic.env`, outside every checkout, read only by the
+runner); the runner, a clean clone at `~/.northwind/runner` on `LLM_RUNNER_PORT`. Per worktree: the
+dev proxy port `LLM_PROXY_PORT` (derived from the path). Details: decisions 0001 and 0005,
 services/llm-replay/SPIKE.md.
 
 Toolchain notes:

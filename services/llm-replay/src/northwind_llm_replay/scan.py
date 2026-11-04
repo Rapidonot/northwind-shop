@@ -15,13 +15,21 @@ Fails on:
   shopper traffic must never carry internal text, so a recording holding one is refused.
 
 Findings never contain the matched secret, only its kind and position.
+
+The walk never follows a symlink: a symlink is a finding and is not read. The key-fragment scan runs
+outside the sandbox over a worktree the sandbox can write, so a link there must not reach other
+files (decision 0005). A process racing the walk could still swap a parent directory; that discloses
+only a finding's kind and line.
 """
 
 from __future__ import annotations
 
+import errno
 import json
+import os
 import re
-from collections.abc import Iterable
+import stat
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -30,6 +38,7 @@ from typing import Any
 from northwind_llm_replay.scrub import request_hash
 
 KEY_FRAGMENT_LEN = 16
+SYMLINK_REFUSED = "symlink-refused"
 ANSWER_KEY = Path("data/fixtures/_answer_key.json")
 
 _KEY_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
@@ -49,6 +58,12 @@ LEGACY_LEDGER_VALUES = {
 _PAN_GROUPED = re.compile(r"(?<![\d])\d{4}([ -])\d{4}\1\d{4}\1\d{4}(?![\d])")
 
 
+def printable(text: str) -> str:
+    """A file name for a terminal. The sandbox picks these names, and escape sequences in one could
+    hide a failing result on the user's screen."""
+    return "".join(ch if ch.isprintable() else f"\\x{ord(ch):02x}" for ch in text)
+
+
 @dataclass(frozen=True)
 class Finding:
     path: str
@@ -56,7 +71,7 @@ class Finding:
     kind: str
 
     def __str__(self) -> str:
-        return f"{self.path}:{self.line}: {self.kind}"
+        return f"{printable(self.path)}:{self.line}: {self.kind}"
 
 
 def luhn_ok(digits: str) -> bool:
@@ -102,7 +117,8 @@ def scan_text(
             if pattern.search(line):
                 findings.append(Finding(path, lineno, kind))
         if fragments and any(f in line for f in fragments):
-            findings.append(Finding(path, lineno, "api-key-fragment"))
+            # No line number: a session can write one guess per line, and read this back.
+            findings.append(Finding(path, 0, "api-key-fragment"))
         if any(c in line for c in canaries):
             findings.append(Finding(path, lineno, "internal-canary"))
         for m in _PAN_RUN.finditer(line):
@@ -156,12 +172,31 @@ def _check_recorded_at(path: Path, text: str) -> list[Finding]:
     return []
 
 
-def _files(roots: Iterable[Path]) -> Iterable[Path]:
-    for root in roots:
-        if root.is_file():
-            yield root
-        elif root.is_dir():
-            yield from sorted(p for p in root.rglob("*") if p.is_file())
+def _walk(path: Path) -> Iterator[Path | Finding]:
+    """Regular files under `path`, and a finding for each symlink. Nothing is followed."""
+    try:
+        mode = path.lstat().st_mode
+    except FileNotFoundError:
+        return
+    if stat.S_ISLNK(mode):
+        yield Finding(str(path), 0, SYMLINK_REFUSED)
+    elif stat.S_ISREG(mode):
+        yield path
+    elif stat.S_ISDIR(mode):
+        for child in sorted(path.iterdir()):
+            yield from _walk(child)
+
+
+def read_no_follow(path: Path) -> str | None:
+    """The file's text, or None if it stopped being a regular file after the walk saw it."""
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    except OSError as exc:
+        if exc.errno == errno.ELOOP:
+            return None
+        raise
+    with os.fdopen(fd, encoding="utf-8", errors="replace") as handle:
+        return handle.read() if stat.S_ISREG(os.fstat(fd).st_mode) else None
 
 
 def is_cassette(path: Path) -> bool:
@@ -176,10 +211,16 @@ def scan_paths(
 ) -> list[Finding]:
     """`ledger` names the one file whose legacy values are left out; there is no default."""
     findings: list[Finding] = []
-    for path in _files(roots):
+    for path in (item for root in roots for item in _walk(root)):
+        if isinstance(path, Finding):
+            findings.append(path)
+            continue
         if path.suffix == ".lock":
             continue
-        text = path.read_text(encoding="utf-8", errors="replace")
+        text = read_no_follow(path)
+        if text is None:
+            findings.append(Finding(str(path), 0, SYMLINK_REFUSED))
+            continue
         if ledger is not None and path.resolve() == ledger.resolve():
             scanned = "\n".join(without_ledger_ids(line) for line in text.splitlines())
         elif is_cassette(path):

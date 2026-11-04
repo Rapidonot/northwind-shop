@@ -1,7 +1,8 @@
 # 0004: Claude's Bash runs in the OS sandbox (CC-27)
 
-**Date:** 2026-11-04. **Status:** installed by the user in the CC-27 worktree, uncommitted there. The
-open findings below still stand.
+**Date:** 2026-11-04. **Status:** installed by the user and committed in 1d07a99. Decision 0005
+supersedes the `excludedCommands` rule, the `~/.northwind/ledger.lock` write and the F1 and F3
+entries below; those take effect when the user installs the new proposal. F4 and F6 still stand.
 
 ## Decision
 
@@ -26,14 +27,16 @@ safe. The sandbox refuses those writes at the OS level, whatever the command loo
 
 - **The user pushes.** Claude can commit, but with the keychain denied it cannot `git push` or use
   `gh`, so PRs are opened from the user's terminal.
-- **The user runs Docker.** `make up` and `make down` run from the user's terminal, outside the
+- **The user runs Docker**, in the runner clone since decision 0005:
+  `make -C ~/.northwind/runner up`. `make up` and `make down` run from the user's terminal, outside the
   sandbox, because the sandbox denies the Docker socket. A linked worktree needs no key file for
   this (FOUND-2 review #12); one is never created there.
 - **`make test-integration` runs inside the sandbox** once the stack is up. It reaches Postgres on
   the local port and needs no Docker access. Measured: 49 passed after the RAG-12 merge.
 - **`make eval-live` takes digits only.** `EVAL_SLICE=all` is refused; a full run is a number at or
   above the item count, such as `EVAL_SLICE=100`.
-- **`make model` runs once in the user's terminal.** The sandbox cannot reach the model's hosts.
+- **`make -C ~/.northwind/runner model` runs once in the user's terminal.** The sandbox cannot reach
+  the model's hosts.
 - **The domain list lives in user settings.** `strictAllowlist` is ignored in project settings, and
   while it is on, project `allowedDomains` are dropped.
 
@@ -46,7 +49,8 @@ which the PRD row does not mention; decision 0001 needs it for recording.
 ## Open before install
 
 Finding F1: excluded targets run code the sandboxed session can edit, with the key available. The
-user decides how to handle it. F3, F4 and F6 are also open.
+user decides how to handle it. F3, F4 and F6 are also open. **Update:** F1 and F3 are addressed by
+decision 0005.
 
 ## Evidence
 

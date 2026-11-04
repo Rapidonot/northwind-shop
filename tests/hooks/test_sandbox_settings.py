@@ -21,18 +21,24 @@ SANDBOX = {
     "failIfUnavailable": True,  # false would run unsandboxed with only a warning
     "allowUnsandboxedCommands": False,  # false makes dangerouslyDisableSandbox ignored
     "autoAllowBashIfSandboxed": False,  # keeps today's prompts
-    # Not `make record*`, which also matched `make recording` and `make record -f evil.mk`.
-    # `make eval-live` alone would match nothing that runs: RAG-12 made EVAL_SLICE required.
-    "excludedCommands": ["make record SUITE=*", "make eval-live EVAL_SLICE=*", "make llm-proxy"],
+    # No excludedCommands: nothing runs outside the sandbox. Spending goes through the runner,
+    # which the user starts from a clean clone (decision 0005).
     "filesystem": {
-        "denyWrite": ["./.claude/settings*", "./.claude/hooks", "./.env*"],
+        "denyWrite": [
+            "./.claude/settings*",
+            "./.claude/hooks",
+            "./.env*",
+            "~/.northwind",  # the runner, its caches, the ledger and its lock are all budget state
+            "~/.northwind/secrets",  # stated on its own, so narrowing the line above cannot lose it
+        ],
         "denyRead": [
             "./.env*",  # this checkout
             "~/Projects/northwind-shop/.env*",  # the main checkout, whose key file worktrees use
             "~/Library/Keychains",  # the GitHub token gh and git use
+            "~/.northwind/secrets",  # the API key, which only the runner reads
+            "~/.northwind/ledger.lock",  # flock works on a read-only descriptor, and would hang it
         ],
         "allowWrite": [
-            "~/.northwind/ledger.lock",  # not the ledger: that would let Bash erase the spend
             "~/.cache/uv",
             "~/Library/pnpm/store",
             "/private/tmp/pnpm-store-operation-locks-502",  # pnpm's shared lock; 502 is the uid
@@ -43,10 +49,24 @@ SANDBOX = {
 }
 
 USER_FILE = {
+    # In user settings too: project settings are per checkout, and an older branch keeps the old
+    # ones. `make runner-check`, run in each checkout, proves these merge with a project's lists.
+    "permissions": {
+        "deny": [
+            "Read(~/.northwind/secrets)",
+            "Read(~/.northwind/secrets/**)",
+            "Edit(~/.northwind/**)",
+            "Write(~/.northwind/**)",
+        ]
+    },
     "sandbox": {
+        "filesystem": {
+            "denyRead": ["~/.northwind/secrets", "~/.northwind/ledger.lock"],
+            "denyWrite": ["~/.northwind"],
+        },
         "network": {
             "strictAllowlist": True,
-            # No Anthropic host: only the excluded targets reach it.
+            # No Anthropic host: only the runner reaches it, from outside the sandbox.
             "allowedDomains": [
                 "pypi.org",
                 "files.pythonhosted.org",
@@ -55,8 +75,8 @@ USER_FILE = {
                 "api.github.com",
                 "*.githubusercontent.com",
             ],
-        }
-    }
+        },
+    },
 }
 
 PERMISSIONS = {
@@ -73,6 +93,13 @@ PERMISSIONS = {
         "Write(./.claude/settings*)",
         "Edit(./.claude/hooks/**)",
         "Write(./.claude/hooks/**)",
+        # The sandbox covers Bash only, so the file tools need their own rules for these.
+        "Read(~/.northwind/secrets)",
+        "Read(~/.northwind/secrets/**)",
+        "Edit(~/.northwind/secrets/**)",
+        "Write(~/.northwind/secrets/**)",
+        "Edit(~/.northwind/**)",
+        "Write(~/.northwind/**)",
     ],
     "allow": [
         "Bash(make *)",
@@ -81,7 +108,8 @@ PERMISSIONS = {
         "Bash(corepack pnpm *)",
         "Bash(docker compose *)",
     ],
-    # Excluded targets stay behind these, so the prompt is the gate.
+    # A courtesy, not a gate: `Bash(make *)` and `Bash(uv run *)` can reach the same code without a
+    # prompt. The window the user opens is the gate (decision 0005).
     "ask": [
         "Bash(git push*)",
         "Bash(make record*)",
@@ -106,6 +134,21 @@ def test_permissions_are_exactly_the_reviewed_ones() -> None:
 
 def test_user_file_is_exactly_the_reviewed_one() -> None:
     assert load("settings.user.proposed.json") == USER_FILE
+
+
+def test_nothing_is_excluded_from_the_sandbox() -> None:
+    assert "excludedCommands" not in load("settings.proposed.json")["sandbox"]
+
+
+def test_the_sandbox_network_list_has_no_anthropic_host() -> None:
+    hosts = load("settings.user.proposed.json")["sandbox"]["network"]["allowedDomains"]
+    assert not [host for host in hosts if "anthropic" in host or "claude" in host]
+
+
+def test_the_sandbox_cannot_write_any_budget_state() -> None:
+    filesystem = load("settings.proposed.json")["sandbox"]["filesystem"]
+    assert "~/.northwind" in filesystem["denyWrite"]
+    assert not [path for path in filesystem["allowWrite"] if ".northwind" in path]
 
 
 def test_proposal_has_no_other_top_level_settings() -> None:

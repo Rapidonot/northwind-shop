@@ -441,12 +441,11 @@ def test_rescore_with_a_request_that_has_no_recording_makes_no_candidate_no_call
 
     monkeypatch.setattr(httpx.AsyncClient, "send", no_upstream)
 
-    class NoLedger:
-        def __init__(self, *args: object, **kwargs: object) -> None:
-            upstream.append("ledger")
-            raise AssertionError("rescore built a ledger")
+    def no_ledger(self: object, *args: object, **kwargs: object) -> None:
+        upstream.append("ledger")
+        raise AssertionError("rescore built a ledger")
 
-    monkeypatch.setattr(cli, "Ledger", NoLedger)
+    monkeypatch.setattr("northwind_llm_replay.ledger.Ledger.__init__", no_ledger)
     assert cli.main(["rescore"]) == 1
     assert not cli.CANDIDATE.exists()
     assert upstream == []

@@ -9,8 +9,8 @@ PNPM ?= corepack pnpm
 COMPOSE := docker compose $(if $(wildcard .env),--env-file .env )-f infra/docker-compose.yml
 
 # Load .env (if present) so DATABASE_URL etc. reach the gateway and tests.
-# The API key is the exception: it is blanked and never exported to recipes (hard rule 4,
-# decision 0001). Only the LLM proxy reads it, straight from .env, via dotenv_values (FOUND-2).
+# The API key is the exception: it does not belong here, and any copy is blanked and never exported
+# to recipes (hard rule 4, decision 0001). Only the runner reads it, from its own file (decision 0005).
 # -include: Claude's sandbox denies reads of .env, which must not stop every target (CC-27).
 ifneq (,$(wildcard .env))
 -include .env
@@ -19,16 +19,37 @@ endif
 override ANTHROPIC_API_KEY :=
 unexport ANTHROPIC_API_KEY
 
+# The compose file's own project name, pinned after the include above: the runner clone and every
+# worktree must drive one stack and one data volume (decision 0005).
+export COMPOSE_PROJECT_NAME := northwind
+
+# The clean clone that holds the key (decision 0005). Inside it nothing uses the uv cache the sandbox
+# can write, nothing re-resolves dependencies, and the shell's PYTHONPATH is dropped. What touches
+# the key runs on .venv-runner, which holds only llm-replay and common: a workspace member's src is
+# on sys.path through a .pth, so a sitecustomize.py in any member would otherwise load with the key.
+# `model` runs beside the key file, so it gets its own small .venv-model. The clone has no full .venv.
+RUNNER_DIR ?= $(HOME)/.northwind/runner
+RUNNER_PYTHON := .venv-runner/bin/python -I
+SCAN_PYTHON := uv run python
+MODEL_PYTHON := uv run python
+ifeq ($(CURDIR),$(realpath $(RUNNER_DIR)))
+export UV_CACHE_DIR := $(HOME)/.northwind/uv-cache
+export UV_FROZEN := 1
+unexport PYTHONPATH
+SCAN_PYTHON := $(RUNNER_PYTHON)
+MODEL_PYTHON := .venv-model/bin/python -I
+endif
+
 .PHONY: help setup up down dev dev-gateway dev-portal data model ingest fmt lint test \
-	test-integration ci scan-cassettes llm-spend llm-proxy record eval-live eval-rescore eval-gate \
-	eval-integrity eval-gate-stale-ok eval-promote eval-snapshot eval-review-list
+	test-integration ci scan-cassettes llm-spend llm-proxy llm-runner runner-sync runner-check \
+	record eval-live eval-rescore eval-gate eval-integrity eval-gate-stale-ok eval-promote \
+	eval-snapshot eval-review-list
 
 # A stable cache, not fastembed's temp-dir default: Claude's sandbox has a different temp dir and
-# cannot reach the model's download hosts, so `make model` fills this once from a terminal (CC-27).
+# cannot reach the model's download hosts, so `make -C ~/.northwind/runner model` fills this (CC-27).
 export FASTEMBED_CACHE_PATH ?= $(HOME)/.cache/fastembed
 
-# Linked git worktrees never get a .env: the LLM proxy reads the key from the main checkout's
-# file (LLM_ENV_FILE), and nothing else needs one there (FOUND-2 addendum).
+# Linked git worktrees never get a .env: nothing there needs one (FOUND-2 addendum).
 IN_LINKED_WORKTREE := $(shell test "$$(git rev-parse --path-format=absolute --git-dir 2>/dev/null)" != "$$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" && echo 1)
 
 help: ## List targets
@@ -38,7 +59,7 @@ setup: ## Install Python + Node deps; create .env from env.example if missing (m
 	uv sync
 	$(PNPM) install
 ifeq ($(IN_LINKED_WORKTREE),1)
-	@echo "linked worktree: no .env here; the LLM proxy uses the main checkout's (LLM_ENV_FILE)"
+	@echo "linked worktree: no .env here; nothing needs one"
 else
 	@test -f .env || (cp env.example .env && echo "created .env from env.example")
 endif
@@ -61,8 +82,8 @@ dev-portal:
 data: ## Generate synthetic fixtures into data/fixtures (deterministic; FOUND-1)
 	uv run python -m northwind_data.cli --out data/fixtures
 
-model: ## Pre-fetch the embedding model into FASTEMBED_CACHE_PATH (run in your own terminal; CC-27)
-	uv run python -c "from northwind_rag.embedding import FastEmbedEmbedder; FastEmbedEmbedder().embed(['warm'])"
+model: ## Pre-fetch the embedding model (own terminal, from the runner clone only; CC-27)
+	$(MODEL_PYTHON) -c "from northwind_rag.embedding import FastEmbedEmbedder; FastEmbedEmbedder().embed(['warm'])"
 
 ingest: ## Load data/fixtures into the RAG index (needs `make up`; idempotent; RAG-01)
 	uv run python -m northwind_rag.cli --fixtures data/fixtures
@@ -87,8 +108,11 @@ test: ## Unit tests (Python + portal), always in replay
 test-integration: ## Integration tests against the local stack (run `make up` first), always in replay
 	LLM_MODE=replay uv run pytest -m integration
 
-scan-cassettes: ## Secret/PAN scan of cassettes, ledger and proxy log (FOUND-2)
-	uv run python -m northwind_llm_replay.cli scan
+# CASSETTES_DIR scans a worktree's cassettes from the runner clone, where the key-fragment check can
+# run. The walk follows no symlink and findings carry no matched text (decision 0005).
+scan-cassettes: ## Secret/PAN scan of cassettes, ledger and proxy log (FOUND-2; CASSETTES_DIR=/abs/path)
+	@[[ -z "$$CASSETTES_DIR" || "$$CASSETTES_DIR" =~ ^/[A-Za-z0-9._/-]+$$ ]] || (echo "usage: make scan-cassettes CASSETTES_DIR=/absolute/path" && exit 2)
+	$(SCAN_PYTHON) -m northwind_llm_replay.cli scan $${CASSETTES_DIR:+--cassettes-dir "$$CASSETTES_DIR"}
 
 llm-spend: ## LLM spend from the shared ledger: total, per suite/model, 20-call checkpoint (FOUND-2)
 	uv run python -m northwind_llm_replay.cli spend
@@ -96,19 +120,54 @@ llm-spend: ## LLM spend from the shared ledger: total, per suite/model, 20-call 
 llm-proxy: ## Dev LLM proxy on this worktree's port (LLM_MODE=replay by default; FOUND-2)
 	uv run python -m northwind_llm_replay.cli serve
 
-# SPENDS API CREDIT. Re-records one cassette suite: unchanged requests replay for free, new ones go
-# live through the budget guard (LLM_RUN_BUDGET_USD, default 5.00; see services/llm-replay/SPIKE.md).
-# SUITE is checked before use: this target runs outside Claude's sandbox, so a value like
-# 'x; cmd' must not reach a shell (CC-27).
+# THE ONLY TARGET THAT SENDS THE KEY ANYWHERE. Your own terminal, from the clean clone, always as
+# `make -C ~/.northwind/runner llm-runner`: run from a worktree, this file is one the sandbox can
+# edit. It opens one window; `make record` or `make eval-live` then spend through it (decision 0005).
+# -I drops PYTHONPATH, user site and the working directory from the import path.
+llm-runner: ## Open one spending window (SUITE=name RUN_BUDGET=usd; own terminal, runner clone only)
+	@[[ "$$SUITE" =~ ^[a-z0-9_-]+$$ && "$$RUN_BUDGET" =~ ^[0-9]+(\.[0-9]+)?$$ ]] || (echo "usage: make -C $(RUNNER_DIR) llm-runner SUITE=<suite> RUN_BUDGET=<usd>" && exit 2)
+	@[[ "$${RUNNER_MINUTES:-30}" =~ ^[0-9]+$$ && "$${RUNNER_IDLE_MINUTES:-10}" =~ ^[0-9]+$$ ]] || (echo "RUNNER_MINUTES and RUNNER_IDLE_MINUTES are whole minutes" && exit 2)
+	@$(RUNNER_SYNC) --check >/dev/null || (echo ".venv-runner does not match uv.lock: run runner-sync" && exit 2)
+	$(RUNNER_PYTHON) -m northwind_llm_replay.cli runner --suite "$$SUITE" --run-budget "$$RUN_BUDGET" --minutes "$${RUNNER_MINUTES:-30}" --idle-minutes "$${RUNNER_IDLE_MINUTES:-10}"
+
+# Key-loaded code, what builds the environment, and what `model` and `up` run beside the key.
+RUNNER_SYNC_PATHS := services/llm-replay services/common services/rag data/src infra Makefile pyproject.toml uv.lock uv.toml .python-version .gitattributes ':(glob)**/pyproject.toml' ':(glob)**/sitecustomize.py' ':(glob)**/usercustomize.py'
+RUNNER_INCOMING := refs/runner/incoming
+RUNNER_DIFF := git --no-pager diff --text --no-ext-diff --no-textconv
+RUNNER_SYNC := UV_PROJECT_ENVIRONMENT=.venv-runner uv sync --frozen --no-dev --package northwind-llm-replay
+
+# Shows what the key-holding code gains before it gains it, since HEAD, the last sync: every commit
+# and changed file, then the full diff of the paths that load with the key or build the environment.
+# The fetch lands on its own ref, so answering no leaves origin/main, and so the runner, working.
+# `cat -v` because a commit subject is text the sandbox wrote.
+runner-sync: ## Show what changed in the runner clone, ask, then fast-forward to origin/main
+	@[[ "$(CURDIR)" == "$(realpath $(RUNNER_DIR))" ]] || (echo "only in the clone: make -C $(RUNNER_DIR) runner-sync" && exit 2)
+	git fetch --refmap= origin +refs/heads/main:$(RUNNER_INCOMING)
+	@git --no-pager log --oneline HEAD..$(RUNNER_INCOMING) | cat -v
+	@$(RUNNER_DIFF) --stat HEAD $(RUNNER_INCOMING) | cat -v
+	@$(RUNNER_DIFF) HEAD $(RUNNER_INCOMING) -- $(RUNNER_SYNC_PATHS) | cat -v
+	@read -r -p "Fast-forward the runner to origin/main? [y/N] " answer; [[ "$$answer" =~ ^[yY]$$ ]] || (echo "not merged" && exit 1)
+	git merge --ff-only $(RUNNER_INCOMING)
+	git update-ref refs/remotes/origin/main $(RUNNER_INCOMING)
+	$(RUNNER_SYNC)
+	UV_PROJECT_ENVIRONMENT=.venv-model uv sync --frozen --no-dev --package northwind-rag
+
+# Must run sandboxed: from a terminal every write succeeds, and it reports exactly that.
+runner-check: ## From the sandbox: measure that nothing the runner loads is writable here (CC-27)
+	uv run python -m northwind_llm_replay.cli runner-check
+
+# SPENDS API CREDIT, through the window you opened with `llm-runner`; with none open it stops at once.
+# Unchanged requests replay for free, new ones go to the runner, which holds the caps. The run stays
+# in the sandbox and SUITE is checked before use, so 'x; cmd' cannot reach a shell (CC-27).
 record: ## Re-record one LLM cassette suite (SUITE=name; spends API credit)
 	@[[ "$$SUITE" =~ ^[a-z0-9_-]+$$ ]] || (echo "usage: make record SUITE=<suite>" && exit 2)
 	LLM_MODE=record uv run pytest -m "" --llm-suite "$$SUITE"
 
-# SPENDS API CREDIT. Records answers and verdicts into a baseline candidate. EVAL_SLICE is required
-# (a number of items; one at or above the item count is a full run), so a bare `make eval-live`
-# cannot start a full run. Unchanged requests replay for free (RAG-12, decision 0001).
-# EVAL_SLICE is checked before use: this target runs outside Claude's sandbox, so a value like
-# 'x; cmd' must not reach a shell (CC-27).
+# SPENDS API CREDIT, through the window you opened with `llm-runner SUITE=eval-answers`. Records
+# answers and verdicts into a baseline candidate. EVAL_SLICE is required (a number of items; one at
+# or above the item count is a full run), so a bare `make eval-live` cannot start a full run.
+# Unchanged requests replay for free (RAG-12, decision 0001). EVAL_SLICE is checked before use, so
+# 'x; cmd' cannot reach a shell (CC-27).
 eval-live: ## Run answer evals live and record them (EVAL_SLICE=<n>; spends API credit)
 	@[[ "$$EVAL_SLICE" =~ ^[0-9]+$$ ]] || (echo "usage: make eval-live EVAL_SLICE=<n>" && exit 2)
 	LLM_MODE=record uv run python -m northwind_evals.cli run --slice "$$EVAL_SLICE"

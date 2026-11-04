@@ -128,7 +128,7 @@ def main() -> None:
         suite="spike",
         cassette_root=args.cassettes,
         ledger=ledger,
-        env_file=localenv.env_file(REPO),
+        env_file=localenv.env_file(),
         log_path=LOG_DIR / "spike.jsonl",
     )
     extra_env: dict[str, str] = {}
