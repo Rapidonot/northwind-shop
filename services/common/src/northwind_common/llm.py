@@ -28,7 +28,6 @@ from pathlib import Path
 from typing import Any
 
 PLACEHOLDER_API_KEY = "northwind-proxy-placeholder"
-DEFAULT_PROXY_URL = "http://127.0.0.1:8787"
 
 # Taken from the parent environment, nothing else is.
 PARENT_ENV_ALLOWLIST = ("PATH", "HOME", "LANG", "TMPDIR")
@@ -48,7 +47,10 @@ DEFAULT_MAX_OUTPUT_TOKENS = int(os.environ.get("LLM_MAX_OUTPUT_TOKENS", "8192"))
 
 
 def proxy_url() -> str:
-    return os.environ.get("LLM_PROXY_URL", DEFAULT_PROXY_URL)
+    """LLM_PROXY_URL, else this worktree's dev proxy port (northwind_common.localenv)."""
+    from northwind_common.localenv import proxy_port
+
+    return os.environ.get("LLM_PROXY_URL") or f"http://127.0.0.1:{proxy_port()}"
 
 
 def _forbidden(name: str) -> bool:

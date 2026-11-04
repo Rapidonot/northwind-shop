@@ -73,11 +73,40 @@ Decided by the user before the first live call:
 - So a runtime call can never land on the subscription: the CLI subprocess gets a child
   environment built from scratch, with a placeholder `ANTHROPIC_API_KEY`, an isolated
   `CLAUDE_CONFIG_DIR` and no inherited `ANTHROPIC_*` / `CLAUDE_CODE_*` / `CLAUDECODE*` variables.
-  The proxy rejects any request that does not carry exactly that placeholder, or that carries an
-  `Authorization` header, and only the proxy holds the real key. It reads the key from `.env` with
+  The proxy rejects any request whose only credential is not exactly that placeholder (as
+  `x-api-key` or `Authorization: Bearer`), and only the proxy holds the real key. It reads the key from `.env` with
   `dotenv_values` and never exports it to the environment. A client that bypassed the proxy would
   present the placeholder to Anthropic and get a 401, so it fails closed and spends nothing.
 - The Makefile no longer exports `ANTHROPIC_API_KEY` into recipe environments.
+
+## Resolution 2026-11-04: spike result (gate passed: proxy path)
+
+The FOUND-2 spike (`services/llm-replay/SPIKE.md`, live spend $0.000363) showed:
+- The Agent SDK's bundled CLI (2.1.318 in `claude-agent-sdk==0.2.178`) sends every request to
+  `ANTHROPIC_BASE_URL`, one `POST /v1/messages?beta=true` per query, with no other egress when
+  nonessential traffic is off.
+- Identical runs differ only in `metadata.user_id`. That is the only scrub rule.
+- No date, OS, username or path appears in request bodies (`--bare`, custom system prompt).
+- Cassettes recorded on macOS replay on Linux.
+
+So §4's fallback (message-stream recording) is not used: every call goes through the proxy.
+Two details changed from §3:
+- `anthropic` 2.x sends an API key as `Authorization: Bearer`. The proxy accepts exactly one
+  credential, and it must be the placeholder, in either form.
+- The CLI's default `max_tokens` is 128000. The factory always sets it (default 8192), because
+  worst-case reservations are priced at `max_tokens`.
+
+## Amendment 2026-11-04: parallel git worktrees (user addendum to FOUND-2)
+
+The build uses parallel git worktrees, so local LLM state is shared or derived, not per checkout:
+- **Ledger:** one file outside the repo, `LLM_LEDGER_PATH` (default `~/.northwind/ledger.jsonl`),
+  with a file lock. Budget reservations happen under the lock, so worktrees cannot jointly exceed
+  `LLM_BUDGET_USD`. This replaces "a gitignored ledger" in §3.
+- **Key:** the proxy reads one fixed file, `LLM_ENV_FILE` (default the main checkout's `.env`,
+  found from git's common dir). `.env` is never copied into worktrees, and `make setup` does not
+  create one in a linked worktree.
+- **Dev proxy port:** per worktree, `LLM_PROXY_PORT` (default derived from the worktree path),
+  never a fixed port. Tests use random ports.
 
 ## Open items
 

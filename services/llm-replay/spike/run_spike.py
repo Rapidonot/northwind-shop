@@ -23,6 +23,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from egress import EgressLogger  # noqa: E402
 
+from northwind_common import localenv  # noqa: E402
 from northwind_common.llm import agent_options, agent_runtime, anthropic_client  # noqa: E402
 from northwind_llm_replay.ledger import Ledger, now_iso  # noqa: E402
 from northwind_llm_replay.proxy import ProxyConfig, RunningProxy  # noqa: E402
@@ -116,7 +117,7 @@ def main() -> None:
     args = ap.parse_args()
 
     ledger = Ledger(
-        REPO / ".llm-ledger" / "ledger.jsonl",
+        localenv.ledger_path(),
         budget_usd=90.0,
         run_budget_usd=SPIKE_RUN_BUDGET_USD,
         run_id=SPIKE_RUN_ID,
@@ -127,7 +128,7 @@ def main() -> None:
         suite="spike",
         cassette_root=args.cassettes,
         ledger=ledger,
-        env_file=REPO / ".env",
+        env_file=localenv.env_file(REPO),
         log_path=LOG_DIR / "spike.jsonl",
     )
     extra_env: dict[str, str] = {}

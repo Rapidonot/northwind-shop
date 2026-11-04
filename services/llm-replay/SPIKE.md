@@ -74,7 +74,13 @@ only rule in `scrub.SCRUB_RULES`.
 After the rule: the recorded Haiku run, then **2 identical replay runs, both cassette hits with no
 key loaded**, both returning `ready`.
 
-Linux (GitHub CI): _pending; filled in after the day-1 push._
+**Linux.** The macOS-recorded cassettes replay on Linux x86_64. On day 1 this was shown in a
+Debian container (`ghcr.io/astral-sh/uv:python3.12-bookworm-slim`, `CI=true`, `LLM_MODE=replay`,
+no key file; only git-tracked and new files copied in): all 4 `test_spike_replay` cases pass with
+the Linux build of the bundled CLI, and the whole FOUND-2 suite passes (155 tests). GitHub CI on
+the day-1 push stopped earlier, at `ruff format --check` on the newly added
+`.claude/hooks/guard_env.py`, a file Claude may not edit. The CI run on the PR is the
+confirmation once that is formatted.
 
 ## 5. `max_tokens` and budget sizing
 
@@ -103,6 +109,7 @@ Linux (GitHub CI): _pending; filled in after the day-1 push._
 The CLI's own `total_cost_usd` agreed with the ledger for both agent runs. The spike suite is
 excluded from the 20-call checkpoint.
 
-## Gate (decision 0001 §4)
+## Gate (decision 0001 §4): proxy path
 
-Proxy path, provided the Linux replay passes (see §4). Message-stream recording is not needed.
+Requests are stable on macOS and Linux, so every LLM call (Agent SDK and direct clients) goes
+through the proxy. Message-stream recording is not needed. Spike time: well inside day 1.

@@ -17,3 +17,6 @@ northwind-common = { workspace = true }
 [build-system]
 requires = ["uv_build>=0.12,<0.13"]
 build-backend = "uv_build"
+
+[project.entry-points.pytest11]
+northwind_llm_replay = "northwind_llm_replay.pytest_plugin"

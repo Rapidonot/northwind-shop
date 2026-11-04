@@ -15,13 +15,15 @@ subscription (decision 0001).
 The real key is loaded from .env by `dotenv_values` (never os.environ) on the first upstream
 call and only ever set on the upstream request.
 
-Test context: a base URL of `http://host:port/_t/<test-id>` tags requests with a test ID
+Test context: a base URL of `http://host:port/_t/<test-id>` (`encode_test_id`) tags requests
+with a test ID
 (used by sequence matching and stored on cassettes); the prefix is stripped before matching.
 """
 
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import threading
 from collections.abc import AsyncIterator, Callable
@@ -32,7 +34,6 @@ from urllib.parse import unquote
 
 import anyio
 import httpx2 as httpx
-import uvicorn
 from dotenv import dotenv_values
 from starlette.applications import Starlette
 from starlette.requests import Request
@@ -122,11 +123,24 @@ def auth_verdict(headers: dict[str, str]) -> str:
     return "placeholder" if ok else "REJECTED"
 
 
+def encode_test_id(test_id: str) -> str:
+    """A URL path segment for a test ID (node IDs contain `/`, `::` and brackets)."""
+    raw = base64.urlsafe_b64encode(test_id.encode("utf-8")).decode("ascii").rstrip("=")
+    return f"b64.{raw}"
+
+
+def _decode_test_id(segment: str) -> str:
+    if segment.startswith("b64."):
+        raw = segment[4:]
+        return base64.urlsafe_b64decode(raw + "=" * (-len(raw) % 4)).decode("utf-8")
+    return unquote(segment)
+
+
 def split_test_prefix(raw_path: str) -> tuple[str | None, str]:
     if raw_path.startswith("/_t/"):
         rest = raw_path[len("/_t/") :]
-        test_id, _, tail = rest.partition("/")
-        return unquote(test_id), "/" + tail
+        segment, _, tail = rest.partition("/")
+        return _decode_test_id(segment), "/" + tail
     return None, raw_path
 
 
@@ -485,30 +499,21 @@ def create_app(cfg: ProxyConfig) -> tuple[Starlette, Proxy]:
 
 
 class RunningProxy:
-    """The proxy served by uvicorn on 127.0.0.1 in a background thread (tests, spike, record)."""
+    """The proxy served on 127.0.0.1 in a background thread (tests, spike, record)."""
 
     def __init__(self, cfg: ProxyConfig, port: int = 0) -> None:
+        from northwind_llm_replay.scripted import ServerThread
+
         self.app, self.proxy = create_app(cfg)
-        config = uvicorn.Config(
-            self.app, host="127.0.0.1", port=port, log_level="warning", lifespan="off"
-        )
-        self.server = uvicorn.Server(config)
-        self._thread = threading.Thread(target=self.server.run, daemon=True)
+        self._server = ServerThread(self.app, port=port)
 
     def __enter__(self) -> RunningProxy:
-        self._thread.start()
-        while not self.server.started:
-            if not self._thread.is_alive():
-                raise RuntimeError("LLM proxy failed to start")
-            threading.Event().wait(0.02)
+        self._server.start()
         return self
 
     @property
     def url(self) -> str:
-        sock = self.server.servers[0].sockets[0]
-        host, port = sock.getsockname()[:2]
-        return f"http://{host}:{port}"
+        return self._server.url
 
     def __exit__(self, *exc: object) -> None:
-        self.server.should_exit = True
-        self._thread.join(timeout=10)
+        self._server.stop()
