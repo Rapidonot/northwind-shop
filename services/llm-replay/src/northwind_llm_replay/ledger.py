@@ -209,7 +209,12 @@ class Ledger:
             )
             return res
 
-    def settle(self, res: Reservation, usage: Mapping[str, Any] | None) -> float:
+    def settle(
+        self,
+        res: Reservation,
+        usage: Mapping[str, Any] | None,
+        first_byte_ms: int | None = None,
+    ) -> float:
         """Record the actual cost. `usage=None` means final usage never arrived: charge the
         reserved worst case."""
         cost = res.amount if usage is None else cost_usd(res.model, usage)
@@ -222,6 +227,7 @@ class Ledger:
                     "cost_usd": cost,
                     "usage": dict(usage) if usage is not None else None,
                     "final_usage": usage is not None,
+                    **({} if first_byte_ms is None else {"first_byte_ms": first_byte_ms}),
                 }
             )
         return cost

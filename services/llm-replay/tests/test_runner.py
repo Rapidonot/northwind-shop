@@ -8,9 +8,11 @@ from __future__ import annotations
 import inspect
 import json
 import os
+import re
 import socket
 import subprocess
 from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -26,6 +28,7 @@ from northwind_llm_replay.proxy import RunningProxy
 from northwind_llm_replay.runner import (
     ALLOWED_MODELS,
     RunnerError,
+    RunnerGate,
     RunnerUnavailableError,
     Window,
     create_runner_app,
@@ -34,11 +37,13 @@ from northwind_llm_replay.runner import (
     proxy_config,
     refuse_if_port_taken,
 )
+from northwind_llm_replay.scan import scan_text
 from northwind_llm_replay.scripted import ScriptedLLM, ServerThread
 
 pytestmark = pytest.mark.req("CC-27")
 
 FAKE_KEY = "nwfake-" + "runnerkey" * 6  # fake; built at runtime
+KEY_ON_DISK = "sk-ant-" + "api03-" + "runnerkey" * 6  # fake; built at runtime
 SUITE = "t"
 JSON_HEADERS = {"content-type": "application/json"}
 
@@ -106,8 +111,8 @@ def no_cached_sessions() -> Iterator[None]:
     runner.SESSIONS.clear()
 
 
-@pytest.fixture
-def rig(tmp_path: Path) -> Iterator[Rig]:
+@contextmanager
+def open_rig(tmp_path: Path, key: str) -> Iterator[Rig]:
     clock = Clock()
     lines: list[str] = []
     with ScriptedLLM(require_placeholder=False) as upstream:
@@ -120,7 +125,7 @@ def rig(tmp_path: Path) -> Iterator[Rig]:
         )
         window = Window(suite=SUITE, minutes=30, idle_minutes=10, clock=clock)
         app, _ = create_runner_app(
-            window, FAKE_KEY, ledger, tmp_path, upstream_url=upstream.url, out=lines.append
+            window, key, ledger, tmp_path, upstream_url=upstream.url, out=lines.append
         )
         server = ServerThread(app)
         server.start()
@@ -128,6 +133,12 @@ def rig(tmp_path: Path) -> Iterator[Rig]:
             yield Rig(upstream, ledger, window, clock, lines, server.url)
         finally:
             server.stop()
+
+
+@pytest.fixture
+def rig(tmp_path: Path) -> Iterator[Rig]:
+    with open_rig(tmp_path, FAKE_KEY) as opened:
+        yield opened
 
 
 # -- claim and auth (F3) ---------------------------------------------------------------------
@@ -524,7 +535,7 @@ def test_refusals_and_blocks_print_too(rig: Rig) -> None:
 # -- the key file (item 1) -------------------------------------------------------------------
 
 
-def key_file(tmp_path: Path, text: str = f"ANTHROPIC_API_KEY={FAKE_KEY}\n") -> Path:
+def key_file(tmp_path: Path, text: str = f"ANTHROPIC_API_KEY={KEY_ON_DISK}\n") -> Path:
     secrets = tmp_path / "secrets"
     secrets.mkdir(mode=0o700, exist_ok=True)
     path = secrets / "key"
@@ -539,13 +550,13 @@ def test_the_key_file_defaults_to_the_private_path(monkeypatch: pytest.MonkeyPat
 
 
 def test_the_key_is_loaded_from_a_private_file(tmp_path: Path) -> None:
-    assert load_runner_key(key_file(tmp_path)) == FAKE_KEY
+    assert load_runner_key(key_file(tmp_path)) == KEY_ON_DISK
 
 
 def test_only_the_key_variable_is_taken(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("LLM_BUDGET_USD", raising=False)
-    path = key_file(tmp_path, f"LLM_BUDGET_USD=1000\nANTHROPIC_API_KEY={FAKE_KEY}\n")
-    assert load_runner_key(path) == FAKE_KEY
+    path = key_file(tmp_path, f"LLM_BUDGET_USD=1000\nANTHROPIC_API_KEY={KEY_ON_DISK}\n")
+    assert load_runner_key(path) == KEY_ON_DISK
     assert "LLM_BUDGET_USD" not in os.environ
 
 
@@ -1161,3 +1172,179 @@ def test_a_list_where_a_name_belongs_is_a_structured_refusal(
     assert reply.status_code == 400
     assert reply.json()["isError"] is True
     assert rig.upstream.requests == []
+
+
+# -- the key's public prefix -----------------------------------------------------------------
+
+PREFIX = "sk-ant-" + "api03-"
+SHAPED_KEY = PREFIX + "Zq7xL9mV2tR8kW4pH1nY6cB3" * 3  # fake; built at runtime
+SECRET = SHAPED_KEY[len(PREFIX) :]
+
+
+@pytest.fixture
+def shaped(tmp_path: Path) -> Iterator[Rig]:
+    with open_rig(tmp_path, SHAPED_KEY) as opened:
+        yield opened
+
+
+def with_text(text: str) -> dict[str, Any]:
+    body = message()
+    body["messages"][0]["content"] = text
+    return body
+
+
+@pytest.mark.parametrize("guess", ["Zq7", "aaa"], ids=["right-guess", "wrong-guess"])
+def test_the_public_prefix_plus_three_guesses_says_nothing(shaped: Rig, guess: str) -> None:
+    """16 characters with 3 unknown could be extended one at a time. A right guess and a wrong one
+    must look the same, so neither is blocked and neither closes the window."""
+    token = shaped.claim()
+    shaped.upstream.reply("hi")
+    reply = shaped.send(token, with_text(PREFIX + guess))
+    assert reply.status_code == 200
+    assert len(shaped.upstream.requests) == 1
+    assert not shaped.window.closed.is_set()
+
+
+@pytest.mark.parametrize("known", range(3, 16))
+def test_no_fragment_overlaps_the_prefix(shaped: Rig, known: int) -> None:
+    """Every overlap a 16-character window can have with the 13-character prefix."""
+    token = shaped.claim()
+    shaped.upstream.reply("hi")
+    guess = SHAPED_KEY[len(PREFIX) + known - 16 : len(PREFIX) + known]
+    assert len(guess) == 16
+    assert shaped.send(token, with_text(guess)).status_code == 200
+    assert not shaped.window.closed.is_set()
+
+
+@pytest.mark.parametrize(
+    "run",
+    [SECRET[:16], SECRET[20:36], SECRET[-16:]],
+    ids=["first", "middle", "last"],
+)
+def test_a_16_character_run_from_the_secret_part_is_blocked(shaped: Rig, run: str) -> None:
+    token = shaped.claim()
+    reply = shaped.send(token, with_text(f"look: {run}"))
+    assert reply.status_code == 502
+    assert run not in reply.text
+    assert shaped.upstream.requests == []
+    assert shaped.window.closed.is_set()
+    assert "ROTATE THE KEY" in "\n".join(shaped.lines)
+
+
+def test_15_characters_of_the_secret_part_pass(shaped: Rig) -> None:
+    token = shaped.claim()
+    shaped.upstream.reply("hi")
+    assert shaped.send(token, with_text(SECRET[:15])).status_code == 200
+
+
+def test_a_miss_is_still_charged(shaped: Rig) -> None:
+    token = shaped.claim()
+    shaped.upstream.reply("hi")
+    shaped.send(token, with_text(PREFIX + "aaa"))
+    assert shaped.ledger.totals().spent_usd > 0
+
+
+def test_the_whole_key_in_a_response_is_blocked_and_closes_the_window(shaped: Rig) -> None:
+    token = shaped.claim()
+    shaped.upstream.reply(f"the key is {SHAPED_KEY}")
+    assert shaped.send(token).status_code == 502
+    assert shaped.window.closed.is_set()
+
+
+@pytest.mark.parametrize(
+    ("key", "secret"),
+    [
+        ("sk-ant-api03-abc", "abc"),
+        ("sk-ant-admin01-abc", "abc"),
+        ("sk-ant-oat01-abc", "abc"),
+        ("nwfake-abc", "nwfake-abc"),
+    ],
+)
+def test_secret_part_drops_only_a_known_prefix(key: str, secret: str) -> None:
+    assert runner.secret_part(key) == secret
+
+
+def test_a_key_too_short_to_scan_for_is_refused(tmp_path: Path) -> None:
+    path = key_file(tmp_path, f"ANTHROPIC_API_KEY={PREFIX}short\n")
+    with pytest.raises(RunnerError, match="too short"):
+        load_runner_key(path)
+
+
+def test_the_offline_scan_still_matches_the_prefix(tmp_path: Path) -> None:
+    """Only the runner narrows its fragments: a file is not an oracle that answers per request."""
+    findings = scan_text(PREFIX + "Zq7", secret=SHAPED_KEY)
+    assert "api-key-fragment" in [f.kind for f in findings]
+
+
+# -- first byte (#17) ------------------------------------------------------------------------
+
+
+def test_each_call_logs_its_first_upstream_byte(rig: Rig) -> None:
+    token = rig.claim()
+    rig.upstream.reply("hi")
+    rig.send(token)
+    (line,) = [line for line in rig.lines if "claude-haiku-5-5" in line]
+    assert re.search(r"first_byte=\d+ms", line)
+    settled = [
+        json.loads(entry)
+        for entry in rig.ledger.path.read_text().splitlines()
+        if '"settle"' in entry
+    ]
+    assert isinstance(settled[0]["first_byte_ms"], int)
+
+
+def test_a_streamed_call_logs_its_first_upstream_byte(rig: Rig) -> None:
+    token = rig.claim()
+    rig.upstream.reply("hi")
+    rig.send(token, message(stream=True))
+    assert any(re.search(r"first_byte=\d+ms", line) for line in rig.lines)
+
+
+def test_a_call_with_no_body_has_no_first_byte(rig: Rig) -> None:
+    token = rig.claim()
+    rig.upstream.reply_raw(529, "")
+    rig.send(token)
+    assert any("first_byte=?ms" in line for line in rig.lines)
+    assert "first_byte_ms" not in rig.ledger.path.read_text()
+
+
+# -- security review 2026-11-04, third pass --------------------------------------------------
+
+
+def test_a_deeply_nested_header_strands_no_reservation(rig: Rig) -> None:
+    """Parses and dumps, then the walk for text overflows: it must not skip settlement."""
+    token = rig.claim()
+    rig.upstream.reply("hi")
+    nested = "[" * 2000 + "]" * 2000
+    post(f"{rig.url}/v1/messages", message(), {"x-api-key": token, "user-agent": nested})
+    assert rig.ledger.totals().outstanding_usd == 0
+
+
+def test_a_request_scan_that_raises_releases_the_reservation_and_is_counted(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def boom(*_: object) -> bool:
+        raise RecursionError
+
+    monkeypatch.setattr(RunnerGate, "request_leaks", boom)
+    token = rig.claim()
+    reply = rig.send(token)
+    assert reply.status_code == 400
+    assert rig.upstream.requests == []
+    assert rig.ledger.totals().outstanding_usd == 0
+    assert "REFUSED refused-unreadable" in "\n".join(rig.lines)
+
+
+@pytest.mark.parametrize(
+    "key",
+    [
+        "sk-ant-API03-" + "x" * 40,
+        "sk-ant-api04_" + "x" * 40,
+        "gateway-" + "x" * 40,
+    ],
+)
+def test_a_key_with_no_known_prefix_is_refused(tmp_path: Path, key: str) -> None:
+    """Its prefix would stay in the fragments, and the guessing search would return."""
+    path = key_file(tmp_path, f"ANTHROPIC_API_KEY={key}\n")
+    with pytest.raises(RunnerError, match="known key prefix"):
+        load_runner_key(path)

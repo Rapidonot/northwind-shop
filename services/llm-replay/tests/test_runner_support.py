@@ -134,7 +134,7 @@ def test_runner_sync_shows_everything_and_asks_before_merging(tmp_path: Path) ->
     assert lines[merge] == "git merge --ff-only refs/runner/incoming"
     assert lines[merge + 1] == "git update-ref refs/remotes/origin/main refs/runner/incoming"
     assert lines[-2] == "uv sync --frozen --no-dev --package northwind-llm-replay"
-    assert lines[-1] == "uv sync --frozen"
+    assert lines[-1] == "uv sync --frozen --no-dev --package northwind-rag"
 
 
 def test_runner_sync_filters_neither_the_log_nor_the_stat(tmp_path: Path) -> None:
@@ -158,6 +158,9 @@ def test_runner_sync_shows_the_full_diff_of_the_key_paths(tmp_path: Path) -> Non
         ".python-version",
         "**/pyproject.toml",
         "services/rag",
+        "data/src",
+        "**/sitecustomize.py",
+        "**/usercustomize.py",
         "infra",
         ".gitattributes",
         "uv.toml",
@@ -272,6 +275,23 @@ def test_inside_the_clone_the_scan_reads_the_key_on_the_runner_python(tmp_path: 
     )
 
 
+def test_inside_the_clone_model_runs_on_its_own_small_environment(tmp_path: Path) -> None:
+    """The full .venv has a .pth per workspace member: a sitecustomize.py in any would load."""
+    env = rig(tmp_path)
+    python = tmp_path / ".venv-model" / "bin" / "python"
+    python.parent.mkdir(parents=True)
+    python.write_text(SHIM)
+    python.chmod(0o755)
+    done = make(tmp_path, env, "model", f"RUNNER_DIR={tmp_path}")
+    assert done.stdout.startswith("python -I -c ")
+
+
+def test_outside_the_clone_model_uses_uv(tmp_path: Path) -> None:
+    env = rig(tmp_path, "uv")
+    done = make(tmp_path, env, "model")
+    assert done.stdout.startswith("uv run python -c ")
+
+
 def test_inside_the_clone_uv_stays_off_the_shared_cache_and_pythonpath_goes(tmp_path: Path) -> None:
     env = rig(tmp_path, "uv")
     env["PYTHONPATH"] = "/somewhere"
@@ -363,6 +383,30 @@ def test_a_hostile_file_name_cannot_write_to_the_terminal(tmp_path: Path, name: 
     assert not [line for line in lines if "\x1b" in line or "\n" in line]
 
 
+def test_the_scan_never_says_where_a_fragment_is(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Neither by path, nor by its place among the lines that match a key's shape."""
+    cassettes = tmp_path / "cassettes"
+    cassettes.mkdir()
+    key = FAKE_KEY
+    (cassettes / "hit.txt").write_text(f"sk-ant-aaaaaaaaaa\n{key}\nsk-ant-bbbbbbbbbb\n")
+    (cassettes / "fragment-only.txt").write_text(key[7:23])
+    key_file = tmp_path / "key"
+    key_file.write_text(f"ANTHROPIC_API_KEY={key}\n")
+    answer_key = tmp_path / "data" / "fixtures" / "_answer_key.json"
+    answer_key.parent.mkdir(parents=True)
+    answer_key.write_text(json.dumps({"internal_only": []}))
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("LLM_LEDGER_PATH", str(tmp_path / "l.jsonl"))
+    monkeypatch.setattr("northwind_common.localenv.worktree_root", lambda: tmp_path)
+    code = cli.main(["scan", "--cassettes-dir", str(cassettes), "--env-file", str(key_file)])
+    err = capsys.readouterr().err
+    assert code == 1
+    assert "fragment-only.txt" not in err
+    assert err.strip().splitlines()[-1].endswith("ROTATE THE KEY")
+
+
 def test_a_fifo_does_not_hang_the_scan(tmp_path: Path) -> None:
     os.mkfifo(tmp_path / "pipe")
     assert scan_paths([tmp_path]) == []
@@ -390,9 +434,8 @@ def test_scan_output_names_the_finding_and_never_the_match(
     code = cli.main(["scan", "--cassettes-dir", str(cassettes), "--env-file", str(key_file)])
     captured = capsys.readouterr()
     assert code == 1
-    assert "api-key-fragment" in captured.err
-    assert "a.txt:0: api-key-fragment" in captured.err  # no line: guesses must not be locatable
     assert "ROTATE THE KEY" in captured.err
+    assert "api-key-fragment" not in captured.err  # a guess per line must not be locatable
     assert "regex + key-fragment" in captured.out
     assert FAKE_KEY[:16] not in captured.out + captured.err
 
@@ -520,6 +563,13 @@ def test_a_checkout_with_exclusions_is_reported(tmp_path: Path) -> None:
 def test_a_checkout_without_the_sandbox_is_reported(tmp_path: Path) -> None:
     problems = runner_check.excluded_commands(settings_file(tmp_path, {}))
     assert problems == [f"NO SANDBOX {tmp_path / 'settings.json'}"]
+
+
+def test_a_local_settings_file_needs_no_sandbox_block_but_may_not_exclude(tmp_path: Path) -> None:
+    clean = settings_file(tmp_path, {})
+    assert runner_check.excluded_commands(clean, must_enable=False) == []
+    bad = settings_file(tmp_path, {"excludedCommands": ["make record SUITE=*"]})
+    assert runner_check.excluded_commands(bad, must_enable=False)
 
 
 def test_a_checkout_on_the_new_settings_passes(tmp_path: Path) -> None:

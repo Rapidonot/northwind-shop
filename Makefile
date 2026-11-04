@@ -27,14 +27,17 @@ export COMPOSE_PROJECT_NAME := northwind
 # can write, nothing re-resolves dependencies, and the shell's PYTHONPATH is dropped. What touches
 # the key runs on .venv-runner, which holds only llm-replay and common: a workspace member's src is
 # on sys.path through a .pth, so a sitecustomize.py in any member would otherwise load with the key.
+# `model` runs beside the key file, so it gets its own small .venv-model. The clone has no full .venv.
 RUNNER_DIR ?= $(HOME)/.northwind/runner
 RUNNER_PYTHON := .venv-runner/bin/python -I
 SCAN_PYTHON := uv run python
+MODEL_PYTHON := uv run python
 ifeq ($(CURDIR),$(realpath $(RUNNER_DIR)))
 export UV_CACHE_DIR := $(HOME)/.northwind/uv-cache
 export UV_FROZEN := 1
 unexport PYTHONPATH
 SCAN_PYTHON := $(RUNNER_PYTHON)
+MODEL_PYTHON := .venv-model/bin/python -I
 endif
 
 .PHONY: help setup up down dev dev-gateway dev-portal data model ingest fmt lint test \
@@ -80,7 +83,7 @@ data: ## Generate synthetic fixtures into data/fixtures (deterministic; FOUND-1)
 	uv run python -m northwind_data.cli --out data/fixtures
 
 model: ## Pre-fetch the embedding model (own terminal, from the runner clone only; CC-27)
-	uv run python -c "from northwind_rag.embedding import FastEmbedEmbedder; FastEmbedEmbedder().embed(['warm'])"
+	$(MODEL_PYTHON) -c "from northwind_rag.embedding import FastEmbedEmbedder; FastEmbedEmbedder().embed(['warm'])"
 
 ingest: ## Load data/fixtures into the RAG index (needs `make up`; idempotent; RAG-01)
 	uv run python -m northwind_rag.cli --fixtures data/fixtures
@@ -124,11 +127,11 @@ llm-proxy: ## Dev LLM proxy on this worktree's port (LLM_MODE=replay by default;
 llm-runner: ## Open one spending window (SUITE=name RUN_BUDGET=usd; own terminal, runner clone only)
 	@[[ "$$SUITE" =~ ^[a-z0-9_-]+$$ && "$$RUN_BUDGET" =~ ^[0-9]+(\.[0-9]+)?$$ ]] || (echo "usage: make -C $(RUNNER_DIR) llm-runner SUITE=<suite> RUN_BUDGET=<usd>" && exit 2)
 	@[[ "$${RUNNER_MINUTES:-30}" =~ ^[0-9]+$$ && "$${RUNNER_IDLE_MINUTES:-10}" =~ ^[0-9]+$$ ]] || (echo "RUNNER_MINUTES and RUNNER_IDLE_MINUTES are whole minutes" && exit 2)
-	@$(RUNNER_SYNC) --check >/dev/null 2>&1 || (echo ".venv-runner does not match uv.lock: run runner-sync" && exit 2)
+	@$(RUNNER_SYNC) --check >/dev/null || (echo ".venv-runner does not match uv.lock: run runner-sync" && exit 2)
 	$(RUNNER_PYTHON) -m northwind_llm_replay.cli runner --suite "$$SUITE" --run-budget "$$RUN_BUDGET" --minutes "$${RUNNER_MINUTES:-30}" --idle-minutes "$${RUNNER_IDLE_MINUTES:-10}"
 
 # Key-loaded code, what builds the environment, and what `model` and `up` run beside the key.
-RUNNER_SYNC_PATHS := services/llm-replay services/common services/rag infra Makefile pyproject.toml uv.lock uv.toml .python-version .gitattributes ':(glob)**/pyproject.toml'
+RUNNER_SYNC_PATHS := services/llm-replay services/common services/rag data/src infra Makefile pyproject.toml uv.lock uv.toml .python-version .gitattributes ':(glob)**/pyproject.toml' ':(glob)**/sitecustomize.py' ':(glob)**/usercustomize.py'
 RUNNER_INCOMING := refs/runner/incoming
 RUNNER_DIFF := git --no-pager diff --text --no-ext-diff --no-textconv
 RUNNER_SYNC := UV_PROJECT_ENVIRONMENT=.venv-runner uv sync --frozen --no-dev --package northwind-llm-replay
@@ -147,7 +150,7 @@ runner-sync: ## Show what changed in the runner clone, ask, then fast-forward to
 	git merge --ff-only $(RUNNER_INCOMING)
 	git update-ref refs/remotes/origin/main $(RUNNER_INCOMING)
 	$(RUNNER_SYNC)
-	uv sync --frozen
+	UV_PROJECT_ENVIRONMENT=.venv-model uv sync --frozen --no-dev --package northwind-rag
 
 # Must run sandboxed: from a terminal every write succeeds, and it reports exactly that.
 runner-check: ## From the sandbox: measure that nothing the runner loads is writable here (CC-27)

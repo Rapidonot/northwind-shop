@@ -76,8 +76,11 @@ def cmd_scan(args: argparse.Namespace) -> int:
     secret = _secret(args.env_file)
     canaries = load_canaries(localenv.worktree_root(), required=True)
     findings = scan_paths(roots, secret=secret, canaries=canaries, ledger=localenv.ledger_path())
+    # One line, no path and last: a session can write one guess per line or per file, so where a
+    # fragment is, or its place among the other findings, must not show.
     for f in findings:
-        print(f, file=sys.stderr)
+        if f.kind != "api-key-fragment":
+            print(f, file=sys.stderr)
     if any(f.kind == "api-key-fragment" for f in findings):
         print("a piece of the key is in these files: ROTATE THE KEY", file=sys.stderr)
     mode = "regex + key-fragment" if secret else "regex only (no readable key file)"

@@ -340,9 +340,11 @@ installing until 1 to 3 were fixed. "Confirmed" means confirmed by reading, unle
 | 16 | Low candidate | Duplicate JSON keys | **Fixed.** Refused |
 | 17 | Medium | Decision 0005 understated limits | **Fixed** in the decision |
 
+The user accepted finding 8 as a stated limit, with the habit in decision 0005. Finding 10 moved to
+PROGRESS row #9a.
+
 A second pass read the fixes above: 1 high, 6 medium and 7 low, and it advised against putting the
-real key on disk until the first was dealt with. **The fixes for this second pass have not been
-reviewed.**
+real key on disk until the first was dealt with.
 
 | # | Severity | Issue | Outcome |
 |---|----------|-------|---------|
@@ -359,7 +361,26 @@ reviewed.**
 | 11 | Low candidate | `.gitattributes` could hide a diff | **Fixed** |
 | 12 | Low candidate | A UTF-16 body passed the fragment check | **Fixed.** Refused |
 | 13 | Low candidate | The file scan as an oracle | **Fixed**: no line number, plus a rotate notice |
-| 14 | Low candidate | How to enter the key | **Fixed** in step 6 |
+| 14 | Low candidate | How to enter the key | **Fixed** in step 7 |
+
+The user then found what these passes missed: a fragment overlapping the public key prefix has only 3
+unknown characters, so a hit could be extended one at a time. The runner now builds fragments from
+the secret part only. The user also accepted the no-user-level-sandbox limit, and decided how #17
+measures first token. The runner logs time to first upstream byte.
+
+A third pass read the second-pass fixes and that change: no high, 1 medium, 6 low. It confirmed the
+`secret_part` change and the first-byte logging hold. **The fixes for this third pass have not been
+reviewed.**
+
+| # | Severity | Issue | Outcome |
+|---|----------|-------|---------|
+| 1 | Medium | `model` ran on the full `.venv`, whose workspace members `runner-sync` did not diff | **Fixed.** `.venv-model` with `northwind-rag` and `northwind-data`, the clone has no full `.venv`, and the key paths gain `data/src` and `sitecustomize.py` anywhere |
+| 2 | Low | Second-pass fix 2 was incomplete: a deeply nested header stranded a reservation | **Fixed**, and any scan failure now releases the reservation |
+| 3 | Low | Second-pass fix 13 was incomplete: a hit could be located by path or by order | **Fixed.** One line, no path, last |
+| 4 | Low | An unknown key shape left its prefix in the fragments | **Fixed.** The runner refuses to start |
+| 5 | Low candidate | "16 unknown characters" overstated a fixed suffix | **Fixed** in the decision: at least 14 |
+| 6 | Low candidate | Timing is the one per-character signal left | **Stated as a limit.** The reviewer advised no fix before install |
+| 7 | Low candidate | Two untested assumptions | **`--frozen --check` measured** with real uv on a throwaway environment: exit 0, and stderr now stays visible. **`runner-check` now reads `settings.local.json` too** |
 
 ## Install
 

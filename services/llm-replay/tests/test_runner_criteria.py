@@ -41,7 +41,7 @@ from northwind_rag.testing import FakeEmbedder
 
 pytestmark = pytest.mark.req("CC-27")
 
-FAKE_KEY = "nwfake-" + "criteriakey" * 5  # fake; built at runtime
+FAKE_KEY = "sk-ant-" + "api03-" + "criteriakey" * 5  # fake; built at runtime
 SUITE = "t"
 PLACEHOLDER = PLACEHOLDER_API_KEY
 

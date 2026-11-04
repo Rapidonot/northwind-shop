@@ -30,6 +30,7 @@ import asyncio
 import base64
 import json
 import threading
+import time
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
 from hmac import compare_digest
@@ -418,7 +419,13 @@ class Proxy:
 
         # Last of all, once every free refusal has passed: a miss here costs a real upstream call,
         # so this cannot be used as a free test of guesses at the key (review 2026-11-04, 1).
-        if self.cfg.gate is not None and self.cfg.gate.request_leaks(raw, headers):
+        try:
+            leaked = self.cfg.gate is not None and self.cfg.gate.request_leaks(raw, headers)
+        except (ValueError, RecursionError):
+            if reservation is not None:
+                await self._settle(reservation, {})  # nothing was sent; release at zero cost
+            raise
+        if leaked and self.cfg.gate is not None:
             if reservation is not None:
                 await self._settle(reservation, {})  # nothing was sent; release at zero cost
             entry["outcome"] = "blocked-key"
@@ -444,6 +451,7 @@ class Proxy:
             content=raw,
         )
         try:
+            sent_at = time.monotonic()
             resp = await client.send(upstream, stream=True)
         except httpx.HTTPError as e:
             return await self._upstream_failed(e, reservation, entry)
@@ -457,7 +465,12 @@ class Proxy:
                 media_type="text/event-stream",
             )
         try:
-            data = await resp.aread()
+            pieces: list[bytes] = []
+            async for piece in resp.aiter_bytes():
+                if not pieces:  # what a caller of a buffering runner cannot measure itself
+                    entry["first_byte_ms"] = round((time.monotonic() - sent_at) * 1000)
+                pieces.append(piece)
+            data = b"".join(pieces)
         except httpx.HTTPError as e:
             return await self._upstream_failed(e, reservation, entry)
         finally:
@@ -474,7 +487,9 @@ class Proxy:
                 parsed = None
         if reservation is not None:
             # Any response without usage, error statuses included, is charged the worst case.
-            entry["cost_usd"] = await self._settle(reservation, usage or None)
+            entry["cost_usd"] = await self._settle(
+                reservation, usage or None, entry.get("first_byte_ms")
+            )
         entry["status"] = resp.status_code
         entry["outcome"] = "live"
         entry["usage"] = usage
@@ -494,7 +509,7 @@ class Proxy:
     ) -> Response:
         if reservation is not None:
             usage: dict[str, Any] | None = {} if isinstance(e, NOT_SENT_ERRORS) else None
-            entry["cost_usd"] = await self._settle(reservation, usage)
+            entry["cost_usd"] = await self._settle(reservation, usage, entry.get("first_byte_ms"))
         entry["outcome"] = "upstream-error"
         entry["error"] = type(e).__name__
         self._log(entry)
@@ -502,11 +517,13 @@ class Proxy:
             502, "transient", True, f"upstream request failed: {type(e).__name__}"
         )
 
-    async def _settle(self, res: Reservation, usage: dict[str, Any] | None) -> float:
+    async def _settle(
+        self, res: Reservation, usage: dict[str, Any] | None, first_byte_ms: int | None = None
+    ) -> float:
         ledger = self.cfg.ledger
         if ledger is None:
             raise RuntimeError("record/live mode needs a ledger")
-        return await anyio.to_thread.run_sync(lambda: ledger.settle(res, usage))
+        return await anyio.to_thread.run_sync(lambda: ledger.settle(res, usage, first_byte_ms))
 
     async def _stream(
         self,

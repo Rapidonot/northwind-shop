@@ -41,8 +41,10 @@ user's terminal:  runner = proxy in live mode -> checks, ledger, budget, key -> 
 - **Inside the clone** uv uses a private cache (`~/.northwind/uv-cache`), because `~/.cache/uv` is
   sandbox-writable and a poisoned wheel would run with the key. `PYTHONPATH` is dropped.
 - **What touches the key runs on `.venv-runner`**, which holds only `northwind-llm-replay` and
-  `northwind-common`, with `python -I`. The full `.venv` puts every workspace member's `src` on
-  `sys.path`, so a `sitecustomize.py` in any of them would load with the key.
+  `northwind-common`, with `python -I`. `make model`, which runs beside the key file, has its own
+  `.venv-model` with `northwind-rag` and `northwind-data`. A full `.venv` puts every workspace
+  member's `src` on `sys.path`, so a `sitecustomize.py` in any of them would load, and the clone has
+  none.
 
 ### What the runner forwards
 
@@ -74,12 +76,18 @@ The runner checks each request, and buffers and checks each whole response, for 
 key: raw text, decoded JSON and joined-up model text, because a key split across two SSE deltas only
 shows once they are joined. A hit is a structured 502 that never echoes the match.
 
-**That check is also an oracle.** Run freely, it would let a token holder bisect the key from
-caller-chosen guesses. So the request check runs after every free refusal, and a miss is charged
-against the window's budget. Any hit closes the window and prints `ROTATE THE KEY`, and five refusals
-or upstream 400s close it too. This limits the search; it does not remove it. A budget buys a number
-of guesses, and misses followed by a hit do reveal something. **Treat that line as an incident:
-rotate the key, every time.** Recovery depends on the key staying in use after it.
+**That check is also an oracle, so its fragments are built from the secret part only.** The runner
+drops the public prefix (`sk-ant-api03-`) first, so no 16-character fragment overlaps it. Otherwise
+a window starting on the prefix would leave 3 unknown characters, and a hit could be extended one
+character at a time. Now a guess has to get at least 14 unknown characters right at once (16, or 14
+at the end of the key if keys carry a fixed `AA` suffix, as public scanner patterns suggest), which no
+budget buys. The runner refuses a key with no known prefix, because that prefix would stay in the
+fragments. The offline cassette scan keeps its whole-key fragments, because it answers nothing per
+request: it reports a hit as one line with no path, so a guess per line or per file cannot be located.
+
+On top of that, the request check runs after every free refusal, and a miss is charged against the
+window's budget. Any hit closes the window and prints `ROTATE THE KEY`, and five refusals or upstream
+400s close it too. **Treat that line as an incident: rotate the key, every time.**
 
 ### The window (F3)
 
@@ -94,8 +102,8 @@ it:
   only. A second claim gets a 409, and another suite is refused. Requests must present the token.
 - Release, the time limit, the idle limit, a spent budget, a blocked fragment or repeated refusals
   closes the window and the runner exits. One window is one run.
-- The terminal prints one line per request: model, tokens, cost, run total and ledger total. Nothing
-  the caller chose is printed.
+- The terminal prints one line per request: model, time to first upstream byte, tokens, cost, run
+  total and ledger total. Nothing the caller chose is printed.
 
 With no window nothing spends, whatever the session does. The caps come from the user's terminal, so
 `LLM_BUDGET_USD=1000` on a sandboxed command does nothing.
@@ -126,31 +134,40 @@ so a spending run under an xdist worker is a usage error rather than a stream of
 
 ## Limits
 
-- **The window authorises the sandbox, not one command.** F3 is narrowed, not closed. Any sandboxed
-  command can claim first. While a run is up, any sandboxed command can also post to its in-process
-  proxy with the placeholder, and the proxy adds the token. A session that can edit `conftest.py` is
-  inside the run anyway, so no 409 need ever appear, and terminal lines look the same. A per-run
-  local credential was considered and left out: the Agent SDK launcher writes the child's environment
-  to a file in the temp directory, so it would raise the bar very little. What holds is the bound:
-  one suite, the two models, the run budget, the time limit.
+- **The window authorises the sandbox, not one command. Accepted by the user, 2026-11-04.** F3 is
+  narrowed, not closed. Any sandboxed command can claim first. While a run is up, any sandboxed
+  command can also post to its in-process proxy with the placeholder, and the proxy adds the token. A
+  session that can edit `conftest.py` is inside the run anyway, so no 409 need ever appear, and
+  terminal lines look the same. A per-run local credential was considered and left out: the Agent SDK
+  launcher writes the child's environment to a file in the temp directory, so it would raise the bar
+  very little. What holds is the bound: one suite, the two models, the run budget, the time limit.
+  **The habit that goes with it: open a window only to record, with a small explicit budget and the
+  default time limit.**
 - **The budget bound rests on the allow-lists.** It assumes a request built from allowed fields
   bills about what the reservation priced. If a run does overshoot, settled spend closes the window
   after that call, so the overrun is one call's worth per request in flight.
 - **The fragment check sees text, not encodings.** A base64 or reversed key is not caught.
+- **Timing is the one per-character signal left.** The check runs on the event loop, and its run time
+  depends on the text. Estimated at microseconds per character, with every sample a charged upstream
+  call, so it is impractical. Not measured.
 - **The cassette-write key-fragment check is gone**, because the sandbox has no key. Regex scanning
   stays at write time, and the runner checks every response. The file-level fragment scan from the
   clone covers `CASSETTES_DIR` only, not a worktree's `.llm-proxy-log/` or `evals/`.
-- **Buffering hides first-token latency.** The caller sees the first token when the response ends,
-  so #17 cannot measure it through the runner.
+- **Buffering hides first-token latency.** The caller sees the first token when the response ends.
+  So the runner logs time to first upstream byte per request, in its terminal line and the ledger's
+  settle entry. #17 measures local overhead in replay with a streaming scripted model, and the
+  estimate is the sum, recorded as NFR-13 partial. It is an estimate, and the first upstream byte of
+  a stream comes slightly before the first token.
 - **`preflight` catches accidents, not attacks.** A tampered copy can delete the check, which is why
   the docs always give the `make -C` form.
 - **`make runner-check` proves things only for an honest session**, because it runs from the worktree
   a hostile session can edit. Its value is catching a wrong install, per checkout. It reads every
   checkout's settings, but only measures the sandbox of the one it runs in.
-- **User-level denies need the sandbox to be on.** In a repo without `sandbox.enabled`, or on a commit
-  before 1d07a99, `denyRead` is inert, so a session there can read the key by Bash. A session started
-  before the settings changed keeps its old policy. Turning the sandbox on at user level would close
-  this, and would change every other repo, so it is the user's call.
+- **User-level denies need the sandbox to be on. Accepted by the user, 2026-11-04: no user-level
+  sandbox for now.** In a repo without `sandbox.enabled`, or on a commit before 1d07a99, `denyRead` is
+  inert, so a session there can read the key by Bash. A session started before the settings changed
+  keeps its old policy. Turning the sandbox on at user level would close this, and would change every
+  other repo.
 - **A key typed into a shell lands in its history**, which the sandbox can read. Use an editor.
 - **`services/llm-replay/spike/run_spike.py` still builds a direct proxy.** It is not wired to any
   target, and in the sandbox it can neither read the key nor reach the host.
@@ -165,6 +182,7 @@ so a spending run under an xdist worker is a usage error rather than a stream of
   `realpath` check, which is the user's to install.
 - **Postgres as a way out (review finding 10, candidate).** The app connects as the image's
   superuser, so `COPY … TO PROGRAM` may run code in the container, with open network and no key.
+  PROGRESS row #9a replaces it with a non-superuser app role.
 - F4 (`allowLocalBinding` is not loopback-only) and F6 for worktrees (shared caches) still stand.
 - Runner support for Batches charging is a prerequisite of #7.
 

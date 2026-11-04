@@ -20,6 +20,7 @@ import io
 import json
 import math
 import os
+import re
 import secrets
 import socket
 import stat
@@ -52,7 +53,7 @@ from northwind_llm_replay.proxy import (
     error_response,
     same_secret,
 )
-from northwind_llm_replay.scan import key_fragments
+from northwind_llm_replay.scan import KEY_FRAGMENT_LEN, key_fragments
 from northwind_llm_replay.scripted import ServerThread
 
 ALLOWED_MODELS = frozenset({"claude-sonnet-5-5", "claude-haiku-5-5"})
@@ -103,6 +104,7 @@ THINKING_TYPES = frozenset({"adaptive", "between_tools"})
 METADATA_KEYS = frozenset({"user_id"})
 CONTEXT_EDIT = {"type": "clear_thinking_20251015", "keep": "all"}
 TEXT_FIELDS = frozenset({"text", "thinking", "partial_json"})
+KEY_PREFIX = re.compile(r"sk-ant-[a-z0-9]+-")  # public: the same in every key of a kind
 MAX_BODY_BYTES = 2 * 1024 * 1024
 MAX_CLAIM_BYTES = 1024
 MAX_IN_FLIGHT = 4
@@ -150,6 +152,14 @@ def preflight(root: Path, expected: Path) -> None:
         raise RunnerError(f"{root} is not at origin/main: run `make runner-sync`")
 
 
+def secret_part(key: str) -> str:
+    """The key without its public prefix. A fragment overlapping the prefix would hold few unknown
+    characters: `sk-ant-api03-` plus three guesses is 16, and a hit on it could be extended one
+    character at a time. Every fragment must be all secret."""
+    prefix = KEY_PREFIX.match(key)
+    return key[prefix.end() :] if prefix else key
+
+
 def load_runner_key(path: Path) -> str:
     """ANTHROPIC_API_KEY alone, from a private regular file. Nothing else in it is used."""
     try:
@@ -168,6 +178,10 @@ def load_runner_key(path: Path) -> str:
         key = dotenv_values(stream=io.StringIO(handle.read())).get("ANTHROPIC_API_KEY")
     if not key:
         raise RunnerError(f"ANTHROPIC_API_KEY is not set in {path}")
+    if not KEY_PREFIX.match(key):  # an unknown prefix would stay in the fragments
+        raise RunnerError(f"ANTHROPIC_API_KEY in {path} does not have a known key prefix")
+    if len(secret_part(key)) < KEY_FRAGMENT_LEN:  # the fragment scan would have nothing to match
+        raise RunnerError(f"ANTHROPIC_API_KEY in {path} is too short to be a key")
     return key
 
 
@@ -273,16 +287,16 @@ def _text_leaves(value: Any) -> Iterator[str]:
 def readable_forms(text: str) -> list[str]:
     """The raw text, each JSON document decoded (so `\\uXXXX` escapes count), and all model text
     joined up, because a key split across two SSE deltas only shows once they are joined."""
-    documents: list[Any] = []
     decoded: list[str] = []
+    leaves: list[str] = []
     for candidate in [text, *(s[5:] for s in text.splitlines() if s.startswith("data:"))]:
         try:  # ValueError too: an oversized integer. Text that cannot parse is still scanned raw.
             document = json.loads(candidate)
             decoded.append(json.dumps(document, ensure_ascii=False))
-            documents.append(document)
+            leaves.extend(_text_leaves(document))
         except (ValueError, RecursionError):
             continue
-    return [text, *decoded, "".join(leaf for doc in documents for leaf in _text_leaves(doc))]
+    return [text, *decoded, "".join(leaves)]
 
 
 def _no_duplicates(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -368,7 +382,7 @@ class RunnerGate:
         close: Callable[[str], None],
         max_tokens: int = DEFAULT_MAX_OUTPUT_TOKENS,
     ) -> None:
-        self._fragments = key_fragments(key)
+        self._fragments = key_fragments(secret_part(key))
         self._ledger = ledger
         self._out = out
         self._close = close
@@ -456,6 +470,7 @@ class RunnerGate:
         cap = self._ledger.run_budget_usd or 0.0
         self._out(
             f"{stamp} {entry.get('model')} status={entry.get('status')} "
+            f"first_byte={entry.get('first_byte_ms', '?')}ms "
             f"in={usage.get('input_tokens', '?')} out={usage.get('output_tokens', '?')} "
             f"${entry['cost_usd']:.6f} | run ${totals.run_spent_usd:.6f} of ${cap:.2f} | "
             f"ledger ${totals.spent_usd:.6f} of ${self._ledger.budget_usd:.2f}"

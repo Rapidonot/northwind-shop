@@ -80,9 +80,9 @@ def present(path: Path) -> bool:
     return True
 
 
-def excluded_commands(settings_file: Path) -> list[str]:
-    """Problems with one checkout's project settings. An exclusion runs code the session can edit
-    outside the sandbox, where it can read the key: that is F1 again."""
+def excluded_commands(settings_file: Path, *, must_enable: bool = True) -> list[str]:
+    """Problems with one settings file. An exclusion runs code the session can edit outside the
+    sandbox, where it can read the key: that is F1 again."""
     try:
         sandbox = json.loads(settings_file.read_text()).get("sandbox", {})
     except (OSError, ValueError):
@@ -90,7 +90,7 @@ def excluded_commands(settings_file: Path) -> list[str]:
     problems = []
     if sandbox.get("excludedCommands"):
         problems.append(f"EXCLUSIONS {settings_file}: commit the new settings, then merge them")
-    if not sandbox.get("enabled"):
+    if must_enable and not sandbox.get("enabled"):
         problems.append(f"NO SANDBOX {settings_file}")
     return problems
 
@@ -138,6 +138,9 @@ def main(python: Path) -> int:
     problems = check(directories, files, [localenv.env_file()])
     for checkout in checkouts():
         problems += excluded_commands(checkout / ".claude" / "settings.json")
+        local = checkout / ".claude" / "settings.local.json"
+        if present(local):
+            problems += excluded_commands(local, must_enable=False)
     for line in problems:
         print(line)
     print(f"runner-check: {len(directories)} directories, {len(problems)} problem(s)")
