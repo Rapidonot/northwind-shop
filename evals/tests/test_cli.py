@@ -20,11 +20,13 @@ from northwind_common.llm import anthropic_client
 from northwind_evals import cli
 from northwind_evals.answerers import Answerer, SingleShotAnswerer
 from northwind_evals.contexts import ContextChunk, SavedContext, save_contexts
-from northwind_evals.gate import Baseline, save_baseline
+from northwind_evals.gate import Baseline, load_baseline, save_baseline
 from northwind_evals.items import MIN_HUMAN_REVIEWED, EvalItem
 from northwind_evals.judge import Judge
+from northwind_llm_replay.proxy import ProxyState
 from northwind_llm_replay.scripted import ScriptedLLM
-from northwind_rag.retrieval import RetrievedChunk
+from northwind_rag.retrieval import RetrievedChunk, retriever_id
+from northwind_rag.testing import FakeEmbedder
 
 pytestmark = pytest.mark.req("RAG-12")
 
@@ -51,7 +53,7 @@ def chunk_ids(n: int = 5) -> list[str]:
 
 def context_for(item_id: str, ids: list[str]) -> SavedContext:
     chunks = tuple(ContextChunk(c, "P1", "product", "text") for c in ids)
-    return SavedContext(item_id, "dense:v1:x", "idx", chunks)
+    return SavedContext(item_id, retriever_id(FakeEmbedder("x")), "idx", chunks)
 
 
 def live_for(ids: list[str], source: str = "P1") -> list[RetrievedChunk]:
@@ -78,7 +80,8 @@ class Rig:
         mp.setattr(cli, "REVIEW_LIST", tmp / "docs" / "review.md")
         mp.setattr(cli, "_connect", lambda: FakeDb())
         mp.setattr(cli, "_index_version", lambda conn: "idx")
-        mp.setattr(cli, "FastEmbedEmbedder", lambda: object())
+        mp.setattr(cli, "FastEmbedEmbedder", lambda: FakeEmbedder("x"))
+        mp.setattr(cli, "CANDIDATE", tmp / "candidate.json")
         mp.setattr(cli, "_live", lambda conn, embedder, items: self.live)
 
     def write_items(self, items: list[EvalItem]) -> None:
@@ -124,11 +127,12 @@ def rig(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Rig:
 
 def scripted_clients(monkeypatch: pytest.MonkeyPatch, llm: ScriptedLLM) -> None:
     @contextmanager
-    def clients(mode: str) -> Iterator[tuple[Answerer, Judge]]:
+    def clients(mode: str) -> Iterator[tuple[Answerer, Judge, ProxyState]]:
         assert mode == "replay"
         yield (
             SingleShotAnswerer(anthropic_client(llm.url), "claude-sonnet-5-5"),
             Judge(anthropic_client(llm.url), "claude-sonnet-5-5"),
+            ProxyState(),
         )
 
     monkeypatch.setattr(cli, "_clients", clients)
@@ -408,3 +412,109 @@ def test_the_committed_review_list_matches_the_committed_items() -> None:
         x.split(" | ")[0].removeprefix("| ") for x in listed.splitlines() if x.startswith("| EV-")
     }
     assert rows == {i.id for i in waiting}
+
+
+# --- the baseline only changes through promote (security review, finding 1) ---------------------
+
+
+def write_candidate(answers: dict[str, Any], retrieval: dict[str, Any] | None = None) -> None:
+    scores = retrieval or {"EV-1": {"recall@5": 1.0, "mrr": 1.0}}
+    save_baseline(
+        cli.CANDIDATE, Baseline("dense-only", "r", "idx", "a", "j", scores, answers, summary={})
+    )
+
+
+GOOD = {"groundedness": 1.0, "relevance": 1.0, "behaviour_ok": 1.0}
+
+
+def test_promote_replaces_the_baseline_and_consumes_the_candidate(rig: Rig) -> None:
+    rig.setup_one_item()
+    write_candidate({"EV-1": {**GOOD, "citation_ok": 1.0}})
+    assert cli.main(["promote"]) == 0
+    assert load_baseline(cli.BASELINE).answers["EV-1"]["citation_ok"] == 1.0
+    assert not cli.CANDIDATE.exists()
+
+
+def test_promote_refuses_a_regression_and_keeps_the_baseline(rig: Rig) -> None:
+    rig.setup_one_item()
+    write_candidate({"EV-1": {**GOOD, "relevance": 0.0}})
+    assert cli.main(["promote"]) == 1
+    assert load_baseline(cli.BASELINE).answers["EV-1"]["relevance"] == 1.0
+
+
+def test_accepting_a_regression_is_explicit(rig: Rig) -> None:
+    rig.setup_one_item()
+    write_candidate({"EV-1": {**GOOD, "relevance": 0.0}})
+    assert cli.main(["promote", "--accept-regression"]) == 0
+    assert load_baseline(cli.BASELINE).answers["EV-1"]["relevance"] == 0.0
+
+
+def test_promote_never_drops_a_gated_item_even_when_accepting_regressions(rig: Rig) -> None:
+    rig.setup_one_item()
+    rig.write_items([item(), item("EV-2")])
+    rig.write_baseline({"EV-1": {"recall@5": 1.0, "mrr": 1.0}}, {"EV-1": GOOD, "EV-2": GOOD})
+    write_candidate({"EV-1": GOOD})
+    assert cli.main(["promote", "--accept-regression"]) == 1
+    assert "EV-2" in load_baseline(cli.BASELINE).answers
+
+
+def test_promote_needs_a_candidate(rig: Rig) -> None:
+    rig.setup_one_item()
+    assert cli.main(["promote"]) == 1
+
+
+@pytest.mark.parametrize("size", ["0", "-1", "ten", ""])
+def test_run_refuses_a_slice_that_is_not_positive(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch, size: str
+) -> None:
+    monkeypatch.setenv("LLM_MODE", "record")
+    monkeypatch.delenv("CI", raising=False)
+    monkeypatch.setattr(cli, "_clients", None)
+    assert cli.main(["run", f"--slice={size}"]) == 2
+
+
+def test_gate_fails_on_a_baseline_with_no_answers(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    rig.setup_one_item()
+    rig.write_baseline({"EV-1": {"recall@5": 1.0, "mrr": 1.0}}, {})
+    with ScriptedLLM() as llm:
+        scripted_clients(monkeypatch, llm)
+        assert cli.main(["gate"]) == 1
+
+
+def test_changed_chunk_text_is_stale_though_the_ids_match(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    rig.setup_one_item()
+    rig.live["EV-1"][0] = RetrievedChunk(chunk_ids()[0], "product", "P1", None, "corrected text")
+    with ScriptedLLM() as llm:
+        scripted_clients(monkeypatch, llm)
+        assert cli.main(["gate"]) == 1
+    assert "STALE EV-1" in capsys.readouterr().out
+
+
+def test_a_run_whose_cassette_the_scanner_refused_writes_no_candidate(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    rig.setup_one_item()
+    monkeypatch.setenv("LLM_MODE", "record")
+    monkeypatch.delenv("CI", raising=False)
+    monkeypatch.setattr(cli, "LAST_RUN", rig.tmp / "last.json")
+    monkeypatch.setattr(cli, "_context_leaks", lambda contexts: [])
+
+    @contextmanager
+    def clients(mode: str) -> Iterator[tuple[Answerer, Judge, ProxyState]]:
+        with ScriptedLLM() as llm:
+            llm.reply("Fine [P1].")
+            llm.reply(VERDICT)
+            state = ProxyState(scan_failures=["cassette abc not written"])
+            yield (
+                SingleShotAnswerer(anthropic_client(llm.url), "m"),
+                Judge(anthropic_client(llm.url), "m"),
+                state,
+            )
+
+    monkeypatch.setattr(cli, "_clients", clients)
+    assert cli.main(["run", "--slice", "all"]) == 1
+    assert not cli.CANDIDATE.exists()

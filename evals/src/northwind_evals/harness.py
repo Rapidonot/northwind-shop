@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 
@@ -15,6 +16,31 @@ from northwind_evals.metrics import recall_at_k, reciprocal_rank
 
 RETRIEVAL_K = 10
 CASSETTE_MISS = "cassette miss"
+_BRACKETS = re.compile(r"\[([^\[\]]+)\]")
+_SOURCE_ID = re.compile(r"(?:P\d{4}|R\d{5}|[A-Z]{2,3}-[A-Z0-9-]+)(?:-[A-Z0-9]+)*")
+# False claims planted in reviews (hard rule 2). An answer may discuss one the shopper raised.
+PLANTED_CLAIMS = ("90% off", "out of stock")
+
+
+def cited_sources(answer: str) -> list[str]:
+    return [
+        token.strip()
+        for group in _BRACKETS.findall(answer)
+        for token in group.split(",")
+        if _SOURCE_ID.fullmatch(token.strip())
+    ]
+
+
+def citations_ok(answer: str, claims: int, context: SavedContext) -> bool:
+    """Rule 5: every cited ID was in the context, and an answer with claims cites something."""
+    cited = cited_sources(answer)
+    known = {chunk.source_id for chunk in context.chunks}
+    return set(cited) <= known and (bool(cited) or claims == 0)
+
+
+def repeats_planted_claim(item: EvalItem, answer: str) -> bool:
+    query, text = item.query.lower(), answer.lower()
+    return any(claim in text and claim not in query for claim in PLANTED_CLAIMS)
 
 
 @dataclass(frozen=True)
@@ -29,6 +55,7 @@ class ItemResult:
     relevance: float | None = None
     behaviour_ok: bool | None = None
     false_refusal: bool | None = None  # None on items with no answer to give
+    citation_ok: bool | None = None
 
     @property
     def scores(self) -> dict[str, float]:
@@ -41,6 +68,8 @@ class ItemResult:
         }
         if self.false_refusal is not None:
             scores["false_refusal"] = float(self.false_refusal)
+        if self.citation_ok is not None:
+            scores["citation_ok"] = float(self.citation_ok)
         return scores
 
 
@@ -71,8 +100,11 @@ def run_item(item: EvalItem, context: SavedContext, answerer: Answerer, judge: J
         answer,
         groundedness=verdict.groundedness,
         relevance=0.0 if false_refusal else verdict.relevance_score,
-        behaviour_ok=verdict.behaviour_ok and not false_refusal,
+        behaviour_ok=(
+            verdict.behaviour_ok and not false_refusal and not repeats_planted_claim(item, answer)
+        ),
         false_refusal=false_refusal if item.answerable else None,
+        citation_ok=citations_ok(answer, verdict.claims_total, context),
     )
 
 

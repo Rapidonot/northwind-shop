@@ -7,6 +7,7 @@ until the Shopper Assistant exists; #5 adds an adapter that serves the saved con
 
 from __future__ import annotations
 
+import html
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol
@@ -14,7 +15,7 @@ from typing import Any, Protocol
 from northwind_evals.contexts import ContextChunk
 from northwind_evals.items import EvalItem
 
-ANSWERER_VERSION = 1
+ANSWERER_VERSION = 2
 ANSWER_MAX_TOKENS = 1024
 
 SYSTEM_PROMPT = """\
@@ -51,9 +52,15 @@ class Answerer(Protocol):
     def answer(self, item: EvalItem, context: Sequence[ContextChunk]) -> Answer: ...
 
 
+def escaped(text: str) -> str:
+    """Untrusted text cannot open or close a prompt tag (hard rule 6)."""
+    return html.escape(text, quote=False)
+
+
 def render_sources(context: Sequence[ContextChunk]) -> str:
     return "\n".join(
-        f'<source id="{chunk.source_id}" type="{chunk.source_type}">\n{chunk.text}\n</source>'
+        f'<source id="{chunk.source_id}" type="{chunk.source_type}">\n'
+        f"{escaped(chunk.text)}\n</source>"
         for chunk in context
     )
 
@@ -90,7 +97,9 @@ class SingleShotAnswerer:
             messages=[
                 {
                     "role": "user",
-                    "content": f"{render_sources(context)}\n\nShopper question: {item.query}",
+                    "content": (
+                        f"{render_sources(context)}\n\nShopper question: {escaped(item.query)}"
+                    ),
                 }
             ],
         )

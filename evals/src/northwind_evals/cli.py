@@ -1,7 +1,8 @@
 """`python -m northwind_evals.cli snapshot|run|gate|review-list` (RAG-12).
 
 `run` is the only command that spends, and only with LLM_MODE=record (`make eval-live`), which CI
-refuses. `gate` always replays.
+refuses. It writes a candidate, never the baseline: `promote` is the deliberate step that replaces
+the baseline, so re-recording cannot hide a regression. `gate` always replays.
 """
 
 from __future__ import annotations
@@ -24,11 +25,21 @@ from northwind_evals.contexts import (
     ANSWER_CONTEXT_K,
     ContextChunk,
     SavedContext,
+    internal_sources,
     is_stale,
+    leaks,
     load_contexts,
     save_contexts,
 )
-from northwind_evals.gate import Baseline, compare, load_baseline, save_baseline
+from northwind_evals.gate import (
+    Baseline,
+    GateResult,
+    compare,
+    coverage_problems,
+    dropped_items,
+    load_baseline,
+    save_baseline,
+)
 from northwind_evals.harness import RETRIEVAL_K, ItemResult, run_answers, score_retrieval
 from northwind_evals.items import (
     MIN_HUMAN_REVIEWED,
@@ -41,7 +52,8 @@ from northwind_evals.items import (
 from northwind_evals.judge import Judge
 from northwind_evals.metrics import aggregate
 from northwind_llm_replay.ledger import Ledger
-from northwind_llm_replay.proxy import ProxyConfig, RunningProxy, encode_test_id
+from northwind_llm_replay.proxy import ProxyConfig, ProxyState, RunningProxy, encode_test_id
+from northwind_llm_replay.scan import load_canaries
 from northwind_rag.cli import DEFAULT_DATABASE_URL
 from northwind_rag.embedding import Embedder, FastEmbedEmbedder
 from northwind_rag.retrieval import RetrievedChunk, dense_search, retriever_id
@@ -49,6 +61,8 @@ from northwind_rag.retrieval import RetrievedChunk, dense_search, retriever_id
 ITEMS = Path("evals/fixtures/starter_set.jsonl")
 CONTEXTS = Path("evals/contexts/dense-only.jsonl")
 BASELINE = Path("evals/baselines/dense-only.json")
+CANDIDATE = Path(".llm-proxy-log/baseline-candidate.json")
+FIXTURES = Path("data/fixtures")
 LAST_RUN = Path(".llm-proxy-log/eval-last-run.json")
 REVIEW_LIST = Path("docs/reviews/RAG-12-eval-review.md")
 SUITE = "eval-answers"
@@ -93,16 +107,18 @@ def _stale_ids(
     items: Sequence[EvalItem],
     contexts: dict[str, SavedContext],
     live: dict[str, list[RetrievedChunk]],
+    retriever: str,
 ) -> list[str]:
-    return [
-        item.id
-        for item in items
-        if is_stale(contexts.get(item.id), [chunk.chunk_id for chunk in live[item.id]])
-    ]
+    return [item.id for item in items if is_stale(contexts.get(item.id), live[item.id], retriever)]
+
+
+def _context_leaks(contexts: dict[str, SavedContext]) -> list[str]:
+    """Checked before contexts are saved or sent: scanning a recording afterwards is too late."""
+    return leaks(contexts, internal_sources(FIXTURES), load_canaries(Path("."), required=True))
 
 
 @contextmanager
-def _clients(mode: str) -> Iterator[tuple[Answerer, Judge]]:
+def _clients(mode: str) -> Iterator[tuple[Answerer, Judge, ProxyState]]:
     """The answerer and the judge, each with its own client, both through the proxy."""
     ledger = None
     if mode != "replay":
@@ -124,7 +140,8 @@ def _clients(mode: str) -> Iterator[tuple[Answerer, Judge]]:
     with RunningProxy(config) as running:
         answerer_client = anthropic_client(f"{running.url}/_t/{encode_test_id('eval-answerer')}")
         judge_client = anthropic_client(f"{running.url}/_t/{encode_test_id('eval-judge')}")
-        yield SingleShotAnswerer(answerer_client, ASSISTANT_MODEL), Judge(judge_client, JUDGE_MODEL)
+        answerer = SingleShotAnswerer(answerer_client, ASSISTANT_MODEL)
+        yield answerer, Judge(judge_client, JUDGE_MODEL), running.proxy.state
 
 
 def _print_summary(summary: dict[str, dict[str, float | None]]) -> None:
@@ -135,6 +152,11 @@ def _print_summary(summary: dict[str, dict[str, float | None]]) -> None:
             if value is not None
         )
         print(f"  {group:<14} {shown}")
+
+
+def _print_rows(result: GateResult) -> None:
+    for metric, before, now, ok in result.rows:
+        print(f"  {'ok  ' if ok else 'FAIL'} {metric:<13} baseline {before:.3f}  current {now:.3f}")
 
 
 def _progress(result: ItemResult) -> None:
@@ -148,7 +170,7 @@ def cmd_snapshot(_: argparse.Namespace) -> int:
     with _connect() as conn:
         version = _index_version(conn)
         live = _live(conn, embedder, items)
-    contexts = [
+    saved = [
         SavedContext(
             item_id=item.id,
             retriever_id=retriever_id(embedder),
@@ -160,59 +182,101 @@ def cmd_snapshot(_: argparse.Namespace) -> int:
         )
         for item in items
     ]
-    save_contexts(CONTEXTS, contexts)
-    print(f"saved {len(contexts)} contexts to {CONTEXTS}")
+    leaked = _context_leaks({context.item_id: context for context in saved})
+    if leaked:
+        print(f"not saving: internal content in {leaked}", file=sys.stderr)
+        return 1
+    save_contexts(CONTEXTS, saved)
+    print(f"saved {len(saved)} contexts to {CONTEXTS}")
     return 0
 
 
 def cmd_run(args: argparse.Namespace) -> int:
-    """SPENDS: records answers and verdicts for a slice and writes the baseline."""
+    """SPENDS: records answers and verdicts for a slice and writes a baseline candidate."""
     if os.environ.get("LLM_MODE") != "record":
         print("run spends API credit: use `make eval-live EVAL_SLICE=<n|all>`", file=sys.stderr)
         return 2
     if os.environ.get("CI"):
         print("CI runs evals in replay only (decision 0001)", file=sys.stderr)
         return 2
+    if args.slice != "all" and not (args.slice.isdigit() and int(args.slice) > 0):
+        print("--slice must be a positive number or `all`", file=sys.stderr)
+        return 2
     items = load_items(ITEMS)
     contexts = load_contexts(CONTEXTS)
+    leaked = _context_leaks(contexts)
+    if leaked:
+        print(f"refusing to send: internal content in {leaked}", file=sys.stderr)
+        return 1
     embedder = FastEmbedEmbedder()
     with _connect() as conn:
         version = _index_version(conn)
         live = _live(conn, embedder, items)
-    stale = _stale_ids(items, contexts, live)
+    stale = _stale_ids(items, contexts, live, retriever_id(embedder))
     if stale:
         print(f"{len(stale)} saved contexts are stale, run `make eval-snapshot`: {stale[:5]}")
         return 1
     chosen = items if args.slice == "all" else slice_items(items, int(args.slice))
-    with _clients("record") as (answerer, judge):
+    with _clients("record") as (answerer, judge, state):
         results = run_answers(chosen, contexts, answerer, judge, _progress)
     LAST_RUN.parent.mkdir(exist_ok=True)
     LAST_RUN.write_text(json.dumps([asdict(r) for r in results], indent=2), encoding="utf-8")
 
+    if state.scan_failures:
+        print(f"not writing a candidate: scanner refused {state.scan_failures}", file=sys.stderr)
+        return 1
     failed = [r.item_id for r in results if r.status != "ok"]
     if failed:
-        print(f"not writing a baseline: {len(failed)} item(s) failed: {failed}", file=sys.stderr)
+        print(f"not writing a candidate: {len(failed)} item(s) failed: {failed}", file=sys.stderr)
         return 1
     segments = {item.id: item.segment for item in items}
     retrieval = _retrieval_scores(items, live)
     answers = {r.item_id: r.scores for r in results}
     summary = {"retrieval": aggregate(retrieval, segments), "answers": aggregate(answers, segments)}
-    save_baseline(
-        BASELINE,
-        Baseline(
-            name="dense-only",
-            retriever_id=retriever_id(embedder),
-            index_version=version,
-            answerer_id=answerer.id,
-            judge_id=judge.id,
-            retrieval=retrieval,
-            answers=answers,
-            summary=summary,
-        ),
+    candidate = Baseline(
+        name="dense-only",
+        retriever_id=retriever_id(embedder),
+        index_version=version,
+        answerer_id=answerer.id,
+        judge_id=judge.id,
+        retrieval=retrieval,
+        answers=answers,
+        summary=summary,
     )
-    print(f"baseline written to {BASELINE} ({len(answers)} answers, {len(retrieval)} retrieval)")
+    save_baseline(CANDIDATE, candidate)
+    print(f"candidate written to {CANDIDATE} ({len(answers)} answers, {len(retrieval)} retrieval)")
     _print_summary(summary["retrieval"])
     _print_summary(summary["answers"])
+    if BASELINE.exists():
+        _print_rows(compare(load_baseline(BASELINE), retrieval, answers, [], [], segments))
+    print("the baseline is unchanged: `make eval-promote` replaces it")
+    return 0
+
+
+def cmd_promote(args: argparse.Namespace) -> int:
+    """Replaces the baseline with the candidate. Refuses a regression or fewer gated items."""
+    if not CANDIDATE.exists():
+        print("no candidate: run `make eval-live` first", file=sys.stderr)
+        return 1
+    items = load_items(ITEMS)
+    candidate = load_baseline(CANDIDATE)
+    problems = coverage_problems(candidate.answers, items)
+    if BASELINE.exists():
+        baseline = load_baseline(BASELINE)
+        problems += [f"would stop gating {i}" for i in dropped_items(baseline, candidate, items)]
+        segments = {item.id: item.segment for item in items}
+        result = compare(baseline, candidate.retrieval, candidate.answers, [], [], segments)
+        _print_rows(result)
+        if not result.passed() and not args.accept_regression:
+            problems += [*result.problems, "the candidate regresses: see the rows above"]
+    if problems:
+        for problem in problems:
+            print(f"  {problem}", file=sys.stderr)
+        print("not promoted", file=sys.stderr)
+        return 1
+    save_baseline(BASELINE, candidate)
+    CANDIDATE.unlink()
+    print(f"promoted to {BASELINE}")
     return 0
 
 
@@ -221,29 +285,32 @@ def cmd_gate(_: argparse.Namespace) -> int:
     items = load_items(ITEMS)
     contexts = load_contexts(CONTEXTS)
     baseline = load_baseline(BASELINE)
+    embedder = FastEmbedEmbedder()
     with _connect() as conn:
         _index_version(conn)
-        live = _live(conn, FastEmbedEmbedder(), items)
+        live = _live(conn, embedder, items)
 
     recorded = [item for item in items if item.id in baseline.answers]
-    stale = _stale_ids(recorded, contexts, live)
+    stale = _stale_ids(recorded, contexts, live, retriever_id(embedder))
     fresh = [item for item in recorded if item.id not in stale]
-    with _clients("replay") as (answerer, judge):
+    with _clients("replay") as (answerer, judge, _state):
         results = run_answers(fresh, contexts, answerer, judge)
 
     stale += [r.item_id for r in results if r.status == "stale"]
     errors = [f"{r.item_id}: {r.detail}" for r in results if r.status == "error"]
     answers = {r.item_id: r.scores for r in results if r.status == "ok"}
-    result = compare(baseline, _retrieval_scores(items, live), answers, stale, errors)
+    segments = {item.id: item.segment for item in items}
+    result = compare(baseline, _retrieval_scores(items, live), answers, stale, errors, segments)
+    result.problems += coverage_problems(baseline.answers, items)
 
-    for metric, before, now, ok in result.rows:
-        print(f"  {'ok  ' if ok else 'FAIL'} {metric:<13} baseline {before:.3f}  current {now:.3f}")
+    _print_rows(result)
     print(f"  answers replayed {len(answers)}/{len(baseline.answers)}, stale {len(result.stale)}")
     for line in [*result.problems, *result.errors, *(f"STALE {i}" for i in result.stale)]:
         print(f"  {line}")
     allow_stale = os.environ.get(ALLOW_STALE_ENV) == "1"
     passed = result.passed(allow_stale)
-    print(f"eval-gate {'passed' if passed else 'FAILED'}")
+    verdict = "passed" if passed else "FAILED"
+    print(f"eval-gate {verdict}" + (f" with {len(result.stale)} stale" if result.stale else ""))
     return 0 if passed else 1
 
 
@@ -290,6 +357,9 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--slice", required=True, help="a number of items, or `all`")
     run.set_defaults(func=cmd_run)
     commands.add_parser("gate").set_defaults(func=cmd_gate)
+    promote = commands.add_parser("promote")
+    promote.add_argument("--accept-regression", action="store_true")
+    promote.set_defaults(func=cmd_promote)
     commands.add_parser("review-list").set_defaults(func=cmd_review_list)
     args = parser.parse_args(argv)
     return int(args.func(args))

@@ -303,12 +303,20 @@ def test_a_context_round_trips_and_keeps_chunk_order(tmp_path: Path) -> None:
     save_contexts(path, [saved, SavedContext("EV-2", "dense:v1:x", "idx", ())])
     loaded = load_contexts(path)
     assert loaded["EV-1"] == saved
-    assert loaded["EV-1"].chunk_ids == ["c3", "c1", "c2"]
+    assert [chunk.chunk_id for chunk in loaded["EV-1"].chunks] == ["c3", "c1", "c2"]
     assert loaded["EV-2"].chunks == ()
 
 
 def test_every_tolerance_is_small_and_covers_each_gated_metric() -> None:
-    assert set(TOLERANCES) == {"recall@5", "mrr", "groundedness", "relevance", "false_refusal"}
+    assert set(TOLERANCES) == {
+        "recall@5",
+        "mrr",
+        "groundedness",
+        "relevance",
+        "false_refusal",
+        "behaviour_ok",
+        "citation_ok",
+    }
     assert all(0 < t <= 0.05 for t in TOLERANCES.values())
 
 
@@ -322,7 +330,15 @@ def test_each_gated_metric_alone_can_fail_the_gate(metric: str) -> None:
         "a",
         "j",
         retrieval={"E": {"recall@5": 0.5, "mrr": 0.5}},
-        answers={"E": {"groundedness": 0.5, "relevance": 0.5, "false_refusal": 0.5}},
+        answers={
+            "E": {
+                "groundedness": 0.5,
+                "relevance": 0.5,
+                "false_refusal": 0.5,
+                "behaviour_ok": 0.5,
+                "citation_ok": 0.5,
+            }
+        },
         summary={},
     )
     retrieval = {"E": dict(base.retrieval["E"])}

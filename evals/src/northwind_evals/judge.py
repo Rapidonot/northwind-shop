@@ -13,11 +13,12 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from northwind_evals.answerers import AnswerError, render_sources, response_text
+from northwind_evals.answerers import AnswerError, escaped, render_sources, response_text
 from northwind_evals.contexts import ContextChunk
 from northwind_evals.items import EvalItem
+from northwind_evals.metrics import fixed
 
-JUDGE_VERSION = 2
+JUDGE_VERSION = 3
 JUDGE_MAX_TOKENS = 512
 RELEVANCE_SCORES = {"full": 1.0, "partial": 0.5, "none": 0.0}
 
@@ -88,7 +89,7 @@ class Verdict:
     @property
     def groundedness(self) -> float:
         """Supported share of the claims. An answer that claims nothing has nothing unsupported."""
-        return self.claims_supported / self.claims_total if self.claims_total else 1.0
+        return fixed(self.claims_supported / self.claims_total) if self.claims_total else 1.0
 
     @property
     def relevance_score(self) -> float:
@@ -125,13 +126,13 @@ class Judge:
         return f"judge:v{JUDGE_VERSION}:{self._model}"
 
     def judge(self, item: EvalItem, context: Sequence[ContextChunk], answer: str) -> Verdict:
-        reference = "\n".join(item.reference_facts)
+        reference = escaped("\n".join(item.reference_facts))
         content = (
             f"<sources>\n{render_sources(context)}\n</sources>\n"
-            f"<question>{item.query}</question>\n"
+            f"<question>{escaped(item.query)}</question>\n"
             f"<reference>{reference}</reference>\n"
             f"<expected>{_EXPECTED[item.expected_behaviour]}</expected>\n"
-            f"<answer>{answer}</answer>"
+            f"<answer>{escaped(answer)}</answer>"
         )
         response = self._client.messages.create(
             model=self._model,

@@ -17,7 +17,7 @@ override ANTHROPIC_API_KEY :=
 unexport ANTHROPIC_API_KEY
 
 .PHONY: help setup up down dev dev-gateway dev-portal data ingest fmt lint test test-integration ci \
-	scan-cassettes llm-spend llm-proxy record eval-live eval-gate eval-snapshot eval-review-list
+	scan-cassettes llm-spend llm-proxy record eval-live eval-gate eval-gate-stale-ok eval-promote eval-snapshot eval-review-list
 
 # Linked git worktrees never get a .env: the LLM proxy reads the key from the main checkout's
 # file (LLM_ENV_FILE), and nothing else needs one there (FOUND-2 addendum).
@@ -91,7 +91,7 @@ record: ## Re-record one LLM cassette suite (SUITE=name; spends API credit)
 	@test -n "$(SUITE)" || (echo "usage: make record SUITE=<suite>" && exit 2)
 	LLM_MODE=record uv run pytest -m "" --llm-suite $(SUITE)
 
-# SPENDS API CREDIT. Records answers and verdicts and rewrites the baseline. EVAL_SLICE is required
+# SPENDS API CREDIT. Records answers and verdicts into a baseline candidate. EVAL_SLICE is required
 # (a number of items, or `all`), so a bare `make eval-live` cannot start a full run. Unchanged
 # requests replay for free (RAG-12, decision 0001).
 eval-live: ## Run answer evals live and record them (EVAL_SLICE=<n|all>; spends API credit)
@@ -99,7 +99,14 @@ eval-live: ## Run answer evals live and record them (EVAL_SLICE=<n|all>; spends 
 	LLM_MODE=record uv run python -m northwind_evals.cli run --slice $(EVAL_SLICE)
 
 eval-gate: ingest ## Regression gate: live retrieval metrics + replayed answers vs the baseline (RAG-12)
-	LLM_MODE=replay uv run python -m northwind_evals.cli gate
+	LLM_MODE=replay EVAL_ALLOW_STALE= uv run python -m northwind_evals.cli gate
+
+# Local only: reports stale items but lets them pass. CI never runs this (decision 0001).
+eval-gate-stale-ok: ingest ## The gate, but stale items pass and are reported as stale
+	LLM_MODE=replay EVAL_ALLOW_STALE=1 uv run python -m northwind_evals.cli gate
+
+eval-promote: ## Replace the baseline with the candidate (refuses a regression; ACCEPT_REGRESSION=1 overrides)
+	uv run python -m northwind_evals.cli promote $(if $(ACCEPT_REGRESSION),--accept-regression)
 
 eval-snapshot: ## Save each eval item's retrieved context, the input for answers (no LLM; RAG-12)
 	uv run python -m northwind_evals.cli snapshot

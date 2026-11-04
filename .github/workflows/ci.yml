@@ -43,7 +43,7 @@ jobs:
       - run: uv run ruff format --check
       - run: uv run mypy services data evals
       - name: Secret/PAN scan of cassettes (FOUND-2)
-        run: uv run python -m northwind_llm_replay.cli scan cassettes evals/contexts
+        run: uv run python -m northwind_llm_replay.cli scan cassettes evals/contexts evals/fixtures evals/baselines docs/reviews/RAG-12-eval-review.md
       - run: uv run pytest
       # Runs even when the unit step fails, so one red test cannot hide integration results.
       - name: Integration tests

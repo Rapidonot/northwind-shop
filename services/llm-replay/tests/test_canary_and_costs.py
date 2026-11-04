@@ -8,8 +8,10 @@ already paid for. Everything here is synthetic.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import random
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -18,7 +20,14 @@ from northwind_llm_replay import cli
 from northwind_llm_replay.cassette import Cassette, CassetteStore, DirtyCassetteError
 from northwind_llm_replay.ledger import Ledger
 from northwind_llm_replay.pricing import COST_DECIMALS, cost_usd, worst_case_usd
-from northwind_llm_replay.scan import ANSWER_KEY, load_canaries, scan_paths, scan_text
+from northwind_llm_replay.scan import (
+    ANSWER_KEY,
+    load_canaries,
+    luhn_ok,
+    scan_paths,
+    scan_text,
+    without_known_ids,
+)
 
 pytestmark = pytest.mark.req("RAG-12")
 
@@ -254,3 +263,96 @@ def test_every_committed_cassette_cost_is_at_fixed_precision() -> None:
     for file in files:
         value = json.loads(file.read_text())["cost_usd"]
         assert value == round(value, COST_DECIMALS), file.name
+
+
+# --- generated IDs vs the PAN check (`make ci` failed on a ledger ID) ---------------------------
+
+# 32 hex characters holding a Luhn-valid 14-digit run, the shape that failed on the shared ledger.
+RUN = next(f"{n:014d}" for n in range(10**13, 10**13 + 100) if luhn_ok(f"{n:014d}"))
+HEX_ID = f"abcdef{RUN}abcdefabcdef"[:32]
+HEX_HASH = (HEX_ID * 2)[:64]
+PAN = "4242424242424242"
+
+
+def ledger_file(tmp_path: Path, record: dict[str, object]) -> Path:
+    path = tmp_path / "ledger.jsonl"
+    path.write_text(json.dumps(record, sort_keys=True) + "\n", encoding="utf-8")
+    return path
+
+
+def test_the_fixture_id_really_trips_the_content_check() -> None:
+    assert len(HEX_ID) == 32
+    assert [f.kind for f in scan_text(HEX_ID)] == ["luhn-valid-pan"]
+
+
+@pytest.mark.parametrize(
+    "record",
+    [
+        {"id": HEX_ID, "type": "settle", "cost_usd": 0.0001},
+        {"id": HEX_ID, "request_hash": HEX_HASH, "type": "reserve"},
+    ],
+)
+def test_ledger_id_fields_pass(tmp_path: Path, record: dict[str, object]) -> None:
+    assert scan_paths([ledger_file(tmp_path, record)]) == []
+
+
+@pytest.mark.parametrize(
+    "record",
+    [
+        {"id": PAN},  # a card number is not the shape of an ID
+        {"id": f"{HEX_ID}0"},  # one character too long
+        {"id": HEX_ID.upper()},  # generated IDs are lowercase
+        {"request_hash": HEX_ID},  # right shape for another field
+        {"note": HEX_ID},  # the same value outside an ID field
+        {"usage": {"id": HEX_ID}},  # nested: not a top-level ID
+        {"id": HEX_ID, "note": PAN},  # an ID does not excuse the rest of its line
+        {"note": f"card {PAN} ok"},
+    ],
+)
+def test_everything_else_in_a_record_stays_content(
+    tmp_path: Path, record: dict[str, object]
+) -> None:
+    findings = scan_paths([ledger_file(tmp_path, record)])
+    assert [f.kind for f in findings] == ["luhn-valid-pan"]
+
+
+def test_plain_text_gets_no_exception(tmp_path: Path) -> None:
+    path = tmp_path / "notes.txt"
+    path.write_text(json.dumps({"id": HEX_ID}), encoding="utf-8")
+    assert [f.kind for f in scan_paths([path])] == ["luhn-valid-pan"]
+
+
+def test_a_card_number_in_a_long_hex_looking_string_is_still_found() -> None:
+    assert [f.kind for f in scan_text(f"abcdef{PAN}abcdefabcdefabcdefabcdef")] == ["luhn-valid-pan"]
+
+
+def test_without_known_ids_keeps_every_other_byte() -> None:
+    document = json.dumps({"id": HEX_ID, "note": "x", "cost": 0.1})
+    assert without_known_ids(document) == json.dumps({"id": "", "note": "x", "cost": 0.1})
+    assert without_known_ids("not json") == "not json"
+    assert without_known_ids("[1, 2]") == "[1, 2]"
+
+
+def test_a_real_ledger_id_never_fails_the_scan(tmp_path: Path) -> None:
+    """Many reserve and settle pairs from the real ledger, through the real scan."""
+    path = tmp_path / "ledger.jsonl"
+    ledger = Ledger(path, budget_usd=1000.0, run_budget_usd=None, run_id="r", suite="s")
+    for n in range(400):
+        request_hash = hashlib.sha256(str(n).encode()).hexdigest()
+        reservation = ledger.reserve(
+            model="claude-sonnet-5-5", worst_case_usd=0.01, request_hash=request_hash
+        )
+        ledger.settle(reservation, {"input_tokens": 10, "output_tokens": 5})
+    assert scan_paths([path]) == []
+
+
+def test_the_cassette_store_accepts_a_hash_with_a_luhn_run(tmp_path: Path) -> None:
+    store = CassetteStore(tmp_path / "cassettes", "s", canaries=frozenset())
+    assert store.put(replace(cassette(), hash=HEX_HASH)).exists()
+    assert scan_paths([tmp_path / "cassettes"]) == []
+
+
+def test_the_cassette_store_still_refuses_a_card_number_in_the_body(tmp_path: Path) -> None:
+    store = CassetteStore(tmp_path / "cassettes", "s", canaries=frozenset())
+    with pytest.raises(DirtyCassetteError):
+        store.put(replace(cassette(body=f"card {PAN}"), hash=HEX_HASH))

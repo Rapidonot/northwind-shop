@@ -8,13 +8,20 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
 
+SCORE_DECIMALS = 6
+
+
+def fixed(score: float) -> float:
+    """Fixed precision: a raw float's long digit run can pass the scanner's PAN check."""
+    return round(score, SCORE_DECIMALS)
+
 
 def recall_at_k(ranked_sources: Sequence[str], relevant: Sequence[Sequence[str]], k: int) -> float:
     """Share of the requirements met by at least one source in the top `k` chunks."""
     if not relevant:
         raise ValueError("recall needs at least one requirement")
     top = set(ranked_sources[:k])
-    return sum(bool(top & set(group)) for group in relevant) / len(relevant)
+    return fixed(sum(bool(top & set(group)) for group in relevant) / len(relevant))
 
 
 def reciprocal_rank(ranked_sources: Sequence[str], relevant: Sequence[Sequence[str]]) -> float:
@@ -22,14 +29,14 @@ def reciprocal_rank(ranked_sources: Sequence[str], relevant: Sequence[Sequence[s
     wanted = {source for group in relevant for source in group}
     for rank, source in enumerate(ranked_sources, start=1):
         if source in wanted:
-            return 1 / rank
+            return fixed(1 / rank)
     return 0.0
 
 
 def mean(values: Iterable[float]) -> float | None:
     """None, not 0, when nothing was scored: "no data" must not read as a failing score."""
     collected = list(values)
-    return sum(collected) / len(collected) if collected else None
+    return fixed(sum(collected) / len(collected)) if collected else None
 
 
 def aggregate(
