@@ -4,5 +4,15 @@
     "deny": ["Read(./.env)", "Read(./.env.*)", "Edit(./.env)", "Edit(./.env.*)", "Write(./.env)", "Write(./.env.*)"],
     "allow": ["Bash(make *)", "Bash(uv run *)", "Bash(uv sync*)", "Bash(corepack pnpm *)", "Bash(docker compose *)"],
     "ask": ["Bash(git push*)"]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Read|Edit|Write|MultiEdit|NotebookEdit|Grep|Glob",
+        "hooks": [
+          { "type": "command", "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard_env.py\"" }
+        ]
+      }
+    ]
   }
 }
