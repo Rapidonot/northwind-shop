@@ -113,6 +113,17 @@ def test_agent_options_refuse_anything_but_a_list(tmp_path: Path, tools: Any) ->
         "--tools=Bash,Read",
         "no-session-persistence=false",
         " tools ",
+        "setting-sources",
+        "--settings=/tmp/x.json",
+        "mcp_config",
+        "permission-mode",
+        "--permission-mode=bypassPermissions",
+        "dangerously-skip-permissions",
+        "allow-dangerously-skip-permissions",
+        "add-dir",
+        "allowedTools",
+        "allowed-tools",
+        "disallowedTools",
     ],
 )
 @pytest.mark.parametrize("value", [None, "", "false", "Bash"])
@@ -126,6 +137,69 @@ def test_extra_args_cannot_touch_a_pinned_flag(tmp_path: Path, key: str, value: 
             runtime=rt,
             extra_args={key: value},
         )
+
+
+@pytest.mark.req("SA-02")
+@pytest.mark.parametrize(
+    ("name", "value"),
+    [
+        ("cwd", "/elsewhere"),
+        ("env", {"X": "1"}),
+        ("add_dirs", ["/elsewhere"]),
+        ("setting_sources", ["project"]),
+        ("settings", "{}"),
+        ("cli_path", "/bin/sh"),
+        ("disallowed_tools", []),
+        ("hooks", {}),
+        ("can_use_tool", print),
+        ("stderr", print),
+        ("agents", {}),
+        ("plugins", []),
+        ("sandbox", {}),
+        ("resume", "x"),
+        ("continue_conversation", True),
+        ("fork_session", True),
+        ("session_store", object()),
+        ("user", "root"),
+    ],
+)
+def test_anything_outside_the_allowlist_is_refused(tmp_path: Path, name: str, value: Any) -> None:
+    rt = agent_runtime(base_url="http://127.0.0.1:9/", root=tmp_path / "rt")
+    extra: dict[str, Any] = {name: value}
+    with pytest.raises(TypeError, match=name):
+        agent_options(system_prompt="sp", model="claude-haiku-5-5", tools=[], runtime=rt, **extra)
+
+
+@pytest.mark.req("SA-02")
+@pytest.mark.parametrize(
+    "mode", ["bypassPermissions", "acceptEdits", "default", "plan", "auto", "dontask", ""]
+)
+def test_only_dont_ask_is_an_accepted_permission_mode(tmp_path: Path, mode: str) -> None:
+    rt = agent_runtime(base_url="http://127.0.0.1:9/", root=tmp_path / "rt")
+    extra: dict[str, Any] = {"permission_mode": mode}
+    with pytest.raises(TypeError, match="permission_mode"):
+        agent_options(system_prompt="sp", model="claude-haiku-5-5", tools=[], runtime=rt, **extra)
+
+
+@pytest.mark.req("SA-02")
+def test_the_allowed_options_reach_the_sdk(tmp_path: Path) -> None:
+    rt = agent_runtime(base_url="http://127.0.0.1:9/", root=tmp_path / "rt")
+    opts = agent_options(
+        system_prompt="sp",
+        model="claude-haiku-5-5",
+        tools=[],
+        runtime=rt,
+        mcp_servers={"s": {"type": "sdk"}},
+        allowed_tools=["mcp__s__t"],
+        max_turns=4,
+        include_partial_messages=True,
+        permission_mode="dontAsk",
+    )
+    assert opts.mcp_servers == {"s": {"type": "sdk"}}
+    assert opts.allowed_tools == ["mcp__s__t"]
+    assert opts.max_turns == 4
+    assert opts.include_partial_messages is True
+    assert opts.permission_mode == "dontAsk"
 
 
 @pytest.mark.req("SA-02")

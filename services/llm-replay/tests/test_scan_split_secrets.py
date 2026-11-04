@@ -124,7 +124,7 @@ def test_a_split_api_key_is_found_in_a_stream_and_refused_by_put(tmp_path: Path)
 def test_a_split_configured_secret_is_found() -> None:
     secret = "zz-not-a-known-shape-0123456789abcdef"  # noqa: S105 - synthetic
     findings = scan_stream(text_stream(secret[:20], secret[20:]), "x", secret=secret)
-    assert "reassembled-api-key-fragment" in kinds(findings)
+    assert "api-key-fragment" in kinds(findings)  # the kind `cmd_scan` hides the place of
 
 
 def test_a_refused_put_leaves_an_existing_cassette_alone(tmp_path: Path) -> None:

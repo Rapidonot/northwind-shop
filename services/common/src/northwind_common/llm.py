@@ -25,7 +25,7 @@ import tempfile
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 PLACEHOLDER_API_KEY = "northwind-proxy-placeholder"
 
@@ -144,8 +144,26 @@ def agent_runtime(
     )
 
 
-# Each is a control: isolation, no transcripts on disk, and the built-in tool set (SA-02).
-PINNED_CLI_FLAGS = frozenset({"bare", "no-session-persistence", "tools"})
+# Each is a control: isolation, no transcripts on disk, and the tools, settings, permissions and
+# directories an agent gets. The options `agent_options()` refuses must not come back as flags.
+PINNED_CLI_FLAGS = frozenset(
+    {
+        "add-dir",
+        "allow-dangerously-skip-permissions",
+        "allowed-tools",
+        "allowedtools",
+        "bare",
+        "dangerously-skip-permissions",
+        "disallowed-tools",
+        "disallowedtools",
+        "mcp-config",
+        "no-session-persistence",
+        "permission-mode",
+        "setting-sources",
+        "settings",
+        "tools",
+    }
+)
 
 
 def _flag_name(key: str) -> str:
@@ -160,18 +178,27 @@ def agent_options(
     tools: list[str],
     runtime: AgentRuntime | None = None,
     extra_args: Mapping[str, str | None] | None = None,
-    **kwargs: Any,
+    mcp_servers: Mapping[str, Any] | None = None,
+    allowed_tools: list[str] | None = None,
+    max_turns: int | None = None,
+    include_partial_messages: bool = False,
+    permission_mode: Literal["dontAsk"] | None = None,
 ) -> Any:
     """ClaudeAgentOptions for a lab agent. `system_prompt`, `model` and `tools` are required, so no
     run picks up Claude Code's default prompt, model or tools by accident.
 
     `tools` is the built-in set; `[]` means none. It must be a list: the SDK adds no flag for
     `None` and sends `--tools default` for any other type (FOUND-2 review 8). In-process tools go
-    in `mcp_servers` and `allowed_tools`, not here."""
+    in `mcp_servers` and `allowed_tools`, not here.
+
+    The parameters are the whole list, on purpose: there is no `**kwargs`, so `cwd`, `env`,
+    `add_dirs`, `setting_sources` and the rest raise TypeError. A new need is a reviewed change."""
     from claude_agent_sdk import ClaudeAgentOptions
 
     if not isinstance(tools, list):
         raise TypeError(f"tools must be a list, not {type(tools).__name__}")
+    if permission_mode not in (None, "dontAsk"):
+        raise TypeError('permission_mode must be "dontAsk" or left out')
     pinned = sorted({_flag_name(key) for key in extra_args or ()} & PINNED_CLI_FLAGS)
     if pinned:
         raise ValueError(f"extra_args may not set {pinned}: the factory controls them")
@@ -188,7 +215,11 @@ def agent_options(
         cwd=rt.workdir,
         setting_sources=[],
         extra_args=args,
-        **kwargs,
+        mcp_servers=dict(mcp_servers or {}),
+        allowed_tools=allowed_tools or [],
+        max_turns=max_turns,
+        include_partial_messages=include_partial_messages,
+        permission_mode=permission_mode,
     )
 
 

@@ -126,9 +126,12 @@ jobs:
         run: psql "$DATABASE_URL" -f infra/db/init/001-extensions.sql
       - name: Install the browser
         run: pnpm --filter @northwind/portal exec playwright install --with-deps chromium
-      # A canned model, so this needs no cassette. The replayed `make e2e` joins it after recording.
       - name: Playwright smoke test on a canned model
         run: make e2e-scripted
+        env:
+          PNPM: pnpm
+      - name: Smoke test replayed from the assistant-smoke cassette
+        run: make e2e
         env:
           PNPM: pnpm
 

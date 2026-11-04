@@ -21,3 +21,23 @@ Also from `test-writer`, fixed before this review: separators the card check mis
 named like an object property crashing the portal, and a cut stream reported as a finished answer. A
 cut stream still ends in `message_stop` and a `success` result, so a stop reason in `message_delta` is
 the only sign an attempt finished.
+
+## Second pass, after recording
+
+Reviewed the branch including the `assistant-smoke` cassettes. 1 high, 2 medium, 8 low; the four
+cassettes are clean. First-pass fixes: 1, 6, 8 and 9 hold; 2, 3, 4 and 5 partly hold, with the gaps
+below. These fixes have had no third review.
+
+| # | Severity | Finding | Decision | What happened |
+|---|---|---|---|---|
+| 1 | High | A regression from this branch: `reassembled-api-key-fragment` escaped `cmd_scan`'s exact match, so a split key hit printed its path and no ROTATE line, against decision 0005 | Fixed | `scan_stream` keeps the kind for key fragments, in `scan.py`; `cli.py` untouched. Test runs a split key through `cli.main` |
+| 2 | Medium | Everyday CVV forms passed | Fixed | More names, separators in names, spaced digits, a 40-character gap that may hold digits |
+| 3 | Medium | The price test does not prove hard rule 2 | Accepted, reworded | True: its docstring now says it is a smoke test, and row #12 says it isn't evidence. It now checks the turn finished |
+| 4 | Low | PAN forms beyond the accepted limit: groups under 3 digits with wide separators, keycap emoji, `(4)(2)`, groups over 12 characters apart, dingbat digits | Accepted by the user | Hosted fields are the real control (PAY-05) |
+| 5 | Low | The tool-argument card check had no carry-over to mcp-rag | Recorded | Row #10 names it and the region filter |
+| 6 | Low | Text clearing was skipped when another error won | Fixed | Clears on any error when search failed and no source came back |
+| 7 | Low | A stream ending with no final event showed nothing | Fixed | The portal shows the fixed error |
+| 8 | Low, unconfirmed | Any `message_delta` counted as finished | Fixed | Only `end_turn` and `tool_use` count, so `max_tokens` and `refusal` are errors |
+| 9 | Low | Reassembly residuals had no home | Recorded | Row #18 |
+| 10 | Low | `extra_args` left other controls open | Fixed | `agent_options()` has no `**kwargs`: an explicit allowlist, `permission_mode` limited to `dontAsk`, anything else a TypeError. The flags behind the refused options are pinned in `extra_args` |
+| 11 | Low | Local identifiers and old transcripts | Noted | `.llm-proxy-log/` is gitignored; pre-fix transcripts in the temp dir hold only test text. The user can delete them |

@@ -94,6 +94,12 @@ describe("[SA-02] Chat", () => {
     await waitFor(() => expect(screen.getByTestId("answer")).toHaveTextContent(/^whole answer$/));
   });
 
+  it("says so when a stream ends with no final event", async () => {
+    mockFetch(streamOf(frame("token", { text: "half an answ" })));
+    ask("hi");
+    expect(await screen.findByRole("alert")).toHaveTextContent(/Something went wrong/);
+  });
+
   it("survives a frame and a character split across reads", async () => {
     const whole = new TextEncoder().encode(frame("token", { text: "café" }));
     const cut = whole.indexOf(0xc3) + 1; // between the two bytes of é

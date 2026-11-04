@@ -162,9 +162,14 @@ def scan_stream(
     canaries: frozenset[str] = frozenset(),
 ) -> list[Finding]:
     """`scan_text` over each reassembled block, because a secret split across deltas is never on
-    one raw line. Pairs with `scan_text` on the raw document (FOUND-2 review 6)."""
+    one raw line. Pairs with `scan_text` on the raw document (FOUND-2 review 6).
+
+    A key fragment keeps its kind: `cmd_scan` hides where those are, so a guess per file cannot be
+    located, and says to rotate the key (decision 0005)."""
     return [
-        replace(finding, kind=f"reassembled-{finding.kind}")
+        finding
+        if finding.kind == "api-key-fragment"
+        else replace(finding, kind=f"reassembled-{finding.kind}")
         for block in reassembled_blocks(document)
         for finding in scan_text(block, path, secret, canaries)
     ]

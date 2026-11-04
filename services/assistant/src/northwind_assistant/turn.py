@@ -31,6 +31,8 @@ log = logging.getLogger(__name__)
 
 # Up to 3 retrieval rounds and the answer: inside RAG-10's 3-round cap.
 MAX_TURNS = 4
+# Anything else, such as max_tokens or a refusal, is not a finished answer.
+FINISHED_STOPS = frozenset({"end_turn", "tool_use"})
 
 ErrorCode = Literal[
     "retrieval_failed", "model_unavailable", "replay_miss", "turn_limit", "internal"
@@ -127,7 +129,7 @@ async def run_turn(message: str, options: Any, state: ToolState) -> AsyncIterato
                         yield Reset()
                     complete = False
                 elif kind == "message_delta":
-                    complete = True
+                    complete = item.event.get("delta", {}).get("stop_reason") in FINISHED_STOPS
                 text = _text_delta(item)
                 if text:
                     parts.append(text)
@@ -147,7 +149,7 @@ async def run_turn(message: str, options: Any, state: ToolState) -> AsyncIterato
         code = "retrieval_failed"
     if code is not None:
         log.error("assistant turn failed: %s", code)
-        if code == "retrieval_failed" and parts:
+        if parts and state.failed and not state.seen:
             yield Reset()  # with no sources behind it, this text must not stay on screen
         yield TurnError(code)
         return

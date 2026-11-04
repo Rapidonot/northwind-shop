@@ -81,11 +81,18 @@ export async function sendMessage(
   }
   const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
   let buffer = "";
+  let ended = false; // a stream that stops with neither `done` nor `error` is a cut-off answer
   for (;;) {
     const { done, value } = await reader.read();
-    if (done) return;
+    if (done) {
+      if (!ended) onEvent({ type: "error", code: "internal" });
+      return;
+    }
     const { events, rest } = parseFrames(buffer + value);
     buffer = rest;
-    events.forEach(onEvent);
+    for (const event of events) {
+      ended ||= event.type === "done" || event.type === "error";
+      onEvent(event);
+    }
   }
 }

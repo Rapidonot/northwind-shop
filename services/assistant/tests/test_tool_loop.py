@@ -40,7 +40,7 @@ from northwind_assistant.turn import (
     stream_answer,
 )
 from northwind_common.llm import AgentRuntime, agent_runtime
-from northwind_llm_replay.scripted import ScriptedLLM
+from northwind_llm_replay.scripted import ScriptedLLM, blocks_sse
 from northwind_llm_replay.scrub import match_key, request_hash, scrub
 from northwind_rag.retrieval import RetrievedChunk
 
@@ -386,6 +386,35 @@ def test_text_with_no_sources_behind_it_is_cleared_when_search_failed(tmp_path: 
         llm.reply_stream("It is 100% waterproof.")
         events = turn("hi", BrokenRetriever(), runtime_for(llm, tmp_path))
     assert events[-2:] == [Reset(), TurnError("retrieval_failed")]
+
+
+def test_failed_search_text_is_cleared_when_another_error_ends_the_turn(tmp_path: Path) -> None:
+    usage = {"input_tokens": 1, "output_tokens": 1}
+    with ScriptedLLM() as llm:
+        for n in range(MAX_TURNS + 1):
+            blocks: list[dict[str, Any]] = [
+                {"type": "text", "chunks": ["It is waterproof. "]},
+                {
+                    "type": "tool_use",
+                    "id": f"toolu_{n}",
+                    "name": ALLOWED_TOOL,
+                    "input": {"query": "q"},
+                },
+            ]
+            body = blocks_sse("m", blocks, "tool_use", usage, f"msg_{n}")
+            llm.reply_raw(200, body, "text/event-stream")
+        events = turn("hi", BrokenRetriever(), runtime_for(llm, tmp_path))
+    assert events[-2:] == [Reset(), TurnError("turn_limit")]
+
+
+@pytest.mark.parametrize("stop_reason", ["max_tokens", "refusal"])
+def test_an_answer_that_did_not_finish_is_an_error(tmp_path: Path, stop_reason: str) -> None:
+    usage = {"input_tokens": 1, "output_tokens": 1}
+    blocks = [{"type": "text", "chunks": ["cut off"]}]
+    with ScriptedLLM() as llm:
+        llm.reply_raw(200, blocks_sse("m", blocks, stop_reason, usage, "m1"), "text/event-stream")
+        events = turn("hi", FakeRetriever(), runtime_for(llm, tmp_path))
+    assert events[-1] == TurnError("model_unavailable")
 
 
 def test_a_slash_command_stays_shopper_text(tmp_path: Path) -> None:

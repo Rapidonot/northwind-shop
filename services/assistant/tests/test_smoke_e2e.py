@@ -58,8 +58,12 @@ def test_a_product_question_streams_and_cites_a_source(llm_proxy: Any, tmp_path:
 
 
 def test_a_price_question_gets_the_product_page_not_a_price(llm_proxy: Any, tmp_path: Path) -> None:
-    """Hard rule 2: there are no live tools yet, so the assistant quotes no price or stock."""
-    answer = answer_of(ask(QUESTIONS["price"], tmp_path))
+    """Row #5's smoke criterion: this one recorded answer quotes no price and points to the product
+    page. Not evidence for hard rule 2: nothing in its context could leak, and in replay the answer
+    cannot change. Row #12 owns the rule."""
+    events = ask(QUESTIONS["price"], tmp_path)
+    assert isinstance(events[-1], Citations)
+    answer = answer_of(events)
     assert find_money_or_stock(answer) == []
     assert not PROMOTION.search(answer)  # textscan can't see these until row #7
     assert "product page" in answer.lower()

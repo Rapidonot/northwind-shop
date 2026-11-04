@@ -75,6 +75,15 @@ def test_product_ids_and_size_lists_are_not_cards(text: str) -> None:
         "737 is my cvv",
         "the card verification value is 737",
         "CVV ７３７",
+        "CVV 7 3 7",
+        "CVV 7-3-7",
+        "CV2 737",
+        "CID 1234",
+        "CVN 737",
+        "security-code 737",
+        "my cvv for this card is printed as 737",
+        "cvv on card 2 is 737",
+        "cvv_737",
     ],
 )
 def test_a_security_code_is_found(text: str) -> None:
