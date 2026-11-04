@@ -1,5 +1,17 @@
 {
+  "permissions": {
+    "deny": [
+      "Read(~/.northwind/secrets)",
+      "Read(~/.northwind/secrets/**)",
+      "Edit(~/.northwind/**)",
+      "Write(~/.northwind/**)"
+    ]
+  },
   "sandbox": {
+    "filesystem": {
+      "denyRead": ["~/.northwind/secrets", "~/.northwind/ledger.lock"],
+      "denyWrite": ["~/.northwind"]
+    },
     "network": {
       "strictAllowlist": true,
       "allowedDomains": [

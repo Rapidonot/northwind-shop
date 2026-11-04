@@ -2,6 +2,8 @@
 
 - `LLM_MODE` = replay (default) | record | live. With `CI` set, anything but replay is a usage
   error, so CI can never spend.
+- Record and live go through the key-holding runner (decision 0005): the run claims the window the
+  user opened, once per process, so a spending run cannot use xdist workers.
 - `llm_proxy` fixture: a proxy for the test's suite (`@pytest.mark.llm_suite("<name>")`, cassettes
   under cassettes/<name>/). It sets `LLM_PROXY_URL` so `northwind_common.llm` clients use it. Each
   test gets its own `/_t/<node id>` base URL. A cassette miss fails the test with the diff against
@@ -14,7 +16,6 @@
 from __future__ import annotations
 
 import os
-import uuid
 import warnings
 from collections.abc import Iterator
 from dataclasses import dataclass
@@ -22,20 +23,9 @@ from pathlib import Path
 
 import pytest
 
-from northwind_common import localenv
-from northwind_llm_replay.ledger import Ledger
-from northwind_llm_replay.proxy import (
-    MODES,
-    ProxyConfig,
-    ProxyState,
-    RunningProxy,
-    encode_test_id,
-)
+from northwind_llm_replay.proxy import MODES, ProxyState, RunningProxy, encode_test_id
+from northwind_llm_replay.runner import RunnerUnavailableError, proxy_config
 from northwind_llm_replay.scripted import ScriptedLLM
-
-DEFAULT_RUN_BUDGET_USD = "5.00"  # SPIKE.md §5: a 20-call slice at the ~$0.20 worst case
-DEFAULT_BUDGET_USD = "90"
-_SESSION_RUN_ID = f"pytest-{uuid.uuid4().hex[:12]}"
 
 
 class StaleReplayWarning(UserWarning):
@@ -59,6 +49,8 @@ def pytest_configure(config: pytest.Config) -> None:
         raise pytest.UsageError(f"LLM_MODE must be one of {MODES}, not {mode!r}")
     if os.environ.get("CI") and mode != "replay":
         raise pytest.UsageError("CI runs LLM tests in replay only (decision 0001); unset LLM_MODE")
+    if os.environ.get("PYTEST_XDIST_WORKER") and mode != "replay":
+        raise pytest.UsageError("a window is one claimed process: record without xdist workers")
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
@@ -97,24 +89,16 @@ def llm_proxy(
     suite = str(marker.args[0])
     mode = llm_mode()
     repo = Path(request.config.rootpath)
-    ledger = None
-    if mode != "replay":
-        ledger = Ledger(
-            localenv.ledger_path(),
-            budget_usd=float(os.environ.get("LLM_BUDGET_USD", DEFAULT_BUDGET_USD)),
-            run_budget_usd=float(os.environ.get("LLM_RUN_BUDGET_USD", DEFAULT_RUN_BUDGET_USD)),
-            run_id=os.environ.get("LLM_RUN_ID", _SESSION_RUN_ID),
-            suite=suite,
+    try:
+        cfg = proxy_config(
+            mode,
+            suite,
+            cassette_root=repo / "cassettes",
+            log_path=None if mode == "replay" else repo / ".llm-proxy-log" / f"{suite}.jsonl",
+            match=os.environ.get("LLM_REPLAY_MATCH", "hash"),
         )
-    cfg = ProxyConfig(
-        mode=mode,
-        suite=suite,
-        cassette_root=repo / "cassettes",
-        ledger=ledger,
-        env_file=localenv.env_file(repo),
-        log_path=None if mode == "replay" else repo / ".llm-proxy-log" / f"{suite}.jsonl",
-        match=os.environ.get("LLM_REPLAY_MATCH", "hash"),
-    )
+    except RunnerUnavailableError as exc:
+        pytest.fail(str(exc), pytrace=False)
     with RunningProxy(cfg) as running:
         handle = LLMProxyHandle(
             base_url=f"{running.url}/_t/{encode_test_id(request.node.nodeid)}",
