@@ -3,7 +3,7 @@
   "permissions": {
     "deny": ["Read(./.env)", "Read(./.env.*)", "Edit(./.env)", "Edit(./.env.*)", "Write(./.env)", "Write(./.env.*)"],
     "allow": ["Bash(make *)", "Bash(uv run *)", "Bash(uv sync*)", "Bash(corepack pnpm *)", "Bash(docker compose *)"],
-    "ask": ["Bash(git push*)"]
+    "ask": ["Bash(git push*)", "Bash(make record*)", "Bash(make eval-live*)", "Bash(make llm-proxy*)"]
   },
   "hooks": {
     "PreToolUse": [
