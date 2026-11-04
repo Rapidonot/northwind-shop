@@ -23,3 +23,7 @@ coverage/
 
 # Claude Code personal overrides (never shared)
 .claude/settings.local.json
+
+# LLM spend ledger and proxy request log: local only, scanned (FOUND-2)
+.llm-ledger/
+.llm-proxy-log/

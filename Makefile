@@ -7,12 +7,17 @@ PNPM ?= corepack pnpm
 COMPOSE := docker compose --env-file .env -f infra/docker-compose.yml
 
 # Load .env (if present) so DATABASE_URL etc. reach the gateway and tests.
+# The API key is the exception: it is blanked and never exported to recipes (hard rule 4,
+# decision 0001). Only the LLM proxy reads it, straight from .env, via dotenv_values (FOUND-2).
 ifneq (,$(wildcard .env))
 include .env
 export
 endif
+override ANTHROPIC_API_KEY :=
+unexport ANTHROPIC_API_KEY
 
-.PHONY: help setup up down dev dev-gateway dev-portal data fmt lint test test-integration ci
+.PHONY: help setup up down dev dev-gateway dev-portal data fmt lint test test-integration ci \
+	scan-cassettes llm-spend
 
 help: ## List targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  make %-18s %s\n", $$1, $$2}'
@@ -57,5 +62,11 @@ test: ## Unit tests (Python + portal)
 
 test-integration: ## Integration tests against the local stack (run `make up` first)
 	uv run pytest -m integration
+
+scan-cassettes: ## Secret/PAN scan of cassettes, ledger and proxy log (FOUND-2)
+	uv run python -m northwind_llm_replay.cli scan
+
+llm-spend: ## LLM spend from the ledger: total, per suite/model, 20-call checkpoint (FOUND-2)
+	uv run python -m northwind_llm_replay.cli spend
 
 ci: lint test test-integration ## Everything CI runs

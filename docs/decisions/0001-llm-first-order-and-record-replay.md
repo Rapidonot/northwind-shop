@@ -60,6 +60,25 @@ eval that calls Claude would also stop passing.
 - `make test`, `make ci` and `make eval-gate` run in replay. `make record` and `make eval-live`
   are the only targets that spend.
 
+## Resolution 2026-11-04: billing route (open item closed)
+
+Decided by the user before the first live call:
+
+- **Claude Code development sessions** (the interactive tool used to build the lab) are billed to
+  the user's **Max 5x subscription**. They are not covered by the $100 API credit, the proxy
+  ledger or `LLM_BUDGET_USD`.
+- **The $100 API credit is for the app's runtime calls only**: the Agent SDK's `claude` CLI
+  subprocess and every direct `anthropic` client. Every one of these goes through the FOUND-2
+  proxy, so the ledger and `LLM_BUDGET_USD` cover all of that spend.
+- So a runtime call can never land on the subscription: the CLI subprocess gets a child
+  environment built from scratch, with a placeholder `ANTHROPIC_API_KEY`, an isolated
+  `CLAUDE_CONFIG_DIR` and no inherited `ANTHROPIC_*` / `CLAUDE_CODE_*` / `CLAUDECODE*` variables.
+  The proxy rejects any request that does not carry exactly that placeholder, or that carries an
+  `Authorization` header, and only the proxy holds the real key. It reads the key from `.env` with
+  `dotenv_values` and never exports it to the environment. A client that bypassed the proxy would
+  present the placeholder to Anthropic and get a 401, so it fails closed and spends nothing.
+- The Makefile no longer exports `ANTHROPIC_API_KEY` into recipe environments.
+
 ## Open items
 
-- **Billing route (resolve before the first live call).** This decision does not record whether Claude Code, and the `claude` CLI subprocess the Agent SDK starts, is billed to the user's subscription or to the API key whose $100 credit this plan budgets. The answer decides what the proxy ledger and `LLM_BUDGET_USD` cover. Tracked at the top of the FOUND-2 row in PROGRESS.md.
+None.
