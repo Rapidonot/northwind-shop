@@ -263,7 +263,7 @@ def _build_candidate(chosen_size: str, mode: str) -> int:
 def cmd_run(args: argparse.Namespace) -> int:
     """SPENDS: records answers and verdicts for a slice and writes a baseline candidate."""
     if os.environ.get("LLM_MODE") != "record":
-        print("run spends API credit: use `make eval-live EVAL_SLICE=<n|all>`", file=sys.stderr)
+        print("run spends API credit: use `make eval-live EVAL_SLICE=<n>`", file=sys.stderr)
         return 2
     if os.environ.get("CI"):
         print("CI runs evals in replay only (decision 0001)", file=sys.stderr)

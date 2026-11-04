@@ -15,7 +15,9 @@ import pytest
 
 pytestmark = pytest.mark.req("NFR-02")
 
-SETTINGS = Path(__file__).resolve().parents[2] / ".claude" / "settings.json"
+ROOT = Path(__file__).resolve().parents[2]
+SETTINGS = ROOT / ".claude" / "settings.json"
+PROPOSED = ROOT / "tools" / "settings.proposed.json"
 
 # Compared whole: `<guard> || true` or an added `async` would keep the path but lose the block.
 GUARD_HOOK = {
@@ -72,6 +74,12 @@ def problems(raw: str) -> list[str]:
 
 def test_settings_file_keeps_the_guard_and_the_rules() -> None:
     assert problems(SETTINGS.read_text()) == []
+
+
+@pytest.mark.req("CC-27")
+def test_proposed_settings_keep_the_guard_and_the_rules() -> None:
+    """Installing the sandbox proposal must not lose anything this file protects."""
+    assert problems(PROPOSED.read_text()) == []
 
 
 @pytest.mark.parametrize(

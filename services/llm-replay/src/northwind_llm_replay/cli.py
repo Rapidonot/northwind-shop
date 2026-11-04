@@ -31,10 +31,16 @@ EVAL_ROOTS = [
 
 
 def _secret(env_file: Path) -> str | None:
-    """The real key, only for fragment matching; never printed. None in CI (no key file)."""
-    if not env_file.exists():
+    """The real key, only for fragment matching; never printed.
+
+    None in CI (no key file) and in Claude's sandbox, which denies reading it (CC-27).
+    """
+    try:
+        if not env_file.exists():
+            return None
+        return dotenv_values(env_file).get("ANTHROPIC_API_KEY") or None
+    except PermissionError:
         return None
-    return dotenv_values(env_file).get("ANTHROPIC_API_KEY") or None
 
 
 def _budget() -> float:
@@ -71,7 +77,7 @@ def cmd_scan(args: argparse.Namespace) -> int:
     findings = scan_paths(roots, secret=secret, canaries=canaries, ledger=localenv.ledger_path())
     for f in findings:
         print(f, file=sys.stderr)
-    mode = "regex + key-fragment" if secret else "regex only (no key file)"
+    mode = "regex + key-fragment" if secret else "regex only (no readable key file)"
     status = "FAIL" if findings else "clean"
     where = ", ".join(map(str, roots))
     print(

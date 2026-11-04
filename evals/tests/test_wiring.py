@@ -107,8 +107,8 @@ def test_eval_live_with_a_slice_runs_the_cli_run_command_in_record_mode(tmp_path
 
 
 def test_eval_live_takes_the_slice_from_the_shell_too(tmp_path: Path) -> None:
-    _, calls, _ = run_make(tmp_path, "eval-live", env={"EVAL_SLICE": "all"})
-    assert calls and calls[0].endswith("run --slice all")
+    _, calls, _ = run_make(tmp_path, "eval-live", env={"EVAL_SLICE": "100"})
+    assert calls and calls[0].endswith("run --slice 100")
 
 
 # --- who may spend ---------------------------------------------------------------------------

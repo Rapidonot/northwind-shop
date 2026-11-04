@@ -69,7 +69,10 @@ NOT_SENT_ERRORS = (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout)
 
 def load_api_key(env_file: Path) -> str:
     """Read ANTHROPIC_API_KEY from .env without touching os.environ."""
-    value = dotenv_values(env_file).get("ANTHROPIC_API_KEY") if env_file.exists() else None
+    try:
+        value = dotenv_values(env_file).get("ANTHROPIC_API_KEY") if env_file.exists() else None
+    except OSError as exc:  # Claude's sandbox denies the key file (CC-27)
+        raise RuntimeError(f"cannot read {env_file}") from exc
     if not value:
         raise RuntimeError(f"ANTHROPIC_API_KEY is not set in {env_file}")
     return value
