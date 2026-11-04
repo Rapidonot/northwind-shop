@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -77,13 +78,174 @@ def test_launcher_runs_the_cli_with_exactly_that_env(tmp_path: Path) -> None:
     assert seen == env
 
 
+@pytest.mark.req("SA-02")
+def test_agent_options_require_tools(tmp_path: Path) -> None:
+    """FOUND-2 review 8: with no `tools` the SDK adds no --tools flag at all."""
+    rt = agent_runtime(base_url="http://127.0.0.1:9/", root=tmp_path / "rt")
+    with pytest.raises(TypeError):
+        agent_options(system_prompt="sp", model="claude-haiku-5-5", runtime=rt)  # type: ignore[call-arg]
+
+
+@pytest.mark.req("SA-02")
+@pytest.mark.parametrize("tools", [None, (), ("Read",), "Read", {"type": "preset"}])
+def test_agent_options_refuse_anything_but_a_list(tmp_path: Path, tools: Any) -> None:
+    """The SDK sends `--tools default` for any non-list, so a tuple means every default tool."""
+    rt = agent_runtime(base_url="http://127.0.0.1:9/", root=tmp_path / "rt")
+    with pytest.raises(TypeError, match="tools"):
+        agent_options(system_prompt="sp", model="claude-haiku-5-5", tools=tools, runtime=rt)
+
+
+@pytest.mark.req("SA-02")
+@pytest.mark.parametrize(
+    "key",
+    [
+        "bare",
+        "no-session-persistence",
+        "tools",
+        "--bare",
+        "--no-session-persistence",
+        "--tools",
+        "BARE",
+        "no_session_persistence",
+        "Tools",
+        "bare=false",
+        "tools=Bash",
+        "--tools=Bash,Read",
+        "no-session-persistence=false",
+        " tools ",
+        "setting-sources",
+        "--settings=/tmp/x.json",
+        "mcp_config",
+        "permission-mode",
+        "--permission-mode=bypassPermissions",
+        "dangerously-skip-permissions",
+        "allow-dangerously-skip-permissions",
+        "add-dir",
+        "allowedTools",
+        "allowed-tools",
+        "disallowedTools",
+    ],
+)
+@pytest.mark.parametrize("value", [None, "", "false", "Bash"])
+def test_extra_args_cannot_touch_a_pinned_flag(tmp_path: Path, key: str, value: str | None) -> None:
+    rt = agent_runtime(base_url="http://127.0.0.1:9/", root=tmp_path / "rt")
+    with pytest.raises(ValueError, match="extra_args may not set"):
+        agent_options(
+            system_prompt="sp",
+            model="claude-haiku-5-5",
+            tools=[],
+            runtime=rt,
+            extra_args={key: value},
+        )
+
+
+@pytest.mark.req("SA-02")
+@pytest.mark.parametrize(
+    ("name", "value"),
+    [
+        ("cwd", "/elsewhere"),
+        ("env", {"X": "1"}),
+        ("add_dirs", ["/elsewhere"]),
+        ("setting_sources", ["project"]),
+        ("settings", "{}"),
+        ("cli_path", "/bin/sh"),
+        ("disallowed_tools", []),
+        ("hooks", {}),
+        ("can_use_tool", print),
+        ("stderr", print),
+        ("agents", {}),
+        ("plugins", []),
+        ("sandbox", {}),
+        ("resume", "x"),
+        ("continue_conversation", True),
+        ("fork_session", True),
+        ("session_store", object()),
+        ("user", "root"),
+    ],
+)
+def test_anything_outside_the_allowlist_is_refused(tmp_path: Path, name: str, value: Any) -> None:
+    rt = agent_runtime(base_url="http://127.0.0.1:9/", root=tmp_path / "rt")
+    extra: dict[str, Any] = {name: value}
+    with pytest.raises(TypeError, match=name):
+        agent_options(system_prompt="sp", model="claude-haiku-5-5", tools=[], runtime=rt, **extra)
+
+
+@pytest.mark.req("SA-02")
+@pytest.mark.parametrize(
+    "mode", ["bypassPermissions", "acceptEdits", "default", "plan", "auto", "dontask", ""]
+)
+def test_only_dont_ask_is_an_accepted_permission_mode(tmp_path: Path, mode: str) -> None:
+    rt = agent_runtime(base_url="http://127.0.0.1:9/", root=tmp_path / "rt")
+    extra: dict[str, Any] = {"permission_mode": mode}
+    with pytest.raises(TypeError, match="permission_mode"):
+        agent_options(system_prompt="sp", model="claude-haiku-5-5", tools=[], runtime=rt, **extra)
+
+
+@pytest.mark.req("SA-02")
+def test_the_allowed_options_reach_the_sdk(tmp_path: Path) -> None:
+    rt = agent_runtime(base_url="http://127.0.0.1:9/", root=tmp_path / "rt")
+    opts = agent_options(
+        system_prompt="sp",
+        model="claude-haiku-5-5",
+        tools=[],
+        runtime=rt,
+        mcp_servers={"s": {"type": "sdk"}},
+        allowed_tools=["mcp__s__t"],
+        max_turns=4,
+        include_partial_messages=True,
+        permission_mode="dontAsk",
+    )
+    assert opts.mcp_servers == {"s": {"type": "sdk"}}
+    assert opts.allowed_tools == ["mcp__s__t"]
+    assert opts.max_turns == 4
+    assert opts.include_partial_messages is True
+    assert opts.permission_mode == "dontAsk"
+
+
+@pytest.mark.req("SA-02")
+def test_a_pinned_flag_among_others_is_still_refused(tmp_path: Path) -> None:
+    rt = agent_runtime(base_url="http://127.0.0.1:9/", root=tmp_path / "rt")
+    with pytest.raises(ValueError, match="bare"):
+        agent_options(
+            system_prompt="sp",
+            model="claude-haiku-5-5",
+            tools=[],
+            runtime=rt,
+            extra_args={"debug": None, "bare": None},
+        )
+
+
+@pytest.mark.req("SA-02")
+def test_other_extra_args_pass_through_beside_the_pinned_flags(tmp_path: Path) -> None:
+    rt = agent_runtime(base_url="http://127.0.0.1:9/", root=tmp_path / "rt")
+    opts = agent_options(
+        system_prompt="sp",
+        model="claude-haiku-5-5",
+        tools=[],
+        runtime=rt,
+        extra_args={"debug": None},
+    )
+    assert opts.extra_args == {"bare": None, "no-session-persistence": None, "debug": None}
+
+
+@pytest.mark.req("SA-02")
+def test_an_empty_tools_list_reaches_the_cli_as_no_tools(tmp_path: Path) -> None:
+    from claude_agent_sdk._internal.transport.subprocess_cli import SubprocessCLITransport
+
+    rt = agent_runtime(base_url="http://127.0.0.1:9/", root=tmp_path / "rt")
+    opts = agent_options(system_prompt="sp", model="claude-haiku-5-5", tools=[], runtime=rt)
+    command = SubprocessCLITransport(prompt="hi", options=opts)._build_command()
+    assert command[command.index("--tools") + 1] == ""
+
+
 @pytest.mark.req("FOUND-2")
 def test_agent_options_use_launcher_bare_mode_and_no_settings(tmp_path: Path) -> None:
     rt = agent_runtime(base_url="http://127.0.0.1:9/", root=tmp_path / "rt")
-    opts = agent_options(system_prompt="sp", model="claude-haiku-5-5", runtime=rt)
+    opts = agent_options(system_prompt="sp", model="claude-haiku-5-5", tools=[], runtime=rt)
     assert Path(str(opts.cli_path)) == rt.launcher
     assert opts.setting_sources == []
     assert "bare" in opts.extra_args and opts.extra_args["bare"] is None
+    assert "no-session-persistence" in opts.extra_args
     assert opts.system_prompt == "sp"
     assert Path(str(opts.cwd)) == rt.workdir
     assert rt.config_dir.is_dir() and rt.config_dir.parent == tmp_path / "rt"

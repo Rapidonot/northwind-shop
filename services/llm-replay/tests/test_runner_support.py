@@ -13,6 +13,7 @@ import pytest
 from northwind_llm_replay import cli, runner_check
 from northwind_llm_replay.ledger import Ledger
 from northwind_llm_replay.scan import SYMLINK_REFUSED, scan_paths
+from northwind_llm_replay.scripted import blocks_sse
 
 pytestmark = pytest.mark.req("CC-27")
 pytest_plugins = ["pytester"]
@@ -438,6 +439,35 @@ def test_scan_output_names_the_finding_and_never_the_match(
     assert "api-key-fragment" not in captured.err  # a guess per line must not be locatable
     assert "regex + key-fragment" in captured.out
     assert FAKE_KEY[:16] not in captured.out + captured.err
+
+
+@pytest.mark.req("SA-02")
+def test_a_key_split_across_deltas_is_reported_without_its_place(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Decision 0005: a hit must not be locatable, split across deltas or not."""
+    cassettes = tmp_path / "cassettes" / "suite"
+    cassettes.mkdir(parents=True)
+    chunks = [FAKE_KEY[i : i + 8] for i in range(0, len(FAKE_KEY), 8)]
+    usage = {"input_tokens": 1, "output_tokens": 1}
+    body = blocks_sse("m", [{"type": "text", "chunks": chunks}], "end_turn", usage, "msg_1")
+    planted = cassettes / "planted-guess.json"
+    planted.write_text(json.dumps({"body": body, "recorded_at": "2026-11-04T00:00:00+00:00"}))
+    key_file = tmp_path / "key"
+    key_file.write_text(f"ANTHROPIC_API_KEY={FAKE_KEY}\n")
+    answer_key = tmp_path / "data" / "fixtures" / "_answer_key.json"
+    answer_key.parent.mkdir(parents=True)
+    answer_key.write_text(json.dumps({"internal_only": []}))
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("LLM_LEDGER_PATH", str(tmp_path / "l.jsonl"))
+    monkeypatch.setattr("northwind_common.localenv.worktree_root", lambda: tmp_path)
+    code = cli.main(
+        ["scan", "--cassettes-dir", str(tmp_path / "cassettes"), "--env-file", str(key_file)]
+    )
+    captured = capsys.readouterr()
+    assert code == 1
+    assert "ROTATE THE KEY" in captured.err
+    assert "api-key-fragment" not in captured.err
 
 
 # -- llm-spend without the lock (item 2) -----------------------------------------------------

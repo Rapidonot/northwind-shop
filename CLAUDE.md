@@ -62,7 +62,9 @@ make fmt              # ruff format + autofix
 make lint             # ruff, ruff format --check, mypy (strict), eslint, tsc
 make test             # unit tests: pytest (excludes integration) + vitest
 make test-integration # pytest -m integration (needs `make up`)
-make ci               # lint + scan-cassettes + test + test-integration, the same steps as GitHub CI
+make ci               # lint + scan-cassettes + test + test-integration + eval-integrity + eval-gate; GitHub CI also runs a browser job
+make e2e              # smoke test in replay: assistant, then Playwright (needs a browser and the cassette)
+make e2e-scripted     # the Playwright smoke test on a canned model (no recording needed)
 make record SUITE=…   # SPENDS through an open runner window: re-record one cassette suite
 make eval-live EVAL_SLICE=<n>  # SPENDS through an open runner window (SUITE=eval-answers): record answers + verdicts into a baseline candidate (digits only; n >= item count is a full run)
 make eval-rescore     # rebuild the candidate from the recordings after a scoring change (never spends)
@@ -78,7 +80,7 @@ make llm-runner SUITE=… RUN_BUDGET=<usd>  # USER ONLY, own terminal, `make -C 
 make runner-sync      # USER ONLY, in the runner clone: show what changed, ask, fast-forward to origin/main
 make runner-check     # from the sandbox, in each checkout: measure that nothing the runner loads is writable
 ```
-Added later: `make e2e` with Playwright (SA-02 crude). Only `make record` and `make eval-live` spend API credit, and only
+Only `make record` and `make eval-live` spend API credit, and only
 through a window the user opened with `make llm-runner`; everything else runs in replay. Everything Claude runs stays in
 the sandbox. Run `model`, `up`, `down` and the key-fragment scan from your own terminal as `make -C ~/.northwind/runner …`
 (decision 0005).

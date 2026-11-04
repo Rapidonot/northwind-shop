@@ -1,7 +1,7 @@
 """What produces an answer for the judge to score (RAG-12).
 
 `Answerer` is the seam: the harness only needs `id` and `answer()`. `SingleShotAnswerer` stands in
-until the Shopper Assistant exists; #5 adds an adapter that serves the saved context through its
+for the Shopper Assistant; #13 adds an adapter that serves the saved context through its
 `retrieve_context` tool. A new answerer has a new `id`, so its answers are recorded separately.
 """
 

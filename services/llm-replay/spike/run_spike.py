@@ -62,8 +62,8 @@ async def run_agent(
         runtime=rt,
         tools=[],
         max_turns=1,
-        stderr=stderr.append,
     )
+    opts.stderr = stderr.append  # debugging only, so the factory does not offer it
     out: dict[str, Any] = {"runtime_root": str(rt.root), "text": "", "result": None}
     try:
         async for msg in query(prompt=prompt, options=opts):

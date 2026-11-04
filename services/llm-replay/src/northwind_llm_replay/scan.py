@@ -30,11 +30,12 @@ import os
 import re
 import stat
 from collections.abc import Iterable, Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from northwind_common.cards import luhn_ok
 from northwind_llm_replay.scrub import request_hash
 
 KEY_FRAGMENT_LEN = 16
@@ -72,18 +73,6 @@ class Finding:
 
     def __str__(self) -> str:
         return f"{printable(self.path)}:{self.line}: {self.kind}"
-
-
-def luhn_ok(digits: str) -> bool:
-    total = 0
-    for i, ch in enumerate(reversed(digits)):
-        d = int(ch)
-        if i % 2 == 1:
-            d *= 2
-            if d > 9:
-                d -= 9
-        total += d
-    return total % 10 == 0
 
 
 def key_fragments(key: str) -> set[str]:
@@ -130,12 +119,60 @@ def scan_text(
     return findings
 
 
+_DELTA_TEXT_KEYS = {
+    "text_delta": "text",
+    "thinking_delta": "thinking",
+    "input_json_delta": "partial_json",
+}
+
+
 def _record(document: str) -> dict[str, Any] | None:
     try:
         record = json.loads(document)
     except json.JSONDecodeError:
         return None
     return record if isinstance(record, dict) else None
+
+
+def reassembled_blocks(document: str) -> list[str]:
+    """The streamed text of each content block, in index order. `document` is a raw SSE body or a
+    cassette holding one. A plain function, so anything holding a stream can reuse it."""
+    record = _record(document)
+    body = record["body"] if record and isinstance(record.get("body"), str) else document
+    blocks: dict[int, list[str]] = {}
+    # Not splitlines(): that also breaks on U+2028 and friends, legal inside a JSON string, and the
+    # broken halves would parse as nothing, leaving a hole in the text.
+    for line in body.split("\n"):
+        event = _record(line[len("data:") :]) if line.startswith("data:") else None
+        if event is None or event.get("type") != "content_block_delta":
+            continue
+        delta = event.get("delta")
+        if not isinstance(delta, dict):
+            continue
+        key = _DELTA_TEXT_KEYS.get(delta.get("type", ""))
+        if key is not None:
+            blocks.setdefault(event.get("index", 0), []).append(str(delta.get(key, "")))
+    return ["".join(parts) for _, parts in sorted(blocks.items())]
+
+
+def scan_stream(
+    document: str,
+    path: str,
+    secret: str | None = None,
+    canaries: frozenset[str] = frozenset(),
+) -> list[Finding]:
+    """`scan_text` over each reassembled block, because a secret split across deltas is never on
+    one raw line. Pairs with `scan_text` on the raw document (FOUND-2 review 6).
+
+    A key fragment keeps its kind: `cmd_scan` hides where those are, so a guess per file cannot be
+    located, and says to rotate the key (decision 0005)."""
+    return [
+        finding
+        if finding.kind == "api-key-fragment"
+        else replace(finding, kind=f"reassembled-{finding.kind}")
+        for block in reassembled_blocks(document)
+        for finding in scan_text(block, path, secret, canaries)
+    ]
 
 
 def without_ledger_ids(line: str) -> str:
@@ -230,4 +267,5 @@ def scan_paths(
         findings.extend(scan_text(scanned, str(path), secret, canaries))
         if is_cassette(path):
             findings.extend(_check_recorded_at(path, text))
+            findings.extend(scan_stream(text, str(path), secret, canaries))
     return findings

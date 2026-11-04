@@ -43,7 +43,7 @@ endif
 .PHONY: help setup up down dev dev-gateway dev-portal data model ingest fmt lint test \
 	test-integration ci scan-cassettes llm-spend llm-proxy llm-runner runner-sync runner-check \
 	record eval-live eval-rescore eval-gate eval-integrity eval-gate-stale-ok eval-promote \
-	eval-snapshot eval-review-list
+	eval-snapshot eval-review-list e2e e2e-scripted
 
 # A stable cache, not fastembed's temp-dir default: Claude's sandbox has a different temp dir and
 # cannot reach the model's download hosts, so `make -C ~/.northwind/runner model` fills this (CC-27).
@@ -172,6 +172,14 @@ eval-live: ## Run answer evals live and record them (EVAL_SLICE=<n>; spends API 
 	@[[ "$$EVAL_SLICE" =~ ^[0-9]+$$ ]] || (echo "usage: make eval-live EVAL_SLICE=<n>" && exit 2)
 	LLM_MODE=record uv run python -m northwind_evals.cli run --slice "$$EVAL_SLICE"
 
+# Replay only. Needs the assistant-smoke cassette, and a browser (`playwright install chromium`).
+e2e: ingest ## Smoke test: assistant in replay, then Playwright against a replayed answer (SA-02)
+	LLM_MODE=replay uv run pytest -m e2e
+	LLM_MODE=replay E2E_MODE=replay $(PNPM) --filter @northwind/portal exec playwright test
+
+e2e-scripted: ingest ## The Playwright smoke test on a canned model: needs no recording (SA-02)
+	LLM_MODE=replay E2E_MODE=scripted $(PNPM) --filter @northwind/portal exec playwright test
+
 eval-gate: ingest ## Regression gate: live retrieval metrics + replayed answers vs the baseline (RAG-12)
 	LLM_MODE=replay EVAL_ALLOW_STALE= uv run python -m northwind_evals.cli gate
 
@@ -195,4 +203,4 @@ eval-snapshot: ## Save each eval item's retrieved context, the input for answers
 eval-review-list: ## Write the list of eval items waiting for human review (RAG-12)
 	uv run python -m northwind_evals.cli review-list
 
-ci: lint scan-cassettes test test-integration eval-integrity eval-gate ## Everything CI runs, in the same order
+ci: lint scan-cassettes test test-integration eval-integrity eval-gate ## What CI runs, in the same order, except its browser job
