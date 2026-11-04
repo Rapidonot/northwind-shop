@@ -3,6 +3,7 @@ worktree (FOUND-2; hard rule 4; addendum (b))."""
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -42,6 +43,25 @@ def test_recipes_never_see_the_key(tmp_path: Path, parent_has_key: bool) -> None
     assert "DATABASE_URL=postgresql://x" in out  # non-secret values still reach recipes
     assert FAKE_KEY not in out
     assert "makevar=[]" in out
+
+
+@pytest.mark.req("CC-27")
+def test_unreadable_key_file_does_not_stop_make(tmp_path: Path) -> None:
+    """Claude's sandbox denies reads of the key file; every target must still run."""
+    if os.geteuid() == 0:
+        pytest.skip("root ignores file modes")
+    (tmp_path / "Makefile").write_text((REPO / "Makefile").read_text() + PROBE)
+    # The sandbox fails even a stat, which a chmod 0 file does not: make would pass on one.
+    locked = tmp_path / "locked"
+    locked.mkdir()
+    (locked / KEY_FILE).write_text(f"ANTHROPIC_API_KEY={FAKE_KEY}\n")
+    (tmp_path / KEY_FILE).symlink_to(locked / KEY_FILE)
+    locked.chmod(0)
+    env = {"PATH": "/usr/bin:/bin:/usr/local/bin", "HOME": str(tmp_path)}
+    try:
+        assert "makevar=[]" in run(tmp_path, "probe", env=env)
+    finally:
+        locked.chmod(0o700)  # or pytest cannot clean up tmp_path
 
 
 def git(cwd: Path, *args: str) -> None:

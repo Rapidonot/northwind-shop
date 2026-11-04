@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(~/Projects/northwind-shop/.env*)",
+      "Edit(./.env)",
+      "Edit(./.env.*)",
+      "Write(./.env)",
+      "Write(./.env.*)",
+      "Edit(./.claude/settings*)",
+      "Write(./.claude/settings*)",
+      "Edit(./.claude/hooks/**)",
+      "Write(./.claude/hooks/**)"
+    ],
+    "allow": ["Bash(make *)", "Bash(uv run *)", "Bash(uv sync*)", "Bash(corepack pnpm *)", "Bash(docker compose *)"],
+    "ask": ["Bash(git push*)", "Bash(make record*)", "Bash(make eval-live*)", "Bash(make llm-proxy*)"]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Read|Edit|Write|MultiEdit|NotebookEdit|Grep|Glob",
+        "hooks": [
+          { "type": "command", "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard_env.py\"" }
+        ]
+      }
+    ]
+  },
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false,
+    "autoAllowBashIfSandboxed": false,
+    "excludedCommands": ["make record SUITE=*", "make eval-live", "make llm-proxy"],
+    "filesystem": {
+      "denyWrite": ["./.claude/settings*", "./.claude/hooks", "./.env*"],
+      "denyRead": ["./.env*", "~/Projects/northwind-shop/.env*", "~/Library/Keychains"],
+      "allowWrite": ["~/.northwind/ledger.lock", "~/.cache/uv", "~/Library/pnpm/store", "/private/tmp/pnpm-store-operation-locks-502"]
+    },
+    "network": {
+      "allowLocalBinding": true
+    }
+  }
+}

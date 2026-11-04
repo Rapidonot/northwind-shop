@@ -42,7 +42,7 @@ hook itself).
 | 9 | Low | `child_env(extra)` can overwrite the placeholder | Accept | Read: `env.update(extra)` runs after the filter, and no caller passes a key. Fix: apply the same filter to `extra` |
 | 10 | Medium | Float costs trip the PAN check | Accept | Probe: 708 of 20,000 synthetic costs (3.5%) were flagged, such as `9.900000000000001e-05`. The sweep is not real traffic, so the live rate may differ. `put()` scans after the call is paid for. Raised to medium because of RECORD-ALL. Fix: store costs at fixed precision; leave the scanner alone |
 | 11 | Low | The proxy is not the only reader of the key | Accept (docs) | Read: the scan CLI loads it for fragment matching, and under `make record` the proxy shares the pytest process. It never reaches `os.environ` and is never printed. Fix: correct the wording in decision 0001 |
-| 12 | Low | `make up` needs a key file in linked worktrees | Accept | Tested: compose exits 1 with "couldn't find env file" when `--env-file` names a missing file, and `COMPOSE` hardcodes it. The obvious workaround is copying the key file, which decision 0001 forbids. Fix before CC-17 |
+| 12 | Low | `make up` needs a key file in linked worktrees | Accept | Tested: compose exits 1 with "couldn't find env file" when `--env-file` names a missing file, and `COMPOSE` hardcodes it. The obvious workaround is copying the key file, which decision 0001 forbids. **Fixed on `req/CC-27-sandbox`:** `COMPOSE` passes `--env-file` only when the file exists (`test_compose_gets_the_env_file_only_when_it_exists`) |
 | 13 | Low | `make ci` skips the cassette scan GitHub CI runs | Accept | Read: `ci: lint test test-integration`, while `ci.yml` has a scan step. CLAUDE.md says they match. Fix: add `scan-cassettes` to `ci` |
 | 14 | Low | "Never hand-edit a cassette" is not enforced | Reject | A checksum stored in the same file stops nothing, because whoever edits the file can recompute it. Git history and PR review are the control, and CLAUDE.md states the rule |
 | 15a | – | Guard gaps in the c01cb2e version | Accept (fixed) | `.ENV`, `printenv <name>`, `git status; rm …` and exit-1 crashes were fixed in 7fc8e93, which reaches main with this PR. Pinned as blocked in `tests/hooks/test_guard_env.py` |
@@ -99,6 +99,12 @@ as data. These and the reviewer's other examples, 15 cases in all, are pinned as
 and the real control is sandboxed Bash with writes denied to `.claude/settings*` and
 `.claude/hooks/`. CC-27 covers the Bash cases, because they are writes. It does not cover R3's
 Write tool case, which never goes through Bash. That one needs a hook change or a permission rule.
+
+**CC-27 update (2026-11-04, not yet installed):** R1 and R2 were refused at the OS level with file
+hashes unchanged, and the proposal's `Edit` and `Write` deny rules refused R3's Write tool case. The
+proposal also denies reads of `.env*`, which covers `cat .en*`, `cat .e''nv` and 15c for Bash. All
+stay strict xfail, because the hook itself is unchanged. Evidence:
+docs/reviews/2026-11-04-cc-27-sandbox-evidence.md.
 
 Also from this review:
 

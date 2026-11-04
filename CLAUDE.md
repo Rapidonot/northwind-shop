@@ -56,6 +56,7 @@ make setup            # uv sync + pnpm install; creates .env from env.example (m
 make up | make down   # docker compose stack (Postgres 16 + pgvector), waits for healthy
 make dev              # gateway on :8000 + portal on :5173 (Vite proxies /api)
 make data             # regenerate data/fixtures (seeded, byte-identical; bump DATA_VERSION if output changes)
+make model            # pre-fetch the embedding model into FASTEMBED_CACHE_PATH (own terminal; CC-27)
 make ingest           # load data/fixtures into the RAG index (needs `make up`; idempotent, no LLM)
 make fmt              # ruff format + autofix
 make lint             # ruff, ruff format --check, mypy (strict), eslint, tsc

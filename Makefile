@@ -4,20 +4,27 @@ SHELL := /bin/bash
 
 export COREPACK_ENABLE_DOWNLOAD_PROMPT := 0
 PNPM ?= corepack pnpm
-COMPOSE := docker compose --env-file .env -f infra/docker-compose.yml
+# --env-file only when the file exists: compose exits 1 on a missing one, and linked worktrees never
+# have one (FOUND-2 review #12). Without it, compose uses the defaults in docker-compose.yml.
+COMPOSE := docker compose $(if $(wildcard .env),--env-file .env )-f infra/docker-compose.yml
 
 # Load .env (if present) so DATABASE_URL etc. reach the gateway and tests.
 # The API key is the exception: it is blanked and never exported to recipes (hard rule 4,
 # decision 0001). Only the LLM proxy reads it, straight from .env, via dotenv_values (FOUND-2).
+# -include: Claude's sandbox denies reads of .env, which must not stop every target (CC-27).
 ifneq (,$(wildcard .env))
-include .env
+-include .env
 export
 endif
 override ANTHROPIC_API_KEY :=
 unexport ANTHROPIC_API_KEY
 
-.PHONY: help setup up down dev dev-gateway dev-portal data ingest fmt lint test test-integration ci \
-	scan-cassettes llm-spend llm-proxy record eval-live
+.PHONY: help setup up down dev dev-gateway dev-portal data model ingest fmt lint test \
+	test-integration ci scan-cassettes llm-spend llm-proxy record eval-live
+
+# A stable cache, not fastembed's temp-dir default: Claude's sandbox has a different temp dir and
+# cannot reach the model's download hosts, so `make model` fills this once from a terminal (CC-27).
+export FASTEMBED_CACHE_PATH ?= $(HOME)/.cache/fastembed
 
 # Linked git worktrees never get a .env: the LLM proxy reads the key from the main checkout's
 # file (LLM_ENV_FILE), and nothing else needs one there (FOUND-2 addendum).
@@ -53,6 +60,9 @@ dev-portal:
 data: ## Generate synthetic fixtures into data/fixtures (deterministic; FOUND-1)
 	uv run python -m northwind_data.cli --out data/fixtures
 
+model: ## Pre-fetch the embedding model into FASTEMBED_CACHE_PATH (run in your own terminal; CC-27)
+	uv run python -c "from northwind_rag.embedding import FastEmbedEmbedder; FastEmbedEmbedder().embed(['warm'])"
+
 ingest: ## Load data/fixtures into the RAG index (needs `make up`; idempotent; RAG-01)
 	uv run python -m northwind_rag.cli --fixtures data/fixtures
 
@@ -87,9 +97,11 @@ llm-proxy: ## Dev LLM proxy on this worktree's port (LLM_MODE=replay by default;
 
 # SPENDS API CREDIT. Re-records one cassette suite: unchanged requests replay for free, new ones go
 # live through the budget guard (LLM_RUN_BUDGET_USD, default 5.00; see services/llm-replay/SPIKE.md).
+# SUITE is checked before use: this target runs outside Claude's sandbox, so a value like
+# 'x; cmd' must not reach a shell (CC-27).
 record: ## Re-record one LLM cassette suite (SUITE=name; spends API credit)
-	@test -n "$(SUITE)" || (echo "usage: make record SUITE=<suite>" && exit 2)
-	LLM_MODE=record uv run pytest --llm-suite $(SUITE)
+	@[[ "$$SUITE" =~ ^[a-z0-9_-]+$$ ]] || (echo "usage: make record SUITE=<suite>" && exit 2)
+	LLM_MODE=record uv run pytest --llm-suite "$$SUITE"
 
 # SPENDS API CREDIT. Answer/journey evals live (RAG-12 adds the eval suites and harness).
 eval-live: ## Run the LLM evals live and record them (spends API credit)
