@@ -79,8 +79,10 @@ Debian container (`ghcr.io/astral-sh/uv:python3.12-bookworm-slim`, `CI=true`, `L
 no key file; only git-tracked and new files copied in): all 4 `test_spike_replay` cases pass with
 the Linux build of the bundled CLI, and the whole FOUND-2 suite passes (155 tests). GitHub CI on
 the day-1 push stopped earlier, at `ruff format --check` on the newly added
-`.claude/hooks/guard_env.py`, a file Claude may not edit. The CI run on the PR is the
-confirmation once that is formatted.
+`.claude/hooks/guard_env.py`, a file Claude may not edit. Once that was formatted, GitHub CI
+confirmed it on ubuntu-latest at the PR #4 merge (c01cb2e6): 155 passed, including all 4
+`test_spike_replay` cases, and 1 integration test.
+https://github.com/Rapidonot/northwind-shop/actions/runs/41757235613
 
 ## 5. `max_tokens` and budget sizing
 

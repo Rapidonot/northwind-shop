@@ -37,7 +37,7 @@ strict = true
 python_version = "3.12"
 
 [tool.pytest.ini_options]
-testpaths = ["services", "data"]
+testpaths = ["services", "data", "tests"]
 addopts = ["--strict-markers", "-m", "not integration", "--import-mode=importlib"]
 markers = [
     "req(id): the PRD requirement ID (e.g. RAG-03) whose acceptance criterion this test proves",
