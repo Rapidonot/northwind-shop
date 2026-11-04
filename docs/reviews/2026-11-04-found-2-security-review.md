@@ -46,19 +46,64 @@ hook itself).
 | 13 | Low | `make ci` skips the cassette scan GitHub CI runs | Accept | Read: `ci: lint test test-integration`, while `ci.yml` has a scan step. CLAUDE.md says they match. Fix: add `scan-cassettes` to `ci` |
 | 14 | Low | "Never hand-edit a cassette" is not enforced | Reject | A checksum stored in the same file stops nothing, because whoever edits the file can recompute it. Git history and PR review are the control, and CLAUDE.md states the rule |
 | 15a | – | Guard gaps in the c01cb2e version | Accept (fixed) | `.ENV`, `printenv <name>`, `git status; rm …` and exit-1 crashes were fixed in 7fc8e93, which reaches main with this PR. Pinned as blocked in `tests/hooks/test_guard_env.py` |
-| 15b | Medium | Guard gaps still open | Accept | 14 cases pinned as `xfail(strict=True)` (list below). The hook and settings are the user's to change |
+| 15b | Medium | Guard gaps still open | Accept (11 of 14 fixed, rest accepted) | The user installed the hook fix on `req/NFR-02-guard-fixes`: 11 of the 14 cases are now pinned as blocked. The other 3 stay `xfail(strict=True)`, and 4 more shell-text gaps are accepted as limits of a speed bump (list below). The real control is CC-27 sandboxed Bash, a follow-up after RAG-01. Review of this change found further bypasses, R1 to R4, still open |
 | 15c | Low | `uv run` Python can read the key file under a constructed name | Reject | Correct, but no text match can stop it; the hook says it is a speed bump. A real fix means an OS sandbox, not a hook change |
 | A | Low | The proxy client may honour `HTTPS_PROXY` | Accept | Confirmed: `trust_env` defaults to True in `httpx2`. Fix: set `trust_env=False` on the upstream client |
 | B | Low | Dev proxy checks no `Host` header | Reject for now | Untested. It binds to loopback, needs live mode, and the caps still apply. Revisit in P6 hardening |
 
-## Guard gaps pinned as strict xfail (15b)
+## Guard gaps (15b)
 
-| Group | Cases |
-|-------|-------|
-| Redirect or flag from an allowed `git` command | `git diff > .claude/settings.json`; `git show HEAD~1:.claude/hooks/guard_env.py > .claude/hooks/guard_env.py`; `git diff --output=.claude/settings.json` |
-| Protected path split or in another case | `cd .claude && rm settings.json`; `rm .CLAUDE/settings.json`; Edit of `/repo/.CLAUDE/settings.json` |
-| Environment dump not on its own | `env > dump.txt`; `set > dump.txt`; `echo $(env)`; `(env)`; `/usr/bin/env` |
-| Key read without shell expansion | `python3 -c` printing `os.environ["ANTHROPIC_API_KEY"]` |
-| Name hidden from the text match | `cat .en*`; `cat .e''nv` |
+The original 14 cases, after the hook fix on `req/NFR-02-guard-fixes`:
 
-The last two groups are the speed-bump limit. The first three look fixable in the hook.
+| Group | Cases | Status |
+|-------|-------|--------|
+| Redirect or flag from an allowed `git` command | `git diff > .claude/settings.json`; `git show HEAD~1:.claude/hooks/guard_env.py > .claude/hooks/guard_env.py`; `git diff --output=.claude/settings.json` | Fixed, pinned as blocked |
+| Protected path split or in another case | `cd .claude && rm settings.json`; `rm .CLAUDE/settings.json`; Edit of `/repo/.CLAUDE/settings.json` | Fixed, pinned as blocked |
+| Environment dump not on its own | `env > dump.txt`; `set > dump.txt`; `echo $(env)`; `(env)`; `/usr/bin/env` | Fixed, pinned as blocked |
+| Key read without shell expansion | `python3 -c` printing `os.environ["ANTHROPIC_API_KEY"]` | Accepted, strict xfail |
+| Name hidden from the text match | `cat .en*`; `cat .e''nv` | Accepted, strict xfail |
+
+Four more shell-text gaps, each confirmed by passing the command to the installed hook as data.
+They are accepted but not pinned in the test suite:
+
+| Case | Why it gets through |
+|------|---------------------|
+| `rm -rf .claude` | Removes the parent directory, so no protected path appears in the text |
+| `git -C .claude checkout -- settings.json` | The bare name is only protected after `cd`; `git -C .claude/hooks …` is blocked |
+| `env -0` | `env` with a flag reads as an ordinary command |
+| `` echo `env` `` | Backticks are not parsed; `$(env)` is blocked, and `printenv` is blocked anywhere |
+
+A text match cannot close these without parsing the shell, so the hook stays a speed bump. The
+real control is CC-27 sandboxed Bash with writes denied to `.claude/settings*` and `.claude/hooks/`,
+a follow-up after RAG-01. `env -0` and `` `env` `` read the environment rather than write, so that
+deny list does not cover them.
+
+`tests/hooks/test_settings.py` guards the other half: the hook only runs while `settings.json`
+registers it, so a truncated or weakened file now fails CI.
+
+## Review of the guard change (open, for the user to decide)
+
+The `security-reviewer` subagent read the hook change and `test_settings.py`. It found no
+regressions: every old block condition still blocks. It did find bypasses beyond the four above.
+All passed the old hook too. Each example below was confirmed by passing it to the installed hook
+as data, and none is covered by the acceptance of those four.
+
+| Finding | Severity | Example that gets through | Why |
+|---------|----------|---------------------------|-----|
+| R1 | Medium | `git status $(rm .claude/settings.json)`; `` git log `cp /tmp/weak.json .claude/settings.json` ``; `git commit -m "$(rm .claude/hooks/guard_env.py)"`; `git diff > >(tee .claude/settings.json)` | An allowed `git` segment is reduced to its redirect targets, so a substitution inside it is not inspected |
+| R2 | Medium | `git diff " -m '" > .claude/settings.json "'"`; `git log --grep=" -m 'x" > .claude/settings.json # '` | `GIT_MESSAGE` ignores quoting, so a real redirect is stripped as message text. New code; it would empty the file, as in the incident |
+| R3 | Low | `git diff > .claude/./settings.json`; `rm .claude//hooks/guard_env.py`; Write to `/repo/.claude/./settings.json` | Protected paths are matched as literal strings |
+| R4 | Low | `cd .claude/agents && rm ../settings.json`; `{ cd .claude; rm settings.json; }`; `if cd .claude; then rm settings.json; fi` | `cd` tracking needs `cd` at the start of a segment and a path ending in `.claude` |
+
+R1 to R4 change the hook, so they are the user's call. CC-27 would stop all of them, because they
+are writes. A speed bump may be enough until then, but R1 and R2 are the ones to look at: they
+write to a protected file through a command the hook treats as safe.
+
+Also from this review:
+
+- Fixed: `test_settings.py` first matched the guard path as a substring, so `<guard> || true`
+  passed. It now compares the whole hook entry, with weakened copies pinning it.
+- Already open: `make -s record` and `make SUITE=x record` miss the `ask` rules. Finding 1 in
+  PROGRESS, to decide before the first `make record` (#4). Read from the rule text, not run.
+- Noted, not changed: `GUARD_HOOK_PATH` can point the guard suite at another copy of the hook.
+  Nothing sets it, including CI. `Bash(git push*)` is not pinned by `test_settings.py`.
