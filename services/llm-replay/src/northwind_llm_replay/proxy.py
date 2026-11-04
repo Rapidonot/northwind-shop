@@ -42,7 +42,13 @@ from starlette.routing import Route
 
 from northwind_common.llm import PLACEHOLDER_API_KEY
 from northwind_llm_replay.cassette import Cassette, CassetteStore, DirtyCassetteError
-from northwind_llm_replay.ledger import BudgetExceededError, Ledger, Reservation, now_iso
+from northwind_llm_replay.ledger import (
+    HASH_PREFIX_CHARS,
+    BudgetExceededError,
+    Ledger,
+    Reservation,
+    now_iso,
+)
 from northwind_llm_replay.pricing import UnpricedModelError, price_for, worst_case_usd
 from northwind_llm_replay.scrub import match_key, request_hash, scrub
 
@@ -57,6 +63,7 @@ FORWARD_HEADERS = ("anthropic-version", "anthropic-beta", "content-type", "accep
 LOGGED_HEADER_VALUES = ("anthropic-version", "anthropic-beta", "content-type", "user-agent")
 # Failures that prove the request never left: the only ones released at zero cost. After the
 # connection opens the request may have been billed, so anything else is charged the worst case.
+LOG_HASH_CHARS = HASH_PREFIX_CHARS  # enough to find a cassette by prefix
 NOT_SENT_ERRORS = (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout)
 
 
@@ -242,7 +249,7 @@ class Proxy:
             else ("bearer" if "authorization" in headers else None),
             "headers": {k: headers[k] for k in LOGGED_HEADER_VALUES if k in headers},
             "auth": auth_verdict(headers),
-            "hash": h,
+            "hash": h[:LOG_HASH_CHARS],
             "model": body.get("model") if isinstance(body, dict) else None,
             "max_tokens": body.get("max_tokens") if isinstance(body, dict) else None,
             "stream": bool(body.get("stream")) if isinstance(body, dict) else False,

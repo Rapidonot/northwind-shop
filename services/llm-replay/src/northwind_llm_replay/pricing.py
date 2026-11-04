@@ -85,6 +85,15 @@ def _int(usage: Mapping[str, Any], key: str) -> int:
     return int(value)
 
 
+COST_DECIMALS = 9  # finer than the cheapest token rate
+
+
+def _fixed(usd: float) -> float:
+    """Fixed precision (FOUND-2 review 10, pulled forward by RAG-12). A raw float's long digit run
+    can pass the scanner's Luhn check, which would refuse a recording already paid for."""
+    return round(usd, COST_DECIMALS)
+
+
 def cost_usd(model: str, usage: Mapping[str, Any]) -> float:
     """Cost of one response, from the Messages API `usage` object."""
     price = price_for(model)
@@ -104,7 +113,7 @@ def cost_usd(model: str, usage: Mapping[str, Any]) -> float:
         + w1h * r.cache_write_1h
         + _int(usage, "output_tokens") * r.output
     )
-    return total * PER_TOKEN
+    return _fixed(total * PER_TOKEN)
 
 
 def estimate_prompt_tokens(body_bytes: int) -> int:
@@ -119,4 +128,4 @@ def worst_case_usd(model: str, body_bytes: int, max_tokens: int) -> float:
     price = price_for(model)
     prompt = estimate_prompt_tokens(body_bytes)
     r = price.rates_for(prompt)
-    return (prompt * r.max_input + max_tokens * r.output) * PER_TOKEN
+    return _fixed((prompt * r.max_input + max_tokens * r.output) * PER_TOKEN)
