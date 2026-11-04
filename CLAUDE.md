@@ -62,7 +62,7 @@ make fmt              # ruff format + autofix
 make lint             # ruff, ruff format --check, mypy (strict), eslint, tsc
 make test             # unit tests: pytest (excludes integration) + vitest
 make test-integration # pytest -m integration (needs `make up`)
-make ci               # lint + scan-cassettes + test + test-integration + eval-integrity + eval-gate; GitHub CI's e2e job is `make e2e`
+make ci               # lint + scan-cassettes + test + test-integration + eval-integrity + eval-gate; GitHub CI also runs a browser job
 make e2e              # smoke test in replay: assistant, then Playwright (needs a browser and the cassette)
 make e2e-scripted     # the Playwright smoke test on a canned model (no recording needed)
 make record SUITE=…   # SPENDS: re-record one cassette suite (new requests live, under LLM_RUN_BUDGET_USD)

@@ -81,6 +81,19 @@ describe("[SA-02] Chat", () => {
     expect(screen.getByTestId("answer")).toHaveTextContent("Wash it cold [FAQ-001].");
   });
 
+  it("drops the partial text when a cut-off attempt is retried", async () => {
+    mockFetch(
+      streamOf(
+        frame("token", { text: "partial " }),
+        frame("reset", {}),
+        frame("token", { text: "whole answer" }),
+        frame("done", {}),
+      ),
+    );
+    ask("hi");
+    await waitFor(() => expect(screen.getByTestId("answer")).toHaveTextContent(/^whole answer$/));
+  });
+
   it("survives a frame and a character split across reads", async () => {
     const whole = new TextEncoder().encode(frame("token", { text: "café" }));
     const cut = whole.indexOf(0xc3) + 1; // between the two bytes of é

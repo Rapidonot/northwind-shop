@@ -20,6 +20,7 @@ from northwind_assistant.caller import Caller
 from northwind_assistant.prompt import system_prompt
 from northwind_assistant.tools import (
     ALLOWED_TOOL,
+    CARD_QUERY_MESSAGE,
     FAILED_MESSAGE,
     NO_SOURCES,
     SERVER_NAME,
@@ -30,6 +31,7 @@ from northwind_assistant.tools import (
 from northwind_assistant.turn import (
     MAX_TURNS,
     Citations,
+    Reset,
     TextDelta,
     TurnError,
     TurnEvent,
@@ -293,6 +295,97 @@ def test_upstream_failures_become_fixed_codes(
             llm.reply_raw(status, json.dumps(error))
         events = turn("hi", FakeRetriever(), runtime_for(llm, tmp_path))
     assert events == [TurnError(code)]  # type: ignore[arg-type]
+
+
+def test_a_cut_stream_that_is_retried_drops_the_partial_text(tmp_path: Path) -> None:
+    """The CLI reports a cut stream as `message_stop` and success, then retries it."""
+    with ScriptedLLM() as llm:
+        llm.reply_cut_stream("partial ")
+        llm.reply_stream("whole ", "answer")
+        events = turn("hi", FakeRetriever(), runtime_for(llm, tmp_path))
+    assert events == [
+        TextDelta("partial "),
+        Reset(),
+        TextDelta("whole "),
+        TextDelta("answer"),
+        Citations(()),
+    ]
+
+
+def test_a_stream_cut_on_every_attempt_is_an_error_not_a_finished_answer(tmp_path: Path) -> None:
+    with ScriptedLLM() as llm:
+        for _ in range(6):
+            llm.reply_cut_stream("partial ")
+        events = turn("hi", FakeRetriever(), runtime_for(llm, tmp_path))
+    assert events[-1] == TurnError("model_unavailable")
+    assert not any(isinstance(event, Citations) for event in events)
+
+
+def test_a_cut_retry_never_keeps_a_citation_from_the_dropped_text(tmp_path: Path) -> None:
+    with ScriptedLLM() as llm:
+        llm.reply_tool_use(ALLOWED_TOOL, {"query": "q"})
+        llm.reply_cut_stream("Dropped [FAQ-001] ")
+        llm.reply_stream("Nothing to cite.")
+        events = turn("hi", FakeRetriever(), runtime_for(llm, tmp_path))
+    assert events[-1] == Citations(())
+
+
+def test_a_tool_turn_followed_by_an_answer_is_not_a_cut_stream(tmp_path: Path) -> None:
+    with ScriptedLLM() as llm:
+        llm.reply_tool_use(ALLOWED_TOOL, {"query": "q"})
+        llm.reply_stream("ok")
+        events = turn("hi", FakeRetriever(), runtime_for(llm, tmp_path))
+    assert not any(isinstance(event, Reset) for event in events)
+
+
+def test_a_turn_leaves_no_trace_of_the_message_on_disk(tmp_path: Path) -> None:
+    """The CLI writes transcripts by default, which no log check or scanner would see."""
+    with ScriptedLLM() as llm:
+        llm.reply_tool_use(ALLOWED_TOOL, {"query": MARKER})
+        llm.reply_stream("hello")
+        turn(f"do you stock {MARKER}?", FakeRetriever(), runtime_for(llm, tmp_path))
+    assert not list(tmp_path.rglob("*.jsonl"))
+    holding = [
+        p for p in tmp_path.rglob("*") if p.is_file() and MARKER in p.read_text("utf-8", "replace")
+    ]
+    assert holding == []
+
+
+def test_a_shopper_cannot_attach_a_file_with_an_at_path(tmp_path: Path) -> None:
+    """`@path` pulls a file into the prompt in the CLI's normal mode; `--bare` keeps it out."""
+    secret = tmp_path / "planted.txt"
+    secret.write_text(MARKER)
+    with ScriptedLLM() as llm:
+        llm.reply_stream("hello")
+        runtime = runtime_for(llm, tmp_path / "rt")
+        (runtime.workdir / "planted.txt").write_text(MARKER)
+        turn(f"@{secret} and @planted.txt please", FakeRetriever(), runtime)
+    assert MARKER not in json.dumps(llm.requests)
+
+
+@pytest.mark.parametrize("query", ["4242" * 4, "4242-4242 4242.4242", "cvv 737"])
+def test_card_data_in_a_tool_argument_is_refused_and_searches_nothing(
+    tmp_path: Path, query: str
+) -> None:
+    retriever = FakeRetriever()
+    with ScriptedLLM() as llm:
+        llm.reply_tool_use(ALLOWED_TOOL, {"query": query})
+        llm.reply_stream("done")
+        turn("hi", retriever, runtime_for(llm, tmp_path))
+    [result] = tool_results(llm)
+    assert (
+        result["is_error"] is True
+        and json.loads(result_text(result))["message"] == CARD_QUERY_MESSAGE
+    )
+    assert retriever.calls == []
+
+
+def test_text_with_no_sources_behind_it_is_cleared_when_search_failed(tmp_path: Path) -> None:
+    with ScriptedLLM() as llm:
+        llm.reply_tool_use(ALLOWED_TOOL, {"query": "q"})
+        llm.reply_stream("It is 100% waterproof.")
+        events = turn("hi", BrokenRetriever(), runtime_for(llm, tmp_path))
+    assert events[-2:] == [Reset(), TurnError("retrieval_failed")]
 
 
 def test_a_slash_command_stays_shopper_text(tmp_path: Path) -> None:

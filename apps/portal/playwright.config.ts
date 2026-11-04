@@ -8,7 +8,12 @@ const scripted = process.env.E2E_MODE === "scripted";
 const here = dirname(fileURLToPath(import.meta.url));
 const repo = resolve(here, "../..");
 const modelPort = 18431;
-const modelEnv = { LLM_MODE: "replay", LLM_PROXY_PORT: String(modelPort) };
+// The URL too: it beats the port, and a shell may export one for a dev proxy that spends.
+const modelEnv = {
+  LLM_MODE: "replay",
+  LLM_PROXY_PORT: String(modelPort),
+  LLM_PROXY_URL: `http://127.0.0.1:${modelPort}`,
+};
 
 const model = scripted
   ? `uv run python services/assistant/e2e/scripted_model.py --port ${modelPort}`

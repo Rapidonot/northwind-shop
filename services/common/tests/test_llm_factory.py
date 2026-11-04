@@ -96,6 +96,65 @@ def test_agent_options_refuse_anything_but_a_list(tmp_path: Path, tools: Any) ->
 
 
 @pytest.mark.req("SA-02")
+@pytest.mark.parametrize(
+    "key",
+    [
+        "bare",
+        "no-session-persistence",
+        "tools",
+        "--bare",
+        "--no-session-persistence",
+        "--tools",
+        "BARE",
+        "no_session_persistence",
+        "Tools",
+        "bare=false",
+        "tools=Bash",
+        "--tools=Bash,Read",
+        "no-session-persistence=false",
+        " tools ",
+    ],
+)
+@pytest.mark.parametrize("value", [None, "", "false", "Bash"])
+def test_extra_args_cannot_touch_a_pinned_flag(tmp_path: Path, key: str, value: str | None) -> None:
+    rt = agent_runtime(base_url="http://127.0.0.1:9/", root=tmp_path / "rt")
+    with pytest.raises(ValueError, match="extra_args may not set"):
+        agent_options(
+            system_prompt="sp",
+            model="claude-haiku-5-5",
+            tools=[],
+            runtime=rt,
+            extra_args={key: value},
+        )
+
+
+@pytest.mark.req("SA-02")
+def test_a_pinned_flag_among_others_is_still_refused(tmp_path: Path) -> None:
+    rt = agent_runtime(base_url="http://127.0.0.1:9/", root=tmp_path / "rt")
+    with pytest.raises(ValueError, match="bare"):
+        agent_options(
+            system_prompt="sp",
+            model="claude-haiku-5-5",
+            tools=[],
+            runtime=rt,
+            extra_args={"debug": None, "bare": None},
+        )
+
+
+@pytest.mark.req("SA-02")
+def test_other_extra_args_pass_through_beside_the_pinned_flags(tmp_path: Path) -> None:
+    rt = agent_runtime(base_url="http://127.0.0.1:9/", root=tmp_path / "rt")
+    opts = agent_options(
+        system_prompt="sp",
+        model="claude-haiku-5-5",
+        tools=[],
+        runtime=rt,
+        extra_args={"debug": None},
+    )
+    assert opts.extra_args == {"bare": None, "no-session-persistence": None, "debug": None}
+
+
+@pytest.mark.req("SA-02")
 def test_an_empty_tools_list_reaches_the_cli_as_no_tools(tmp_path: Path) -> None:
     from claude_agent_sdk._internal.transport.subprocess_cli import SubprocessCLITransport
 
@@ -112,6 +171,7 @@ def test_agent_options_use_launcher_bare_mode_and_no_settings(tmp_path: Path) ->
     assert Path(str(opts.cli_path)) == rt.launcher
     assert opts.setting_sources == []
     assert "bare" in opts.extra_args and opts.extra_args["bare"] is None
+    assert "no-session-persistence" in opts.extra_args
     assert opts.system_prompt == "sp"
     assert Path(str(opts.cwd)) == rt.workdir
     assert rt.config_dir.is_dir() and rt.config_dir.parent == tmp_path / "rt"

@@ -9,6 +9,7 @@ export type ErrorCode =
 
 export type ChatEvent =
   | { type: "token"; text: string }
+  | { type: "reset" }
   | { type: "citations"; sourceIds: string[] }
   | { type: "error"; code: ErrorCode }
   | { type: "refused"; message: string }
@@ -21,6 +22,8 @@ function toEvent(name: string, data: string): ChatEvent | null {
   switch (name) {
     case "token":
       return { type: "token", text: body.text as string };
+    case "reset":
+      return { type: "reset" };
     case "citations":
       return { type: "citations", sourceIds: body.source_ids as string[] };
     case "error":

@@ -144,6 +144,15 @@ def agent_runtime(
     )
 
 
+# Each is a control: isolation, no transcripts on disk, and the built-in tool set (SA-02).
+PINNED_CLI_FLAGS = frozenset({"bare", "no-session-persistence", "tools"})
+
+
+def _flag_name(key: str) -> str:
+    """The CLI flag an `extra_args` key becomes, however spelled: `--tools=Bash` is `tools`."""
+    return key.split("=", 1)[0].strip().lstrip("-").replace("_", "-").lower()
+
+
 def agent_options(
     *,
     system_prompt: str,
@@ -163,8 +172,12 @@ def agent_options(
 
     if not isinstance(tools, list):
         raise TypeError(f"tools must be a list, not {type(tools).__name__}")
+    pinned = sorted({_flag_name(key) for key in extra_args or ()} & PINNED_CLI_FLAGS)
+    if pinned:
+        raise ValueError(f"extra_args may not set {pinned}: the factory controls them")
     rt = runtime or agent_runtime()
-    args: dict[str, str | None] = {"bare": None}
+    # The CLI otherwise writes every turn, prompt included, to a transcript under its config dir.
+    args: dict[str, str | None] = {"bare": None, "no-session-persistence": None}
     if extra_args:
         args.update(extra_args)
     return ClaudeAgentOptions(

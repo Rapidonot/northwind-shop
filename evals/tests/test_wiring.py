@@ -219,6 +219,15 @@ def runs(job: str) -> list[str]:
     return [m.group(1).strip() for step in steps(job) if (m := re.search(r"run: (.*)", step))]
 
 
+@pytest.mark.req("SA-02")
+def test_ci_runs_the_browser_test_on_a_canned_model_with_no_cassette() -> None:
+    block = job_text("e2e")
+    assert "LLM_MODE: replay" in block
+    assert "secrets." not in block
+    assert block.index("--with-deps chromium") < block.index("make e2e-scripted")
+    assert "pytest -m e2e" not in block, "needs the cassette: joins after recording"
+
+
 def test_ci_has_an_eval_gate_job_that_runs_the_gate_command() -> None:
     assert any("northwind_evals.cli gate" in c for c in runs("eval-gate"))
 

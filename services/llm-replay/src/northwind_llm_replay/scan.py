@@ -124,7 +124,9 @@ def reassembled_blocks(document: str) -> list[str]:
     record = _record(document)
     body = record["body"] if record and isinstance(record.get("body"), str) else document
     blocks: dict[int, list[str]] = {}
-    for line in body.splitlines():
+    # Not splitlines(): that also breaks on U+2028 and friends, legal inside a JSON string, and the
+    # broken halves would parse as nothing, leaving a hole in the text.
+    for line in body.split("\n"):
         event = _record(line[len("data:") :]) if line.startswith("data:") else None
         if event is None or event.get("type") != "content_block_delta":
             continue

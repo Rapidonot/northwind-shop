@@ -82,6 +82,21 @@ def test_a_document_with_no_stream_has_no_blocks(document: str) -> None:
     assert reassembled_blocks(document) == []
 
 
+@pytest.mark.parametrize("separator", ["\u2028", "\u2029", "\u0085", "\x0b", "\x0c"])
+def test_a_line_separator_inside_a_delta_leaves_no_hole(separator: str) -> None:
+    raw = json.dumps(
+        {
+            "type": "content_block_delta",
+            "index": 0,
+            "delta": {"type": "text_delta", "text": f"{CANARY[:9]}{separator}"},
+        },
+        ensure_ascii=False,
+    )
+    rest = event("content_block_delta", index=0, delta={"type": "text_delta", "text": CANARY[9:]})
+    [block] = reassembled_blocks(f"event: content_block_delta\ndata: {raw}\n\n{rest}")
+    assert block == f"{CANARY[:9]}{separator}{CANARY[9:]}"
+
+
 def test_the_raw_text_alone_misses_a_split_canary() -> None:
     """Why the reassembly exists: the line scan finds nothing here."""
     body = stream(CANARY[:9], CANARY[9:])

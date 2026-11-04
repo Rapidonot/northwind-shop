@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +28,7 @@ from northwind_rag.embedding import FastEmbedEmbedder
 pytestmark = [pytest.mark.e2e, pytest.mark.req("SA-02"), pytest.mark.llm_suite("assistant-smoke")]
 
 REPO = Path(__file__).resolve().parents[3]
+PROMOTION = re.compile(r"\d+\s*%\s*off|\bfree today\b", re.IGNORECASE)
 QUESTIONS = json.loads((REPO / "apps/portal/e2e/questions.json").read_text(encoding="utf-8"))
 
 
@@ -59,4 +61,5 @@ def test_a_price_question_gets_the_product_page_not_a_price(llm_proxy: Any, tmp_
     """Hard rule 2: there are no live tools yet, so the assistant quotes no price or stock."""
     answer = answer_of(ask(QUESTIONS["price"], tmp_path))
     assert find_money_or_stock(answer) == []
+    assert not PROMOTION.search(answer)  # textscan can't see these until row #7
     assert "product page" in answer.lower()

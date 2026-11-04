@@ -101,6 +101,9 @@ def test_a_bad_server_region_is_refused(monkeypatch: pytest.MonkeyPatch, region:
 REJECTED_BODIES: list[tuple[str, dict[str, Any]]] = [
     ("card in message", {"json": {"message": f"my card is {CARD}"}}),
     ("spaced card", {"json": {"message": " ".join([CARD[:4]] * 4)}}),
+    ("wide card", {"json": {"message": "    ".join([CARD[:4]] * 4)}}),
+    ("worded card", {"json": {"message": " then ".join([CARD[:4]] * 4)}}),
+    ("cvv", {"json": {"message": "card ending 4242, CVV 737, exp 12/28"}}),
     ("card in an extra field", {"json": {"message": "hi", "note": CARD}}),
     ("audience field", {"json": {"message": CARD, "audience": "staff"}}),
     ("region field", {"json": {"message": CARD, "region": "UK"}}),
@@ -126,7 +129,8 @@ def test_a_rejected_body_is_never_echoed_or_logged_and_reaches_no_model(
     response = stack.client.post("/api/chat", **request_args)
     assert response.status_code == 422
     assert CARD not in response.text and CARD[:4] not in response.text
-    expected = CARD_MESSAGE if name in {"card in message", "spaced card"} else INVALID_MESSAGE
+    refused_as_card = {"card in message", "spaced card", "wide card", "worded card", "cvv"}
+    expected = CARD_MESSAGE if name in refused_as_card else INVALID_MESSAGE
     assert response.json() == {
         "isError": True,
         "errorCategory": "validation",
@@ -144,6 +148,27 @@ def test_an_upstream_failure_is_only_a_fixed_code(stack: Stack) -> None:
     response = stack.client.post("/api/chat", json={"message": "hi"})
     assert events(response.text) == [("error", {"code": "model_unavailable"})]
     assert MARKER not in response.text
+
+
+def test_a_truncated_answer_never_reports_done(stack: Stack) -> None:
+    for _ in range(6):
+        stack.llm.reply_cut_stream("partial ")
+    response = stack.client.post("/api/chat", json={"message": "hi"})
+    names = [name for name, _ in events(response.text)]
+    assert names[-1] == "error" and "done" not in names and "citations" not in names
+
+
+def test_a_retried_stream_tells_the_portal_to_drop_the_partial_text(stack: Stack) -> None:
+    stack.llm.reply_cut_stream("partial ")
+    stack.llm.reply_stream("whole answer")
+    response = stack.client.post("/api/chat", json={"message": "hi"})
+    assert [name for name, _ in events(response.text)] == [
+        "token",
+        "reset",
+        "token",
+        "citations",
+        "done",
+    ]
 
 
 def test_the_turn_cap_is_a_fixed_code(stack: Stack) -> None:
@@ -164,6 +189,12 @@ def test_an_unexpected_exception_is_only_a_fixed_code(
     [(name, data)] = events(response.text)
     assert name == "error" and data == {"code": "internal"} and data["code"] in FIXED_CODES
     assert MARKER not in response.text and MARKER not in caplog.text
+
+
+def test_an_accepted_message_leaves_no_transcript(stack: Stack, tmp_path: Path) -> None:
+    stack.llm.reply_stream("hello")
+    stack.client.post("/api/chat", json={"message": f"do you stock {MARKER}?"})
+    assert not list(tmp_path.rglob("*.jsonl"))
 
 
 def test_an_accepted_message_is_not_logged(stack: Stack, caplog: pytest.LogCaptureFixture) -> None:

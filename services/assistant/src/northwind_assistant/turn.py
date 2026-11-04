@@ -45,6 +45,11 @@ class TextDelta:
 
 
 @dataclass(frozen=True)
+class Reset:
+    """A model attempt was cut off and is being retried: drop the text streamed so far."""
+
+
+@dataclass(frozen=True)
 class Citations:
     source_ids: tuple[str, ...]
 
@@ -54,7 +59,7 @@ class TurnError:
     code: ErrorCode
 
 
-TurnEvent = TextDelta | Citations | TurnError
+TurnEvent = TextDelta | Reset | Citations | TurnError
 
 
 def cited_ids(answer: str, seen: set[str]) -> tuple[str, ...]:
@@ -108,10 +113,21 @@ async def run_turn(message: str, options: Any, state: ToolState) -> AsyncIterato
     parts: list[str] = []
     code: ErrorCode | None = None
     finished = False
+    # A cut stream still ends in `message_stop` and a `success` result, so a stop reason in
+    # `message_delta` is the only sign that an attempt reached its end.
+    complete = True
     try:
         # Runs to the end even after an error: leaving early strands the SDK's generator.
         async for item in query(prompt=user_prompt(message), options=options):
             if isinstance(item, StreamEvent):
+                kind = item.event.get("type")
+                if kind == "message_start":
+                    if not complete and parts:
+                        parts.clear()
+                        yield Reset()
+                    complete = False
+                elif kind == "message_delta":
+                    complete = True
                 text = _text_delta(item)
                 if text:
                     parts.append(text)
@@ -125,12 +141,14 @@ async def run_turn(message: str, options: Any, state: ToolState) -> AsyncIterato
     except Exception as error:  # noqa: BLE001 - its text must not reach the shopper
         log.error("assistant turn failed: %s", type(error).__name__)
         code = "internal"
-    if not finished:
+    if not finished or not complete:
         code = code or "model_unavailable"
     if code is None and state.failed and not state.seen:
         code = "retrieval_failed"
     if code is not None:
         log.error("assistant turn failed: %s", code)
+        if code == "retrieval_failed" and parts:
+            yield Reset()  # with no sources behind it, this text must not stay on screen
         yield TurnError(code)
         return
     yield Citations(cited_ids("".join(parts), state.seen))

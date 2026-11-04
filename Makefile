@@ -144,4 +144,4 @@ eval-snapshot: ## Save each eval item's retrieved context, the input for answers
 eval-review-list: ## Write the list of eval items waiting for human review (RAG-12)
 	uv run python -m northwind_evals.cli review-list
 
-ci: lint scan-cassettes test test-integration eval-integrity eval-gate ## What CI runs, in the same order, except its browser job (make e2e)
+ci: lint scan-cassettes test test-integration eval-integrity eval-gate ## What CI runs, in the same order, except its browser job

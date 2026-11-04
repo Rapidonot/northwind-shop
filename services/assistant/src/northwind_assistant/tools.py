@@ -22,6 +22,7 @@ from typing import Any, Protocol
 from claude_agent_sdk import SdkMcpTool, tool
 
 from northwind_assistant.caller import Caller
+from northwind_common.cards import contains_card_data
 from northwind_rag.retrieval import RetrievedChunk
 
 log = logging.getLogger(__name__)
@@ -43,6 +44,7 @@ INPUT_SCHEMA: dict[str, Any] = {
 NO_SOURCES = "No sources matched this search."
 FAILED_MESSAGE = "Search is unavailable right now. Tell the shopper you cannot look this up."
 BAD_QUERY_MESSAGE = "The query must be non-empty text."
+CARD_QUERY_MESSAGE = "Search queries must not hold card details."
 
 
 class Retriever(Protocol):
@@ -82,6 +84,8 @@ def retrieve_tool(caller: Caller, retriever: Retriever, state: ToolState) -> Sdk
         query = args.get("query")
         if not isinstance(query, str) or not query.strip():
             return _error("validation", False, BAD_QUERY_MESSAGE)
+        if contains_card_data(query):  # hard rule 1 names tool arguments too
+            return _error("validation", False, CARD_QUERY_MESSAGE)
         try:
             chunks = await asyncio.to_thread(retriever.search, query, caller)
         except Exception as error:  # noqa: BLE001 - its text must not reach the model

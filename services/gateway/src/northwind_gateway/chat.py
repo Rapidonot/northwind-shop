@@ -1,11 +1,13 @@
 """POST /api/chat: one shopper message, answered over SSE (SA-02).
 
-Nothing a shopper sends comes back or reaches a log. FastAPI's default 422 repeats each bad field's
-`input`, so a rejected body could echo a card number: both handlers here return fixed text. A card
-number is refused in a dependency, before the response starts and before any model call (hard rule
-1). `error` events hold one code from a closed set, never exception or upstream text.
+Nothing a shopper sends comes back, reaches a log or stays on disk here (`agent_options` turns the
+CLI's transcripts off). FastAPI's default 422 repeats each bad field's `input`, so a rejected body
+could echo a card number: both handlers here return fixed text. Card data is refused in a
+dependency, before the response starts and before any model call (hard rule 1). `error` events hold
+one code from a closed set, never exception or upstream text.
 
-Events: `token` {text}, then `citations` {source_ids} and `done` {}, or `error` {code}.
+Events: `token` {text}, then `citations` {source_ids} and `done` {}, or `error` {code}. `reset` {}
+means a model attempt was cut off and retried, so the text so far must be dropped.
 """
 
 from __future__ import annotations
@@ -25,8 +27,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from northwind_assistant.caller import Caller
 from northwind_assistant.retriever import IndexRetriever
 from northwind_assistant.tools import Retriever
-from northwind_assistant.turn import Citations, TextDelta, TurnError, stream_answer
-from northwind_common.cards import contains_pan
+from northwind_assistant.turn import Citations, Reset, TextDelta, TurnError, stream_answer
+from northwind_common.cards import contains_card_data
 from northwind_common.llm import AgentRuntime, agent_runtime
 from northwind_gateway.settings import current_caller, database_url
 from northwind_rag.embedding import FastEmbedEmbedder
@@ -35,7 +37,7 @@ log = logging.getLogger(__name__)
 
 MAX_MESSAGE_CHARS = 2000
 INVALID_MESSAGE = "That message could not be accepted."
-CARD_MESSAGE = "Please don't share card numbers in chat. Your message was not sent."
+CARD_MESSAGE = "Please don't share card details in chat. Your message was not sent."
 
 router = APIRouter()
 
@@ -71,7 +73,7 @@ def card_refused(_request: Request, _error: Exception) -> JSONResponse:
 
 
 def checked_message(body: ChatRequest) -> str:
-    if contains_pan(body.message):
+    if contains_card_data(body.message):
         raise CardNumberRefused
     return body.message
 
@@ -96,6 +98,8 @@ def chat_services() -> ChatServices:
 def _event(event: Any) -> ServerSentEvent:
     if isinstance(event, TextDelta):
         return ServerSentEvent(event="token", data={"text": event.text})
+    if isinstance(event, Reset):
+        return ServerSentEvent(event="reset", data={})
     if isinstance(event, Citations):
         return ServerSentEvent(event="citations", data={"source_ids": list(event.source_ids)})
     return ServerSentEvent(event="error", data={"code": event.code})

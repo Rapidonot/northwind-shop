@@ -2,12 +2,16 @@ import { type FormEvent, useState } from "react";
 import { type ChatEvent, type ErrorCode, sendMessage } from "./chatStream";
 
 const ERROR_TEXT: Record<ErrorCode, string> = {
-  retrieval_failed: "Search isn't available right now, so this answer may be incomplete.",
+  retrieval_failed: "Search isn't available right now, so I can't answer that.",
   model_unavailable: "The assistant isn't available right now. Please try again.",
   replay_miss: "This question has no recorded answer yet.",
   turn_limit: "That took too many steps. Please try a simpler question.",
   internal: "Something went wrong. Please try again.",
 };
+
+function errorText(code: ErrorCode): string {
+  return Object.hasOwn(ERROR_TEXT, code) ? ERROR_TEXT[code] : ERROR_TEXT.internal;
+}
 
 type Turn = { answer: string; sources: string[]; notice: string | null };
 
@@ -17,10 +21,12 @@ function apply(turn: Turn, event: ChatEvent): Turn {
   switch (event.type) {
     case "token":
       return { ...turn, answer: turn.answer + event.text };
+    case "reset":
+      return { ...turn, answer: "" };
     case "citations":
       return { ...turn, sources: event.sourceIds };
     case "error":
-      return { ...turn, notice: ERROR_TEXT[event.code] ?? ERROR_TEXT.internal };
+      return { ...turn, notice: errorText(event.code) };
     case "refused":
       return { ...turn, notice: event.message };
     case "done":
