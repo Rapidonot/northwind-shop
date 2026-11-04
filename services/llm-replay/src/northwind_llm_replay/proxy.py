@@ -7,13 +7,17 @@ Modes (LLM_MODE):
   write the cassette (after the scanner), settle the ledger.
 - live: admit, call upstream, settle; no cassette.
 
-Auth: callers must present exactly one credential and it must be the placeholder key, either
-as `x-api-key` (the Agent SDK's CLI) or as `Authorization: Bearer <placeholder>` (`anthropic`
-2.x sends API keys that way). Anything else, such as an OAuth token, a real key or two
-credentials, is refused. This is a hard pass/fail that keeps runtime calls off the developer's
-subscription (decision 0001).
-The real key is loaded from .env by `dotenv_values` (never os.environ) on the first upstream
-call and only ever set on the upstream request.
+Auth: callers must present exactly one credential and it must be the expected one, either as
+`x-api-key` (the Agent SDK's CLI) or as `Authorization: Bearer <credential>` (`anthropic` 2.x
+sends API keys that way). Anything else, such as an OAuth token, a real key or two credentials,
+is refused. This is a hard pass/fail that keeps runtime calls off the developer's subscription
+(decision 0001). The expected credential is the placeholder, except on the runner, where it is
+the token of the run that claimed the window.
+
+Two roles for spending (decision 0005). The runner (`northwind_llm_replay.runner`) is this proxy
+in live mode with a `gate`: it alone holds the key, the ledger and the caps, and it runs from a
+clean checkout the sandbox cannot write. Everything else is `via_runner`: its upstream is the
+runner, it presents the claimed token, and it has no ledger and no key.
 
 Test context: a base URL of `http://host:port/_t/<test-id>` (`encode_test_id`) tags requests
 with a test ID
@@ -28,8 +32,9 @@ import json
 import threading
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
+from hmac import compare_digest
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 from urllib.parse import unquote
 
 import anyio
@@ -49,7 +54,12 @@ from northwind_llm_replay.ledger import (
     Reservation,
     now_iso,
 )
-from northwind_llm_replay.pricing import UnpricedModelError, price_for, worst_case_usd
+from northwind_llm_replay.pricing import (
+    UnpricedModelError,
+    cost_usd,
+    price_for,
+    worst_case_usd,
+)
 from northwind_llm_replay.scrub import match_key, request_hash, scrub
 
 MODES = ("replay", "record", "live")
@@ -78,6 +88,34 @@ def load_api_key(env_file: Path) -> str:
     return value
 
 
+def placeholder_credential() -> str | None:
+    return PLACEHOLDER_API_KEY
+
+
+class Gate(Protocol):
+    """What the runner adds to a live proxy. A proxy with a gate buffers every response, so
+    nothing reaches the caller before `leaks` has seen all of it."""
+
+    def refuse(
+        self,
+        method: str,
+        raw_path: str,
+        query: str,
+        raw: bytes,
+        body: Any,
+        headers: dict[str, str],
+    ) -> tuple[str, Response] | None:
+        """(outcome, response) to refuse a request, or None to let it through."""
+
+    def leaks(self, text: str) -> bool: ...
+
+    def request_leaks(self, raw: bytes, headers: dict[str, str]) -> bool: ...
+
+    def blocked(self) -> Response: ...
+
+    def report(self, entry: dict[str, Any]) -> None: ...
+
+
 @dataclass
 class ProxyConfig:
     mode: str = "replay"  # replay | record | live
@@ -90,6 +128,9 @@ class ProxyConfig:
     match: str = "hash"  # hash | sequence
     key_loader: Callable[[], str] | None = None
     secret_for_scan: str | None = None  # the real key, if known, for fragment scanning
+    credential: Callable[[], str | None] = placeholder_credential  # None refuses everyone
+    via_runner: bool = False  # upstream is the runner, which owns the guard and the ledger
+    gate: Gate | None = None  # set on the runner only
 
     def __post_init__(self) -> None:
         # handle() sends anything but replay upstream, so a typo must not get that far.
@@ -130,14 +171,18 @@ def error_response(
     )
 
 
-def auth_verdict(headers: dict[str, str]) -> str:
-    """ "placeholder" if the only credential is the placeholder key, else "REJECTED"."""
+def same_secret(presented: str, expected: str) -> bool:
+    """Constant-time, and safe for the non-ASCII text a header can decode to."""
+    return compare_digest(presented.encode("utf-8", "replace"), expected.encode("utf-8", "replace"))
+
+
+def auth_verdict(headers: dict[str, str], expected: str | None = PLACEHOLDER_API_KEY) -> str:
+    """ "placeholder" if the only credential is the expected one, else "REJECTED"."""
     creds = [v for k, v in headers.items() if k in ("x-api-key", "authorization")]
-    if len(creds) != 1:
+    if expected is None or len(creds) != 1:
         return "REJECTED"
-    ok = (
-        headers.get("x-api-key") == PLACEHOLDER_API_KEY
-        or headers.get("authorization") == f"Bearer {PLACEHOLDER_API_KEY}"
+    ok = same_secret(headers.get("x-api-key", ""), expected) or same_secret(
+        headers.get("authorization", ""), f"Bearer {expected}"
     )
     return "placeholder" if ok else "REJECTED"
 
@@ -202,12 +247,14 @@ class Proxy:
         if self._key is None:
             loader = self.cfg.key_loader or (lambda: load_api_key(self.cfg.env_file))
             self._key = loader()
-            if self.store._secret is None:
+            if self.store._secret is None and not self.cfg.via_runner:  # a token is not the key
                 self.store._secret = self._key
         return self._key
 
     def _log(self, entry: dict[str, Any]) -> None:
         self.state.calls.append({k: v for k, v in entry.items() if k != "body"})
+        if self.cfg.gate is not None:
+            self.cfg.gate.report(entry)
         if self.cfg.log_path is None:
             return
         self.cfg.log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -251,7 +298,7 @@ class Proxy:
             if "x-api-key" in headers
             else ("bearer" if "authorization" in headers else None),
             "headers": {k: headers[k] for k in LOGGED_HEADER_VALUES if k in headers},
-            "auth": auth_verdict(headers),
+            "auth": auth_verdict(headers, self.cfg.credential()),
             "hash": h[:LOG_HASH_CHARS],
             "model": body.get("model") if isinstance(body, dict) else None,
             "max_tokens": body.get("max_tokens") if isinstance(body, dict) else None,
@@ -269,6 +316,15 @@ class Proxy:
                 "the LLM proxy only accepts the placeholder key as the single credential "
                 "(build clients with northwind_common.llm)",
             )
+
+        if self.cfg.gate is not None:
+            refusal = self.cfg.gate.refuse(
+                request.method, request.url.path, request.url.query, raw, body, headers
+            )
+            if refusal is not None:
+                entry["outcome"], refused = refusal
+                self._log(entry)
+                return refused
 
         seq_no = None
         if test_id is not None:
@@ -316,7 +372,7 @@ class Proxy:
             )
 
         reservation: Reservation | None = None
-        if path == PRICED_PATH:
+        if path == PRICED_PATH and not self.cfg.via_runner:
             if not isinstance(body, dict):
                 entry["outcome"] = "refused-body"
                 self._log(entry)
@@ -360,6 +416,15 @@ class Proxy:
                 return error_response(402, "business", False, str(e))
             entry["reserved_usd"] = worst
 
+        # Last of all, once every free refusal has passed: a miss here costs a real upstream call,
+        # so this cannot be used as a free test of guesses at the key (review 2026-11-04, 1).
+        if self.cfg.gate is not None and self.cfg.gate.request_leaks(raw, headers):
+            if reservation is not None:
+                await self._settle(reservation, {})  # nothing was sent; release at zero cost
+            entry["outcome"] = "blocked-key"
+            self._log(entry)
+            return self.cfg.gate.blocked()
+
         out_headers = {k: headers[k] for k in FORWARD_HEADERS if k in headers}
         out_headers["accept-encoding"] = "identity"
         try:
@@ -384,7 +449,8 @@ class Proxy:
             return await self._upstream_failed(e, reservation, entry)
 
         content_type = resp.headers.get("content-type", "application/json")
-        if "text/event-stream" in content_type:
+        is_sse = "text/event-stream" in content_type
+        if is_sse and self.cfg.gate is None:
             return StreamingResponse(
                 self._stream(resp, reservation, entry, key, h, test_id, seq_no),
                 status_code=resp.status_code,
@@ -398,16 +464,24 @@ class Proxy:
             await resp.aclose()
         text = data.decode("utf-8", errors="replace")
         usage: dict[str, Any] | None = None
-        try:
-            parsed = json.loads(text)
-            usage = parsed.get("usage") if isinstance(parsed, dict) else None
-        except json.JSONDecodeError:
-            parsed = None
+        if is_sse:
+            usage, _ = parse_sse_usage(text)
+        else:
+            try:
+                parsed = json.loads(text)
+                usage = parsed.get("usage") if isinstance(parsed, dict) else None
+            except json.JSONDecodeError:
+                parsed = None
         if reservation is not None:
             # Any response without usage, error statuses included, is charged the worst case.
             entry["cost_usd"] = await self._settle(reservation, usage or None)
         entry["status"] = resp.status_code
         entry["outcome"] = "live"
+        entry["usage"] = usage
+        if self.cfg.gate is not None and self.cfg.gate.leaks(text):
+            entry["outcome"] = "blocked-key"
+            self._log(entry)
+            return self.cfg.gate.blocked()
         if self.cfg.mode == "record" and resp.status_code == 200:
             self._record(
                 key, h, resp.status_code, content_type, "json", text, entry, usage, test_id, seq_no
@@ -498,6 +572,12 @@ class Proxy:
         test_id: str | None,
         seq_no: int | None,
     ) -> None:
+        # Through the runner there is no local settlement, and usage prices to the same figure.
+        cost = (
+            cost_usd(str(entry.get("model")), usage)
+            if self.cfg.via_runner and usage
+            else float(entry.get("cost_usd") or 0.0)
+        )
         cassette = Cassette(
             hash=h,
             suite=self.cfg.suite,
@@ -509,7 +589,7 @@ class Proxy:
             body=text,
             model=str(entry.get("model")),
             usage=usage,
-            cost_usd=float(entry.get("cost_usd") or 0.0),
+            cost_usd=cost,
             test_id=test_id,
             seq=seq_no,
         )

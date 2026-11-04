@@ -45,16 +45,10 @@ def make_uv_calls(
         "x`touch injected`",
         "x && touch injected",
         "",
-        pytest.param(
-            "$(shell touch injected)",
-            marks=pytest.mark.xfail(
-                strict=True, reason="make expands it first; known limit, like `-f evil.mk`"
-            ),
-        ),
     ],
 )
 def test_record_refuses_a_suite_that_is_not_a_name(tmp_path: Path, suite: str) -> None:
-    """`make record` runs outside Claude's sandbox, so SUITE must not reach a shell."""
+    """SUITE must not reach a shell. `$(shell ...)` is make's own, and the run is sandboxed."""
     (tmp_path / "Makefile").write_text((REPO / "Makefile").read_text())
     done = subprocess.run(  # noqa: S603
         ["make", "-s", "record", f"SUITE={suite}"],  # noqa: S607
@@ -88,16 +82,10 @@ def test_record_passes_a_plain_suite_name(tmp_path: Path) -> None:
         "all",
         "-1",
         "",
-        pytest.param(
-            "$(shell touch injected)",
-            marks=pytest.mark.xfail(
-                strict=True, reason="make expands it first; known limit, like `-f evil.mk`"
-            ),
-        ),
     ],
 )
 def test_eval_live_refuses_a_slice_that_is_not_digits(tmp_path: Path, size: str) -> None:
-    """`make eval-live EVAL_SLICE=*` runs outside Claude's sandbox, so it must not reach a shell."""
+    """EVAL_SLICE must not reach a shell. `$(shell ...)` is make's own, and the run is sandboxed."""
     (tmp_path / "Makefile").write_text((REPO / "Makefile").read_text())
     shim = tmp_path / "bin" / "uv"
     shim.parent.mkdir()

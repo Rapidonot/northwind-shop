@@ -108,21 +108,28 @@ class Ledger:
             finally:
                 fcntl.flock(lock_file, fcntl.LOCK_UN)
 
-    def _entries(self) -> list[dict[str, Any]]:
+    def _entries(self, *, unfinished_tail_ok: bool = False) -> list[dict[str, Any]]:
         if not self.path.exists():
             return []
-        lines = self.path.read_text(encoding="utf-8").splitlines()
-        return [json.loads(line) for line in lines if line.strip()]
+        lines = [
+            line for line in self.path.read_text(encoding="utf-8").splitlines() if line.strip()
+        ]
+        if unfinished_tail_ok and lines:
+            try:
+                json.loads(lines[-1])
+            except json.JSONDecodeError:
+                lines.pop()  # the runner is mid-append; only the last line can be
+        return [json.loads(line) for line in lines]
 
     def _append(self, entry: Mapping[str, Any]) -> None:
         with self.path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(entry, sort_keys=True) + "\n")
             f.flush()
 
-    def _totals_unlocked(self) -> Totals:
+    def _totals_unlocked(self, entries: list[dict[str, Any]] | None = None) -> Totals:
         reserved: dict[str, dict[str, Any]] = {}
         settled: dict[str, dict[str, Any]] = {}
-        for e in self._entries():
+        for e in self._entries() if entries is None else entries:
             if e["type"] == "reserve":
                 reserved[e["id"]] = e
             elif e["type"] == "settle":
@@ -156,6 +163,11 @@ class Ledger:
     def totals(self) -> Totals:
         with self._locked():
             return self._totals_unlocked()
+
+    def read_totals(self) -> Totals:
+        """Totals without the lock, for a reader that may not write it: the sandbox cannot, so
+        `make llm-spend` works there (decision 0005). A report, never an admission decision."""
+        return self._totals_unlocked(self._entries(unfinished_tail_ok=True))
 
     def reserve(self, *, model: str, worst_case_usd: float, request_hash: str) -> Reservation:
         """Admit a call or raise BudgetExceededError. Admission and reservation are one step

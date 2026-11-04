@@ -21,7 +21,6 @@ from typing import Any
 
 import psycopg
 
-from northwind_common import localenv
 from northwind_common.llm import ASSISTANT_MODEL, anthropic_client
 from northwind_evals.answerers import Answerer, SingleShotAnswerer
 from northwind_evals.contexts import (
@@ -60,8 +59,8 @@ from northwind_evals.items import (
     slice_items,
 )
 from northwind_evals.judge import Judge
-from northwind_llm_replay.ledger import Ledger
-from northwind_llm_replay.proxy import ProxyConfig, ProxyState, RunningProxy, encode_test_id
+from northwind_llm_replay.proxy import ProxyState, RunningProxy, encode_test_id
+from northwind_llm_replay.runner import RunnerUnavailableError, proxy_config
 from northwind_llm_replay.scan import load_canaries, scan_text
 from northwind_rag.cli import DEFAULT_DATABASE_URL
 from northwind_rag.embedding import Embedder, FastEmbedEmbedder
@@ -137,21 +136,10 @@ def _context_leaks(contexts: dict[str, SavedContext], items: Sequence[EvalItem])
 @contextmanager
 def _clients(mode: str) -> Iterator[tuple[Answerer, Judge, ProxyState]]:
     """The answerer and the judge, each with its own client, both through the proxy."""
-    ledger = None
-    if mode != "replay":
-        ledger = Ledger(
-            localenv.ledger_path(),
-            budget_usd=float(os.environ.get("LLM_BUDGET_USD", "90")),
-            run_budget_usd=float(os.environ.get("LLM_RUN_BUDGET_USD", "5.00")),
-            run_id=os.environ.get("LLM_RUN_ID", f"evals-{os.getpid()}"),
-            suite=SUITE,
-        )
-    config = ProxyConfig(
-        mode=mode,
-        suite=SUITE,
+    config = proxy_config(
+        mode,
+        SUITE,
         cassette_root=Path("cassettes"),
-        ledger=ledger,
-        env_file=localenv.env_file(),
         log_path=None if mode == "replay" else Path(f".llm-proxy-log/{SUITE}.jsonl"),
     )
     with RunningProxy(config) as running:
@@ -271,7 +259,11 @@ def cmd_run(args: argparse.Namespace) -> int:
     if args.slice != "all" and not (args.slice.isdigit() and int(args.slice) > 0):
         print("--slice must be a positive number or `all`", file=sys.stderr)
         return 2
-    return _build_candidate(args.slice, "record")
+    try:
+        return _build_candidate(args.slice, "record")
+    except RunnerUnavailableError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 2
 
 
 def cmd_rescore(_: argparse.Namespace) -> int:
