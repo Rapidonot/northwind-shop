@@ -46,7 +46,7 @@ hook itself).
 | 13 | Low | `make ci` skips the cassette scan GitHub CI runs | Accept | Read: `ci: lint test test-integration`, while `ci.yml` has a scan step. CLAUDE.md says they match. Fix: add `scan-cassettes` to `ci` |
 | 14 | Low | "Never hand-edit a cassette" is not enforced | Reject | A checksum stored in the same file stops nothing, because whoever edits the file can recompute it. Git history and PR review are the control, and CLAUDE.md states the rule |
 | 15a | – | Guard gaps in the c01cb2e version | Accept (fixed) | `.ENV`, `printenv <name>`, `git status; rm …` and exit-1 crashes were fixed in 7fc8e93, which reaches main with this PR. Pinned as blocked in `tests/hooks/test_guard_env.py` |
-| 15b | Medium | Guard gaps still open | Accept (11 of 14 fixed, rest accepted) | The user installed the hook fix on `req/NFR-02-guard-fixes`: 11 of the 14 cases are now pinned as blocked. The other 3 stay `xfail(strict=True)`, and 4 more shell-text gaps are accepted as limits of a speed bump (list below). The real control is CC-27 sandboxed Bash, a follow-up after RAG-01. Review of this change found further bypasses, R1 to R4, still open |
+| 15b | Medium | Guard gaps still open | Accept (11 of 14 fixed, rest accepted until CC-27) | The user installed the hook fix on `req/NFR-02-guard-fixes`: 11 of the 14 cases are now pinned as blocked. The other 3, 4 more shell-text gaps and review findings R1 to R4 are accepted by the user as limits of a speed bump until CC-27 sandboxed Bash, a follow-up after RAG-01. All are pinned as `xfail(strict=True)`, so a future fix flips them (list below) |
 | 15c | Low | `uv run` Python can read the key file under a constructed name | Reject | Correct, but no text match can stop it; the hook says it is a speed bump. A real fix means an OS sandbox, not a hook change |
 | A | Low | The proxy client may honour `HTTPS_PROXY` | Accept | Confirmed: `trust_env` defaults to True in `httpx2`. Fix: set `trust_env=False` on the upstream client |
 | B | Low | Dev proxy checks no `Host` header | Reject for now | Untested. It binds to loopback, needs live mode, and the caps still apply. Revisit in P6 hardening |
@@ -64,7 +64,7 @@ The original 14 cases, after the hook fix on `req/NFR-02-guard-fixes`:
 | Name hidden from the text match | `cat .en*`; `cat .e''nv` | Accepted, strict xfail |
 
 Four more shell-text gaps, each confirmed by passing the command to the installed hook as data.
-They are accepted but not pinned in the test suite:
+They are accepted and pinned as strict xfail:
 
 | Case | Why it gets through |
 |------|---------------------|
@@ -81,12 +81,12 @@ deny list does not cover them.
 `tests/hooks/test_settings.py` guards the other half: the hook only runs while `settings.json`
 registers it, so a truncated or weakened file now fails CI.
 
-## Review of the guard change (open, for the user to decide)
+## Review of the guard change (R1 to R4 accepted until CC-27)
 
 The `security-reviewer` subagent read the hook change and `test_settings.py`. It found no
 regressions: every old block condition still blocks. It did find bypasses beyond the four above.
 All passed the old hook too. Each example below was confirmed by passing it to the installed hook
-as data, and none is covered by the acceptance of those four.
+as data. These and the reviewer's other examples, 15 cases in all, are pinned as strict xfail.
 
 | Finding | Severity | Example that gets through | Why |
 |---------|----------|---------------------------|-----|
@@ -95,9 +95,10 @@ as data, and none is covered by the acceptance of those four.
 | R3 | Low | `git diff > .claude/./settings.json`; `rm .claude//hooks/guard_env.py`; Write to `/repo/.claude/./settings.json` | Protected paths are matched as literal strings |
 | R4 | Low | `cd .claude/agents && rm ../settings.json`; `{ cd .claude; rm settings.json; }`; `if cd .claude; then rm settings.json; fi` | `cd` tracking needs `cd` at the start of a segment and a path ending in `.claude` |
 
-R1 to R4 change the hook, so they are the user's call. CC-27 would stop all of them, because they
-are writes. A speed bump may be enough until then, but R1 and R2 are the ones to look at: they
-write to a protected file through a command the hook treats as safe.
+**Decision (the user, 2026-11-04):** R1 to R4 are accepted until CC-27. The hook is a speed bump,
+and the real control is sandboxed Bash with writes denied to `.claude/settings*` and
+`.claude/hooks/`. CC-27 covers the Bash cases, because they are writes. It does not cover R3's
+Write tool case, which never goes through Bash. That one needs a hook change or a permission rule.
 
 Also from this review:
 

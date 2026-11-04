@@ -140,6 +140,46 @@ def test_bash_protected_path_is_blocked(command: str) -> None:
     assert_blocked(run_hook("Bash", {"command": command}), SELF_MSG)
 
 
+SUBSTITUTION = "R1: a substitution inside an allowed git segment is not inspected"
+GIT_MESSAGE_QUOTING = "R2: GIT_MESSAGE ignores quoting, so a real redirect is stripped as text"
+PATH_SPELLING = "R3: protected paths are matched as literal strings"
+CD_TRACKING = "R4: cd tracking needs cd at the start of a segment and a path ending in .claude"
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        gap("rm -rf .claude", "removes the parent, so no protected path appears in the text"),
+        gap(
+            "git -C .claude checkout -- settings.json",
+            "the bare name is only protected after cd",
+        ),
+        gap("git status $(rm .claude/settings.json)", SUBSTITUTION),
+        gap("git log `cp /tmp/weak.json .claude/settings.json`", SUBSTITUTION),
+        gap('git commit -m "$(rm .claude/hooks/guard_env.py)"', SUBSTITUTION),
+        gap("git diff > >(tee .claude/settings.json)", SUBSTITUTION),
+        gap("""git diff " -m '" > .claude/settings.json "'" """, GIT_MESSAGE_QUOTING),
+        gap("""git log --grep=" -m 'x" > .claude/settings.json # '""", GIT_MESSAGE_QUOTING),
+        gap("git diff > .claude/./settings.json", PATH_SPELLING),
+        gap("git diff --output=.claude//settings.json", PATH_SPELLING),
+        gap("rm .claude//hooks/guard_env.py", PATH_SPELLING),
+        gap("cd .claude/agents && rm ../settings.json", CD_TRACKING),
+        gap("cd .claude/agents && git diff > ../settings.json", CD_TRACKING),
+        gap("cd .claude/. && rm settings.json", CD_TRACKING),
+        gap("{ cd .claude; rm settings.json; }", CD_TRACKING),
+        gap("if cd .claude; then rm settings.json; fi", CD_TRACKING),
+    ],
+)
+def test_bash_protected_path_gaps(command: str) -> None:
+    assert_blocked(run_hook("Bash", {"command": command}), SELF_MSG)
+
+
+@pytest.mark.xfail(strict=True, reason=PATH_SPELLING)
+def test_write_to_protected_path_in_other_spelling_gap() -> None:
+    result = run_hook("Write", {"file_path": "/repo/.claude/./settings.json"})
+    assert_blocked(result, SELF_MSG)
+
+
 @pytest.mark.parametrize(
     "command",
     [
@@ -147,6 +187,8 @@ def test_bash_protected_path_is_blocked(command: str) -> None:
             "python3 -c 'import os; print(os.environ[\"ANTHROPIC_API_KEY\"])'",
             "KEY_REF only matches shell expansion",
         ),
+        gap("env -0", "env with a flag reads as an ordinary command"),
+        gap("echo `env`", "backticks are not parsed; $(env) is blocked"),
     ],
 )
 def test_bash_environment_dump_gaps(command: str) -> None:
