@@ -51,7 +51,7 @@ docs/            PRD.md, images/, decisions/
 
 ## Commands (keep this list current; `make` lists them)
 ```
-make setup            # uv sync + pnpm install; creates .env from env.example
+make setup            # uv sync + pnpm install; creates .env from env.example (main checkout only)
 make up | make down   # docker compose stack (Postgres 16 + pgvector), waits for healthy
 make dev              # gateway on :8000 + portal on :5173 (Vite proxies /api)
 make data             # regenerate data/fixtures (seeded, byte-identical; bump DATA_VERSION if output changes)
@@ -60,11 +60,23 @@ make lint             # ruff, ruff format --check, mypy (strict), eslint, tsc
 make test             # unit tests: pytest (excludes integration) + vitest
 make test-integration # pytest -m integration (needs `make up`)
 make ci               # lint + test + test-integration, the same steps as GitHub CI
+make record SUITE=…   # SPENDS: re-record one cassette suite (new requests live, under LLM_RUN_BUDGET_USD)
+make eval-live        # SPENDS: evals live + recorded (suites arrive with RAG-12)
+make llm-spend        # shared ledger: total, per suite/model, 20-call checkpoint
+make scan-cassettes   # secret/PAN scan of cassettes, ledger and proxy log
+make llm-proxy        # dev LLM proxy on this worktree's port (LLM_MODE, default replay)
 ```
-Added later: `make record SUITE=…` / `make eval-live` / `make llm-spend`
-(FOUND-2), `make ingest` (RAG-01), `make eval` / `make eval-gate` (RAG-12), `make e2e` with
+Added later: `make ingest` (RAG-01), `make eval` / `make eval-gate` (RAG-12), `make e2e` with
 Playwright (SA-02 crude). Only `make record` and `make eval-live` spend API credit; everything
 else runs in replay.
+
+LLM clients (FOUND-2): build every client with `northwind_common.llm` (`anthropic_client()`,
+`agent_options()`); never construct `anthropic.Anthropic` or `ClaudeAgentOptions` directly. LLM
+tests use the `llm_proxy` fixture with `@pytest.mark.llm_suite("<suite>")`, or `scripted_llm`.
+Shared across worktrees: ledger `LLM_LEDGER_PATH` (default `~/.northwind/ledger.jsonl`); key file
+`LLM_ENV_FILE` (default the main checkout's `.env`, never copied into worktrees). Per worktree: the
+dev proxy port `LLM_PROXY_PORT` (derived from the path). Details: decision 0001,
+services/llm-replay/SPIKE.md.
 
 Toolchain notes:
 - pnpm runs through corepack (`corepack pnpm …`, pinned in package.json); there is no global pnpm.

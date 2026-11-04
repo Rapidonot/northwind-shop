@@ -1,0 +1,119 @@
+"""Secret / PAN scanner for cassettes, the ledger and the proxy log (FOUND-2; hard rules 1, 4).
+
+Fails on:
+- API-key shapes: `sk-ant-…`, other `sk-…` keys, Bearer tokens, an `x-api-key` header with a value;
+- any 16+ character piece of the real key (when the caller supplies it, e.g. loaded from .env),
+  so a key in a format the regexes don't know is still caught;
+- Luhn-valid 13–19 digit runs with a non-digit (or start/end of text) on both sides, plus
+  4-4-4-4 groups split by one space or dash. There is no allowlist: sandbox test PANs fail too,
+  because card numbers never belong in model traffic;
+- a cassette whose `recorded_at` is not ISO-8601.
+
+Findings never contain the matched secret, only its kind and position.
+"""
+
+from __future__ import annotations
+
+import json
+import re
+from collections.abc import Iterable
+from dataclasses import dataclass
+from datetime import datetime
+from pathlib import Path
+
+KEY_FRAGMENT_LEN = 16
+
+_KEY_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("anthropic-api-key", re.compile(r"sk-ant-[A-Za-z0-9_\-]{8,}")),
+    ("generic-sk-key", re.compile(r"(?<![A-Za-z0-9])sk-[A-Za-z0-9_\-]{20,}")),
+    ("bearer-token", re.compile(r"(?i)bearer\s+[A-Za-z0-9._~+/\-]{16,}")),
+    # The header *with a value* (a header dump, curl line or JSON object), not the bare name.
+    ("x-api-key-header", re.compile(r"""(?i)x-api-key["']?\s*[:=]\s*["']?[^\s"',}]+""")),
+)
+_PAN_RUN = re.compile(r"(?<!\d)\d{13,19}(?!\d)")
+_PAN_GROUPED = re.compile(r"(?<![\d])\d{4}([ -])\d{4}\1\d{4}\1\d{4}(?![\d])")
+
+
+@dataclass(frozen=True)
+class Finding:
+    path: str
+    line: int
+    kind: str
+
+    def __str__(self) -> str:
+        return f"{self.path}:{self.line}: {self.kind}"
+
+
+def luhn_ok(digits: str) -> bool:
+    total = 0
+    for i, ch in enumerate(reversed(digits)):
+        d = int(ch)
+        if i % 2 == 1:
+            d *= 2
+            if d > 9:
+                d -= 9
+        total += d
+    return total % 10 == 0
+
+
+def key_fragments(key: str) -> set[str]:
+    if len(key) < KEY_FRAGMENT_LEN:
+        return {key} if key else set()
+    return {key[i : i + KEY_FRAGMENT_LEN] for i in range(len(key) - KEY_FRAGMENT_LEN + 1)}
+
+
+def scan_text(text: str, path: str = "<text>", secret: str | None = None) -> list[Finding]:
+    findings: list[Finding] = []
+    fragments = key_fragments(secret) if secret else set()
+    for lineno, line in enumerate(text.splitlines() or [text], start=1):
+        for kind, pattern in _KEY_PATTERNS:
+            if pattern.search(line):
+                findings.append(Finding(path, lineno, kind))
+        if fragments and any(f in line for f in fragments):
+            findings.append(Finding(path, lineno, "api-key-fragment"))
+        for m in _PAN_RUN.finditer(line):
+            if luhn_ok(m.group(0)):
+                findings.append(Finding(path, lineno, "luhn-valid-pan"))
+        for m in _PAN_GROUPED.finditer(line):
+            if luhn_ok(re.sub(r"\D", "", m.group(0))):
+                findings.append(Finding(path, lineno, "luhn-valid-pan"))
+    return findings
+
+
+def _check_recorded_at(path: Path, text: str) -> list[Finding]:
+    try:
+        doc = json.loads(text)
+    except json.JSONDecodeError:
+        return [Finding(str(path), 1, "cassette-not-json")]
+    value = doc.get("recorded_at") if isinstance(doc, dict) else None
+    if not isinstance(value, str):
+        return [Finding(str(path), 1, "recorded_at-missing")]
+    try:
+        datetime.fromisoformat(value)
+    except ValueError:
+        return [Finding(str(path), 1, "recorded_at-not-iso8601")]
+    return []
+
+
+def _files(roots: Iterable[Path]) -> Iterable[Path]:
+    for root in roots:
+        if root.is_file():
+            yield root
+        elif root.is_dir():
+            yield from sorted(p for p in root.rglob("*") if p.is_file())
+
+
+def is_cassette(path: Path) -> bool:
+    return path.suffix == ".json" and "cassettes" in path.parts
+
+
+def scan_paths(roots: Iterable[Path], secret: str | None = None) -> list[Finding]:
+    findings: list[Finding] = []
+    for path in _files(roots):
+        if path.suffix == ".lock":
+            continue
+        text = path.read_text(encoding="utf-8", errors="replace")
+        findings.extend(scan_text(text, str(path), secret))
+        if is_cassette(path):
+            findings.extend(_check_recorded_at(path, text))
+    return findings

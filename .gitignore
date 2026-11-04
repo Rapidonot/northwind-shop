@@ -23,3 +23,8 @@ coverage/
 
 # Claude Code personal overrides (never shared)
 .claude/settings.local.json
+
+# LLM proxy request log: local only, scanned (FOUND-2). The spend ledger lives outside the repo
+# (LLM_LEDGER_PATH, default ~/.northwind/ledger.jsonl); .llm-ledger/ was its first location.
+.llm-ledger/
+.llm-proxy-log/
