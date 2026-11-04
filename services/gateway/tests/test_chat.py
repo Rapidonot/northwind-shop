@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 
 from northwind_assistant.caller import Caller
 from northwind_assistant.tools import ALLOWED_TOOL
+from northwind_assistant.turn import INSUFFICIENT_EVIDENCE
 from northwind_common.llm import agent_runtime
 from northwind_gateway.app import app
 from northwind_gateway.chat import CARD_MESSAGE, INVALID_MESSAGE, ChatServices, chat_services
@@ -24,7 +25,7 @@ pytestmark = pytest.mark.req("SA-02")
 
 CARD = "4242" * 4
 MARKER = "PLANTED-MARKER-9c1e"
-FIXED_CODES = {"retrieval_failed", "model_unavailable", "replay_miss", "turn_limit", "internal"}
+FIXED_CODES = {"retrieval_failed", "model_unavailable", "replay_miss", "internal"}
 SOURCE = RetrievedChunk("c1", "document", "FAQ-001", "faq", "Wash cold.")
 
 
@@ -88,7 +89,7 @@ def test_the_region_comes_from_server_config_not_the_request(
         json={"message": "hi"},
         headers={"X-Region": "UK", "X-Audience": "staff"},
     )
-    assert stack.retriever.callers == [Caller(region="EU", audience="shopper")]
+    assert stack.retriever.callers == [Caller(region="EU", audience="shopper")] * 2
 
 
 @pytest.mark.parametrize("region", ["ALL", "", "us", "AU"])
@@ -101,6 +102,7 @@ def test_a_bad_server_region_is_refused(monkeypatch: pytest.MonkeyPatch, region:
 REJECTED_BODIES: list[tuple[str, dict[str, Any]]] = [
     ("card in message", {"json": {"message": f"my card is {CARD}"}}),
     ("spaced card", {"json": {"message": " ".join([CARD[:4]] * 4)}}),
+    ("blank text", {"json": {"message": "   "}}),
     ("wide card", {"json": {"message": "    ".join([CARD[:4]] * 4)}}),
     ("worded card", {"json": {"message": " then ".join([CARD[:4]] * 4)}}),
     ("cvv", {"json": {"message": "card ending 4242, CVV 737, exp 12/28"}}),
@@ -171,11 +173,16 @@ def test_a_retried_stream_tells_the_portal_to_drop_the_partial_text(stack: Stack
     ]
 
 
-def test_the_turn_cap_is_a_fixed_code(stack: Stack) -> None:
+@pytest.mark.req("RAG-10")
+def test_the_turn_cap_gives_the_shopper_a_reply_not_an_error(stack: Stack) -> None:
     for n in range(6):
         stack.llm.reply_tool_use(ALLOWED_TOOL, {"query": f"q{n}"}, tool_id=f"toolu_{n}")
     response = stack.client.post("/api/chat", json={"message": "hi"})
-    assert events(response.text) == [("error", {"code": "turn_limit"})]
+    assert events(response.text) == [
+        ("token", {"text": INSUFFICIENT_EVIDENCE}),
+        ("citations", {"source_ids": []}),
+        ("done", {}),
+    ]
 
 
 def test_an_unexpected_exception_is_only_a_fixed_code(
@@ -202,3 +209,49 @@ def test_an_accepted_message_is_not_logged(stack: Stack, caplog: pytest.LogCaptu
     stack.llm.reply_stream("hello")
     stack.client.post("/api/chat", json={"message": f"do you stock {MARKER}?"})
     assert MARKER not in caplog.text
+
+
+def _tool_turns(stack: Stack, count: int, *, with_text: bool = False) -> None:
+    from northwind_llm_replay.scripted import blocks_sse
+
+    for n in range(count):
+        blocks: list[dict[str, Any]] = [
+            {
+                "type": "tool_use",
+                "id": f"toolu_g{n}",
+                "name": ALLOWED_TOOL,
+                "input": {"query": f"q{n}"},
+            }
+        ]
+        if with_text:
+            blocks.insert(0, {"type": "text", "chunks": ["Let me check. "]})
+        body = blocks_sse(
+            "claude-sonnet-5-5",
+            blocks,
+            "tool_use",
+            {"input_tokens": 1, "output_tokens": 1},
+            f"msg_g{n}",
+        )
+        stack.llm.reply_raw(200, body, "text/event-stream")
+
+
+@pytest.mark.req("RAG-10")
+def test_a_model_that_answers_after_the_search_refusal_ends_in_done(stack: Stack) -> None:
+    _tool_turns(stack, 3)  # the server's own search is the first of 3, so the third call is refused
+    stack.llm.reply_stream("Wash cold [FAQ-001].")
+    names = [
+        name for name, _ in events(stack.client.post("/api/chat", json={"message": "hi"}).text)
+    ]
+    assert names == ["token", "citations", "done"]
+
+
+@pytest.mark.req("RAG-10")
+def test_a_model_that_never_answers_gets_no_error_event_and_done_follows(stack: Stack) -> None:
+    _tool_turns(stack, 8, with_text=True)
+    parsed = events(stack.client.post("/api/chat", json={"message": "hi"}).text)
+    names = [name for name, _ in parsed]
+    assert "error" not in names
+    assert names[-3:] == ["token", "citations", "done"]
+    assert names[-4] == "reset"  # the streamed "Let me check" is dropped first
+    assert parsed[-3] == ("token", {"text": INSUFFICIENT_EVIDENCE})
+    assert parsed[-2] == ("citations", {"source_ids": []})

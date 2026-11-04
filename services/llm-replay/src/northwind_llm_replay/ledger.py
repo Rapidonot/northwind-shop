@@ -67,6 +67,31 @@ class Totals:
     by_model: dict[str, float]
 
 
+@dataclass
+class SuiteUsage:
+    """Token and cache figures for one suite, from `usage` on settled calls (RAG-13, NFR-16).
+    `unreported` counts calls charged at worst case because usage never arrived: they may have been
+    billed. `unsent` counts calls released at $0 without reaching the API, which are not calls."""
+
+    calls: int = 0
+    unreported: int = 0
+    unsent: int = 0
+    input_tokens: int = 0
+    cache_read_tokens: int = 0
+    cache_write_tokens: int = 0
+    output_tokens: int = 0
+    cost_usd: float = 0.0
+
+    @property
+    def cache_hit_rate(self) -> float | None:
+        prompt = self.input_tokens + self.cache_read_tokens + self.cache_write_tokens
+        return self.cache_read_tokens / prompt if prompt else None
+
+    @property
+    def cost_per_call(self) -> float | None:
+        return self.cost_usd / self.calls if self.calls else None
+
+
 def now_iso() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
 
@@ -159,6 +184,30 @@ class Ledger:
             by_suite=by_suite,
             by_model=by_model,
         )
+
+    def usage_by_suite(self) -> dict[str, SuiteUsage]:
+        """A report from settled calls, read without the lock, like `read_totals`."""
+        entries = self._entries(unfinished_tail_ok=True)
+        suites = {e["id"]: e["suite"] for e in entries if e["type"] == "reserve"}
+        report: dict[str, SuiteUsage] = {}
+        for e in entries:
+            if e["type"] != "settle" or e["id"] not in suites:
+                continue
+            row = report.setdefault(suites[e["id"]], SuiteUsage())
+            usage = e.get("usage")
+            if usage == {}:
+                row.unsent += 1
+                continue
+            row.calls += 1
+            row.cost_usd += float(e["cost_usd"])
+            if usage is None:
+                row.unreported += 1
+                continue
+            row.input_tokens += int(usage.get("input_tokens") or 0)
+            row.cache_read_tokens += int(usage.get("cache_read_input_tokens") or 0)
+            row.cache_write_tokens += int(usage.get("cache_creation_input_tokens") or 0)
+            row.output_tokens += int(usage.get("output_tokens") or 0)
+        return report
 
     def totals(self) -> Totals:
         with self._locked():

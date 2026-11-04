@@ -29,6 +29,7 @@ from northwind_assistant.tools import (
     retrieve_tool,
 )
 from northwind_assistant.turn import (
+    INSUFFICIENT_EVIDENCE,
     MAX_TURNS,
     Citations,
     Reset,
@@ -110,7 +111,7 @@ def test_an_answer_streams_in_order_with_its_citation(tmp_path: Path) -> None:
         TextDelta("cold [FAQ-001]."),
         Citations(("FAQ-001",)),
     ]
-    assert retriever.calls == [("wash", US)]
+    assert retriever.calls == [("How do I wash it?", US), ("wash", US)]
     assert len(llm.requests) == 2
 
 
@@ -228,6 +229,7 @@ def test_a_built_in_tool_cannot_run(tmp_path: Path) -> None:
     assert result["is_error"] is True and not target.exists()
 
 
+@pytest.mark.req("RAG-10")
 def test_a_fifth_turn_never_happens(tmp_path: Path) -> None:
     assert MAX_TURNS == 4
     retriever = FakeRetriever()
@@ -236,7 +238,7 @@ def test_a_fifth_turn_never_happens(tmp_path: Path) -> None:
             llm.reply_tool_use(ALLOWED_TOOL, {"query": f"q{n}"}, tool_id=f"toolu_{n}")
         events = turn("hi", retriever, runtime_for(llm, tmp_path))
     assert len(llm.requests) == MAX_TURNS
-    assert events == [TurnError("turn_limit")]
+    assert events == [TextDelta(INSUFFICIENT_EVIDENCE), Citations(())]
 
 
 def test_model_supplied_audience_and_region_change_nothing_through_the_cli(tmp_path: Path) -> None:
@@ -377,7 +379,7 @@ def test_card_data_in_a_tool_argument_is_refused_and_searches_nothing(
         result["is_error"] is True
         and json.loads(result_text(result))["message"] == CARD_QUERY_MESSAGE
     )
-    assert retriever.calls == []
+    assert retriever.calls == [("hi", US)]  # the server's own search, never the card text
 
 
 def test_text_with_no_sources_behind_it_is_cleared_when_search_failed(tmp_path: Path) -> None:
@@ -404,7 +406,7 @@ def test_failed_search_text_is_cleared_when_another_error_ends_the_turn(tmp_path
             body = blocks_sse("m", blocks, "tool_use", usage, f"msg_{n}")
             llm.reply_raw(200, body, "text/event-stream")
         events = turn("hi", BrokenRetriever(), runtime_for(llm, tmp_path))
-    assert events[-2:] == [Reset(), TurnError("turn_limit")]
+    assert events[-2:] == [Reset(), TurnError("retrieval_failed")]  # an outage, not a thin answer
 
 
 @pytest.mark.parametrize("stop_reason", ["max_tokens", "refusal"])
@@ -422,7 +424,8 @@ def test_a_slash_command_stays_shopper_text(tmp_path: Path) -> None:
         llm.reply_stream("hello")
         turn("/compact", FakeRetriever(), runtime_for(llm, tmp_path))
     [first] = llm.requests[0]["body"]["messages"][0]["content"]
-    assert first["text"] == "Shopper's message:\n/compact"
+    assert first["text"].startswith("<sources>\n")
+    assert first["text"].endswith("<shopper_message>\n/compact\n</shopper_message>")
 
 
 def test_every_request_of_a_tool_loop_hashes_the_same_across_runtimes(tmp_path: Path) -> None:

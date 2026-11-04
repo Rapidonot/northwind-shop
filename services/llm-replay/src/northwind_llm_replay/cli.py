@@ -64,6 +64,17 @@ def cmd_spend(args: argparse.Namespace) -> int:
         print(f"  suite {suite:<12} ${usd:.6f}")
     for model, usd in sorted(t.by_model.items()):
         print(f"  model {model:<20} ${usd:.6f}")
+    print("  cache and tokens, settled calls:")
+    for suite, row in sorted(ledger.usage_by_suite().items()):
+        rate = "n/a" if row.cache_hit_rate is None else f"{row.cache_hit_rate:.1%}"
+        per_call = "n/a" if row.cost_per_call is None else f"${row.cost_per_call:.6f}"
+        print(
+            f"  suite {suite:<16} calls {row.calls} "
+            f"(no usage: {row.unreported}, unsent: {row.unsent}) "
+            f"input {row.input_tokens} read {row.cache_read_tokens} "
+            f"write {row.cache_write_tokens} output {row.output_tokens} "
+            f"hit {rate} per call {per_call}"
+        )
     return 0
 
 
