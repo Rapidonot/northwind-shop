@@ -33,6 +33,8 @@ def healthz() -> Health:
             row = conn.execute(
                 "SELECT extversion FROM pg_extension WHERE extname = 'vector'"
             ).fetchone()
-    except psycopg.OperationalError:
+    except psycopg.Error:
+        # Not only OperationalError: a malformed URL raises ProgrammingError, and libpq's message
+        # quotes the URL, password included. Letting it escape would log it (NFR-02).
         return Health(db="unavailable")
     return Health(db="ok", pgvector=row[0] if row else None)

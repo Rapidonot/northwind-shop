@@ -56,6 +56,7 @@ make setup            # uv sync + pnpm install; creates .env from env.example (m
 make up | make down   # docker compose stack (Postgres 16 + pgvector), waits for healthy
 make dev              # gateway on :8000 + portal on :5173 (Vite proxies /api)
 make data             # regenerate data/fixtures (seeded, byte-identical; bump DATA_VERSION if output changes)
+make ingest           # load data/fixtures into the RAG index (needs `make up`; idempotent, no LLM)
 make fmt              # ruff format + autofix
 make lint             # ruff, ruff format --check, mypy (strict), eslint, tsc
 make test             # unit tests: pytest (excludes integration) + vitest
@@ -67,7 +68,7 @@ make llm-spend        # shared ledger: total, per suite/model, 20-call checkpoin
 make scan-cassettes   # secret/PAN scan of cassettes, ledger and proxy log
 make llm-proxy        # dev LLM proxy on this worktree's port (LLM_MODE, default replay)
 ```
-Added later: `make ingest` (RAG-01), `make eval` / `make eval-gate` (RAG-12), `make e2e` with
+Added later: `make eval` / `make eval-gate` (RAG-12), `make e2e` with
 Playwright (SA-02 crude). Only `make record` and `make eval-live` spend API credit; everything
 else runs in replay.
 

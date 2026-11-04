@@ -26,10 +26,17 @@ jobs:
       DATABASE_URL: postgresql://northwind:northwind-ci@localhost:5432/northwind
       # CI never spends: replay only, and no API key exists in CI secrets (decision 0001).
       LLM_MODE: replay
+      # Absolute: neither env values nor fastembed expand "~".
+      FASTEMBED_CACHE_PATH: /home/runner/.cache/fastembed
     steps:
       - uses: actions/checkout@v5
       - uses: astral-sh/setup-uv@v7
       - run: uv sync --locked
+      - name: Cache the embedding model (RAG-01 integration test)
+        uses: actions/cache@v4
+        with:
+          path: /home/runner/.cache/fastembed
+          key: fastembed-bge-small-en-v1.5
       - name: Install pgvector extension (compose does this via infra/db/init)
         run: psql "$DATABASE_URL" -f infra/db/init/001-extensions.sql
       - run: uv run ruff check
