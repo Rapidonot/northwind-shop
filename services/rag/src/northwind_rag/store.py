@@ -98,7 +98,7 @@ def _corpus_sha256(chunks: Sequence[Chunk]) -> str:
     return hashlib.sha256("\n".join(lines).encode()).hexdigest()
 
 
-def _vector_literal(vector: Sequence[float]) -> str:
+def vector_literal(vector: Sequence[float]) -> str:
     return "[" + ",".join(repr(float(x)) for x in vector) + "]"
 
 
@@ -230,7 +230,7 @@ def sync_chunks(
         vectors = embedder.embed([c.text for c in to_embed]) if to_embed else []
         if len(vectors) != len(to_embed) or any(len(v) != column_dim for v in vectors):
             raise IngestError(f"embedder {embedder.id} returned vectors of the wrong shape")
-        literals = {c.chunk_id: _vector_literal(v) for c, v in zip(to_embed, vectors, strict=True)}
+        literals = {c.chunk_id: vector_literal(v) for c, v in zip(to_embed, vectors, strict=True)}
 
         _publish_manifest(conn, index_version, version, corpus, embedder.id, len(chunks))
 

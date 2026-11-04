@@ -16,7 +16,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
-from northwind_llm_replay.scan import scan_text
+from northwind_llm_replay.scan import load_canaries, scan_text, without_request_hash
 from northwind_llm_replay.scrub import canonical
 
 FORMAT = 1
@@ -57,11 +57,18 @@ def pretty(obj: Any) -> list[str]:
 
 
 class CassetteStore:
-    def __init__(self, root: Path, suite: str, secret: str | None = None) -> None:
+    def __init__(
+        self,
+        root: Path,
+        suite: str,
+        secret: str | None = None,
+        canaries: frozenset[str] | None = None,
+    ) -> None:
         self.root = root
         self.suite = suite
         self.dir = root / suite
         self._secret = secret
+        self._canaries = load_canaries(root.parent) if canaries is None else canaries
 
     def path_for(self, request_hash: str) -> Path:
         return self.dir / f"{request_hash}.json"
@@ -86,7 +93,12 @@ class CassetteStore:
 
     def put(self, cassette: Cassette) -> Path:
         text = cassette.to_json()
-        findings = scan_text(text, str(self.path_for(cassette.hash)), self._secret)
+        findings = scan_text(
+            without_request_hash(text),
+            str(self.path_for(cassette.hash)),
+            self._secret,
+            self._canaries,
+        )
         if findings:
             kinds = sorted({f.kind for f in findings})
             raise DirtyCassetteError(f"cassette {cassette.hash[:12]} not written: {kinds}")

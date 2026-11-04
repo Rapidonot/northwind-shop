@@ -17,10 +17,17 @@ from dotenv import dotenv_values
 
 from northwind_common import localenv
 from northwind_llm_replay.ledger import CHECKPOINT_EXCLUDED_SUITES, Ledger
-from northwind_llm_replay.scan import scan_paths
+from northwind_llm_replay.scan import load_canaries, scan_paths
 
 CHECKPOINT_CALLS = 20
 PROXY_LOG_DIR = Path(".llm-proxy-log")
+# Committed eval files carry retrieved text and labels, so they get the same scan as cassettes.
+EVAL_ROOTS = [
+    Path("evals/contexts"),
+    Path("evals/fixtures"),
+    Path("evals/baselines"),
+    Path("docs/reviews/RAG-12-eval-review.md"),
+]
 
 
 def _secret(env_file: Path) -> str | None:
@@ -64,14 +71,18 @@ def cmd_scan(args: argparse.Namespace) -> int:
     if args.paths:
         roots = [Path(p) for p in args.paths]
     else:
-        roots = [Path("cassettes"), localenv.ledger_path(), PROXY_LOG_DIR]
+        roots = [*EVAL_ROOTS, Path("cassettes"), localenv.ledger_path(), PROXY_LOG_DIR]
     secret = _secret(args.env_file)
-    findings = scan_paths(roots, secret=secret)
+    canaries = load_canaries(localenv.worktree_root(), required=True)
+    findings = scan_paths(roots, secret=secret, canaries=canaries, ledger=localenv.ledger_path())
     for f in findings:
         print(f, file=sys.stderr)
     mode = "regex + key-fragment" if secret else "regex only (no readable key file)"
     status = "FAIL" if findings else "clean"
-    print(f"scan {status}: {len(findings)} finding(s) in {', '.join(map(str, roots))} [{mode}]")
+    where = ", ".join(map(str, roots))
+    print(
+        f"scan {status}: {len(findings)} finding(s) in {where} [{mode}, {len(canaries)} canaries]"
+    )
     return 1 if findings else 0
 
 
@@ -128,7 +139,7 @@ def main(argv: list[str] | None = None) -> int:
         args.env_file = localenv.env_file()
     try:
         return int(args.func(args))
-    except ValueError as e:  # a bad LLM_MODE or budget cap: refuse, with no traceback
+    except (ValueError, FileNotFoundError) as e:  # bad config: refuse, with no traceback
         print(f"error: {e}", file=sys.stderr)
         return 2
 

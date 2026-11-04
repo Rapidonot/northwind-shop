@@ -72,7 +72,8 @@ def test_record_refuses_a_suite_that_is_not_a_name(tmp_path: Path, suite: str) -
 @pytest.mark.req("CC-27")
 def test_record_passes_a_plain_suite_name(tmp_path: Path) -> None:
     calls = make_uv_calls(tmp_path, "record", "SUITE=eval-answers_2")
-    assert calls == ["uv LLM_MODE=record run pytest --llm-suite eval-answers_2"]
+    # The shim prints `-m ""` as `-m` and an empty word, hence the two spaces.
+    assert calls == ["uv LLM_MODE=record run pytest -m  --llm-suite eval-answers_2"]
 
 
 @pytest.mark.req("CC-27")

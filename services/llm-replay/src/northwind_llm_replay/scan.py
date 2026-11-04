@@ -6,8 +6,13 @@ Fails on:
   so a key in a format the regexes don't know is still caught;
 - Luhn-valid 13–19 digit runs with a non-digit (or start/end of text) on both sides, plus
   4-4-4-4 groups split by one space or dash. There is no allowlist: sandbox test PANs fail too,
-  because card numbers never belong in model traffic;
-- a cassette whose `recorded_at` is not ISO-8601.
+  because card numbers never belong in model traffic. This check is the same for all content. A
+  random ID can hold a digit run that passes Luhn, so two things are left out, and nothing else:
+  the exact legacy ledger values below, in the ledger file only, and a cassette's `hash` when it is
+  provably the SHA-256 of that cassette's own request. New ledger IDs cannot hold such a run;
+- a cassette whose `recorded_at` is not ISO-8601;
+- an internal-only canary from the answer key (hard rule 7; pulled forward from #5 by RAG-12):
+  shopper traffic must never carry internal text, so a recording holding one is refused.
 
 Findings never contain the matched secret, only its kind and position.
 """
@@ -20,8 +25,12 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import Any
+
+from northwind_llm_replay.scrub import request_hash
 
 KEY_FRAGMENT_LEN = 16
+ANSWER_KEY = Path("data/fixtures/_answer_key.json")
 
 _KEY_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("anthropic-api-key", re.compile(r"sk-ant-[A-Za-z0-9_\-]{8,}")),
@@ -31,6 +40,12 @@ _KEY_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("x-api-key-header", re.compile(r"""(?i)x-api-key["']?\s*[:=]\s*["']?[^\s"',}]+""")),
 )
 _PAN_RUN = re.compile(r"(?<!\d)\d{13,19}(?!\d)")
+# The only generated values that trip the PAN check, written before ledger IDs became digit-free
+# (shared ledger lines 103, 104 and 371). Exact values: this list never grows.
+LEGACY_LEDGER_VALUES = {
+    "id": "8a6cfff64959463199414e83f6dc4f65",
+    "request_hash": "9ae008fbeda6cdf6a5e448691696572946f33256beca740eec2bbb879d27a62b",
+}
 _PAN_GROUPED = re.compile(r"(?<![\d])\d{4}([ -])\d{4}\1\d{4}\1\d{4}(?![\d])")
 
 
@@ -62,7 +77,24 @@ def key_fragments(key: str) -> set[str]:
     return {key[i : i + KEY_FRAGMENT_LEN] for i in range(len(key) - KEY_FRAGMENT_LEN + 1)}
 
 
-def scan_text(text: str, path: str = "<text>", secret: str | None = None) -> list[Finding]:
+def load_canaries(repo_root: Path, required: bool = False) -> frozenset[str]:
+    """`internal_only[].canary` from the answer key. A missing key file is empty, unless `required`:
+    the repo's own scans must not report clean with the canary check silently off."""
+    key = repo_root / ANSWER_KEY
+    if not key.exists():
+        if required:
+            raise FileNotFoundError(f"{key} is missing, so the canary check cannot run")
+        return frozenset()
+    entries = json.loads(key.read_text(encoding="utf-8")).get("internal_only", [])
+    return frozenset(e["canary"] for e in entries)
+
+
+def scan_text(
+    text: str,
+    path: str = "<text>",
+    secret: str | None = None,
+    canaries: frozenset[str] = frozenset(),
+) -> list[Finding]:
     findings: list[Finding] = []
     fragments = key_fragments(secret) if secret else set()
     for lineno, line in enumerate(text.splitlines() or [text], start=1):
@@ -71,6 +103,8 @@ def scan_text(text: str, path: str = "<text>", secret: str | None = None) -> lis
                 findings.append(Finding(path, lineno, kind))
         if fragments and any(f in line for f in fragments):
             findings.append(Finding(path, lineno, "api-key-fragment"))
+        if any(c in line for c in canaries):
+            findings.append(Finding(path, lineno, "internal-canary"))
         for m in _PAN_RUN.finditer(line):
             if luhn_ok(m.group(0)):
                 findings.append(Finding(path, lineno, "luhn-valid-pan"))
@@ -78,6 +112,33 @@ def scan_text(text: str, path: str = "<text>", secret: str | None = None) -> lis
             if luhn_ok(re.sub(r"\D", "", m.group(0))):
                 findings.append(Finding(path, lineno, "luhn-valid-pan"))
     return findings
+
+
+def _record(document: str) -> dict[str, Any] | None:
+    try:
+        record = json.loads(document)
+    except json.JSONDecodeError:
+        return None
+    return record if isinstance(record, dict) else None
+
+
+def without_ledger_ids(line: str) -> str:
+    """One ledger record with any legacy value blanked and every other byte kept."""
+    record = _record(line) or {}
+    for key, value in LEGACY_LEDGER_VALUES.items():
+        if record.get(key) == value:
+            line = line.replace(f'"{key}": "{value}"', f'"{key}": ""', 1)
+    return line
+
+
+def without_request_hash(cassette: str) -> str:
+    """A cassette with its `hash` blanked, only if that hash is the SHA-256 of its own `match`: a
+    digest cannot be chosen, so it cannot carry a card number."""
+    record = _record(cassette) or {}
+    value = record.get("hash")
+    if isinstance(value, str) and "match" in record and value == request_hash(record["match"]):
+        return cassette.replace(f'"hash": "{value}"', '"hash": ""', 1)
+    return cassette
 
 
 def _check_recorded_at(path: Path, text: str) -> list[Finding]:
@@ -107,13 +168,25 @@ def is_cassette(path: Path) -> bool:
     return path.suffix == ".json" and "cassettes" in path.parts
 
 
-def scan_paths(roots: Iterable[Path], secret: str | None = None) -> list[Finding]:
+def scan_paths(
+    roots: Iterable[Path],
+    secret: str | None = None,
+    canaries: frozenset[str] = frozenset(),
+    ledger: Path | None = None,
+) -> list[Finding]:
+    """`ledger` names the one file whose legacy values are left out; there is no default."""
     findings: list[Finding] = []
     for path in _files(roots):
         if path.suffix == ".lock":
             continue
         text = path.read_text(encoding="utf-8", errors="replace")
-        findings.extend(scan_text(text, str(path), secret))
+        if ledger is not None and path.resolve() == ledger.resolve():
+            scanned = "\n".join(without_ledger_ids(line) for line in text.splitlines())
+        elif is_cassette(path):
+            scanned = without_request_hash(text)
+        else:
+            scanned = text
+        findings.extend(scan_text(scanned, str(path), secret, canaries))
         if is_cassette(path):
             findings.extend(_check_recorded_at(path, text))
     return findings

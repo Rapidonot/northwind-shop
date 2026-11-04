@@ -20,7 +20,8 @@ override ANTHROPIC_API_KEY :=
 unexport ANTHROPIC_API_KEY
 
 .PHONY: help setup up down dev dev-gateway dev-portal data model ingest fmt lint test \
-	test-integration ci scan-cassettes llm-spend llm-proxy record eval-live
+	test-integration ci scan-cassettes llm-spend llm-proxy record eval-live eval-rescore eval-gate \
+	eval-integrity eval-gate-stale-ok eval-promote eval-snapshot eval-review-list
 
 # A stable cache, not fastembed's temp-dir default: Claude's sandbox has a different temp dir and
 # cannot reach the model's download hosts, so `make model` fills this once from a terminal (CC-27).
@@ -73,7 +74,7 @@ fmt: ## Auto-format and auto-fix Python
 lint: ## Lint + type-check Python and TypeScript
 	uv run ruff check
 	uv run ruff format --check
-	uv run mypy services data
+	uv run mypy services data evals
 	$(PNPM) -r lint
 	$(PNPM) -r typecheck
 
@@ -101,10 +102,36 @@ llm-proxy: ## Dev LLM proxy on this worktree's port (LLM_MODE=replay by default;
 # 'x; cmd' must not reach a shell (CC-27).
 record: ## Re-record one LLM cassette suite (SUITE=name; spends API credit)
 	@[[ "$$SUITE" =~ ^[a-z0-9_-]+$$ ]] || (echo "usage: make record SUITE=<suite>" && exit 2)
-	LLM_MODE=record uv run pytest --llm-suite "$$SUITE"
+	LLM_MODE=record uv run pytest -m "" --llm-suite "$$SUITE"
 
-# SPENDS API CREDIT. Answer/journey evals live (RAG-12 adds the eval suites and harness).
-eval-live: ## Run the LLM evals live and record them (spends API credit)
-	@if [ -d evals ]; then LLM_MODE=record uv run pytest evals; else echo "no eval suites yet (RAG-12)"; fi
+# SPENDS API CREDIT. Records answers and verdicts into a baseline candidate. EVAL_SLICE is required
+# (a number of items, or `all`), so a bare `make eval-live` cannot start a full run. Unchanged
+# requests replay for free (RAG-12, decision 0001).
+eval-live: ## Run answer evals live and record them (EVAL_SLICE=<n|all>; spends API credit)
+	@test -n "$(EVAL_SLICE)" || (echo "usage: make eval-live EVAL_SLICE=<n|all>" && exit 2)
+	LLM_MODE=record uv run python -m northwind_evals.cli run --slice $(EVAL_SLICE)
 
-ci: lint scan-cassettes test test-integration ## Everything CI runs, in the same order
+eval-gate: ingest ## Regression gate: live retrieval metrics + replayed answers vs the baseline (RAG-12)
+	LLM_MODE=replay EVAL_ALLOW_STALE= uv run python -m northwind_evals.cli gate
+
+# Local only: reports stale items but lets them pass. CI never runs this (decision 0001).
+eval-gate-stale-ok: ingest ## The gate, but stale items pass and are reported as stale
+	LLM_MODE=replay EVAL_ALLOW_STALE=1 uv run python -m northwind_evals.cli gate
+
+# Never spends: a request with no recording is a failed item.
+eval-rescore: ingest ## Rebuild the baseline candidate from the recordings after a scoring change
+	LLM_MODE=replay uv run python -m northwind_evals.cli rescore
+
+eval-integrity: ## Refuse edited cassettes and lost overrides, against origin/main (decision 0003)
+	uv run python -m northwind_evals.cli integrity
+
+eval-promote: ## Replace the baseline with the candidate (a regression needs ACCEPT_REGRESSION="reason", which is recorded)
+	uv run python -m northwind_evals.cli promote $(if $(ACCEPT_REGRESSION),--accept-regression "$$ACCEPT_REGRESSION") $(if $(BOOTSTRAP),--bootstrap "$$BOOTSTRAP")
+
+eval-snapshot: ## Save each eval item's retrieved context, the input for answers (no LLM; RAG-12)
+	uv run python -m northwind_evals.cli snapshot
+
+eval-review-list: ## Write the list of eval items waiting for human review (RAG-12)
+	uv run python -m northwind_evals.cli review-list
+
+ci: lint scan-cassettes test test-integration eval-integrity eval-gate ## Everything CI runs, in the same order
