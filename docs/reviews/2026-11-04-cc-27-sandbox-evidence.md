@@ -327,7 +327,7 @@ installing until 1 to 3 were fixed. "Confirmed" means confirmed by reading, unle
 | 3 | High | The key moved to a path existing settings do not deny, and the install order exposed it | **Fixed in the steps below**: settings first, key last, denies also in user settings. Whether user and project lists merge is measured per checkout by `make runner-check` |
 | 4 | High if real | Hooks or config in the git common dir, run by your terminal's git | **Measured, refused.** Above |
 | 5 | Medium | Docs sent the terminal to sandbox-owned code | **Fixed**, including copying the settings from the clone |
-| 6 | High if real | A Grep route to the key through a symlink | **Open.** Unverified, and the hook is the user's. See step 4 below |
+| 6 | High if real | A Grep route to the key through a symlink | **Closed 2026-11-04 by the user's fake-key test** (Install step 5). A subagent's Grep by path, Grep from `~/.northwind`, Grep through a directory symlink, Read and Bash `cat` were all denied: the hook stopped the first, second and fifth, the permission layer the third and fourth. Manual, as reported by the user; no automated test repeats it |
 | 7 | Medium | `runner-sync` filtered what the runner loads; a no left `origin/main` moved and blocked windows | **Fixed.** Unfiltered log and stat, full diff of key paths, `.venv-runner`, fetch to its own ref |
 | 8 | Medium | The in-process proxy reopens F3 one hop down | **Not fixed; stated as a limit in decision 0005, for the user to decide** |
 | 9 | Medium | File names and commit subjects reach the terminal raw | **Fixed.** Escaped, and `cat -v` |

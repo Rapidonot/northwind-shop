@@ -175,11 +175,11 @@ so a spending run under an xdist worker is a usage error rather than a stream of
 
 ## Open
 
-- **A Grep route to the key (review finding 6).** The sandbox covers Bash only, and the guard hook
-  checks only for `.env` names. Whether the `Read` deny stops a search through a symlink, or from a
-  parent directory, has not been tested, because that needs a fake key at the real path. Test it
-  before the real key goes in: the install steps say how. If it gets through, the hook needs a
-  `realpath` check, which is the user's to install.
+- **A Grep route to the key (review finding 6): closed 2026-11-04.** The sandbox covers Bash only,
+  so the user tested this with a fake key at the real path, before the real key went in. A
+  subagent's Grep by path, Grep from `~/.northwind`, Grep through a directory symlink, Read and Bash
+  `cat` were all denied: the guard hook stopped the first, second and fifth, the permission layer
+  the third and fourth. This is a manual result as reported by the user; no automated test repeats it.
 - **Postgres as a way out (review finding 10, candidate).** The app connects as the image's
   superuser, so `COPY … TO PROGRAM` may run code in the container, with open network and no key.
   PROGRESS row #9a replaces it with a non-superuser app role.
