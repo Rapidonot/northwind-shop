@@ -5,6 +5,7 @@ Blocks tool calls that read or write .env files, dump the environment, or change
 Claude's own settings and hooks. Exit 2 blocks the call; stderr goes back to Claude.
 A speed bump, not a sandbox.
 """
+
 import json
 import re
 import sys
