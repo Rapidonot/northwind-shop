@@ -45,7 +45,8 @@ data/            synthetic catalog generator + generated fixtures, shoppers
 evals/           retrieval/, answers/, journeys/, adversarial/, fixtures/ + harness
 cassettes/       recorded LLM calls per suite (synthetic data only; scanned for secrets/PANs)
 infra/           docker-compose.yml, db init/migrations, otel
-docs/            PRD.md, images/, decisions/
+tests/           repo-level tests that fit no service (hooks/)
+docs/            PRD.md, images/, decisions/, reviews/
 .github/workflows/
 ```
 
@@ -117,6 +118,9 @@ Toolchain notes:
 - One requirement per session. Start by reading PROGRESS.md, pick the next ID, and
   restate its acceptance criteria from docs/PRD.md. Use plan mode for anything beyond a
   one-file change.
+- Per-requirement flow: `/req-start <ID>` → plan → implement → `test-writer` subagent →
+  `security-reviewer` subagent (read-only: write the diff to a file and pass the path) →
+  `/req-done` → the user reviews and merges. Only the user can run the two skills.
 - Every acceptance criterion gets at least one automated test. Tag it with the ID:
   pytest `@pytest.mark.req("RAG-03")` / Vitest/Playwright `describe("[SA-01] …")`.
   A requirement is done only when its tagged tests pass, lint passes and
