@@ -36,6 +36,16 @@ class BudgetExceededError(Exception):
     """The call would push spend past a budget cap. Nothing was sent upstream."""
 
 
+# Generated IDs must not look like card numbers to the scanner: digit-free reservation IDs, and a
+# hash prefix too short to hold the 13 digits the PAN check starts at.
+_DIGITS_TO_LETTERS = str.maketrans("0123456789", "ghijklmnop")
+HASH_PREFIX_CHARS = 12
+
+
+def new_id() -> str:
+    return uuid.uuid4().hex.translate(_DIGITS_TO_LETTERS)
+
+
 @dataclass(frozen=True)
 class Reservation:
     id: str
@@ -166,7 +176,7 @@ class Ledger:
                     f"{t.run_spent_usd:.4f} + worst case {worst_case_usd:.4f}"
                 )
             res = Reservation(
-                id=uuid.uuid4().hex,
+                id=new_id(),
                 model=model,
                 amount=worst_case_usd,
                 suite=self.suite,
@@ -182,7 +192,7 @@ class Ledger:
                     "amount_usd": worst_case_usd,
                     "suite": res.suite,
                     "run_id": res.run_id,
-                    "request_hash": request_hash,
+                    "request_hash": request_hash[:HASH_PREFIX_CHARS],
                 }
             )
             return res

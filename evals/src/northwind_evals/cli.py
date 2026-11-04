@@ -1,8 +1,9 @@
-"""`python -m northwind_evals.cli snapshot|run|gate|review-list` (RAG-12).
+"""`python -m northwind_evals.cli snapshot|run|rescore|promote|gate|review-list` (RAG-12).
 
 `run` is the only command that spends, and only with LLM_MODE=record (`make eval-live`), which CI
 refuses. It writes a candidate, never the baseline: `promote` is the deliberate step that replaces
-the baseline, so re-recording cannot hide a regression. `gate` always replays.
+the baseline, so re-recording cannot hide a regression. `rescore` rebuilds the candidate from the
+recordings alone, for scoring changes, and `gate` always replays: neither can spend.
 """
 
 from __future__ import annotations
@@ -13,7 +14,8 @@ import os
 import sys
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
-from dataclasses import asdict
+from dataclasses import asdict, replace
+from datetime import date
 from pathlib import Path
 
 import psycopg
@@ -38,6 +40,7 @@ from northwind_evals.gate import (
     coverage_problems,
     dropped_items,
     load_baseline,
+    load_known_failures,
     save_baseline,
 )
 from northwind_evals.harness import RETRIEVAL_K, ItemResult, run_answers, score_retrieval
@@ -63,6 +66,7 @@ CONTEXTS = Path("evals/contexts/dense-only.jsonl")
 BASELINE = Path("evals/baselines/dense-only.json")
 CANDIDATE = Path(".llm-proxy-log/baseline-candidate.json")
 FIXTURES = Path("data/fixtures")
+KNOWN_FAILURES = Path("evals/fixtures/known_failures.json")
 LAST_RUN = Path(".llm-proxy-log/eval-last-run.json")
 REVIEW_LIST = Path("docs/reviews/RAG-12-eval-review.md")
 SUITE = "eval-answers"
@@ -196,17 +200,8 @@ def cmd_snapshot(_: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_run(args: argparse.Namespace) -> int:
-    """SPENDS: records answers and verdicts for a slice and writes a baseline candidate."""
-    if os.environ.get("LLM_MODE") != "record":
-        print("run spends API credit: use `make eval-live EVAL_SLICE=<n|all>`", file=sys.stderr)
-        return 2
-    if os.environ.get("CI"):
-        print("CI runs evals in replay only (decision 0001)", file=sys.stderr)
-        return 2
-    if args.slice != "all" and not (args.slice.isdigit() and int(args.slice) > 0):
-        print("--slice must be a positive number or `all`", file=sys.stderr)
-        return 2
+def _build_candidate(chosen_size: str, mode: str) -> int:
+    """Scores `chosen_size` items through the proxy in `mode` and writes a baseline candidate."""
     items = load_items(ITEMS)
     contexts = load_contexts(CONTEXTS)
     leaked = _context_leaks(contexts, items)
@@ -221,8 +216,8 @@ def cmd_run(args: argparse.Namespace) -> int:
     if stale:
         print(f"{len(stale)} saved contexts are stale, run `make eval-snapshot`: {stale[:5]}")
         return 1
-    chosen = items if args.slice == "all" else slice_items(items, int(args.slice))
-    with _clients("record") as (answerer, judge, state):
+    chosen = items if chosen_size == "all" else slice_items(items, int(chosen_size))
+    with _clients(mode) as (answerer, judge, state):
         results = run_answers(chosen, contexts, answerer, judge, _progress)
     if state.scan_failures:
         print(f"not writing a candidate: scanner refused {state.scan_failures}", file=sys.stderr)
@@ -247,49 +242,84 @@ def cmd_run(args: argparse.Namespace) -> int:
         retrieval=retrieval,
         answers=answers,
         summary=summary,
+        segments=segments,
     )
     save_baseline(CANDIDATE, candidate)
     print(f"candidate written to {CANDIDATE} ({len(answers)} answers, {len(retrieval)} retrieval)")
     _print_summary(summary["retrieval"])
     _print_summary(summary["answers"])
-    if BASELINE.exists():
-        _print_rows(compare(load_baseline(BASELINE), retrieval, answers, [], [], segments))
     print("the baseline is unchanged: `make eval-promote` replaces it")
     return 0
 
 
+def cmd_run(args: argparse.Namespace) -> int:
+    """SPENDS: records answers and verdicts for a slice and writes a baseline candidate."""
+    if os.environ.get("LLM_MODE") != "record":
+        print("run spends API credit: use `make eval-live EVAL_SLICE=<n|all>`", file=sys.stderr)
+        return 2
+    if os.environ.get("CI"):
+        print("CI runs evals in replay only (decision 0001)", file=sys.stderr)
+        return 2
+    if args.slice != "all" and not (args.slice.isdigit() and int(args.slice) > 0):
+        print("--slice must be a positive number or `all`", file=sys.stderr)
+        return 2
+    return _build_candidate(args.slice, "record")
+
+
+def cmd_rescore(_: argparse.Namespace) -> int:
+    """Rebuilds the candidate from the recordings after a scoring change. Never spends: a request
+    with no recording is a failed item, and no candidate is written."""
+    return _build_candidate("all", "replay")
+
+
 def cmd_promote(args: argparse.Namespace) -> int:
-    """Replaces the baseline with the candidate. Refuses a regression or fewer gated items."""
+    """Replaces the baseline with the candidate. A regression needs a recorded reason. A containment
+    failure or a dropped item cannot be overridden here at all."""
     if not CANDIDATE.exists():
-        print("no candidate: run `make eval-live` first", file=sys.stderr)
+        print("no candidate: run `make eval-rescore` or `make eval-live` first", file=sys.stderr)
         return 1
     items = load_items(ITEMS)
     candidate = load_baseline(CANDIDATE)
-    problems = coverage_problems(candidate.answers, items)
+    segments = {item.id: item.segment for item in items}
+    known = load_known_failures(KNOWN_FAILURES)
+    final = coverage_problems(candidate, items)
+    overridable: list[str] = []
+    overrides = []
     if BASELINE.exists():
         baseline = load_baseline(BASELINE)
-        problems += [f"would stop gating {i}" for i in dropped_items(baseline, candidate, items)]
-        segments = {item.id: item.segment for item in items}
-        result = compare(baseline, candidate.retrieval, candidate.answers, [], [], segments)
+        overrides = list(baseline.overrides)
+        final += [f"would stop gating {i}" for i in dropped_items(baseline, candidate, items)]
+        result = compare(baseline, candidate.retrieval, candidate.answers, [], [], segments, known)
         _print_rows(result)
-        if not result.passed() and not args.accept_regression:
-            problems += [*result.problems, "the candidate regresses: see the rows above"]
-    if problems:
-        for problem in problems:
-            print(f"  {problem}", file=sys.stderr)
+        final += result.containment
+        overridable += result.problems
+        overridable += [f"{row[0]} regressed" for row in result.rows if not row[3]]
+    else:
+        result = compare(candidate, candidate.retrieval, candidate.answers, [], [], segments, known)
+        final += result.containment
+    for problem in [*final, *overridable]:
+        print(f"  {problem}", file=sys.stderr)
+    reason = (args.accept_regression or "").strip()
+    if final or (overridable and not reason):
         print("not promoted", file=sys.stderr)
         return 1
-    save_baseline(BASELINE, candidate)
+    if args.check:
+        print("promotion check passed; nothing was changed")
+        return 0
+    if overridable:
+        entry = {"on": date.today().isoformat(), "reason": reason, "accepted": overridable}
+        overrides.append(entry)
+    save_baseline(BASELINE, replace(candidate, overrides=overrides))
     CANDIDATE.unlink()
     print(f"promoted to {BASELINE}")
     return 0
 
 
-def cmd_gate(_: argparse.Namespace) -> int:
+def cmd_gate(args: argparse.Namespace) -> int:
     """Live retrieval metrics plus replayed answers against the baseline. Never spends."""
     items = load_items(ITEMS)
     contexts = load_contexts(CONTEXTS)
-    baseline = load_baseline(BASELINE)
+    baseline = load_baseline(args.baseline or BASELINE)
     embedder = FastEmbedEmbedder()
     with _connect() as conn:
         _index_version(conn)
@@ -305,12 +335,16 @@ def cmd_gate(_: argparse.Namespace) -> int:
     errors = [f"{r.item_id}: {r.detail}" for r in results if r.status == "error"]
     answers = {r.item_id: r.scores for r in results if r.status == "ok"}
     segments = {item.id: item.segment for item in items}
-    result = compare(baseline, _retrieval_scores(items, live), answers, stale, errors, segments)
-    result.problems += coverage_problems(baseline.answers, items)
+    known = load_known_failures(KNOWN_FAILURES)
+    scores = _retrieval_scores(items, live)
+    result = compare(baseline, scores, answers, stale, errors, segments, known)
+    result.problems += coverage_problems(baseline, items)
 
     _print_rows(result)
     print(f"  answers replayed {len(answers)}/{len(baseline.answers)}, stale {len(result.stale)}")
-    for line in [*result.problems, *result.errors, *(f"STALE {i}" for i in result.stale)]:
+    stale_lines = [f"STALE {i}" for i in result.stale]
+    new_metrics = [f"{metric} is missing from the baseline" for metric in result.new_metrics]
+    for line in [*result.containment, *new_metrics, *result.problems, *result.errors, *stale_lines]:
         print(f"  {line}")
     allow_stale = os.environ.get(ALLOW_STALE_ENV) == "1"
     passed = result.passed(allow_stale)
@@ -361,9 +395,15 @@ def main(argv: list[str] | None = None) -> int:
     run = commands.add_parser("run")
     run.add_argument("--slice", required=True, help="a number of items, or `all`")
     run.set_defaults(func=cmd_run)
-    commands.add_parser("gate").set_defaults(func=cmd_gate)
+    commands.add_parser("rescore").set_defaults(func=cmd_rescore)
+    gate = commands.add_parser("gate")
+    gate.add_argument(
+        "--baseline", type=Path, help="gate against this file instead of the baseline"
+    )
+    gate.set_defaults(func=cmd_gate)
     promote = commands.add_parser("promote")
-    promote.add_argument("--accept-regression", action="store_true")
+    promote.add_argument("--accept-regression", metavar="REASON", help="recorded in the baseline")
+    promote.add_argument("--check", action="store_true", help="report only; change nothing")
     promote.set_defaults(func=cmd_promote)
     commands.add_parser("review-list").set_defaults(func=cmd_review_list)
     args = parser.parse_args(argv)

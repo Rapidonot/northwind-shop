@@ -329,25 +329,25 @@ def test_each_gated_metric_alone_can_fail_the_gate(metric: str) -> None:
         "i",
         "a",
         "j",
-        retrieval={"E": {"recall@5": 0.5, "mrr": 0.5}},
+        retrieval={"E": {"recall@5": 0.96, "mrr": 0.96}},
         answers={
             "E": {
-                "groundedness": 0.5,
-                "relevance": 0.5,
-                "false_refusal": 0.5,
-                "behaviour_ok": 0.5,
-                "citation_ok": 0.5,
+                "groundedness": 0.96,
+                "relevance": 0.96,
+                "false_refusal": 0.96,
+                "behaviour_ok": 0.96,
+                "citation_ok": 0.96,
             }
         },
         summary={},
     )
     retrieval = {"E": dict(base.retrieval["E"])}
     answers = {"E": dict(base.answers["E"])}
-    worse = 0.5 + 0.1 if metric == "false_refusal" else 0.5 - 0.1
+    worse = 0.96 + 0.1 if metric == "false_refusal" else 0.96 - 0.1
     (retrieval if metric in retrieval["E"] else answers)["E"][metric] = worse
     assert not compare(base, retrieval, answers, [], []).passed()
     # and an improvement is never a failure
-    better = 0.5 - 0.1 if metric == "false_refusal" else 0.5 + 0.1
+    better = 0.96 - 0.1 if metric == "false_refusal" else 0.96 + 0.1
     (retrieval if metric in retrieval["E"] else answers)["E"][metric] = better
     assert compare(base, retrieval, answers, [], []).passed()
 

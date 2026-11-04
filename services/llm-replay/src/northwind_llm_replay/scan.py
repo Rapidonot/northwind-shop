@@ -7,9 +7,9 @@ Fails on:
 - Luhn-valid 13–19 digit runs with a non-digit (or start/end of text) on both sides, plus
   4-4-4-4 groups split by one space or dash. There is no allowlist: sandbox test PANs fail too,
   because card numbers never belong in model traffic. This check is the same for all content. A
-  random ID can hold a digit run that passes Luhn, so two generated IDs are left out, and nothing
-  else: the top-level `id` and `request_hash` of records in the ledger file itself, and a
-  cassette's `hash` when it is provably the SHA-256 of that cassette's own request;
+  random ID can hold a digit run that passes Luhn, so two things are left out, and nothing else:
+  the exact legacy ledger values below, in the ledger file only, and a cassette's `hash` when it is
+  provably the SHA-256 of that cassette's own request. New ledger IDs cannot hold such a run;
 - a cassette whose `recorded_at` is not ISO-8601;
 - an internal-only canary from the answer key (hard rule 7; pulled forward from #5 by RAG-12):
   shopper traffic must never carry internal text, so a recording holding one is refused.
@@ -40,11 +40,11 @@ _KEY_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("x-api-key-header", re.compile(r"""(?i)x-api-key["']?\s*[:=]\s*["']?[^\s"',}]+""")),
 )
 _PAN_RUN = re.compile(r"(?<!\d)\d{13,19}(?!\d)")
-# Written only by the ledger: uuid4 hex and a SHA-256. Any other file, any other shape, the same
-# value in any other field, and anything nested are all scanned as content.
-_LEDGER_ID_FIELDS = {
-    "id": re.compile(r"[0-9a-f]{32}"),
-    "request_hash": re.compile(r"[0-9a-f]{64}"),
+# The only generated values that trip the PAN check, written before ledger IDs became digit-free
+# (shared ledger lines 103, 104 and 371). Exact values: this list never grows.
+LEGACY_LEDGER_VALUES = {
+    "id": "8a6cfff64959463199414e83f6dc4f65",
+    "request_hash": "9ae008fbeda6cdf6a5e448691696572946f33256beca740eec2bbb879d27a62b",
 }
 _PAN_GROUPED = re.compile(r"(?<![\d])\d{4}([ -])\d{4}\1\d{4}\1\d{4}(?![\d])")
 
@@ -123,11 +123,10 @@ def _record(document: str) -> dict[str, Any] | None:
 
 
 def without_ledger_ids(line: str) -> str:
-    """One ledger record with its generated IDs blanked and every other byte kept."""
+    """One ledger record with any legacy value blanked and every other byte kept."""
     record = _record(line) or {}
-    for key, shape in _LEDGER_ID_FIELDS.items():
-        value = record.get(key)
-        if isinstance(value, str) and shape.fullmatch(value):
+    for key, value in LEGACY_LEDGER_VALUES.items():
+        if record.get(key) == value:
             line = line.replace(f'"{key}": "{value}"', f'"{key}": ""', 1)
     return line
 
@@ -175,7 +174,7 @@ def scan_paths(
     canaries: frozenset[str] = frozenset(),
     ledger: Path | None = None,
 ) -> list[Finding]:
-    """`ledger` names the one file whose generated IDs are left out; there is no default."""
+    """`ledger` names the one file whose legacy values are left out; there is no default."""
     findings: list[Finding] = []
     for path in _files(roots):
         if path.suffix == ".lock":

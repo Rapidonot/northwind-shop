@@ -11,6 +11,7 @@ import pytest
 
 from northwind_data import textscan
 from northwind_evals.contexts import load_contexts
+from northwind_evals.gate import load_known_failures
 from northwind_evals.items import (
     MIN_HUMAN_REVIEWED,
     SEGMENTS,
@@ -37,6 +38,16 @@ def _traps(node: object) -> set[str]:
     if isinstance(node, list):
         return set().union(*(_traps(v) for v in node)) if node else set()
     return set()
+
+
+@pytest.mark.req("RAG-12")
+def test_every_known_failure_names_an_open_progress_row() -> None:
+    known = load_known_failures(REPO / "evals/fixtures/known_failures.json")
+    rows = (REPO / "PROGRESS.md").read_text(encoding="utf-8").splitlines()
+    for entry in known:
+        number = entry.fix_item.lstrip("#")
+        [row] = [line for line in rows if line.startswith(f"| {number} |")]
+        assert "| done |" not in row, entry.item_id
 
 
 @pytest.mark.req("RAG-12")

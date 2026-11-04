@@ -18,11 +18,12 @@ import pytest
 
 from northwind_llm_replay import cli
 from northwind_llm_replay.cassette import Cassette, CassetteStore, DirtyCassetteError
-from northwind_llm_replay.ledger import Ledger
+from northwind_llm_replay.ledger import Ledger, new_id
 from northwind_llm_replay.pricing import COST_DECIMALS, cost_usd, worst_case_usd
 from northwind_llm_replay.proxy import LOG_HASH_CHARS
 from northwind_llm_replay.scan import (
     ANSWER_KEY,
+    LEGACY_LEDGER_VALUES,
     load_canaries,
     luhn_ok,
     scan_paths,
@@ -291,26 +292,60 @@ def test_the_fixture_id_really_trips_the_content_check() -> None:
 @pytest.mark.parametrize(
     "record",
     [
-        {"id": HEX_ID, "type": "settle", "cost_usd": 0.0001},
-        {"id": HEX_ID, "request_hash": HEX_HASH, "type": "reserve"},
+        {"id": LEGACY_LEDGER_VALUES["id"], "type": "settle", "cost_usd": 0.0001},
+        {"request_hash": LEGACY_LEDGER_VALUES["request_hash"], "type": "reserve"},
     ],
 )
-def test_generated_ids_in_the_ledger_file_pass(tmp_path: Path, record: dict[str, object]) -> None:
+def test_the_legacy_values_pass_in_the_ledger_file(
+    tmp_path: Path, record: dict[str, object]
+) -> None:
     ledger = records_file(tmp_path, record)
     assert scan_paths([ledger], ledger=ledger) == []
+
+
+def test_the_legacy_values_really_need_the_exemption() -> None:
+    assert all(scan_text(value) for value in LEGACY_LEDGER_VALUES.values())
+
+
+def test_a_padded_card_number_never_passes_even_in_the_ledger_file(tmp_path: Path) -> None:
+    ledger = records_file(tmp_path, {"id": PADDED_PAN})
+    assert [f.kind for f in scan_paths([ledger], ledger=ledger)] == ["luhn-valid-pan"]
+
+
+def test_a_legacy_value_gets_no_exemption_in_another_field(tmp_path: Path) -> None:
+    ledger = records_file(tmp_path, {"note": LEGACY_LEDGER_VALUES["id"]})
+    assert [f.kind for f in scan_paths([ledger], ledger=ledger)] == ["luhn-valid-pan"]
+
+
+def test_new_ledger_ids_hold_no_digits_and_hashes_are_prefixes(tmp_path: Path) -> None:
+    path = tmp_path / "ledger.jsonl"
+    ledger = Ledger(path, budget_usd=1000.0, run_budget_usd=None, run_id="r", suite="s")
+    reservation = ledger.reserve(
+        model="claude-sonnet-5-5", worst_case_usd=0.01, request_hash="ab" * 32
+    )
+    ledger.settle(reservation, {"input_tokens": 10, "output_tokens": 5})
+    records = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+    assert all(not any(c.isdigit() for c in r["id"]) for r in records)
+    assert records[0]["id"] == records[1]["id"]
+    assert records[0]["request_hash"] == "ab" * 6
+
+
+def test_ids_stay_unique() -> None:
+    assert len({new_id() for _ in range(2000)}) == 2000
 
 
 @pytest.mark.parametrize(
     "record",
     [
         {"id": PAN},  # a card number is not the shape of an ID
-        {"id": f"{HEX_ID}0"},  # one character too long
-        {"id": HEX_ID.upper()},  # generated IDs are lowercase
+        {"id": HEX_ID},  # right shape, but not one of the legacy values
+        {"id": f"{HEX_ID}0"},
+        {"id": HEX_ID.upper()},
         {"request_hash": HEX_ID},  # right shape for another field
         {"hash": HEX_HASH},  # not a ledger field
         {"note": HEX_ID},  # the same value outside an ID field
         {"usage": {"id": HEX_ID}},  # nested: not a top-level ID
-        {"id": HEX_ID, "note": PAN},  # an ID does not excuse the rest of its line
+        {"id": LEGACY_LEDGER_VALUES["id"], "note": PAN},  # no excuse for the rest of its line
         {"note": f"card {PAN} ok"},
     ],
 )
@@ -339,7 +374,8 @@ def test_a_card_number_in_a_long_hex_looking_string_is_still_found() -> None:
 
 
 def test_without_ledger_ids_keeps_every_other_byte() -> None:
-    document = json.dumps({"id": HEX_ID, "note": "x", "cost": 0.1})
+    legacy = LEGACY_LEDGER_VALUES["id"]
+    document = json.dumps({"id": legacy, "note": "x", "cost": 0.1})
     assert without_ledger_ids(document) == json.dumps({"id": "", "note": "x", "cost": 0.1})
     assert without_ledger_ids("not json") == "not json"
     assert without_ledger_ids("[1, 2]") == "[1, 2]"

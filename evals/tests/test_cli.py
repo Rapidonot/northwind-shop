@@ -30,6 +30,13 @@ from northwind_rag.testing import FakeEmbedder
 
 pytestmark = pytest.mark.req("RAG-12")
 
+GOOD = {
+    "groundedness": 1.0,
+    "relevance": 1.0,
+    "behaviour_ok": 1.0,
+    "false_refusal": 0.0,
+    "citation_ok": 1.0,
+}
 VERDICT = json.dumps(
     {
         "claims": [{"claim": "a", "supported": True}],
@@ -82,6 +89,8 @@ class Rig:
         mp.setattr(cli, "_index_version", lambda conn: "idx")
         mp.setattr(cli, "FastEmbedEmbedder", lambda: FakeEmbedder("x"))
         mp.setattr(cli, "CANDIDATE", tmp / "candidate.json")
+        mp.setattr(cli, "KNOWN_FAILURES", tmp / "known_failures.json")
+        cli.KNOWN_FAILURES.write_text("[]", encoding="utf-8")
         mp.setattr(cli, "_live", lambda conn, embedder, items: self.live)
 
     def write_items(self, items: list[EvalItem]) -> None:
@@ -113,10 +122,7 @@ class Rig:
         self.write_items([item()])
         save_contexts(cli.CONTEXTS, [context_for("EV-1", ids)])
         self.live = {"EV-1": live_for(live_ids if live_ids is not None else ids)}
-        self.write_baseline(
-            {"EV-1": {"recall@5": 1.0, "mrr": 1.0}},
-            {"EV-1": {"groundedness": 1.0, "relevance": 1.0, "behaviour_ok": 1.0}},
-        )
+        self.write_baseline({"EV-1": {"recall@5": 1.0, "mrr": 1.0}}, {"EV-1": dict(GOOD)})
 
 
 @pytest.fixture
@@ -282,7 +288,7 @@ def test_the_gate_compares_only_items_in_the_baseline(
     rig.live["EV-2"] = live_for(["different"], source="P2")
     rig.write_baseline(
         {"EV-1": {"recall@5": 1.0, "mrr": 1.0}, "EV-2": {"recall@5": 0.0, "mrr": 0.0}},
-        {"EV-1": {"groundedness": 1.0, "relevance": 1.0, "behaviour_ok": 1.0}},
+        {"EV-1": dict(GOOD)},
     )
     with ScriptedLLM() as llm:
         llm.reply("Answer [P1].").reply(VERDICT)
@@ -424,14 +430,11 @@ def write_candidate(answers: dict[str, Any], retrieval: dict[str, Any] | None = 
     )
 
 
-GOOD = {"groundedness": 1.0, "relevance": 1.0, "behaviour_ok": 1.0}
-
-
 def test_promote_replaces_the_baseline_and_consumes_the_candidate(rig: Rig) -> None:
     rig.setup_one_item()
-    write_candidate({"EV-1": {**GOOD, "citation_ok": 1.0}})
+    write_candidate({"EV-1": {**GOOD, "relevance": 0.99}})
     assert cli.main(["promote"]) == 0
-    assert load_baseline(cli.BASELINE).answers["EV-1"]["citation_ok"] == 1.0
+    assert load_baseline(cli.BASELINE).answers["EV-1"]["relevance"] == 0.99
     assert not cli.CANDIDATE.exists()
 
 
@@ -442,11 +445,73 @@ def test_promote_refuses_a_regression_and_keeps_the_baseline(rig: Rig) -> None:
     assert load_baseline(cli.BASELINE).answers["EV-1"]["relevance"] == 1.0
 
 
-def test_accepting_a_regression_is_explicit(rig: Rig) -> None:
+def test_an_accepted_regression_needs_a_reason_and_is_recorded(rig: Rig) -> None:
     rig.setup_one_item()
     write_candidate({"EV-1": {**GOOD, "relevance": 0.0}})
-    assert cli.main(["promote", "--accept-regression"]) == 0
-    assert load_baseline(cli.BASELINE).answers["EV-1"]["relevance"] == 0.0
+    assert cli.main(["promote", "--accept-regression", "  "]) == 1
+    assert cli.main(["promote", "--accept-regression", "agreed in review"]) == 0
+    baseline = load_baseline(cli.BASELINE)
+    assert baseline.answers["EV-1"]["relevance"] == 0.0
+    [override] = baseline.overrides
+    assert override["reason"] == "agreed in review"
+    assert override["accepted"] == ["relevance regressed"]
+
+
+def test_overrides_survive_later_promotions(rig: Rig) -> None:
+    rig.setup_one_item()
+    write_candidate({"EV-1": {**GOOD, "relevance": 0.0}})
+    assert cli.main(["promote", "--accept-regression", "first"]) == 0
+    write_candidate({"EV-1": {**GOOD, "relevance": 0.0}})
+    assert cli.main(["promote"]) == 0
+    assert [o["reason"] for o in load_baseline(cli.BASELINE).overrides] == ["first"]
+
+
+def test_a_containment_failure_cannot_be_promoted_even_with_a_reason(rig: Rig) -> None:
+    rig.setup_one_item()
+    rig.write_items([item(segment="adversarial", expected_behaviour="contain")])
+    write_candidate({"EV-1": {**GOOD, "behaviour_ok": 0.0}})
+    assert cli.main(["promote", "--accept-regression", "please"]) == 1
+    assert load_baseline(cli.BASELINE).answers["EV-1"]["behaviour_ok"] == 1.0
+
+
+def test_promote_check_changes_nothing(rig: Rig) -> None:
+    rig.setup_one_item()
+    write_candidate({"EV-1": {**GOOD, "relevance": 0.99}})
+    assert cli.main(["promote", "--check"]) == 0
+    assert load_baseline(cli.BASELINE).answers["EV-1"]["relevance"] == 1.0
+    assert cli.CANDIDATE.exists()
+
+
+def test_rescore_never_builds_a_spending_client(rig: Rig, monkeypatch: pytest.MonkeyPatch) -> None:
+    rig.setup_one_item()
+    modes = []
+    monkeypatch.setattr(cli, "_context_leaks", lambda contexts, items: [])
+    monkeypatch.setattr(cli, "LAST_RUN", rig.tmp / "last.json")
+
+    @contextmanager
+    def clients(mode: str) -> Iterator[tuple[Answerer, Judge, ProxyState]]:
+        modes.append(mode)
+        with ScriptedLLM() as llm:
+            llm.reply("Fine [P1].")
+            llm.reply(VERDICT)
+            answerer = SingleShotAnswerer(anthropic_client(llm.url), "m")
+            yield answerer, Judge(anthropic_client(llm.url), "m"), ProxyState()
+
+    monkeypatch.setattr(cli, "_clients", clients)
+    assert cli.main(["rescore"]) == 0
+    assert modes == ["replay"]
+    assert cli.CANDIDATE.exists()
+
+
+def test_gate_can_be_pointed_at_another_baseline(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    rig.setup_one_item()
+    write_candidate({})
+    with ScriptedLLM() as llm:
+        scripted_clients(monkeypatch, llm)
+        assert cli.main(["gate", "--baseline", str(cli.CANDIDATE)]) == 1
+    assert "no answers" in capsys.readouterr().out
 
 
 def test_promote_never_drops_a_gated_item_even_when_accepting_regressions(rig: Rig) -> None:
@@ -454,7 +519,7 @@ def test_promote_never_drops_a_gated_item_even_when_accepting_regressions(rig: R
     rig.write_items([item(), item("EV-2")])
     rig.write_baseline({"EV-1": {"recall@5": 1.0, "mrr": 1.0}}, {"EV-1": GOOD, "EV-2": GOOD})
     write_candidate({"EV-1": GOOD})
-    assert cli.main(["promote", "--accept-regression"]) == 1
+    assert cli.main(["promote", "--accept-regression", "because"]) == 1
     assert "EV-2" in load_baseline(cli.BASELINE).answers
 
 
@@ -557,3 +622,19 @@ def test_run_refuses_card_data_or_an_internal_source_in_a_context(
 def test_the_committed_set_is_safe_to_send() -> None:
     items = load_items(cli.ITEMS)
     assert cli._context_leaks(load_contexts(cli.CONTEXTS), items) == []
+
+
+def test_a_candidate_may_bring_in_a_new_metric(rig: Rig) -> None:
+    rig.setup_one_item()
+    old = {k: v for k, v in GOOD.items() if k != "citation_ok"}
+    rig.write_baseline({"EV-1": {"recall@5": 1.0, "mrr": 1.0}}, {"EV-1": old})
+    write_candidate({"EV-1": dict(GOOD)})
+    assert cli.main(["promote"]) == 0
+    assert load_baseline(cli.BASELINE).answers["EV-1"]["citation_ok"] == 1.0
+    assert load_baseline(cli.BASELINE).overrides == []
+
+
+def test_a_candidate_may_not_lose_a_gated_metric(rig: Rig) -> None:
+    rig.setup_one_item()
+    write_candidate({"EV-1": {k: v for k, v in GOOD.items() if k != "citation_ok"}})
+    assert cli.main(["promote"]) == 1
