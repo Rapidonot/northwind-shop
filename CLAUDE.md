@@ -14,7 +14,8 @@ live in @PROGRESS.md.
 ## Tech stack (PRD §3 defaults + confirmed choices)
 - Python 3.12 for agents and services: uv (workspace), FastAPI, pytest, ruff, mypy
 - Agents: Claude Agent SDK (Python). Models are set in config: Sonnet for the assistant,
-  Haiku for routine steps, and a separate judge instance for evals
+  Haiku for routine steps, and a separate judge instance (Sonnet 5.5) for evals.
+  Every LLM call goes through the record/replay proxy (FOUND-2, decision 0001)
 - Portal: TypeScript, Vite + React SPA, pnpm, Vitest, Playwright; streaming over SSE
   from services/gateway
 - Data: PostgreSQL 16 + pgvector + built-in full-text search (one store)
@@ -30,7 +31,8 @@ CLAUDE.md, COVERAGE.md, PROGRESS.md, .mcp.json
 .claude/         settings.json, agents/, skills/, rules/, output-styles/
 apps/portal/     Vite + React TS portal
 services/
-  common/        shared Python: error envelope, config, ids, audit stub
+  common/        shared Python: error envelope, config, ids, audit stub, LLM client factory
+  llm-replay/    record/replay proxy for LLM calls, cassette store, pytest plugin (FOUND-2)
   gateway/       FastAPI: portal API, chat SSE, cart, sessions
   assistant/     Shopper Assistant (Agent SDK)
   orchestrator/  backend crew (P3)
@@ -40,7 +42,8 @@ services/
 agents-external/ mock A2A agents: payment, fraud, carrier (P4–P5)
 partner-agent/   A2A test client (P5)
 data/            synthetic catalog generator + generated fixtures, shoppers
-evals/           retrieval/, answers/, journeys/, adversarial/ + harness
+evals/           retrieval/, answers/, journeys/, adversarial/, fixtures/ + harness
+cassettes/       recorded LLM calls per suite (synthetic data only; scanned for secrets/PANs)
 infra/           docker-compose.yml, db init/migrations, otel
 docs/            PRD.md, images/, decisions/
 .github/workflows/
@@ -57,8 +60,10 @@ make test             # unit tests: pytest (excludes integration) + vitest
 make test-integration # pytest -m integration (needs `make up`)
 make ci               # lint + test + test-integration, the same steps as GitHub CI
 ```
-Added later: `make data` (FOUND-1), `make ingest` (RAG-01), `make eval` / `make eval-gate`
-(RAG-12), `make e2e` with Playwright (SA-02 crude).
+Added later: `make data` (FOUND-1), `make record SUITE=…` / `make eval-live` / `make llm-spend`
+(FOUND-2), `make ingest` (RAG-01), `make eval` / `make eval-gate` (RAG-12), `make e2e` with
+Playwright (SA-02 crude). Only `make record` and `make eval-live` spend API credit; everything
+else runs in replay.
 
 Toolchain notes:
 - pnpm runs through corepack (`corepack pnpm …`, pinned in package.json); there is no global pnpm.
@@ -114,3 +119,9 @@ Toolchain notes:
   only the user marks an item `human`. Never change a human-reviewed item's labels
   without asking.
 - Record decisions that change this file or the PRD defaults in docs/decisions/.
+- LLM calls (decision 0001): tests and evals run in replay by default. Live calls only
+  through `make record` / `make eval-live`, on 10–20-item slices during development, with
+  full runs only at milestones. The proxy's budget cap is never raised without asking. Never
+  put an API key in CI secrets. Cassettes hold synthetic data only and must pass the
+  secret/PAN scanner. A cassette miss means the model input changed: re-record on purpose,
+  never hand-edit a cassette.
