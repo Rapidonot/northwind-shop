@@ -64,12 +64,14 @@ lint: ## Lint + type-check Python and TypeScript
 	$(PNPM) -r lint
 	$(PNPM) -r typecheck
 
-test: ## Unit tests (Python + portal)
-	uv run pytest
+# LLM_MODE is pinned on the recipe line, so neither the shell, the key file nor
+# `make test LLM_MODE=…` can turn these targets into spending ones (decision 0001).
+test: ## Unit tests (Python + portal), always in replay
+	LLM_MODE=replay uv run pytest
 	$(PNPM) -r test
 
-test-integration: ## Integration tests against the local stack (run `make up` first)
-	uv run pytest -m integration
+test-integration: ## Integration tests against the local stack (run `make up` first), always in replay
+	LLM_MODE=replay uv run pytest -m integration
 
 scan-cassettes: ## Secret/PAN scan of cassettes, ledger and proxy log (FOUND-2)
 	uv run python -m northwind_llm_replay.cli scan
@@ -90,4 +92,4 @@ record: ## Re-record one LLM cassette suite (SUITE=name; spends API credit)
 eval-live: ## Run the LLM evals live and record them (spends API credit)
 	@if [ -d evals ]; then LLM_MODE=record uv run pytest evals; else echo "no eval suites yet (RAG-12)"; fi
 
-ci: lint test test-integration ## Everything CI runs
+ci: lint scan-cassettes test test-integration ## Everything CI runs, in the same order

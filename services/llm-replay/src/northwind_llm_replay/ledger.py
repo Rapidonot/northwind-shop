@@ -5,7 +5,8 @@ committed spend + outstanding reservations + this call's worst case must fit bot
 budget (`LLM_BUDGET_USD`) and the run budget (`LLM_RUN_BUDGET_USD`). If it fits, the worst
 case is reserved before the call goes upstream. When the call completes, the reservation is
 settled to the actual cost from `usage`. A call that ends without final usage (a dropped stream,
-an upstream error mid-stream) is settled at its full worst case.
+an upstream error, a failure after the connection opened) is settled at its full worst case. Only
+a call that provably never reached upstream is released at zero.
 
 The ledger is an append-only JSONL file (gitignored). A reservation with no settlement, for
 example after a crash, keeps counting at its reserved amount.
@@ -15,6 +16,7 @@ from __future__ import annotations
 
 import fcntl
 import json
+import math
 import threading
 import uuid
 from collections.abc import Iterator, Mapping
@@ -59,6 +61,13 @@ def now_iso() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
+def _checked_cap(name: str, value: float) -> float:
+    """NaN compares false against everything, so a NaN cap would admit any call (review #1)."""
+    if not math.isfinite(value) or value < 0:
+        raise ValueError(f"{name} must be a finite, non-negative number, not {value!r}")
+    return value
+
+
 class Ledger:
     def __init__(
         self,
@@ -70,8 +79,10 @@ class Ledger:
         suite: str,
     ) -> None:
         self.path = path
-        self.budget_usd = budget_usd
-        self.run_budget_usd = run_budget_usd
+        self.budget_usd = _checked_cap("LLM_BUDGET_USD", budget_usd)
+        self.run_budget_usd = (
+            None if run_budget_usd is None else _checked_cap("LLM_RUN_BUDGET_USD", run_budget_usd)
+        )
         self.run_id = run_id
         self.suite = suite
         self._thread_lock = threading.Lock()

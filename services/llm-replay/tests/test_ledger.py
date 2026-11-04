@@ -28,6 +28,17 @@ USAGE = {"input_tokens": 1_000, "output_tokens": 100}  # Sonnet: $0.003
 
 @pytest.mark.req("FOUND-2")
 @pytest.mark.req("NFR-16")
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), float("-inf"), -1.0])
+@pytest.mark.parametrize("cap", ["budget", "run"])
+def test_non_finite_or_negative_caps_are_rejected(tmp_path: Path, cap: str, bad: float) -> None:
+    """Review #1: `budget_usd=nan` used to admit a $1e9 reservation."""
+    with pytest.raises(ValueError, match="finite, non-negative"):
+        ledger(tmp_path, **{cap: bad})  # type: ignore[arg-type]
+    assert ledger(tmp_path, budget=0.0, run=0.0).budget_usd == 0.0  # zero stays a valid "no spend"
+
+
+@pytest.mark.req("FOUND-2")
+@pytest.mark.req("NFR-16")
 def test_reserve_then_settle_charges_actual_cost(tmp_path: Path) -> None:
     lg = ledger(tmp_path)
     res = lg.reserve(model="claude-sonnet-5-5", worst_case_usd=0.5, request_hash="h")

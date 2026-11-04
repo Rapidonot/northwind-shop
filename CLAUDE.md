@@ -60,7 +60,7 @@ make fmt              # ruff format + autofix
 make lint             # ruff, ruff format --check, mypy (strict), eslint, tsc
 make test             # unit tests: pytest (excludes integration) + vitest
 make test-integration # pytest -m integration (needs `make up`)
-make ci               # lint + test + test-integration, the same steps as GitHub CI
+make ci               # lint + scan-cassettes + test + test-integration, the same steps as GitHub CI
 make record SUITE=…   # SPENDS: re-record one cassette suite (new requests live, under LLM_RUN_BUDGET_USD)
 make eval-live        # SPENDS: evals live + recorded (suites arrive with RAG-12)
 make llm-spend        # shared ledger: total, per suite/model, 20-call checkpoint

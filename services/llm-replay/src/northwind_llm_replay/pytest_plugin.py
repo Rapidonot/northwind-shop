@@ -24,10 +24,15 @@ import pytest
 
 from northwind_common import localenv
 from northwind_llm_replay.ledger import Ledger
-from northwind_llm_replay.proxy import ProxyConfig, ProxyState, RunningProxy, encode_test_id
+from northwind_llm_replay.proxy import (
+    MODES,
+    ProxyConfig,
+    ProxyState,
+    RunningProxy,
+    encode_test_id,
+)
 from northwind_llm_replay.scripted import ScriptedLLM
 
-MODES = ("replay", "record", "live")
 DEFAULT_RUN_BUDGET_USD = "5.00"  # SPIKE.md §5: a 20-call slice at the ~$0.20 worst case
 DEFAULT_BUDGET_USD = "90"
 _SESSION_RUN_ID = f"pytest-{uuid.uuid4().hex[:12]}"

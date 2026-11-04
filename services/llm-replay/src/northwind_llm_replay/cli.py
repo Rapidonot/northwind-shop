@@ -120,7 +120,11 @@ def main(argv: list[str] | None = None) -> int:
         args.ledger = localenv.ledger_path()
     if getattr(args, "env_file", "unset") is None:
         args.env_file = localenv.env_file()
-    return int(args.func(args))
+    try:
+        return int(args.func(args))
+    except ValueError as e:  # a bad LLM_MODE or budget cap: refuse, with no traceback
+        print(f"error: {e}", file=sys.stderr)
+        return 2
 
 
 if __name__ == "__main__":
