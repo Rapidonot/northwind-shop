@@ -73,7 +73,7 @@ describe("[SA-02] Chat edges", () => {
       streamOf(
         frame("token", { text: "First answer" }),
         frame("citations", { source_ids: ["FAQ-001"] }),
-        frame("error", { code: "turn_limit" }),
+        frame("error", { code: "internal" }),
       ),
       streamOf(frame("token", { text: "Second answer" }), frame("done", {})),
     );

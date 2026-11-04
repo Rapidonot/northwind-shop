@@ -5,7 +5,6 @@ const ERROR_TEXT: Record<ErrorCode, string> = {
   retrieval_failed: "Search isn't available right now, so I can't answer that.",
   model_unavailable: "The assistant isn't available right now. Please try again.",
   replay_miss: "This question has no recorded answer yet.",
-  turn_limit: "That took too many steps. Please try a simpler question.",
   internal: "Something went wrong. Please try again.",
 };
 

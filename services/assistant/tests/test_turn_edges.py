@@ -42,7 +42,7 @@ US = Caller(region="US")
 MARKER = "PLANTED-MARKER-55d0"
 SOURCE = RetrievedChunk("c1", "document", "FAQ-001", "faq", "Wash cold.")
 OTHER = RetrievedChunk("c2", "document", "FAQ-002", "faq", "Dry flat.")
-CLOSED_CODES = {"retrieval_failed", "model_unavailable", "replay_miss", "turn_limit", "internal"}
+CLOSED_CODES = {"retrieval_failed", "model_unavailable", "replay_miss", "internal"}
 
 
 class Fixed:
@@ -127,9 +127,8 @@ def test_one_turns_sources_are_not_citable_in_the_next(tmp_path: Path) -> None:
         llm.reply_tool_use(ALLOWED_TOOL, {"query": "q"}, tool_id="t1")
         llm.reply_stream("First [FAQ-001].")
         llm.reply_stream("Second [FAQ-001].")
-        retriever = Fixed([SOURCE])
-        first = run("hi", retriever, runtime_for(llm, tmp_path / "a"))
-        second = run("again", retriever, runtime_for(llm, tmp_path / "b"))
+        first = run("hi", Fixed([SOURCE]), runtime_for(llm, tmp_path / "a"))
+        second = run("again", Fixed([]), runtime_for(llm, tmp_path / "b"))
     assert first[-1] == Citations(("FAQ-001",))
     assert second[-1] == Citations(())
 

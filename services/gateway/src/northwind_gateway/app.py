@@ -4,6 +4,7 @@ FOUND-0: a health endpoint that proves the portal -> gateway -> Postgres path wo
 SA-02: the chat endpoint, in `northwind_gateway.chat`.
 """
 
+import logging
 from typing import Literal
 
 import psycopg
@@ -11,6 +12,7 @@ from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel
 
+from northwind_assistant.usage import TELEMETRY_LOGGER
 from northwind_gateway.chat import (
     CardNumberRefused,
     card_refused,
@@ -18,6 +20,12 @@ from northwind_gateway.chat import (
     router,
 )
 from northwind_gateway.settings import database_url
+
+# OpenTelemetry comes later: for now the per-answer line goes to stderr (RAG-13).
+_telemetry = logging.getLogger(TELEMETRY_LOGGER)
+_telemetry.setLevel(logging.INFO)
+if not _telemetry.handlers:
+    _telemetry.addHandler(logging.StreamHandler())
 
 app = FastAPI(title="Northwind gateway")
 app.include_router(router)

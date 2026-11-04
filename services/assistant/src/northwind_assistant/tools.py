@@ -1,4 +1,9 @@
-"""The assistant's only tool (SA-02).
+"""Searching the index, and the assistant's only tool (SA-02).
+
+`search_sources` is the one path to the retriever. The server calls it on the shopper's message
+before the first model call (decision 0007), and `retrieve_context` calls it for refinement, so the
+card check, failure handling and RAG-10's search cap cannot differ between the two. Its card check
+guards the retriever; `stream_answer` ends the turn on a refusal, which is what guards the model.
 
 `retrieve_context` is built per request as a closure over the server-side `Caller`: the schema
 offers only `query`, and the handler reads only `query`, so nothing the model sends can change the
@@ -41,10 +46,16 @@ INPUT_SCHEMA: dict[str, Any] = {
     "required": ["query"],
     "additionalProperties": False,
 }
+# RAG-10: no answer needs more than 3 retrieval rounds, and the first is the server's own search.
+MAX_SEARCHES = 3
 NO_SOURCES = "No sources matched this search."
 FAILED_MESSAGE = "Search is unavailable right now. Tell the shopper you cannot look this up."
 BAD_QUERY_MESSAGE = "The query must be non-empty text."
 CARD_QUERY_MESSAGE = "Search queries must not hold card details."
+LIMIT_MESSAGE = (
+    "The search limit is reached. Answer from the sources you have, or say the evidence is not "
+    "enough."
+)
 
 
 class Retriever(Protocol):
@@ -57,6 +68,14 @@ class ToolState:
 
     seen: set[str] = field(default_factory=set)
     failed: bool = False
+    searches: int = 0
+
+
+@dataclass(frozen=True)
+class SearchFailure:
+    category: str
+    retryable: bool
+    message: str
 
 
 def render_sources(chunks: Sequence[RetrievedChunk]) -> str:
@@ -78,22 +97,35 @@ def _error(category: str, retryable: bool, message: str) -> dict[str, Any]:
     return {"content": [{"type": "text", "text": json.dumps(body)}], "is_error": True}
 
 
+async def search_sources(
+    query: Any, caller: Caller, retriever: Retriever, state: ToolState
+) -> str | SearchFailure:
+    """Rendered sources, or `NO_SOURCES` for a search that found nothing, or a failure: an access
+    failure and a valid empty result stay distinct (hard rule 10). Audience and region come only
+    from `caller`, which the server built."""
+    if not isinstance(query, str) or not query.strip():
+        return SearchFailure("validation", False, BAD_QUERY_MESSAGE)
+    if contains_card_data(query):  # hard rule 1 names tool arguments too
+        return SearchFailure("validation", False, CARD_QUERY_MESSAGE)
+    if state.searches >= MAX_SEARCHES:
+        return SearchFailure("business", False, LIMIT_MESSAGE)
+    state.searches += 1
+    try:
+        chunks = await asyncio.to_thread(retriever.search, query, caller)
+    except Exception as error:  # noqa: BLE001 - its text must not reach the model
+        log.error("search failed: %s", type(error).__name__)
+        state.failed = True
+        return SearchFailure("transient", True, FAILED_MESSAGE)
+    state.seen.update(chunk.source_id for chunk in chunks)
+    return render_sources(chunks) if chunks else NO_SOURCES
+
+
 def retrieve_tool(caller: Caller, retriever: Retriever, state: ToolState) -> SdkMcpTool[Any]:
     @tool(TOOL_NAME, DESCRIPTION, INPUT_SCHEMA)
     async def retrieve_context(args: dict[str, Any]) -> dict[str, Any]:
-        query = args.get("query")
-        if not isinstance(query, str) or not query.strip():
-            return _error("validation", False, BAD_QUERY_MESSAGE)
-        if contains_card_data(query):  # hard rule 1 names tool arguments too
-            return _error("validation", False, CARD_QUERY_MESSAGE)
-        try:
-            chunks = await asyncio.to_thread(retriever.search, query, caller)
-        except Exception as error:  # noqa: BLE001 - its text must not reach the model
-            log.error("retrieve_context failed: %s", type(error).__name__)
-            state.failed = True
-            return _error("transient", True, FAILED_MESSAGE)
-        state.seen.update(chunk.source_id for chunk in chunks)
-        text = render_sources(chunks) if chunks else NO_SOURCES
-        return {"content": [{"type": "text", "text": text}]}
+        found = await search_sources(args.get("query"), caller, retriever, state)
+        if isinstance(found, SearchFailure):
+            return _error(found.category, found.retryable, found.message)
+        return {"content": [{"type": "text", "text": found}]}
 
     return retrieve_context
