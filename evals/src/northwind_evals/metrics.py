@@ -1,7 +1,7 @@
 """Retrieval metrics and per-segment aggregation (RAG-12).
 
-An item's relevance is per source, and `ranked_sources` holds one entry per retrieved chunk, so
-several chunks of one source do not count more than once toward recall.
+`relevant` is a list of requirements, each a set of alternative sources. `ranked_sources` holds one
+entry per retrieved chunk, so several chunks of one source do not count more than once.
 """
 
 from __future__ import annotations
@@ -9,17 +9,17 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping, Sequence
 
 
-def recall_at_k(ranked_sources: Sequence[str], relevant: Iterable[str], k: int) -> float:
-    """Share of the relevant sources that appear in the top `k` chunks."""
-    wanted = set(relevant)
-    if not wanted:
-        raise ValueError("recall needs at least one relevant source")
-    return len(wanted & set(ranked_sources[:k])) / len(wanted)
+def recall_at_k(ranked_sources: Sequence[str], relevant: Sequence[Sequence[str]], k: int) -> float:
+    """Share of the requirements met by at least one source in the top `k` chunks."""
+    if not relevant:
+        raise ValueError("recall needs at least one requirement")
+    top = set(ranked_sources[:k])
+    return sum(bool(top & set(group)) for group in relevant) / len(relevant)
 
 
-def reciprocal_rank(ranked_sources: Sequence[str], relevant: Iterable[str]) -> float:
+def reciprocal_rank(ranked_sources: Sequence[str], relevant: Sequence[Sequence[str]]) -> float:
     """1 / rank of the first chunk from a relevant source; 0 if none was retrieved."""
-    wanted = set(relevant)
+    wanted = {source for group in relevant for source in group}
     for rank, source in enumerate(ranked_sources, start=1):
         if source in wanted:
             return 1 / rank

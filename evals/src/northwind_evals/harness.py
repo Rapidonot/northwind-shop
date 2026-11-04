@@ -28,16 +28,20 @@ class ItemResult:
     groundedness: float | None = None
     relevance: float | None = None
     behaviour_ok: bool | None = None
+    false_refusal: bool | None = None  # None on items with no answer to give
 
     @property
     def scores(self) -> dict[str, float]:
         if self.groundedness is None or self.relevance is None or self.behaviour_ok is None:
             return {}
-        return {
+        scores = {
             "groundedness": self.groundedness,
             "relevance": self.relevance,
             "behaviour_ok": float(self.behaviour_ok),
         }
+        if self.false_refusal is not None:
+            scores["false_refusal"] = float(self.false_refusal)
+        return scores
 
 
 def score_retrieval(item: EvalItem, ranked_sources: Sequence[str]) -> dict[str, float]:
@@ -58,13 +62,17 @@ def run_item(item: EvalItem, context: SavedContext, answerer: Answerer, judge: J
         return ItemResult(item.id, status, answer, f"{error.status_code}: {error.message[:200]}")
     except (AnswerError, JudgeError) as error:
         return ItemResult(item.id, "error", answer, str(error))
+    # "Not available" passes only where that is true. On an answerable item it is a false refusal,
+    # whatever the judge scored: an honest refusal must not read as a relevant answer.
+    false_refusal = item.answerable and verdict.declined
     return ItemResult(
         item.id,
         "ok",
         answer,
         groundedness=verdict.groundedness,
-        relevance=verdict.relevance_score,
-        behaviour_ok=verdict.behaviour_ok,
+        relevance=0.0 if false_refusal else verdict.relevance_score,
+        behaviour_ok=verdict.behaviour_ok and not false_refusal,
+        false_refusal=false_refusal if item.answerable else None,
     )
 
 

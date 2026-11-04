@@ -265,7 +265,7 @@ def cmd_review_list(_: argparse.Namespace) -> int:
         "|---|---|---|---|---|---|---|",
     ]
     for item in waiting:
-        sources = ", ".join(item.relevant_sources) or "none"
+        sources = ", ".join(" or ".join(g) for g in item.relevant_sources) or "none"
         cells = (
             item.id,
             item.segment,

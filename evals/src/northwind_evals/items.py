@@ -1,6 +1,9 @@
 """The labelled eval set (RAG-12): item schema, the human-review rule and slicing.
 
 Labels point at `source_id`, not chunk IDs, so re-chunking (RAG-02, RAG-06) does not break them.
+`relevant_sources` is a list of requirements, and each requirement is a list of alternatives: any
+one source in it satisfies it. A comparison needs two requirements; a policy fact held by both the
+policy and the FAQ is one requirement with two alternatives, both for the shopper's own region.
 Claude writes `reviewed_by: model`; only the user sets `human` (CLAUDE.md, eval review rule).
 """
 
@@ -54,16 +57,24 @@ class EvalItem:
     query: str
     region: str
     expected_behaviour: str
-    relevant_sources: tuple[str, ...]
+    relevant_sources: tuple[tuple[str, ...], ...]
     reference_facts: tuple[str, ...]
     why: str
     trap_id: str | None
     reviewed_by: str
 
     @property
+    def answerable(self) -> bool:
+        return self.expected_behaviour == "answer"
+
+    @property
     def retrieval_scored(self) -> bool:
         """Only items with an answer to find count toward recall and MRR."""
-        return self.expected_behaviour == "answer"
+        return self.answerable
+
+    @property
+    def all_sources(self) -> tuple[str, ...]:
+        return tuple(source for group in self.relevant_sources for source in group)
 
 
 def _one_of(record: dict[str, Any], key: str, allowed: Sequence[str]) -> str:
@@ -80,6 +91,16 @@ def _strings(record: dict[str, Any], key: str) -> tuple[str, ...]:
     return tuple(value)
 
 
+def _source_groups(record: dict[str, Any]) -> tuple[tuple[str, ...], ...]:
+    value = record["relevant_sources"]
+    if not isinstance(value, list) or not all(
+        isinstance(group, list) and group and all(isinstance(s, str) and s for s in group)
+        for group in value
+    ):
+        raise ItemError(f"{record['id']}: relevant_sources must be a list of non-empty lists")
+    return tuple(tuple(group) for group in value)
+
+
 def parse_item(record: dict[str, Any]) -> EvalItem:
     missing, extra = _FIELDS - record.keys(), record.keys() - _FIELDS
     if missing or extra:
@@ -94,7 +115,7 @@ def parse_item(record: dict[str, Any]) -> EvalItem:
         query=record["query"],
         region=_one_of(record, "region", REGIONS),
         expected_behaviour=_one_of(record, "expected_behaviour", BEHAVIOURS),
-        relevant_sources=_strings(record, "relevant_sources"),
+        relevant_sources=_source_groups(record),
         reference_facts=_strings(record, "reference_facts"),
         why=record["why"],
         trap_id=record["trap_id"],

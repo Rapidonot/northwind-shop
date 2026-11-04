@@ -64,7 +64,16 @@ def test_labels_point_at_real_public_sources() -> None:
     key = json.loads((FIXTURES / "_answer_key.json").read_text(encoding="utf-8"))
     internal = {entry.get("doc_id") or entry.get("product_id") for entry in key["internal_only"]}
     for item in ITEMS:
-        assert set(item.relevant_sources) <= known - internal, item.id
+        assert set(item.all_sources) <= known - internal, item.id
+
+
+@pytest.mark.req("RAG-12")
+def test_document_sources_match_the_shoppers_region() -> None:
+    lines = (FIXTURES / "documents.jsonl").read_text(encoding="utf-8").splitlines()
+    regions = {doc["doc_id"]: doc["region"] for doc in map(json.loads, lines)}
+    for item in ITEMS:
+        for source in item.all_sources:
+            assert regions.get(source, "ALL") in ("ALL", item.region), (item.id, source)
 
 
 @pytest.mark.req("RAG-12")

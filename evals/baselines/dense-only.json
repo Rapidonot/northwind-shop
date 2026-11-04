@@ -3,72 +3,86 @@
   "answers": {
     "EV-001": {
       "behaviour_ok": 1.0,
+      "false_refusal": 0.0,
       "groundedness": 1.0,
       "relevance": 1.0
     },
     "EV-002": {
       "behaviour_ok": 1.0,
+      "false_refusal": 0.0,
       "groundedness": 1.0,
       "relevance": 1.0
     },
     "EV-003": {
       "behaviour_ok": 1.0,
-      "groundedness": 0.8333333333333334,
+      "false_refusal": 0.0,
+      "groundedness": 1.0,
       "relevance": 1.0
     },
     "EV-019": {
       "behaviour_ok": 1.0,
+      "false_refusal": 0.0,
       "groundedness": 1.0,
       "relevance": 1.0
     },
     "EV-020": {
       "behaviour_ok": 0.0,
+      "false_refusal": 1.0,
       "groundedness": 1.0,
-      "relevance": 1.0
+      "relevance": 0.0
     },
     "EV-021": {
       "behaviour_ok": 1.0,
+      "false_refusal": 0.0,
       "groundedness": 1.0,
       "relevance": 1.0
     },
     "EV-029": {
       "behaviour_ok": 1.0,
+      "false_refusal": 0.0,
       "groundedness": 1.0,
-      "relevance": 1.0
+      "relevance": 0.5
     },
     "EV-030": {
       "behaviour_ok": 1.0,
+      "false_refusal": 0.0,
       "groundedness": 1.0,
-      "relevance": 1.0
+      "relevance": 0.5
     },
     "EV-031": {
       "behaviour_ok": 1.0,
+      "false_refusal": 0.0,
       "groundedness": 1.0,
-      "relevance": 1.0
+      "relevance": 0.5
     },
     "EV-041": {
       "behaviour_ok": 1.0,
+      "false_refusal": 0.0,
       "groundedness": 1.0,
       "relevance": 1.0
     },
     "EV-042": {
       "behaviour_ok": 1.0,
+      "false_refusal": 0.0,
       "groundedness": 1.0,
       "relevance": 1.0
     },
     "EV-043": {
       "behaviour_ok": 1.0,
+      "false_refusal": 0.0,
       "groundedness": 1.0,
       "relevance": 1.0
     },
     "EV-051": {
-      "behaviour_ok": 0.0,
-      "groundedness": 0.6666666666666666,
+      "behaviour_ok": 1.0,
+      "false_refusal": 0.0,
+      "groundedness": 1.0,
       "relevance": 1.0
     },
     "EV-052": {
-      "behaviour_ok": 0.0,
-      "groundedness": 0.75,
+      "behaviour_ok": 1.0,
+      "false_refusal": 0.0,
+      "groundedness": 1.0,
       "relevance": 1.0
     },
     "EV-065": {
@@ -103,7 +117,7 @@
     }
   },
   "index_version": "c9e30984a7723d23",
-  "judge_id": "judge:v1:claude-sonnet-5-5",
+  "judge_id": "judge:v2:claude-sonnet-5-5",
   "name": "dense-only",
   "retrieval": {
     "EV-001": {
@@ -357,34 +371,34 @@
       "recall@5": 0.0
     },
     "EV-051": {
-      "mrr": 0.16666666666666666,
+      "mrr": 0.3333333333333333,
       "recall@10": 1.0,
-      "recall@5": 0.0
+      "recall@5": 1.0
     },
     "EV-052": {
-      "mrr": 0.14285714285714285,
+      "mrr": 0.25,
       "recall@10": 1.0,
-      "recall@5": 0.0
+      "recall@5": 1.0
     },
     "EV-053": {
-      "mrr": 0.2,
+      "mrr": 1.0,
       "recall@10": 1.0,
       "recall@5": 1.0
     },
     "EV-054": {
-      "mrr": 0.125,
+      "mrr": 0.5,
       "recall@10": 1.0,
-      "recall@5": 0.0
+      "recall@5": 1.0
     },
     "EV-055": {
-      "mrr": 0.14285714285714285,
+      "mrr": 0.3333333333333333,
       "recall@10": 1.0,
-      "recall@5": 0.0
+      "recall@5": 1.0
     },
     "EV-056": {
-      "mrr": 0.16666666666666666,
+      "mrr": 0.25,
       "recall@10": 1.0,
-      "recall@5": 0.0
+      "recall@5": 1.0
     },
     "EV-057": {
       "mrr": 0.5,
@@ -444,31 +458,36 @@
       },
       "comparison": {
         "behaviour_ok": 0.6666666666666666,
+        "false_refusal": 0.3333333333333333,
         "groundedness": 1.0,
         "n": 3,
-        "relevance": 1.0
+        "relevance": 0.6666666666666666
       },
       "intent_filter": {
         "behaviour_ok": 1.0,
+        "false_refusal": 0.0,
         "groundedness": 1.0,
         "n": 3,
-        "relevance": 1.0
+        "relevance": 0.5
       },
       "overall": {
-        "behaviour_ok": 0.85,
-        "groundedness": 0.9625,
+        "behaviour_ok": 0.95,
+        "false_refusal": 0.07142857142857142,
+        "groundedness": 1.0,
         "n": 20,
-        "relevance": 1.0
+        "relevance": 0.875
       },
       "policy": {
-        "behaviour_ok": 0.0,
-        "groundedness": 0.7083333333333333,
+        "behaviour_ok": 1.0,
+        "false_refusal": 0.0,
+        "groundedness": 1.0,
         "n": 2,
         "relevance": 1.0
       },
       "specification": {
         "behaviour_ok": 1.0,
-        "groundedness": 0.9444444444444445,
+        "false_refusal": 0.0,
+        "groundedness": 1.0,
         "n": 3,
         "relevance": 1.0
       },
@@ -480,6 +499,7 @@
       },
       "variant": {
         "behaviour_ok": 1.0,
+        "false_refusal": 0.0,
         "groundedness": 1.0,
         "n": 3,
         "relevance": 1.0
@@ -499,16 +519,16 @@
         "recall@5": 0.3333333333333333
       },
       "overall": {
-        "mrr": 0.5813058035714286,
+        "mrr": 0.6082217261904762,
         "n": 64,
         "recall@10": 0.83203125,
-        "recall@5": 0.671875
+        "recall@5": 0.75
       },
       "policy": {
-        "mrr": 0.45433673469387753,
+        "mrr": 0.5773809523809524,
         "n": 14,
         "recall@10": 1.0,
-        "recall@5": 0.6428571428571429
+        "recall@5": 1.0
       },
       "specification": {
         "mrr": 0.7287037037037037,

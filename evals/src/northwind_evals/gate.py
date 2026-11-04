@@ -15,7 +15,14 @@ from typing import Any
 from northwind_evals.metrics import mean
 
 # Absolute drops. One item is about 0.015 of a retrieval metric at the starter set's size.
-TOLERANCES = {"recall@5": 0.02, "mrr": 0.02, "groundedness": 0.03, "relevance": 0.03}
+TOLERANCES = {
+    "recall@5": 0.02,
+    "mrr": 0.02,
+    "groundedness": 0.03,
+    "relevance": 0.03,
+    "false_refusal": 0.03,
+}
+LOWER_IS_BETTER = {"false_refusal"}
 Scores = Mapping[str, Mapping[str, float]]
 
 
@@ -66,7 +73,8 @@ def _compare(result: GateResult, metrics: Sequence[str], baseline: Scores, curre
         now = mean(current[i][metric] for i in common if metric in current[i])
         if before is None or now is None:
             continue
-        result.rows.append((metric, before, now, before - now <= TOLERANCES[metric] + 1e-9))
+        worsened = now - before if metric in LOWER_IS_BETTER else before - now
+        result.rows.append((metric, before, now, worsened <= TOLERANCES[metric] + 1e-9))
 
 
 def compare(
@@ -80,7 +88,7 @@ def compare(
     if set(retrieval) != set(baseline.retrieval):
         result.problems.append("the retrieval items differ from the baseline: re-record it")
     _compare(result, ("recall@5", "mrr"), baseline.retrieval, retrieval)
-    _compare(result, ("groundedness", "relevance"), baseline.answers, answers)
+    _compare(result, ("groundedness", "relevance", "false_refusal"), baseline.answers, answers)
     if not result.rows:
         result.problems.append("nothing was compared")
     return result
