@@ -2,12 +2,14 @@
 
 Runs the real hook as a subprocess with Claude Code's JSON on stdin, the way the harness does,
 and asserts the exit code (2 blocks, 0 allows) and stderr. Every command here is only passed
-to the hook as data; none of them is ever executed.
+to the hook as data; none of them is ever executed. GUARD_HOOK_PATH points the suite at another
+copy of the hook, such as a proposed fix; the default is the installed one.
 
 xfail(strict=True) marks a gap that still gets through, so fixing the hook flips the test.
 """
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -17,7 +19,8 @@ import pytest
 
 pytestmark = pytest.mark.req("NFR-02")
 
-HOOK = Path(__file__).resolve().parents[2] / ".claude" / "hooks" / "guard_env.py"
+INSTALLED_HOOK = Path(__file__).resolve().parents[2] / ".claude" / "hooks" / "guard_env.py"
+HOOK = Path(os.environ.get("GUARD_HOOK_PATH", INSTALLED_HOOK))
 
 ENV_MSG = "may not reference .env files"
 DUMP_MSG = "may not dump the environment"
@@ -87,6 +90,16 @@ def test_bash_env_file_is_blocked(command: str) -> None:
         "set",
         "echo $ANTHROPIC_API_KEY",
         "echo ${ANTHROPIC_API_KEY}",
+        "env > dump.txt",
+        "env>dump.txt",
+        "set > dump.txt",
+        "export > dump.txt",
+        "echo $(env)",
+        "echo $(set)",
+        "echo $(env | sort)",
+        "(env)",
+        "/usr/bin/env",
+        "/usr/bin/env > dump.txt",
     ],
 )
 def test_bash_environment_dump_is_blocked(command: str) -> None:
@@ -104,41 +117,78 @@ def test_bash_environment_dump_is_blocked(command: str) -> None:
         "git log; rm -rf .claude/hooks",
         "git checkout -- .claude/settings.json",
         "sed -i '' s/a/b/ .claude/settings.json",
+        "git diff > .claude/settings.json",
+        "git diff >> .claude/settings.json",
+        'git diff > ".claude/settings.json"',
+        "git diff > .CLAUDE/settings.json",
+        "git show HEAD~1:.claude/hooks/guard_env.py > .claude/hooks/guard_env.py",
+        "git diff --output=.claude/settings.json",
+        "git diff --output .claude/settings.json",
+        "git commit -m 'x' > .claude/settings.json",
+        "cd .claude && rm settings.json",
+        "cd .claude/ && rm settings.local.json",
+        "cd /repo/.claude; rm -rf hooks",
+        "cd .claude && cd hooks",
+        "(cd .claude && rm settings.json)",
+        "pushd .claude && rm settings.json",
+        "cd .claude && git diff > settings.json",
+        "rm .CLAUDE/settings.json",
+        "rm .Claude/Hooks/guard_env.py",
     ],
 )
 def test_bash_protected_path_is_blocked(command: str) -> None:
     assert_blocked(run_hook("Bash", {"command": command}), SELF_MSG)
 
 
+SUBSTITUTION = "R1: a substitution inside an allowed git segment is not inspected"
+GIT_MESSAGE_QUOTING = "R2: GIT_MESSAGE ignores quoting, so a real redirect is stripped as text"
+PATH_SPELLING = "R3: protected paths are matched as literal strings"
+CD_TRACKING = "R4: cd tracking needs cd at the start of a segment and a path ending in .claude"
+
+
 @pytest.mark.parametrize(
     "command",
     [
-        gap("git diff > .claude/settings.json", "SAFE_GIT passes the whole segment"),
+        gap("rm -rf .claude", "removes the parent, so no protected path appears in the text"),
         gap(
-            "git show HEAD~1:.claude/hooks/guard_env.py > .claude/hooks/guard_env.py",
-            "SAFE_GIT passes the whole segment",
+            "git -C .claude checkout -- settings.json",
+            "the bare name is only protected after cd",
         ),
-        gap("git diff --output=.claude/settings.json", "SAFE_GIT passes the whole segment"),
-        gap("cd .claude && rm settings.json", "PROTECTED needs the full path in one segment"),
-        gap("rm .CLAUDE/settings.json", "PROTECTED is case-sensitive; macOS paths are not"),
+        gap("git status $(rm .claude/settings.json)", SUBSTITUTION),
+        gap("git log `cp /tmp/weak.json .claude/settings.json`", SUBSTITUTION),
+        gap('git commit -m "$(rm .claude/hooks/guard_env.py)"', SUBSTITUTION),
+        gap("git diff > >(tee .claude/settings.json)", SUBSTITUTION),
+        gap("""git diff " -m '" > .claude/settings.json "'" """, GIT_MESSAGE_QUOTING),
+        gap("""git log --grep=" -m 'x" > .claude/settings.json # '""", GIT_MESSAGE_QUOTING),
+        gap("git diff > .claude/./settings.json", PATH_SPELLING),
+        gap("git diff --output=.claude//settings.json", PATH_SPELLING),
+        gap("rm .claude//hooks/guard_env.py", PATH_SPELLING),
+        gap("cd .claude/agents && rm ../settings.json", CD_TRACKING),
+        gap("cd .claude/agents && git diff > ../settings.json", CD_TRACKING),
+        gap("cd .claude/. && rm settings.json", CD_TRACKING),
+        gap("{ cd .claude; rm settings.json; }", CD_TRACKING),
+        gap("if cd .claude; then rm settings.json; fi", CD_TRACKING),
     ],
 )
 def test_bash_protected_path_gaps(command: str) -> None:
     assert_blocked(run_hook("Bash", {"command": command}), SELF_MSG)
 
 
+@pytest.mark.xfail(strict=True, reason=PATH_SPELLING)
+def test_write_to_protected_path_in_other_spelling_gap() -> None:
+    result = run_hook("Write", {"file_path": "/repo/.claude/./settings.json"})
+    assert_blocked(result, SELF_MSG)
+
+
 @pytest.mark.parametrize(
     "command",
     [
-        gap("env > dump.txt", "ENV_DUMP needs the command to end after env"),
-        gap("set > dump.txt", "ENV_DUMP needs the command to end after set"),
-        gap("echo $(env)", "ENV_DUMP only looks at the start of a segment"),
-        gap("(env)", "ENV_DUMP only looks at the start of a segment"),
-        gap("/usr/bin/env", "ENV_DUMP does not match a path to env"),
         gap(
             "python3 -c 'import os; print(os.environ[\"ANTHROPIC_API_KEY\"])'",
             "KEY_REF only matches shell expansion",
         ),
+        gap("env -0", "env with a flag reads as an ordinary command"),
+        gap("echo `env`", "backticks are not parsed; $(env) is blocked"),
     ],
 )
 def test_bash_environment_dump_gaps(command: str) -> None:
@@ -173,6 +223,7 @@ def test_notebook_edit_on_env_file_is_blocked() -> None:
         "/repo/.claude/settings.json",
         "/repo/.claude/settings.local.json",
         "/repo/.claude/hooks/guard_env.py",
+        "/repo/.CLAUDE/settings.json",
     ],
 )
 def test_edit_tools_on_protected_path_are_blocked(tool: str, path: str) -> None:
@@ -182,11 +233,6 @@ def test_edit_tools_on_protected_path_are_blocked(tool: str, path: str) -> None:
 def test_notebook_edit_on_protected_path_is_blocked() -> None:
     result = run_hook("NotebookEdit", {"notebook_path": "/repo/.claude/hooks/x.ipynb"})
     assert_blocked(result, SELF_MSG)
-
-
-@pytest.mark.xfail(strict=True, reason="PROTECTED is case-sensitive; macOS paths are not")
-def test_edit_on_protected_path_in_other_case_gap() -> None:
-    assert_blocked(run_hook("Edit", {"file_path": "/repo/.CLAUDE/settings.json"}), SELF_MSG)
 
 
 @pytest.mark.parametrize(
@@ -239,8 +285,18 @@ def test_unreadable_input_fails_closed(stdin: bytes) -> None:
         "make test",
         "uv run pytest tests/hooks",
         "set -e; make test",
+        "set -euo pipefail",
         "env FOO=1 make test",
+        "env FOO=1 cmd",
+        "/usr/bin/env python3",
         "export FOO=1",
+        "echo '(env)'",
+        "git diff .claude/hooks/guard_env.py > /tmp/hook.diff",
+        "git commit -m 'block git diff > .claude/settings.json'",
+        "git commit -am 'block --output=.claude/settings.json'",
+        "cd .claude && ls",
+        "cd .claude && git add settings.json",
+        "cd .claude && cd .. && ls tests/hooks",
     ],
 )
 def test_bash_ordinary_commands_are_allowed(command: str) -> None:
