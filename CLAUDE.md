@@ -66,6 +66,7 @@ make record SUITE=…   # SPENDS: re-record one cassette suite (new requests liv
 make eval-live EVAL_SLICE=<n|all>  # SPENDS: record answers + verdicts into a baseline candidate
 make eval-rescore     # rebuild the candidate from the recordings after a scoring change (never spends)
 make eval-promote     # replace the baseline with the candidate (refuses a regression)
+make eval-integrity   # refuse edited cassettes and lost overrides, against origin/main
 make eval-gate        # regression gate: live retrieval + replayed answers vs the baseline (RAG-12)
 make eval-snapshot    # save each eval item's retrieved context, the input for answers (no LLM)
 make eval-review-list # write the list of eval items waiting for human review

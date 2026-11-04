@@ -13,6 +13,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
+from northwind_common.llm import JUDGE_MODEL
 from northwind_evals.answerers import AnswerError, escaped, render_sources, response_text
 from northwind_evals.contexts import ContextChunk
 from northwind_evals.items import EvalItem
@@ -116,7 +117,9 @@ def parse_verdict(text: str) -> Verdict:
 
 
 class Judge:
-    def __init__(self, client: Any, model: str, max_tokens: int = JUDGE_MAX_TOKENS) -> None:
+    def __init__(
+        self, client: Any, model: str = JUDGE_MODEL, max_tokens: int = JUDGE_MAX_TOKENS
+    ) -> None:
         self._client = client
         self._model = model
         self._max_tokens = max_tokens

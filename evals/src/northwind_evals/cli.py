@@ -1,4 +1,4 @@
-"""`python -m northwind_evals.cli snapshot|run|rescore|promote|gate|review-list` (RAG-12).
+"""`python -m northwind_evals.cli snapshot|run|rescore|promote|gate|integrity|review-list` (RAG-12).
 
 `run` is the only command that spends, and only with LLM_MODE=record (`make eval-live`), which CI
 refuses. It writes a candidate, never the baseline: `promote` is the deliberate step that replaces
@@ -17,11 +17,12 @@ from contextlib import contextmanager
 from dataclasses import asdict, replace
 from datetime import date
 from pathlib import Path
+from typing import Any
 
 import psycopg
 
 from northwind_common import localenv
-from northwind_common.llm import ASSISTANT_MODEL, JUDGE_MODEL, anthropic_client
+from northwind_common.llm import ASSISTANT_MODEL, anthropic_client
 from northwind_evals.answerers import Answerer, SingleShotAnswerer
 from northwind_evals.contexts import (
     ANSWER_CONTEXT_K,
@@ -39,11 +40,17 @@ from northwind_evals.gate import (
     compare,
     coverage_problems,
     dropped_items,
+    identity_problems,
     load_baseline,
     load_known_failures,
+    malformed_behaviour,
     save_baseline,
+    score_drift,
+    summary_of,
+    summary_problems,
 )
 from northwind_evals.harness import RETRIEVAL_K, ItemResult, run_answers, score_retrieval
+from northwind_evals.integrity import integrity_problems
 from northwind_evals.items import (
     MIN_HUMAN_REVIEWED,
     EvalItem,
@@ -53,7 +60,6 @@ from northwind_evals.items import (
     slice_items,
 )
 from northwind_evals.judge import Judge
-from northwind_evals.metrics import aggregate
 from northwind_llm_replay.ledger import Ledger
 from northwind_llm_replay.proxy import ProxyConfig, ProxyState, RunningProxy, encode_test_id
 from northwind_llm_replay.scan import load_canaries, scan_text
@@ -152,7 +158,7 @@ def _clients(mode: str) -> Iterator[tuple[Answerer, Judge, ProxyState]]:
         answerer_client = anthropic_client(f"{running.url}/_t/{encode_test_id('eval-answerer')}")
         judge_client = anthropic_client(f"{running.url}/_t/{encode_test_id('eval-judge')}")
         answerer = SingleShotAnswerer(answerer_client, ASSISTANT_MODEL)
-        yield answerer, Judge(judge_client, JUDGE_MODEL), running.proxy.state
+        yield answerer, Judge(judge_client), running.proxy.state
 
 
 def _print_summary(summary: dict[str, dict[str, float | None]]) -> None:
@@ -234,7 +240,7 @@ def _build_candidate(chosen_size: str, mode: str) -> int:
     segments = {item.id: item.segment for item in items}
     retrieval = _retrieval_scores(items, live)
     answers = {r.item_id: r.scores for r in results}
-    summary = {"retrieval": aggregate(retrieval, segments), "answers": aggregate(answers, segments)}
+    summary = summary_of(retrieval, answers, segments)
     candidate = Baseline(
         name="dense-only",
         retriever_id=retriever_id(embedder),
@@ -284,22 +290,26 @@ def cmd_promote(args: argparse.Namespace) -> int:
     candidate = load_baseline(CANDIDATE)
     segments = {item.id: item.segment for item in items}
     known = load_known_failures(KNOWN_FAILURES)
-    final = coverage_problems(candidate, items)
+    final = coverage_problems(candidate, items) + malformed_behaviour(candidate.answers)
     overridable: list[str] = []
-    overrides = []
+    overrides: list[dict[str, Any]] = []
+    bootstrap = (args.bootstrap or "").strip()
     if BASELINE.exists():
         baseline = load_baseline(BASELINE)
         overrides = list(baseline.overrides)
         final += [f"would stop gating {i}" for i in dropped_items(baseline, candidate, items)]
-        result = compare(baseline, candidate.retrieval, candidate.answers, [], [], segments, known)
-        _print_rows(result)
-        final += result.containment
-        final += [f"{metric} is missing from the candidate" for metric in result.lost_metrics]
-        overridable += result.problems
-        overridable += [f"{row[0]} regressed" for row in result.rows if not row[3]]
+        final += identity_problems(baseline, items)
+    elif not bootstrap:
+        final.append("no baseline to compare with: --bootstrap REASON starts a new one")
+        baseline = candidate
     else:
-        result = compare(candidate, candidate.retrieval, candidate.answers, [], [], segments, known)
-        final += result.containment
+        baseline = candidate
+    result = compare(baseline, candidate.retrieval, candidate.answers, [], [], segments, known)
+    _print_rows(result)
+    final += result.containment
+    final += [f"{metric} is missing from the candidate" for metric in result.lost_metrics]
+    overridable += result.problems
+    overridable += [f"{row[0]} regressed" for row in result.rows if not row[3]]
     for problem in [*final, *overridable]:
         print(f"  {problem}", file=sys.stderr)
     reason = (args.accept_regression or "").strip()
@@ -309,10 +319,13 @@ def cmd_promote(args: argparse.Namespace) -> int:
     if args.check:
         print("promotion check passed; nothing was changed")
         return 0
+    today = date.today().isoformat()
+    if bootstrap:
+        overrides.append({"on": today, "reason": bootstrap, "accepted": ["no earlier baseline"]})
     if overridable:
-        entry = {"on": date.today().isoformat(), "reason": reason, "accepted": overridable}
-        overrides.append(entry)
-    save_baseline(BASELINE, replace(candidate, overrides=overrides))
+        overrides.append({"on": today, "reason": reason, "accepted": overridable})
+    summary = summary_of(candidate.retrieval, candidate.answers, candidate.segments)
+    save_baseline(BASELINE, replace(candidate, overrides=overrides, summary=summary))
     CANDIDATE.unlink()
     print(f"promoted to {BASELINE}")
     return 0
@@ -342,6 +355,8 @@ def cmd_gate(args: argparse.Namespace) -> int:
     scores = _retrieval_scores(items, live)
     result = compare(baseline, scores, answers, stale, errors, segments, known)
     result.problems += coverage_problems(baseline, items)
+    result.problems += score_drift(baseline, answers)
+    result.problems += summary_problems(baseline)
 
     _print_rows(result)
     print(f"  answers replayed {len(answers)}/{len(baseline.answers)}, stale {len(result.stale)}")
@@ -392,6 +407,19 @@ def cmd_review_list(_: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_integrity(args: argparse.Namespace) -> int:
+    """Compares this branch with the base branch. Never spends and needs no database."""
+    try:
+        problems = integrity_problems(args.base, BASELINE)
+    except RuntimeError as error:
+        print(f"eval-integrity FAILED: {error}", file=sys.stderr)
+        return 1
+    for problem in problems:
+        print(f"  {problem}", file=sys.stderr)
+    print(f"eval-integrity {'FAILED' if problems else 'passed'} against {args.base}")
+    return 1 if problems else 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="northwind_evals.cli")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -407,9 +435,13 @@ def main(argv: list[str] | None = None) -> int:
     gate.set_defaults(func=cmd_gate)
     promote = commands.add_parser("promote")
     promote.add_argument("--accept-regression", metavar="REASON", help="recorded in the baseline")
+    promote.add_argument("--bootstrap", metavar="REASON", help="start with no baseline; recorded")
     promote.add_argument("--check", action="store_true", help="report only; change nothing")
     promote.set_defaults(func=cmd_promote)
     commands.add_parser("review-list").set_defaults(func=cmd_review_list)
+    integrity = commands.add_parser("integrity")
+    integrity.add_argument("--base", default="origin/main")
+    integrity.set_defaults(func=cmd_integrity)
     args = parser.parse_args(argv)
     return int(args.func(args))
 

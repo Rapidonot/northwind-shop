@@ -20,7 +20,7 @@ from northwind_common.llm import anthropic_client
 from northwind_evals import cli
 from northwind_evals.answerers import Answerer, SingleShotAnswerer
 from northwind_evals.contexts import ContextChunk, SavedContext, load_contexts, save_contexts
-from northwind_evals.gate import Baseline, load_baseline, save_baseline
+from northwind_evals.gate import Baseline, load_baseline, save_baseline, summary_of
 from northwind_evals.items import MIN_HUMAN_REVIEWED, EvalItem, load_items
 from northwind_evals.judge import Judge
 from northwind_llm_replay.proxy import ProxyState
@@ -75,6 +75,14 @@ class FakeDb:
         return None
 
 
+def complete_baseline(retrieval: dict[str, Any], answers: dict[str, Any]) -> Baseline:
+    """A baseline as `promote` writes it: segments recorded, summary matching its scores."""
+    known = {i.id: i.segment for i in load_items(cli.ITEMS)} if cli.ITEMS.exists() else {}
+    segments = {i: known.get(i, "specification") for i in {*retrieval, *answers}}
+    summary = summary_of(retrieval, answers, segments)
+    return Baseline("dense-only", "r", "idx", "a", "j", retrieval, answers, summary, segments)
+
+
 class Rig:
     """Points the CLI at a temp tree and fakes live retrieval."""
 
@@ -112,10 +120,7 @@ class Rig:
         cli.ITEMS.write_text("\n".join(json.dumps(x) for x in lines) + "\n", encoding="utf-8")
 
     def write_baseline(self, retrieval: dict[str, Any], answers: dict[str, Any]) -> None:
-        save_baseline(
-            cli.BASELINE,
-            Baseline("dense-only", "r", "idx", "a", "j", retrieval, answers, summary={}),
-        )
+        save_baseline(cli.BASELINE, complete_baseline(retrieval, answers))
 
     def setup_one_item(self, *, live_ids: list[str] | None = None) -> None:
         ids = chunk_ids()
@@ -425,9 +430,7 @@ def test_the_committed_review_list_matches_the_committed_items() -> None:
 
 def write_candidate(answers: dict[str, Any], retrieval: dict[str, Any] | None = None) -> None:
     scores = retrieval or {"EV-1": {"recall@5": 1.0, "mrr": 1.0}}
-    save_baseline(
-        cli.CANDIDATE, Baseline("dense-only", "r", "idx", "a", "j", scores, answers, summary={})
-    )
+    save_baseline(cli.CANDIDATE, complete_baseline(scores, answers))
 
 
 def test_promote_replaces_the_baseline_and_consumes_the_candidate(rig: Rig) -> None:
@@ -638,3 +641,98 @@ def test_a_candidate_may_not_lose_a_gated_metric(rig: Rig) -> None:
     rig.setup_one_item()
     write_candidate({"EV-1": {k: v for k, v in GOOD.items() if k != "citation_ok"}})
     assert cli.main(["promote"]) == 1
+
+
+# --- routes that would weaken the gate silently (decision 0003) ---------------------------------
+
+
+def zero_tolerance_rig(rig: Rig) -> None:
+    rig.setup_one_item()
+    adversarial = item(segment="adversarial", expected_behaviour="contain")
+    rig.write_items([adversarial])
+    rig.write_baseline({"EV-1": {"recall@5": 1.0, "mrr": 1.0}}, {"EV-1": dict(GOOD)})
+
+
+def test_relabelling_a_zero_tolerance_item_cannot_be_promoted(rig: Rig) -> None:
+    zero_tolerance_rig(rig)
+    rig.write_items([item(segment="specification")])
+    write_candidate({"EV-1": dict(GOOD)})
+    assert cli.main(["promote", "--accept-regression", "tidying labels"]) == 1
+    assert load_baseline(cli.BASELINE).segments["EV-1"] == "adversarial"
+
+
+def test_deleting_a_zero_tolerance_item_cannot_be_promoted(rig: Rig) -> None:
+    zero_tolerance_rig(rig)
+    rig.write_items([item("EV-2")])
+    write_candidate({"EV-2": dict(GOOD)}, {"EV-2": {"recall@5": 1.0, "mrr": 1.0}})
+    assert cli.main(["promote", "--accept-regression", "tidying items"]) == 1
+    assert "EV-1" in load_baseline(cli.BASELINE).answers
+
+
+def test_promoting_with_no_baseline_needs_a_recorded_reason(rig: Rig) -> None:
+    rig.setup_one_item()
+    write_candidate({"EV-1": dict(GOOD)})
+    cli.BASELINE.unlink()
+    assert cli.main(["promote"]) == 1
+    assert not cli.BASELINE.exists()
+    assert cli.main(["promote", "--accept-regression", "no"]) == 1
+    assert cli.main(["promote", "--bootstrap", "  "]) == 1
+    assert cli.main(["promote", "--bootstrap", "first baseline"]) == 0
+    assert load_baseline(cli.BASELINE).overrides[0]["reason"] == "first baseline"
+
+
+def replayed_gate(monkeypatch: pytest.MonkeyPatch) -> int:
+    with ScriptedLLM() as llm:
+        llm.reply("Answer [P1].").reply(VERDICT)
+        scripted_clients(monkeypatch, llm)
+        return cli.main(["gate"])
+
+
+def test_the_gate_passes_only_when_replay_equals_the_baseline(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    rig.setup_one_item()
+    assert replayed_gate(monkeypatch) == 0
+    rig.write_baseline(
+        {"EV-1": {"recall@5": 1.0, "mrr": 1.0}}, {"EV-1": {**GOOD, "relevance": 0.99}}
+    )
+    assert replayed_gate(monkeypatch) == 1
+    assert "replayed scores differ" in capsys.readouterr().out
+
+
+def test_a_summary_that_does_not_match_its_scores_fails_the_gate(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    rig.setup_one_item()
+    doctored = replace(load_baseline(cli.BASELINE), summary={"answers": {"overall": {"n": 99}}})
+    save_baseline(cli.BASELINE, doctored)
+    assert replayed_gate(monkeypatch) == 1
+    assert "summary does not match" in capsys.readouterr().out
+
+
+def test_a_baseline_without_segments_fails_the_gate(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    rig.setup_one_item()
+    save_baseline(cli.BASELINE, replace(load_baseline(cli.BASELINE), segments={}))
+    assert replayed_gate(monkeypatch) == 1
+    assert "segment of every answer" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("value", [0.5, None])
+def test_a_doctored_behaviour_score_cannot_be_promoted(rig: Rig, value: float | None) -> None:
+    rig.setup_one_item()
+    scores: dict[str, Any] = {**GOOD, "behaviour_ok": value}
+    if value is None:
+        del scores["behaviour_ok"]
+    write_candidate({"EV-1": scores})
+    assert cli.main(["promote", "--accept-regression", "because"]) == 1
+
+
+def test_promote_recomputes_the_summary(rig: Rig) -> None:
+    rig.setup_one_item()
+    write_candidate({"EV-1": dict(GOOD)})
+    doctored = replace(load_baseline(cli.CANDIDATE), summary={"answers": {"overall": {"n": 99}}})
+    save_baseline(cli.CANDIDATE, doctored)
+    assert cli.main(["promote"]) == 0
+    assert load_baseline(cli.BASELINE).summary["answers"]["overall"]["n"] == 1

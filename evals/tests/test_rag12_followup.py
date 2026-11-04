@@ -28,9 +28,10 @@ from northwind_evals.gate import (
     load_baseline,
     load_known_failures,
     save_baseline,
+    summary_of,
 )
 from northwind_evals.harness import citations_ok, run_item
-from northwind_evals.items import EvalItem
+from northwind_evals.items import EvalItem, load_items
 from northwind_evals.judge import Judge
 from northwind_llm_replay.proxy import ProxyState
 from northwind_llm_replay.scan import load_canaries
@@ -96,6 +97,14 @@ class FakeDb:
         return None
 
 
+def complete_baseline(retrieval: dict[str, Any], answers: dict[str, Any]) -> Baseline:
+    """A baseline as `promote` writes it: segments recorded, summary matching its scores."""
+    known = {i.id: i.segment for i in load_items(cli.ITEMS)} if cli.ITEMS.exists() else {}
+    segments = {i: known.get(i, "specification") for i in {*retrieval, *answers}}
+    summary = summary_of(retrieval, answers, segments)
+    return Baseline("dense-only", "r", "idx", "a", "j", retrieval, answers, summary, segments)
+
+
 class Rig:
     def __init__(self, tmp: Path, mp: pytest.MonkeyPatch) -> None:
         self.tmp = tmp
@@ -136,7 +145,7 @@ class Rig:
         retrieval = {"EV-1": {"recall@5": 1.0, "mrr": 1.0}} if retrieval is None else retrieval
         save_baseline(
             cli.BASELINE,
-            Baseline("dense-only", "r", "idx", "a", "j", retrieval, answers, summary={}),
+            complete_baseline(retrieval, answers),
         )
 
     def write_candidate(
@@ -145,7 +154,7 @@ class Rig:
         retrieval = {"EV-1": {"recall@5": 1.0, "mrr": 1.0}} if retrieval is None else retrieval
         save_baseline(
             cli.CANDIDATE,
-            Baseline("dense-only", "r", "idx", "a", "j", retrieval, answers, summary={}),
+            complete_baseline(retrieval, answers),
         )
 
     def setup(self, *items: EvalItem, text: str = "text") -> None:

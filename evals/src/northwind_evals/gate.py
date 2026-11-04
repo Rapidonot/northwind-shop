@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from northwind_evals.items import EvalItem
-from northwind_evals.metrics import mean
+from northwind_evals.metrics import aggregate, mean
 
 # Absolute drops. One item is about 0.015 of a retrieval metric at the starter set's size.
 TOLERANCES = {
@@ -136,24 +136,71 @@ def _containment(
         if current.get(entry.item_id, {}).get("behaviour_ok") == 1.0:
             result.containment.append(f"{entry.item_id}: now passes, remove it from known failures")
     for item_id, scores in current.items():
-        failed = scores.get("behaviour_ok") == 0.0
+        failed = scores.get("behaviour_ok") != 1.0
         if failed and segments.get(item_id) in ZERO_TOLERANCE_SEGMENTS and item_id not in listed:
             result.containment.append(f"{item_id}: containment failed")
+
+
+def identity_problems(baseline: Baseline, items: Sequence[EvalItem]) -> list[str]:
+    """Zero-tolerance items recorded in the baseline must still be there, in the same segment.
+    Checked against the old baseline at promotion too: promoting would erase the evidence."""
+    current = {item.id: item.segment for item in items}
+    problems = []
+    for item_id, segment in sorted(baseline.segments.items()):
+        if segment not in ZERO_TOLERANCE_SEGMENTS:
+            continue
+        if item_id not in current:
+            problems.append(f"{item_id}: removed from the set")
+        elif current[item_id] != segment:
+            problems.append(f"{item_id}: moved out of {segment}")
+    return problems
 
 
 def coverage_problems(baseline: Baseline, items: Sequence[EvalItem]) -> list[str]:
     """Every zero-tolerance item stays gated: none leaves by shrinking, deletion or relabelling."""
     if not baseline.answers:
         return ["the baseline has no answers"]
+    if not set(baseline.answers) <= set(baseline.segments):
+        return ["the baseline does not record the segment of every answer"]
     current = {item.id: item.segment for item in items}
     required = [i for i, segment in current.items() if segment in ZERO_TOLERANCE_SEGMENTS]
     problems = [f"{i}: not in the baseline" for i in required if i not in baseline.answers]
     removed = baseline.answers.keys() - current.keys()
     problems += [f"{i}: in the baseline but not in the set" for i in sorted(removed)]
-    for item_id, segment in baseline.segments.items():
-        if segment in ZERO_TOLERANCE_SEGMENTS and current.get(item_id, segment) != segment:
-            problems.append(f"{item_id}: moved out of {segment}")
-    return problems
+    return problems + identity_problems(baseline, items)
+
+
+def score_drift(baseline: Baseline, answers: Scores) -> list[str]:
+    """Replay is hash-matched, so replayed scores equal the baseline exactly. Any difference means
+    the baseline, a candidate or a recording was changed outside a recording run."""
+    return [
+        f"{item_id}: replayed scores differ from the baseline"
+        for item_id, scores in sorted(answers.items())
+        if dict(scores) != baseline.answers.get(item_id)
+    ]
+
+
+def summary_of(
+    retrieval: Scores, answers: Scores, segments: Mapping[str, str]
+) -> dict[str, dict[str, dict[str, float | None]]]:
+    return {"retrieval": aggregate(retrieval, segments), "answers": aggregate(answers, segments)}
+
+
+def summary_problems(baseline: Baseline) -> list[str]:
+    """The readable part of a baseline must describe the scores it sits above."""
+    if not {*baseline.retrieval, *baseline.answers} <= set(baseline.segments):
+        return ["the baseline does not record the segment of every item it scores"]
+    if baseline.summary != summary_of(baseline.retrieval, baseline.answers, baseline.segments):
+        return ["the baseline summary does not match its scores"]
+    return []
+
+
+def malformed_behaviour(answers: Scores) -> list[str]:
+    return [
+        f"{item_id}: behaviour_ok must be 0 or 1"
+        for item_id, scores in sorted(answers.items())
+        if scores.get("behaviour_ok") not in (0.0, 1.0)
+    ]
 
 
 def dropped_items(baseline: Baseline, candidate: Baseline, items: Sequence[EvalItem]) -> list[str]:

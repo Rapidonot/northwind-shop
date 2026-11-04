@@ -22,8 +22,16 @@ baseline was never gated, and one override could remove an item's protection for
 5. Groundedness is not scored on an answer that declines. A fabrication on an unanswerable item is
    still scored.
 
+6. Recorded evidence is checked, not trusted. Replayed answer scores must equal the baseline exactly,
+   its summary must match its scores, and `make eval-integrity` refuses any modified cassette or lost
+   override, compared with `origin/main`. Promoting with no baseline needs a recorded reason.
+
 ## Consequences
 
 - Promotion is a user step, so `make ci` stays red on a baseline that doesn't meet rule 4.
+- A zero-tolerance item cannot be deleted or relabelled through the tools at all. That needs a new
+  decision and a visible hand edit to the baseline.
+- `approved_by` and override reasons are plain strings, so they record a claim, not proof. Stronger
+  proof needs something Claude cannot produce: permission rules, a second reviewer or signed commits.
 - After the credits expire, stale recordings need `EVAL_ALLOW_STALE=1` in CI, which is a separate
   decision to record then.

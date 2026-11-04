@@ -17,7 +17,7 @@ override ANTHROPIC_API_KEY :=
 unexport ANTHROPIC_API_KEY
 
 .PHONY: help setup up down dev dev-gateway dev-portal data ingest fmt lint test test-integration ci \
-	scan-cassettes llm-spend llm-proxy record eval-live eval-rescore eval-gate eval-gate-stale-ok eval-promote eval-snapshot eval-review-list
+	scan-cassettes llm-spend llm-proxy record eval-live eval-rescore eval-gate eval-integrity eval-gate-stale-ok eval-promote eval-snapshot eval-review-list
 
 # Linked git worktrees never get a .env: the LLM proxy reads the key from the main checkout's
 # file (LLM_ENV_FILE), and nothing else needs one there (FOUND-2 addendum).
@@ -109,8 +109,11 @@ eval-gate-stale-ok: ingest ## The gate, but stale items pass and are reported as
 eval-rescore: ingest ## Rebuild the baseline candidate from the recordings after a scoring change
 	LLM_MODE=replay uv run python -m northwind_evals.cli rescore
 
+eval-integrity: ## Refuse edited cassettes and lost overrides, against origin/main (decision 0003)
+	uv run python -m northwind_evals.cli integrity
+
 eval-promote: ## Replace the baseline with the candidate (a regression needs ACCEPT_REGRESSION="reason", which is recorded)
-	uv run python -m northwind_evals.cli promote $(if $(ACCEPT_REGRESSION),--accept-regression "$$ACCEPT_REGRESSION")
+	uv run python -m northwind_evals.cli promote $(if $(ACCEPT_REGRESSION),--accept-regression "$$ACCEPT_REGRESSION") $(if $(BOOTSTRAP),--bootstrap "$$BOOTSTRAP")
 
 eval-snapshot: ## Save each eval item's retrieved context, the input for answers (no LLM; RAG-12)
 	uv run python -m northwind_evals.cli snapshot
@@ -118,4 +121,4 @@ eval-snapshot: ## Save each eval item's retrieved context, the input for answers
 eval-review-list: ## Write the list of eval items waiting for human review (RAG-12)
 	uv run python -m northwind_evals.cli review-list
 
-ci: lint scan-cassettes test test-integration eval-gate ## Everything CI runs, in the same order
+ci: lint scan-cassettes test test-integration eval-integrity eval-gate ## Everything CI runs, in the same order

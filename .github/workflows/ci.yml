@@ -71,8 +71,12 @@ jobs:
       FASTEMBED_CACHE_PATH: /home/runner/.cache/fastembed
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0  # eval-integrity compares with origin/main
       - uses: astral-sh/setup-uv@v7
       - run: uv sync --locked
+      - name: Eval integrity
+        run: uv run python -m northwind_evals.cli integrity
       - name: Cache the embedding model
         uses: actions/cache@v4
         with:

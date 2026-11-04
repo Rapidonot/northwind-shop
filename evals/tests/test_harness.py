@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import json
+import os
+import subprocess
+import sys
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -63,6 +66,7 @@ def baseline(recall: float = 0.8, groundedness: float = 0.9) -> Baseline:
         retrieval={"EV-1": {"recall@5": recall, "mrr": 0.5}},
         answers={"EV-1": {"groundedness": groundedness, "relevance": 1.0}},
         summary={},
+        segments={"EV-1": "specification"},
     )
 
 
@@ -430,3 +434,39 @@ def test_scanner_refuses_a_canary_and_never_prints_it() -> None:
     [finding] = scan_text("x NWCANARY-abc y", canaries=frozenset({"NWCANARY-abc"}))
     assert finding.kind == "internal-canary"
     assert "NWCANARY" not in str(finding)
+
+
+_DEFAULT_JUDGE = """
+import json
+from northwind_common.llm import anthropic_client
+from northwind_evals.items import EvalItem
+from northwind_evals.contexts import ContextChunk
+from northwind_evals.judge import Judge
+from northwind_llm_replay.scripted import ScriptedLLM
+
+verdict = {"claims": [], "relevance": "full", "declined": False, "behaviour_ok": True}
+item = EvalItem(
+    "EV-1", "specification", "q?", "US", "answer", (("P1",),), ("f",), "w", None, "model"
+)
+with ScriptedLLM() as llm:
+    llm.reply(json.dumps(verdict))
+    judge = Judge(anthropic_client(llm.url))
+    judge.judge(item, (ContextChunk("product:P1:0", "P1", "product", "text"),), "answer")
+    print(json.dumps({"id": judge.id, "sent": llm.requests[0]["body"]["model"]}))
+"""
+
+
+def test_the_default_judge_is_sonnet_5_5_when_no_model_is_passed() -> None:
+    """A fresh process with JUDGE_MODEL unset, because the default is read at import."""
+    env = {k: v for k, v in os.environ.items() if k != "JUDGE_MODEL"}
+    done = subprocess.run(  # noqa: S603  (fixed argv: this interpreter and a literal script)
+        [sys.executable, "-c", _DEFAULT_JUDGE], env=env, capture_output=True, text=True, check=True
+    )
+    result = json.loads(done.stdout.splitlines()[-1])
+    assert result["sent"] == "claude-sonnet-5-5"
+    assert result["id"].endswith(":claude-sonnet-5-5")
+
+
+def test_the_cli_builds_its_judge_with_the_default_model() -> None:
+    source = (REPO / "evals/src/northwind_evals/cli.py").read_text(encoding="utf-8")
+    assert "Judge(judge_client)" in source
