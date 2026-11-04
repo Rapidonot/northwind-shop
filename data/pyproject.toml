@@ -1,0 +1,12 @@
+[project]
+name = "northwind-data"
+version = "0.0.0"
+description = "Seeded synthetic data generator: catalog, reviews, guides, policies, live tables, answer key (FOUND-1)"
+requires-python = ">=3.12,<3.13"
+# Faker is pinned exactly: its output for a given seed can change between releases, and the
+# fixtures (and every cassette recorded against them) must stay byte-identical.
+dependencies = ["faker==40.44.0"]
+
+[build-system]
+requires = ["uv_build>=0.12,<0.13"]
+build-backend = "uv_build"

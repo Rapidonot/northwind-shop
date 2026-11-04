@@ -54,13 +54,14 @@ docs/            PRD.md, images/, decisions/
 make setup            # uv sync + pnpm install; creates .env from env.example
 make up | make down   # docker compose stack (Postgres 16 + pgvector), waits for healthy
 make dev              # gateway on :8000 + portal on :5173 (Vite proxies /api)
+make data             # regenerate data/fixtures (seeded, byte-identical; bump DATA_VERSION if output changes)
 make fmt              # ruff format + autofix
 make lint             # ruff, ruff format --check, mypy (strict), eslint, tsc
 make test             # unit tests: pytest (excludes integration) + vitest
 make test-integration # pytest -m integration (needs `make up`)
 make ci               # lint + test + test-integration, the same steps as GitHub CI
 ```
-Added later: `make data` (FOUND-1), `make record SUITE=…` / `make eval-live` / `make llm-spend`
+Added later: `make record SUITE=…` / `make eval-live` / `make llm-spend`
 (FOUND-2), `make ingest` (RAG-01), `make eval` / `make eval-gate` (RAG-12), `make e2e` with
 Playwright (SA-02 crude). Only `make record` and `make eval-live` spend API credit; everything
 else runs in replay.

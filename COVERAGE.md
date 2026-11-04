@@ -9,7 +9,7 @@ Features and pass tests are defined in docs/PRD.md §6; this file only tracks ev
 | CC-01 | CLAUDE.md hierarchy, @import, CLAUDE.local.md, /memory, /init, /context | partial | 2026-11-03: project CLAUDE.md with stack, layout, hard rules, commands; imports @PROGRESS.md. Still to do: per-service CLAUDE.md files, a shared-standards import, a clean-clone check |
 | CC-02 | Path-scoped rules in .claude/rules/ | todo | |
 | CC-03 | Auto memory | todo | |
-| CC-04 | Plan mode and /plan | partial | 2026-11-03: plan mode used before writing the PRD conversion and FOUND-0. Still to do: plans for the payment port and the RAG pipeline epics |
+| CC-04 | Plan mode and /plan | partial | 2026-11-03: plan mode used before writing the PRD conversion and FOUND-0; 2026-11-04: FOUND-1 planned in plan mode, the user approved with four changes (wide-frame text, strict under-150, billing open item, separate docs PR), which were applied before implementation. Still to do: plans for the payment port and the RAG pipeline epics |
 | CC-05 | Context control: /compact, /context, /model, /effort, /usage | todo | |
 | CC-06 | Session management: --resume, --continue, /fork, /branch | todo | |
 | CC-07 | Custom skills | todo | |
