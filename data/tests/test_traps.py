@@ -310,3 +310,26 @@ def test_answer_key_content_never_leaks_into_ingestible_files(ds: Dataset) -> No
     for name in ds.manifest["ingestible"]:
         text = ds.files[name].decode("utf-8")
         assert "TRAP-" not in text and "never_ingest" not in text and "_answer_key" not in text
+
+
+@pytest.mark.req("FOUND-1")
+@pytest.mark.req("RAG-11")
+def test_p0009_is_the_internal_unreleased_product_on_product_and_every_variant(
+    ds: Dataset, t: Tables, key: dict[str, Any]
+) -> None:
+    # Pinned by ID: PROGRESS #10 (mcp-catalog) tests that P0009 never reaches shopper callers.
+    p = t.products["P0009"]
+    assert p["visibility"] == "internal" and p["status"] == "unreleased"
+    assert p["regions"] == [] and p["price_bands"] == {}
+    variants = t.variants["P0009"]
+    assert variants and all(v["visibility"] == "internal" for v in variants)
+    ids = {v["variant_id"] for v in variants}
+    assert not any(r["variant_id"] in ids for r in ds.jsonl("prices.jsonl"))
+    assert not any(r["variant_id"] in ids for r in ds.jsonl("stock.jsonl"))
+    assert t.reviews["P0009"] == []
+    entry = next(e for e in key["internal_only"] if e.get("product_id") == "P0009")
+    assert entry["canary"] in p["description"]
+    # It is the only internal product.
+    assert [q["product_id"] for q in t.products.values() if q["visibility"] != "public"] == [
+        "P0009"
+    ]
