@@ -148,14 +148,21 @@ def agent_options(
     *,
     system_prompt: str,
     model: str,
+    tools: list[str],
     runtime: AgentRuntime | None = None,
     extra_args: Mapping[str, str | None] | None = None,
     **kwargs: Any,
 ) -> Any:
-    """ClaudeAgentOptions for a lab agent. `system_prompt` and `model` are required, so no run
-    picks up Claude Code's default prompt or model by accident."""
+    """ClaudeAgentOptions for a lab agent. `system_prompt`, `model` and `tools` are required, so no
+    run picks up Claude Code's default prompt, model or tools by accident.
+
+    `tools` is the built-in set; `[]` means none. It must be a list: the SDK adds no flag for
+    `None` and sends `--tools default` for any other type (FOUND-2 review 8). In-process tools go
+    in `mcp_servers` and `allowed_tools`, not here."""
     from claude_agent_sdk import ClaudeAgentOptions
 
+    if not isinstance(tools, list):
+        raise TypeError(f"tools must be a list, not {type(tools).__name__}")
     rt = runtime or agent_runtime()
     args: dict[str, str | None] = {"bare": None}
     if extra_args:
@@ -163,6 +170,7 @@ def agent_options(
     return ClaudeAgentOptions(
         system_prompt=system_prompt,
         model=model,
+        tools=tools,
         cli_path=rt.launcher,
         cwd=rt.workdir,
         setting_sources=[],

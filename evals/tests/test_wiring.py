@@ -157,10 +157,10 @@ def test_the_live_target_help_says_it_spends() -> None:
 # --- condition f: DB-backed tests are not silently deselected -------------------------------
 
 
-def test_default_pytest_deselects_integration_so_record_must_override_it() -> None:
+def test_default_pytest_deselects_integration_and_e2e_so_record_must_override_it() -> None:
     pyproject = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))
     addopts = pyproject["tool"]["pytest"]["ini_options"]["addopts"]
-    assert addopts[addopts.index("-m") + 1] == "not integration"
+    assert addopts[addopts.index("-m") + 1] == "not integration and not e2e"
 
 
 def test_make_record_overrides_the_default_marker_filter() -> None:

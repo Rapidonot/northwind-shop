@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -77,10 +78,37 @@ def test_launcher_runs_the_cli_with_exactly_that_env(tmp_path: Path) -> None:
     assert seen == env
 
 
+@pytest.mark.req("SA-02")
+def test_agent_options_require_tools(tmp_path: Path) -> None:
+    """FOUND-2 review 8: with no `tools` the SDK adds no --tools flag at all."""
+    rt = agent_runtime(base_url="http://127.0.0.1:9/", root=tmp_path / "rt")
+    with pytest.raises(TypeError):
+        agent_options(system_prompt="sp", model="claude-haiku-5-5", runtime=rt)  # type: ignore[call-arg]
+
+
+@pytest.mark.req("SA-02")
+@pytest.mark.parametrize("tools", [None, (), ("Read",), "Read", {"type": "preset"}])
+def test_agent_options_refuse_anything_but_a_list(tmp_path: Path, tools: Any) -> None:
+    """The SDK sends `--tools default` for any non-list, so a tuple means every default tool."""
+    rt = agent_runtime(base_url="http://127.0.0.1:9/", root=tmp_path / "rt")
+    with pytest.raises(TypeError, match="tools"):
+        agent_options(system_prompt="sp", model="claude-haiku-5-5", tools=tools, runtime=rt)
+
+
+@pytest.mark.req("SA-02")
+def test_an_empty_tools_list_reaches_the_cli_as_no_tools(tmp_path: Path) -> None:
+    from claude_agent_sdk._internal.transport.subprocess_cli import SubprocessCLITransport
+
+    rt = agent_runtime(base_url="http://127.0.0.1:9/", root=tmp_path / "rt")
+    opts = agent_options(system_prompt="sp", model="claude-haiku-5-5", tools=[], runtime=rt)
+    command = SubprocessCLITransport(prompt="hi", options=opts)._build_command()
+    assert command[command.index("--tools") + 1] == ""
+
+
 @pytest.mark.req("FOUND-2")
 def test_agent_options_use_launcher_bare_mode_and_no_settings(tmp_path: Path) -> None:
     rt = agent_runtime(base_url="http://127.0.0.1:9/", root=tmp_path / "rt")
-    opts = agent_options(system_prompt="sp", model="claude-haiku-5-5", runtime=rt)
+    opts = agent_options(system_prompt="sp", model="claude-haiku-5-5", tools=[], runtime=rt)
     assert Path(str(opts.cli_path)) == rt.launcher
     assert opts.setting_sources == []
     assert "bare" in opts.extra_args and opts.extra_args["bare"] is None

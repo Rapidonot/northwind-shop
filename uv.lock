@@ -4,6 +4,7 @@ requires-python = "==3.12.*"
 
 [manifest]
 members = [
+    "northwind-assistant",
     "northwind-common",
     "northwind-data",
     "northwind-evals",
@@ -697,6 +698,25 @@ wheels = [
 ]
 
 [[package]]
+name = "northwind-assistant"
+version = "0.0.0"
+source = { editable = "services/assistant" }
+dependencies = [
+    { name = "claude-agent-sdk" },
+    { name = "northwind-common" },
+    { name = "northwind-rag" },
+    { name = "psycopg", extra = ["binary"] },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "claude-agent-sdk" },
+    { name = "northwind-common", editable = "services/common" },
+    { name = "northwind-rag", editable = "services/rag" },
+    { name = "psycopg", extras = ["binary"], specifier = ">=3.3.7" },
+]
+
+[[package]]
 name = "northwind-common"
 version = "0.0.0"
 source = { editable = "services/common" }
@@ -749,6 +769,9 @@ version = "0.0.0"
 source = { editable = "services/gateway" }
 dependencies = [
     { name = "fastapi" },
+    { name = "northwind-assistant" },
+    { name = "northwind-common" },
+    { name = "northwind-rag" },
     { name = "psycopg", extra = ["binary"] },
     { name = "uvicorn", extra = ["standard"] },
 ]
@@ -756,6 +779,9 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "fastapi", specifier = ">=0.162.0" },
+    { name = "northwind-assistant", editable = "services/assistant" },
+    { name = "northwind-common", editable = "services/common" },
+    { name = "northwind-rag", editable = "services/rag" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.3.7" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.54.0" },
 ]
@@ -803,6 +829,7 @@ name = "northwind-shop"
 version = "0.0.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "northwind-assistant" },
     { name = "northwind-common" },
     { name = "northwind-data" },
     { name = "northwind-evals" },
@@ -821,6 +848,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "northwind-assistant", editable = "services/assistant" },
     { name = "northwind-common", editable = "services/common" },
     { name = "northwind-data", editable = "data" },
     { name = "northwind-evals", editable = "evals" },

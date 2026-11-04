@@ -62,7 +62,9 @@ make fmt              # ruff format + autofix
 make lint             # ruff, ruff format --check, mypy (strict), eslint, tsc
 make test             # unit tests: pytest (excludes integration) + vitest
 make test-integration # pytest -m integration (needs `make up`)
-make ci               # lint + scan-cassettes + test + test-integration, the same steps as GitHub CI
+make ci               # lint + scan-cassettes + test + test-integration + eval-integrity + eval-gate; GitHub CI's e2e job is `make e2e`
+make e2e              # smoke test in replay: assistant, then Playwright (needs a browser and the cassette)
+make e2e-scripted     # the Playwright smoke test on a canned model (no recording needed)
 make record SUITE=…   # SPENDS: re-record one cassette suite (new requests live, under LLM_RUN_BUDGET_USD)
 make eval-live EVAL_SLICE=<n>  # SPENDS: record answers + verdicts into a baseline candidate (digits only; n >= item count is a full run)
 make eval-rescore     # rebuild the candidate from the recordings after a scoring change (never spends)
@@ -75,7 +77,7 @@ make llm-spend        # shared ledger: total, per suite/model, 20-call checkpoin
 make scan-cassettes   # secret/PAN scan of cassettes, ledger and proxy log
 make llm-proxy        # dev LLM proxy on this worktree's port (LLM_MODE, default replay)
 ```
-Added later: `make e2e` with Playwright (SA-02 crude). Only `make record` and `make eval-live` spend API credit; everything
+Only `make record` and `make eval-live` spend API credit; everything
 else runs in replay.
 
 LLM clients (FOUND-2): build every client with `northwind_common.llm` (`anthropic_client()`,

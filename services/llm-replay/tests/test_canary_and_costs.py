@@ -16,6 +16,7 @@ from pathlib import Path
 
 import pytest
 
+from northwind_common.cards import luhn_ok
 from northwind_llm_replay import cli
 from northwind_llm_replay.cassette import Cassette, CassetteStore, DirtyCassetteError
 from northwind_llm_replay.ledger import Ledger, new_id
@@ -25,7 +26,6 @@ from northwind_llm_replay.scan import (
     ANSWER_KEY,
     LEGACY_LEDGER_VALUES,
     load_canaries,
-    luhn_ok,
     scan_paths,
     scan_text,
     without_ledger_ids,

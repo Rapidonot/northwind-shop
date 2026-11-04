@@ -120,16 +120,54 @@ def message_sse(
     return "".join(parts)
 
 
+def blocks_sse(
+    model: str,
+    blocks: list[dict[str, Any]],
+    stop_reason: str,
+    usage: dict[str, int],
+    msg_id: str,
+) -> str:
+    """A full stream of `text` blocks (`chunks`: one delta each) and `tool_use` blocks."""
+
+    def ev(name: str, data: dict[str, Any]) -> str:
+        return f"event: {name}\ndata: {json.dumps({'type': name, **data})}\n\n"
+
+    start_usage = {k: v for k, v in usage.items() if k != "output_tokens"} | {"output_tokens": 1}
+    msg = message_json(model, "", start_usage, msg_id) | {"content": [], "stop_reason": None}
+    parts = [ev("message_start", {"message": msg})]
+    for index, block in enumerate(blocks):
+        if block["type"] == "text":
+            start: dict[str, Any] = {"type": "text", "text": ""}
+            deltas = [{"type": "text_delta", "text": chunk} for chunk in block["chunks"]]
+        else:
+            start = {"type": "tool_use", "id": block["id"], "name": block["name"], "input": {}}
+            deltas = [{"type": "input_json_delta", "partial_json": json.dumps(block["input"])}]
+        parts.append(ev("content_block_start", {"index": index, "content_block": start}))
+        parts += [ev("content_block_delta", {"index": index, "delta": d}) for d in deltas]
+        parts.append(ev("content_block_stop", {"index": index}))
+    parts.append(
+        ev(
+            "message_delta",
+            {
+                "delta": {"stop_reason": stop_reason, "stop_sequence": None},
+                "usage": {"output_tokens": usage.get("output_tokens", 0)},
+            },
+        )
+    )
+    parts.append(ev("message_stop", {}))
+    return "".join(parts)
+
+
 class ScriptedLLM:
     """`with ScriptedLLM() as llm: llm.reply("hi"); client = anthropic_client(base_url=llm.url)`."""
 
-    def __init__(self, *, require_placeholder: bool = True) -> None:
+    def __init__(self, *, require_placeholder: bool = True, port: int = 0) -> None:
         self.queue: deque[Scripted] = deque()
         self.requests: list[dict[str, Any]] = []
         self.require_placeholder = require_placeholder
         self._lock = threading.Lock()
         app = Starlette(routes=[Route("/{path:path}", self._handle, methods=["GET", "POST"])])
-        self._server = ServerThread(app)
+        self._server = ServerThread(app, port)
 
     def reply(self, text: str, **usage: int) -> ScriptedLLM:
         self.queue.append(
@@ -142,6 +180,22 @@ class ScriptedLLM:
     ) -> ScriptedLLM:
         self.queue.append(Scripted(raw=(status, content_type, body)))
         return self
+
+    def reply_stream(self, *chunks: str, model: str = "scripted") -> ScriptedLLM:
+        """A text answer in several deltas, as a real stream arrives."""
+        blocks = [{"type": "text", "chunks": list(chunks)}]
+        usage = {"input_tokens": 10, "output_tokens": 5}
+        body = blocks_sse(model, blocks, "end_turn", usage, "msg_scripted_stream")
+        return self.reply_raw(200, body, "text/event-stream")
+
+    def reply_tool_use(
+        self, name: str, arguments: dict[str, Any], tool_id: str = "toolu_scripted"
+    ) -> ScriptedLLM:
+        """A turn that calls one tool. Use `reply` or `reply_stream` for the turn after it."""
+        blocks = [{"type": "tool_use", "id": tool_id, "name": name, "input": arguments}]
+        usage = {"input_tokens": 10, "output_tokens": 5}
+        body = blocks_sse("scripted", blocks, "tool_use", usage, f"msg_{tool_id}")
+        return self.reply_raw(200, body, "text/event-stream")
 
     def reply_cut_stream(self, text: str = "partial") -> ScriptedLLM:
         self.queue.append(Scripted(text=text, cut_stream=True))

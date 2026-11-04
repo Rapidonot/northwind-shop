@@ -1,28 +1,34 @@
 """FastAPI app for the portal gateway.
 
-FOUND-0: only a health endpoint that proves the portal -> gateway -> Postgres path works.
+FOUND-0: a health endpoint that proves the portal -> gateway -> Postgres path works.
+SA-02: the chat endpoint, in `northwind_gateway.chat`.
 """
 
-import os
 from typing import Literal
 
 import psycopg
 from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel
 
-DEFAULT_DATABASE_URL = "postgresql://northwind:northwind-local@localhost:5432/northwind"
+from northwind_gateway.chat import (
+    CardNumberRefused,
+    card_refused,
+    invalid_request,
+    router,
+)
+from northwind_gateway.settings import database_url
 
 app = FastAPI(title="Northwind gateway")
+app.include_router(router)
+app.add_exception_handler(RequestValidationError, invalid_request)
+app.add_exception_handler(CardNumberRefused, card_refused)
 
 
 class Health(BaseModel):
     status: Literal["ok"] = "ok"
     db: Literal["ok", "unavailable"]
     pgvector: str | None = None
-
-
-def database_url() -> str:
-    return os.environ.get("DATABASE_URL", DEFAULT_DATABASE_URL)
 
 
 @app.get("/api/healthz")

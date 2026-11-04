@@ -6,6 +6,7 @@ requires-python = ">=3.12,<3.13"
 # When you add services/<name>/, add it here and under [tool.uv.sources]. data/ (FOUND-1) is
 # a workspace member too.
 dependencies = [
+    "northwind-assistant",
     "northwind-common",
     "northwind-data",
     "northwind-evals",
@@ -15,6 +16,7 @@ dependencies = [
 ]
 
 [tool.uv.sources]
+northwind-assistant = { workspace = true }
 northwind-common = { workspace = true }
 northwind-data = { workspace = true }
 northwind-evals = { workspace = true }
@@ -47,10 +49,11 @@ python_version = "3.12"
 
 [tool.pytest.ini_options]
 testpaths = ["services", "data", "evals", "tests"]
-addopts = ["--strict-markers", "-m", "not integration", "--import-mode=importlib"]
+addopts = ["--strict-markers", "-m", "not integration and not e2e", "--import-mode=importlib"]
 markers = [
     "req(id): the PRD requirement ID (e.g. RAG-03) whose acceptance criterion this test proves",
     "integration: needs the local stack (make up); run with `make test-integration`",
+    "e2e: needs the real index and a recording; run with `make e2e`",
 ]
 
 [dependency-groups]

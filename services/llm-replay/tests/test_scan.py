@@ -11,7 +11,8 @@ from pathlib import Path
 
 import pytest
 
-from northwind_llm_replay.scan import KEY_FRAGMENT_LEN, luhn_ok, scan_paths, scan_text
+from northwind_common.cards import luhn_ok
+from northwind_llm_replay.scan import KEY_FRAGMENT_LEN, scan_paths, scan_text
 
 FAKE_KEY = "sk-ant-" + "api03-" + "Zq7" * 20  # fake, never a real key
 OPAQUE_KEY = "nwfake" + "0123456789abcdefghijKLMNOP" * 2  # a key format no regex knows
