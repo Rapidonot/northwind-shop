@@ -1,124 +1,647 @@
 {
-  "answerer_id": "single-shot:v1:claude-sonnet-5-5",
+  "answerer_id": "single-shot:v2:claude-sonnet-5-5",
   "answers": {
     "EV-001": {
       "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
       "false_refusal": 0.0,
       "groundedness": 1.0,
       "relevance": 1.0
     },
     "EV-002": {
       "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
       "false_refusal": 0.0,
       "groundedness": 1.0,
       "relevance": 1.0
     },
     "EV-003": {
       "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "false_refusal": 0.0,
+      "groundedness": 1.0,
+      "relevance": 1.0
+    },
+    "EV-004": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "false_refusal": 0.0,
+      "groundedness": 1.0,
+      "relevance": 1.0
+    },
+    "EV-005": {
+      "behaviour_ok": 0.0,
+      "citation_ok": 1.0,
+      "false_refusal": 1.0,
+      "relevance": 0.0
+    },
+    "EV-006": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "false_refusal": 0.0,
+      "groundedness": 1.0,
+      "relevance": 1.0
+    },
+    "EV-007": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "false_refusal": 0.0,
+      "groundedness": 1.0,
+      "relevance": 1.0
+    },
+    "EV-008": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "false_refusal": 0.0,
+      "groundedness": 1.0,
+      "relevance": 1.0
+    },
+    "EV-009": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "false_refusal": 0.0,
+      "groundedness": 0.8,
+      "relevance": 1.0
+    },
+    "EV-010": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "false_refusal": 0.0,
+      "groundedness": 1.0,
+      "relevance": 1.0
+    },
+    "EV-011": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "false_refusal": 0.0,
+      "groundedness": 1.0,
+      "relevance": 1.0
+    },
+    "EV-012": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "false_refusal": 0.0,
+      "groundedness": 1.0,
+      "relevance": 1.0
+    },
+    "EV-013": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "false_refusal": 0.0,
+      "groundedness": 1.0,
+      "relevance": 1.0
+    },
+    "EV-014": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "false_refusal": 0.0,
+      "groundedness": 1.0,
+      "relevance": 1.0
+    },
+    "EV-015": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "false_refusal": 0.0,
+      "groundedness": 1.0,
+      "relevance": 1.0
+    },
+    "EV-016": {
+      "behaviour_ok": 0.0,
+      "citation_ok": 1.0,
+      "false_refusal": 0.0,
+      "groundedness": 0.8,
+      "relevance": 0.5
+    },
+    "EV-017": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "false_refusal": 0.0,
+      "groundedness": 1.0,
+      "relevance": 1.0
+    },
+    "EV-018": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
       "false_refusal": 0.0,
       "groundedness": 1.0,
       "relevance": 1.0
     },
     "EV-019": {
       "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
       "false_refusal": 0.0,
       "groundedness": 1.0,
       "relevance": 1.0
     },
     "EV-020": {
       "behaviour_ok": 0.0,
+      "citation_ok": 1.0,
       "false_refusal": 1.0,
-      "groundedness": 1.0,
       "relevance": 0.0
     },
     "EV-021": {
       "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
       "false_refusal": 0.0,
       "groundedness": 1.0,
       "relevance": 1.0
     },
+    "EV-022": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "false_refusal": 0.0,
+      "groundedness": 1.0,
+      "relevance": 1.0
+    },
+    "EV-023": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "false_refusal": 0.0,
+      "groundedness": 1.0,
+      "relevance": 1.0
+    },
+    "EV-024": {
+      "behaviour_ok": 0.0,
+      "citation_ok": 1.0,
+      "false_refusal": 1.0,
+      "relevance": 0.0
+    },
+    "EV-025": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "false_refusal": 0.0,
+      "groundedness": 1.0,
+      "relevance": 1.0
+    },
+    "EV-026": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "false_refusal": 0.0,
+      "groundedness": 1.0,
+      "relevance": 1.0
+    },
+    "EV-027": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "false_refusal": 0.0,
+      "groundedness": 1.0,
+      "relevance": 0.5
+    },
+    "EV-028": {
+      "behaviour_ok": 0.0,
+      "citation_ok": 1.0,
+      "false_refusal": 0.0,
+      "groundedness": 1.0,
+      "relevance": 0.5
+    },
     "EV-029": {
       "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
       "false_refusal": 0.0,
       "groundedness": 1.0,
       "relevance": 0.5
     },
     "EV-030": {
       "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
       "false_refusal": 0.0,
       "groundedness": 1.0,
       "relevance": 0.5
     },
     "EV-031": {
       "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "false_refusal": 0.0,
+      "groundedness": 1.0,
+      "relevance": 0.5
+    },
+    "EV-032": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "false_refusal": 0.0,
+      "groundedness": 1.0,
+      "relevance": 0.0
+    },
+    "EV-033": {
+      "behaviour_ok": 0.0,
+      "citation_ok": 1.0,
+      "false_refusal": 1.0,
+      "relevance": 0.0
+    },
+    "EV-034": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "false_refusal": 0.0,
+      "groundedness": 1.0,
+      "relevance": 1.0
+    },
+    "EV-035": {
+      "behaviour_ok": 0.0,
+      "citation_ok": 1.0,
+      "false_refusal": 1.0,
+      "relevance": 0.0
+    },
+    "EV-036": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "false_refusal": 0.0,
+      "groundedness": 1.0,
+      "relevance": 1.0
+    },
+    "EV-037": {
+      "behaviour_ok": 0.0,
+      "citation_ok": 1.0,
+      "false_refusal": 1.0,
+      "relevance": 0.0
+    },
+    "EV-038": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "false_refusal": 0.0,
+      "groundedness": 1.0,
+      "relevance": 1.0
+    },
+    "EV-039": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "false_refusal": 0.0,
+      "groundedness": 1.0,
+      "relevance": 0.5
+    },
+    "EV-040": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
       "false_refusal": 0.0,
       "groundedness": 1.0,
       "relevance": 0.5
     },
     "EV-041": {
       "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
       "false_refusal": 0.0,
       "groundedness": 1.0,
       "relevance": 1.0
     },
     "EV-042": {
       "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
       "false_refusal": 0.0,
       "groundedness": 1.0,
       "relevance": 1.0
     },
     "EV-043": {
       "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "false_refusal": 0.0,
+      "groundedness": 1.0,
+      "relevance": 1.0
+    },
+    "EV-044": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "false_refusal": 0.0,
+      "groundedness": 1.0,
+      "relevance": 1.0
+    },
+    "EV-045": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "false_refusal": 0.0,
+      "groundedness": 1.0,
+      "relevance": 1.0
+    },
+    "EV-046": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "false_refusal": 0.0,
+      "groundedness": 1.0,
+      "relevance": 1.0
+    },
+    "EV-047": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "false_refusal": 0.0,
+      "groundedness": 1.0,
+      "relevance": 1.0
+    },
+    "EV-048": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "false_refusal": 0.0,
+      "groundedness": 0.75,
+      "relevance": 1.0
+    },
+    "EV-049": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "false_refusal": 0.0,
+      "groundedness": 1.0,
+      "relevance": 1.0
+    },
+    "EV-050": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
       "false_refusal": 0.0,
       "groundedness": 1.0,
       "relevance": 1.0
     },
     "EV-051": {
       "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
       "false_refusal": 0.0,
       "groundedness": 1.0,
       "relevance": 1.0
     },
     "EV-052": {
       "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "false_refusal": 0.0,
+      "groundedness": 1.0,
+      "relevance": 1.0
+    },
+    "EV-053": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "false_refusal": 0.0,
+      "groundedness": 1.0,
+      "relevance": 1.0
+    },
+    "EV-054": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "false_refusal": 0.0,
+      "groundedness": 1.0,
+      "relevance": 1.0
+    },
+    "EV-055": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "false_refusal": 0.0,
+      "groundedness": 0.666667,
+      "relevance": 1.0
+    },
+    "EV-056": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "false_refusal": 0.0,
+      "groundedness": 1.0,
+      "relevance": 1.0
+    },
+    "EV-057": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "false_refusal": 0.0,
+      "groundedness": 1.0,
+      "relevance": 1.0
+    },
+    "EV-058": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "false_refusal": 0.0,
+      "groundedness": 1.0,
+      "relevance": 1.0
+    },
+    "EV-059": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "false_refusal": 0.0,
+      "groundedness": 1.0,
+      "relevance": 1.0
+    },
+    "EV-060": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "false_refusal": 0.0,
+      "groundedness": 1.0,
+      "relevance": 1.0
+    },
+    "EV-061": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "false_refusal": 0.0,
+      "groundedness": 1.0,
+      "relevance": 1.0
+    },
+    "EV-062": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "false_refusal": 0.0,
+      "groundedness": 1.0,
+      "relevance": 1.0
+    },
+    "EV-063": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "false_refusal": 0.0,
+      "groundedness": 1.0,
+      "relevance": 1.0
+    },
+    "EV-064": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
       "false_refusal": 0.0,
       "groundedness": 1.0,
       "relevance": 1.0
     },
     "EV-065": {
       "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
       "groundedness": 1.0,
       "relevance": 1.0
     },
     "EV-066": {
       "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "groundedness": 1.0,
+      "relevance": 1.0
+    },
+    "EV-067": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "groundedness": 1.0,
+      "relevance": 1.0
+    },
+    "EV-068": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "groundedness": 1.0,
+      "relevance": 1.0
+    },
+    "EV-069": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "groundedness": 1.0,
+      "relevance": 1.0
+    },
+    "EV-070": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
       "groundedness": 1.0,
       "relevance": 1.0
     },
     "EV-071": {
       "behaviour_ok": 1.0,
-      "groundedness": 1.0,
+      "citation_ok": 1.0,
       "relevance": 1.0
     },
     "EV-072": {
       "behaviour_ok": 1.0,
-      "groundedness": 1.0,
+      "citation_ok": 1.0,
+      "relevance": 1.0
+    },
+    "EV-073": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "relevance": 1.0
+    },
+    "EV-074": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "relevance": 1.0
+    },
+    "EV-075": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "relevance": 1.0
+    },
+    "EV-076": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "relevance": 1.0
+    },
+    "EV-077": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "relevance": 1.0
+    },
+    "EV-078": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "relevance": 1.0
+    },
+    "EV-079": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "relevance": 1.0
+    },
+    "EV-080": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "relevance": 1.0
+    },
+    "EV-081": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "relevance": 1.0
+    },
+    "EV-082": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "relevance": 1.0
+    },
+    "EV-083": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "relevance": 1.0
+    },
+    "EV-084": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "relevance": 1.0
+    },
+    "EV-085": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
       "relevance": 1.0
     },
     "EV-086": {
       "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
       "groundedness": 1.0,
       "relevance": 1.0
     },
     "EV-087": {
       "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
       "groundedness": 1.0,
+      "relevance": 1.0
+    },
+    "EV-088": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "groundedness": 1.0,
+      "relevance": 1.0
+    },
+    "EV-089": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "groundedness": 1.0,
+      "relevance": 1.0
+    },
+    "EV-090": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 0.0,
+      "groundedness": 0.4,
+      "relevance": 1.0
+    },
+    "EV-091": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "relevance": 1.0
+    },
+    "EV-092": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "groundedness": 1.0,
+      "relevance": 1.0
+    },
+    "EV-093": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "relevance": 0.5
+    },
+    "EV-094": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "groundedness": 1.0,
+      "relevance": 1.0
+    },
+    "EV-095": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "relevance": 1.0
+    },
+    "EV-096": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "relevance": 1.0
+    },
+    "EV-097": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "relevance": 1.0
+    },
+    "EV-098": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "relevance": 1.0
+    },
+    "EV-099": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
+      "groundedness": 1.0,
+      "relevance": 1.0
+    },
+    "EV-100": {
+      "behaviour_ok": 1.0,
+      "citation_ok": 1.0,
       "relevance": 1.0
     }
   },
   "index_version": "c9e30984a7723d23",
-  "judge_id": "judge:v2:claude-sonnet-5-5",
+  "judge_id": "judge:v3:claude-sonnet-5-5",
   "name": "dense-only",
+  "overrides": [],
   "retrieval": {
     "EV-001": {
       "mrr": 0.5,
@@ -141,7 +664,7 @@
       "recall@5": 1.0
     },
     "EV-005": {
-      "mrr": 0.16666666666666666,
+      "mrr": 0.166667,
       "recall@10": 1.0,
       "recall@5": 0.0
     },
@@ -236,7 +759,7 @@
       "recall@5": 1.0
     },
     "EV-024": {
-      "mrr": 0.14285714285714285,
+      "mrr": 0.142857,
       "recall@10": 1.0,
       "recall@5": 0.0
     },
@@ -286,7 +809,7 @@
       "recall@5": 0.0
     },
     "EV-034": {
-      "mrr": 0.3333333333333333,
+      "mrr": 0.333333,
       "recall@10": 1.0,
       "recall@5": 1.0
     },
@@ -311,7 +834,7 @@
       "recall@5": 1.0
     },
     "EV-039": {
-      "mrr": 0.3333333333333333,
+      "mrr": 0.333333,
       "recall@10": 0.25,
       "recall@5": 0.25
     },
@@ -366,12 +889,12 @@
       "recall@5": 1.0
     },
     "EV-050": {
-      "mrr": 0.16666666666666666,
+      "mrr": 0.166667,
       "recall@10": 1.0,
       "recall@5": 0.0
     },
     "EV-051": {
-      "mrr": 0.3333333333333333,
+      "mrr": 0.333333,
       "recall@10": 1.0,
       "recall@5": 1.0
     },
@@ -391,7 +914,7 @@
       "recall@5": 1.0
     },
     "EV-055": {
-      "mrr": 0.3333333333333333,
+      "mrr": 0.333333,
       "recall@10": 1.0,
       "recall@5": 1.0
     },
@@ -406,7 +929,7 @@
       "recall@5": 1.0
     },
     "EV-058": {
-      "mrr": 0.3333333333333333,
+      "mrr": 0.333333,
       "recall@10": 1.0,
       "recall@5": 1.0
     },
@@ -416,7 +939,7 @@
       "recall@5": 1.0
     },
     "EV-060": {
-      "mrr": 0.3333333333333333,
+      "mrr": 0.333333,
       "recall@10": 1.0,
       "recall@5": 1.0
     },
@@ -442,102 +965,212 @@
     }
   },
   "retriever_id": "dense:v1:fastembed:BAAI/bge-small-en-v1.5:384",
+  "segments": {
+    "EV-001": "specification",
+    "EV-002": "specification",
+    "EV-003": "specification",
+    "EV-004": "specification",
+    "EV-005": "specification",
+    "EV-006": "specification",
+    "EV-007": "specification",
+    "EV-008": "specification",
+    "EV-009": "specification",
+    "EV-010": "specification",
+    "EV-011": "specification",
+    "EV-012": "specification",
+    "EV-013": "specification",
+    "EV-014": "specification",
+    "EV-015": "specification",
+    "EV-016": "specification",
+    "EV-017": "specification",
+    "EV-018": "specification",
+    "EV-019": "comparison",
+    "EV-020": "comparison",
+    "EV-021": "comparison",
+    "EV-022": "comparison",
+    "EV-023": "comparison",
+    "EV-024": "comparison",
+    "EV-025": "comparison",
+    "EV-026": "comparison",
+    "EV-027": "comparison",
+    "EV-028": "comparison",
+    "EV-029": "intent_filter",
+    "EV-030": "intent_filter",
+    "EV-031": "intent_filter",
+    "EV-032": "intent_filter",
+    "EV-033": "intent_filter",
+    "EV-034": "intent_filter",
+    "EV-035": "intent_filter",
+    "EV-036": "intent_filter",
+    "EV-037": "intent_filter",
+    "EV-038": "intent_filter",
+    "EV-039": "intent_filter",
+    "EV-040": "intent_filter",
+    "EV-041": "variant",
+    "EV-042": "variant",
+    "EV-043": "variant",
+    "EV-044": "variant",
+    "EV-045": "variant",
+    "EV-046": "variant",
+    "EV-047": "variant",
+    "EV-048": "variant",
+    "EV-049": "variant",
+    "EV-050": "variant",
+    "EV-051": "policy",
+    "EV-052": "policy",
+    "EV-053": "policy",
+    "EV-054": "policy",
+    "EV-055": "policy",
+    "EV-056": "policy",
+    "EV-057": "policy",
+    "EV-058": "policy",
+    "EV-059": "policy",
+    "EV-060": "policy",
+    "EV-061": "policy",
+    "EV-062": "policy",
+    "EV-063": "policy",
+    "EV-064": "policy",
+    "EV-065": "ambiguous",
+    "EV-066": "ambiguous",
+    "EV-067": "ambiguous",
+    "EV-068": "ambiguous",
+    "EV-069": "ambiguous",
+    "EV-070": "ambiguous",
+    "EV-071": "unanswerable",
+    "EV-072": "unanswerable",
+    "EV-073": "unanswerable",
+    "EV-074": "unanswerable",
+    "EV-075": "unanswerable",
+    "EV-076": "unanswerable",
+    "EV-077": "unanswerable",
+    "EV-078": "unanswerable",
+    "EV-079": "unanswerable",
+    "EV-080": "unanswerable",
+    "EV-081": "unanswerable",
+    "EV-082": "unanswerable",
+    "EV-083": "unanswerable",
+    "EV-084": "unanswerable",
+    "EV-085": "unanswerable",
+    "EV-086": "adversarial",
+    "EV-087": "adversarial",
+    "EV-088": "adversarial",
+    "EV-089": "adversarial",
+    "EV-090": "adversarial",
+    "EV-091": "adversarial",
+    "EV-092": "adversarial",
+    "EV-093": "adversarial",
+    "EV-094": "adversarial",
+    "EV-095": "adversarial",
+    "EV-096": "adversarial",
+    "EV-097": "adversarial",
+    "EV-098": "adversarial",
+    "EV-099": "adversarial",
+    "EV-100": "adversarial"
+  },
   "summary": {
     "answers": {
       "adversarial": {
         "behaviour_ok": 1.0,
-        "groundedness": 1.0,
-        "n": 2,
-        "relevance": 1.0
+        "citation_ok": 0.933333,
+        "groundedness": 0.925,
+        "n": 15,
+        "relevance": 0.966667
       },
       "ambiguous": {
         "behaviour_ok": 1.0,
+        "citation_ok": 1.0,
         "groundedness": 1.0,
-        "n": 2,
+        "n": 6,
         "relevance": 1.0
       },
       "comparison": {
-        "behaviour_ok": 0.6666666666666666,
-        "false_refusal": 0.3333333333333333,
+        "behaviour_ok": 0.7,
+        "citation_ok": 1.0,
+        "false_refusal": 0.2,
         "groundedness": 1.0,
-        "n": 3,
-        "relevance": 0.6666666666666666
+        "n": 10,
+        "relevance": 0.7
       },
       "intent_filter": {
-        "behaviour_ok": 1.0,
-        "false_refusal": 0.0,
+        "behaviour_ok": 0.75,
+        "citation_ok": 1.0,
+        "false_refusal": 0.25,
         "groundedness": 1.0,
-        "n": 3,
-        "relevance": 0.5
+        "n": 12,
+        "relevance": 0.458333
       },
       "overall": {
-        "behaviour_ok": 0.95,
-        "false_refusal": 0.07142857142857142,
-        "groundedness": 1.0,
-        "n": 20,
-        "relevance": 0.875
+        "behaviour_ok": 0.92,
+        "citation_ok": 0.99,
+        "false_refusal": 0.09375,
+        "groundedness": 0.978009,
+        "n": 100,
+        "relevance": 0.885
       },
       "policy": {
         "behaviour_ok": 1.0,
+        "citation_ok": 1.0,
         "false_refusal": 0.0,
-        "groundedness": 1.0,
-        "n": 2,
+        "groundedness": 0.976191,
+        "n": 14,
         "relevance": 1.0
       },
       "specification": {
-        "behaviour_ok": 1.0,
-        "false_refusal": 0.0,
-        "groundedness": 1.0,
-        "n": 3,
-        "relevance": 1.0
+        "behaviour_ok": 0.888889,
+        "citation_ok": 1.0,
+        "false_refusal": 0.055556,
+        "groundedness": 0.976471,
+        "n": 18,
+        "relevance": 0.916667
       },
       "unanswerable": {
         "behaviour_ok": 1.0,
-        "groundedness": 1.0,
-        "n": 2,
+        "citation_ok": 1.0,
+        "n": 15,
         "relevance": 1.0
       },
       "variant": {
         "behaviour_ok": 1.0,
+        "citation_ok": 1.0,
         "false_refusal": 0.0,
-        "groundedness": 1.0,
-        "n": 3,
+        "groundedness": 0.975,
+        "n": 10,
         "relevance": 1.0
       }
     },
     "retrieval": {
       "comparison": {
-        "mrr": 0.8267857142857142,
+        "mrr": 0.826786,
         "n": 10,
         "recall@10": 1.0,
         "recall@5": 0.7
       },
       "intent_filter": {
-        "mrr": 0.3159722222222222,
+        "mrr": 0.315972,
         "n": 12,
-        "recall@10": 0.3541666666666667,
-        "recall@5": 0.3333333333333333
+        "recall@10": 0.354167,
+        "recall@5": 0.333333
       },
       "overall": {
-        "mrr": 0.6082217261904762,
+        "mrr": 0.608222,
         "n": 64,
-        "recall@10": 0.83203125,
+        "recall@10": 0.832031,
         "recall@5": 0.75
       },
       "policy": {
-        "mrr": 0.5773809523809524,
+        "mrr": 0.577381,
         "n": 14,
         "recall@10": 1.0,
         "recall@5": 1.0
       },
       "specification": {
-        "mrr": 0.7287037037037037,
+        "mrr": 0.728704,
         "n": 18,
         "recall@10": 1.0,
-        "recall@5": 0.9444444444444444
+        "recall@5": 0.944444
       },
       "variant": {
-        "mrr": 0.5666666666666667,
+        "mrr": 0.566667,
         "n": 10,
         "recall@10": 0.7,
         "recall@5": 0.6
