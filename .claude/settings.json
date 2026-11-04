@@ -12,7 +12,13 @@
       "Edit(./.claude/settings*)",
       "Write(./.claude/settings*)",
       "Edit(./.claude/hooks/**)",
-      "Write(./.claude/hooks/**)"
+      "Write(./.claude/hooks/**)",
+      "Read(~/.northwind/secrets)",
+      "Read(~/.northwind/secrets/**)",
+      "Edit(~/.northwind/secrets/**)",
+      "Write(~/.northwind/secrets/**)",
+      "Edit(~/.northwind/**)",
+      "Write(~/.northwind/**)"
     ],
     "allow": ["Bash(make *)", "Bash(uv run *)", "Bash(uv sync*)", "Bash(corepack pnpm *)", "Bash(docker compose *)"],
     "ask": ["Bash(git push*)", "Bash(make record*)", "Bash(make eval-live*)", "Bash(make llm-proxy*)"]
@@ -32,11 +38,10 @@
     "failIfUnavailable": true,
     "allowUnsandboxedCommands": false,
     "autoAllowBashIfSandboxed": false,
-    "excludedCommands": ["make record SUITE=*", "make eval-live EVAL_SLICE=*", "make llm-proxy"],
     "filesystem": {
-      "denyWrite": ["./.claude/settings*", "./.claude/hooks", "./.env*"],
-      "denyRead": ["./.env*", "~/Projects/northwind-shop/.env*", "~/Library/Keychains"],
-      "allowWrite": ["~/.northwind/ledger.lock", "~/.cache/uv", "~/Library/pnpm/store", "/private/tmp/pnpm-store-operation-locks-502"]
+      "denyWrite": ["./.claude/settings*", "./.claude/hooks", "./.env*", "~/.northwind", "~/.northwind/secrets"],
+      "denyRead": ["./.env*", "~/Projects/northwind-shop/.env*", "~/Library/Keychains", "~/.northwind/secrets", "~/.northwind/ledger.lock"],
+      "allowWrite": ["~/.cache/uv", "~/Library/pnpm/store", "/private/tmp/pnpm-store-operation-locks-502"]
     },
     "network": {
       "allowLocalBinding": true
