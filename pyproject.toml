@@ -5,13 +5,20 @@ requires-python = ">=3.12,<3.13"
 # Every workspace service is listed here so `uv sync` installs all of them.
 # When you add services/<name>/, add it here and under [tool.uv.sources]. data/ (FOUND-1) is
 # a workspace member too.
-dependencies = ["northwind-common", "northwind-data", "northwind-gateway", "northwind-llm-replay"]
+dependencies = [
+    "northwind-common",
+    "northwind-data",
+    "northwind-gateway",
+    "northwind-llm-replay",
+    "northwind-rag",
+]
 
 [tool.uv.sources]
 northwind-common = { workspace = true }
 northwind-data = { workspace = true }
 northwind-gateway = { workspace = true }
 northwind-llm-replay = { workspace = true }
+northwind-rag = { workspace = true }
 
 [tool.uv]
 package = false
