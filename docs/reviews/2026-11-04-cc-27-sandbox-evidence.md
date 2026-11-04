@@ -1,7 +1,9 @@
 # CC-27 sandboxed Bash: evidence (2026-11-04)
 
-**Status:** `partial`. Tested against the proposal files only; nothing is installed. The PRD's
-"sandbox payment host" is left for P4, because no provider is chosen yet.
+**Status:** `partial`. The rig results below were measured against the proposal files. The user has
+since installed the sandbox in this worktree: `.claude/settings.json` carries the block, uncommitted,
+and a live session ran under it. In that session `example.com` got the proxy's 403 and a write to
+`~` was refused. The PRD's "sandbox payment host" is left for P4, because no provider is chosen yet.
 
 **Files:** `tools/settings.proposed.json` becomes `.claude/settings.json`.
 `tools/settings.user.proposed.json` merges into `~/.claude/settings.json`.
@@ -82,6 +84,14 @@ outside the sandbox. The first pattern tried, `make record*`, was too wide:
 
 Exact patterns are exact: `make eval-live -f evil.mk`, `make eval-live TAG=arg`,
 `make llm-proxy -f evil.mk` and `make llm-proxy LLM_MODE=live` all stayed sandboxed.
+
+**`make eval-live` now needs `EVAL_SLICE=*`.** RAG-12 made `EVAL_SLICE` required, so the exact pattern
+above could only match a command that prints usage, and a real run would have stayed sandboxed. The
+proposal now excludes `make eval-live EVAL_SLICE=*`. `EVAL_SLICE` had reached the shell unquoted, so
+the recipe now takes digits only and quotes it, as F7 did for `SUITE`. Tests in
+`test_makefile_targets.py` were seen failing first. `all` is refused too: a number at or above the
+item count is a full run, and `EVAL_SLICE=100` covers today's 100 items. The new pattern was not run
+on the rig. It has the same shape as `SUITE=*`, so expect the same matching and the same limit.
 
 **Compound commands are safe.** `&&`, `;`, `|`, `$(...)`, backticks, process substitution and
 redirects all left the whole call sandboxed, including the first command. No probe appeared.
@@ -198,8 +208,9 @@ for the main checkout too. If the main checkout's key file sets non-default `POS
 `make up` from a worktree would recreate the container with the defaults. Read from the compose
 file, not run. The main checkout's values were not read.
 
-`make ci` was not run: `make scan-cassettes` fails until RAG-12's ledger-ID fix is on main (see the
-follow-up below).
+After the RAG-12 merge, `make test-integration` gave 49 passed in the sandbox. `make ci` was not run
+here: it now includes `make eval-gate`, which writes to the shared index through `make ingest`, so
+that is left for `/req-done`.
 
 ## Security review
 
@@ -238,11 +249,11 @@ protected file when you later check it out. It would show in the diff.
 
 ## Limits
 
-- **Anything after `SUITE=` reaches make.** `make record SUITE=a -f evil.mk` and
+- **Anything after `SUITE=` or `EVAL_SLICE=` reaches make.** `make record SUITE=a -f evil.mk` and
   `make record SUITE='$(shell cmd)'` run unsandboxed, and `make record SUITE=a LLM_BUDGET_USD=1000`
-  would raise a cap (read from the Makefile, not run). `SUITE=*` has to be a wildcard, so the `ask`
-  prompt is the only gate: read the whole command before approving. `$(shell ...)` is pinned as a
-  strict xfail.
+  would raise a cap (read from the Makefile, not run). `make eval-live EVAL_SLICE=1 -f evil.mk` has
+  the same shape (not run). Both patterns have to be wildcards, so the `ask` prompt is the only gate:
+  read the whole command before approving. `$(shell ...)` is pinned as a strict xfail for both.
 - **Excluded targets are fully unsandboxed**, with the key and the network. See F1.
 - **The sandbox covers Bash only.** Read, Edit and Write follow permission rules and the guard. The
   `Edit` and `Write` deny rules closed R3's Write tool case in the rig, with `notes.txt` as the
@@ -256,20 +267,22 @@ protected file when you later check it out. It would show in the diff.
 - **macOS only:** `~/Library/...` and the `502` uid are specific to this machine.
 - **After install, nothing fails if `.claude/settings.json` loses its `sandbox` block.** The tests pin
   the proposal file. Extend `test_settings.py` to the installed file when you install.
-- **Not run under the sandbox:** a real `make record`, because it spends. `make eval-live` ran but
-  exercised nothing, because there is no `evals/` directory until RAG-12 merges.
+- **Not run under the sandbox:** a real `make record` or `make eval-live EVAL_SLICE=…`, because both
+  spend.
 
-## Separate follow-up: `make scan-cassettes` fails today
+## Closed follow-up: `make scan-cassettes` false positive
 
-This is not caused by the sandbox: it fails the same way unsandboxed. Ledger lines 103 and 104, from
-the RAG-12 run, are flagged `luhn-valid-pan`. The real scanner flags only their shared `id` field, a
-random 32-character hex id holding a 14-digit run that happens to pass Luhn. It is not card data.
-Like finding 10 this is a scanner false positive, but on ids rather than float costs, so fixing
-finding 10 will not fix it. It fails `make ci` until it is handled. Not changed here.
+This was not caused by the sandbox: it failed the same way unsandboxed. Ledger lines 103 and 104, from
+the RAG-12 run, were flagged `luhn-valid-pan`. The scanner flagged only their shared `id` field, a
+random 32-character hex id holding a 14-digit run that happened to pass Luhn. It was not card data.
+RAG-12 fixed it on main with digit-free ledger IDs and a narrow scanner exemption. After the merge,
+`make scan-cassettes` exits 0 in this worktree with 0 findings. That run was in the sandbox, so
+regex only (see Limits).
 
-## Install (after RAG-12)
+## Install
 
-Decide F1 first.
+Decide F1 first. This worktree already has an install from before the `make eval-live EVAL_SLICE=*`
+pattern, so repeat steps 2 and 4 there.
 
 1. In your own terminal: `make model`.
 2. Copy `tools/settings.proposed.json` over `.claude/settings.json`.
@@ -279,7 +292,9 @@ Decide F1 first.
 ## Check after installing
 
 1. `claude sandbox status` shows `enabled: true` and `strictMode: true`.
-2. Ask Claude to run a bare `make eval-live`: it should prompt, then run outside the sandbox.
+2. With the stack up, ask Claude to run `make eval-live EVAL_SLICE=1`, bare: it should prompt, then
+   run outside the sandbox. It is `make eval-live`, so it can spend, though unchanged requests replay
+   for free. A bare `make eval-live` now only prints usage, which proves nothing.
 3. With the stack up from your terminal, `make test-integration` passes inside the sandbox. Measured
-   in this worktree: 39 passed.
+   in this worktree: 49 passed after the RAG-12 merge.
 4. In your own terminal: `make scan-cassettes` reports `regex + key-fragment`.

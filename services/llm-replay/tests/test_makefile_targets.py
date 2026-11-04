@@ -77,6 +77,56 @@ def test_record_passes_a_plain_suite_name(tmp_path: Path) -> None:
 
 
 @pytest.mark.req("CC-27")
+@pytest.mark.parametrize(
+    "size",
+    [
+        "x; touch injected",
+        "x`touch injected`",
+        "x && touch injected",
+        "1; touch injected",
+        "1\ntouch injected",
+        "all",
+        "-1",
+        "",
+        pytest.param(
+            "$(shell touch injected)",
+            marks=pytest.mark.xfail(
+                strict=True, reason="make expands it first; known limit, like `-f evil.mk`"
+            ),
+        ),
+    ],
+)
+def test_eval_live_refuses_a_slice_that_is_not_digits(tmp_path: Path, size: str) -> None:
+    """`make eval-live EVAL_SLICE=*` runs outside Claude's sandbox, so it must not reach a shell."""
+    (tmp_path / "Makefile").write_text((REPO / "Makefile").read_text())
+    shim = tmp_path / "bin" / "uv"
+    shim.parent.mkdir()
+    shim.write_text(SHIM)
+    shim.chmod(0o755)
+    done = subprocess.run(  # noqa: S603
+        ["make", "-s", "eval-live", f"EVAL_SLICE={size}"],  # noqa: S607
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=False,
+        env={
+            "PATH": f"{shim.parent}{os.pathsep}/usr/bin:/bin:/usr/local/bin",
+            "HOME": str(tmp_path),
+        },
+    )
+    assert done.returncode != 0
+    assert "usage: make eval-live" in done.stdout
+    assert "uv " not in done.stdout  # refused before anything that could spend
+    assert not (tmp_path / "injected").exists()
+
+
+@pytest.mark.req("CC-27")
+def test_eval_live_passes_a_digit_slice(tmp_path: Path) -> None:
+    calls = make_uv_calls(tmp_path, "eval-live", "EVAL_SLICE=20")
+    assert calls == ["uv LLM_MODE=record run python -m northwind_evals.cli run --slice 20"]
+
+
+@pytest.mark.req("CC-27")
 @pytest.mark.parametrize("override", [None, "/elsewhere"])
 def test_model_cache_is_stable_and_overridable(tmp_path: Path, override: str | None) -> None:
     """Claude's sandbox has another temp dir, so the cache cannot be fastembed's default."""

@@ -105,11 +105,13 @@ record: ## Re-record one LLM cassette suite (SUITE=name; spends API credit)
 	LLM_MODE=record uv run pytest -m "" --llm-suite "$$SUITE"
 
 # SPENDS API CREDIT. Records answers and verdicts into a baseline candidate. EVAL_SLICE is required
-# (a number of items, or `all`), so a bare `make eval-live` cannot start a full run. Unchanged
-# requests replay for free (RAG-12, decision 0001).
-eval-live: ## Run answer evals live and record them (EVAL_SLICE=<n|all>; spends API credit)
-	@test -n "$(EVAL_SLICE)" || (echo "usage: make eval-live EVAL_SLICE=<n|all>" && exit 2)
-	LLM_MODE=record uv run python -m northwind_evals.cli run --slice $(EVAL_SLICE)
+# (a number of items; one at or above the item count is a full run), so a bare `make eval-live`
+# cannot start a full run. Unchanged requests replay for free (RAG-12, decision 0001).
+# EVAL_SLICE is checked before use: this target runs outside Claude's sandbox, so a value like
+# 'x; cmd' must not reach a shell (CC-27).
+eval-live: ## Run answer evals live and record them (EVAL_SLICE=<n>; spends API credit)
+	@[[ "$$EVAL_SLICE" =~ ^[0-9]+$$ ]] || (echo "usage: make eval-live EVAL_SLICE=<n>" && exit 2)
+	LLM_MODE=record uv run python -m northwind_evals.cli run --slice "$$EVAL_SLICE"
 
 eval-gate: ingest ## Regression gate: live retrieval metrics + replayed answers vs the baseline (RAG-12)
 	LLM_MODE=replay EVAL_ALLOW_STALE= uv run python -m northwind_evals.cli gate

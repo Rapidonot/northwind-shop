@@ -64,7 +64,7 @@ make test             # unit tests: pytest (excludes integration) + vitest
 make test-integration # pytest -m integration (needs `make up`)
 make ci               # lint + scan-cassettes + test + test-integration, the same steps as GitHub CI
 make record SUITE=…   # SPENDS: re-record one cassette suite (new requests live, under LLM_RUN_BUDGET_USD)
-make eval-live EVAL_SLICE=<n|all>  # SPENDS: record answers + verdicts into a baseline candidate
+make eval-live EVAL_SLICE=<n>  # SPENDS: record answers + verdicts into a baseline candidate (digits only; n >= item count is a full run)
 make eval-rescore     # rebuild the candidate from the recordings after a scoring change (never spends)
 make eval-promote     # replace the baseline with the candidate (refuses a regression)
 make eval-integrity   # refuse edited cassettes and lost overrides, against origin/main

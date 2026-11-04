@@ -32,7 +32,7 @@
     "failIfUnavailable": true,
     "allowUnsandboxedCommands": false,
     "autoAllowBashIfSandboxed": false,
-    "excludedCommands": ["make record SUITE=*", "make eval-live", "make llm-proxy"],
+    "excludedCommands": ["make record SUITE=*", "make eval-live EVAL_SLICE=*", "make llm-proxy"],
     "filesystem": {
       "denyWrite": ["./.claude/settings*", "./.claude/hooks", "./.env*"],
       "denyRead": ["./.env*", "~/Projects/northwind-shop/.env*", "~/Library/Keychains"],

@@ -22,7 +22,8 @@ SANDBOX = {
     "allowUnsandboxedCommands": False,  # false makes dangerouslyDisableSandbox ignored
     "autoAllowBashIfSandboxed": False,  # keeps today's prompts
     # Not `make record*`, which also matched `make recording` and `make record -f evil.mk`.
-    "excludedCommands": ["make record SUITE=*", "make eval-live", "make llm-proxy"],
+    # `make eval-live` alone would match nothing that runs: RAG-12 made EVAL_SLICE required.
+    "excludedCommands": ["make record SUITE=*", "make eval-live EVAL_SLICE=*", "make llm-proxy"],
     "filesystem": {
         "denyWrite": ["./.claude/settings*", "./.claude/hooks", "./.env*"],
         "denyRead": [
