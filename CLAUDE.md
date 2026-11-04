@@ -63,13 +63,15 @@ make test             # unit tests: pytest (excludes integration) + vitest
 make test-integration # pytest -m integration (needs `make up`)
 make ci               # lint + scan-cassettes + test + test-integration, the same steps as GitHub CI
 make record SUITE=…   # SPENDS: re-record one cassette suite (new requests live, under LLM_RUN_BUDGET_USD)
-make eval-live        # SPENDS: evals live + recorded (suites arrive with RAG-12)
+make eval-live EVAL_SLICE=<n|all>  # SPENDS: record answers + verdicts, rewrite the baseline
+make eval-gate        # regression gate: live retrieval + replayed answers vs the baseline (RAG-12)
+make eval-snapshot    # save each eval item's retrieved context, the input for answers (no LLM)
+make eval-review-list # write the list of eval items waiting for human review
 make llm-spend        # shared ledger: total, per suite/model, 20-call checkpoint
 make scan-cassettes   # secret/PAN scan of cassettes, ledger and proxy log
 make llm-proxy        # dev LLM proxy on this worktree's port (LLM_MODE, default replay)
 ```
-Added later: `make eval` / `make eval-gate` (RAG-12), `make e2e` with
-Playwright (SA-02 crude). Only `make record` and `make eval-live` spend API credit; everything
+Added later: `make e2e` with Playwright (SA-02 crude). Only `make record` and `make eval-live` spend API credit; everything
 else runs in replay.
 
 LLM clients (FOUND-2): build every client with `northwind_common.llm` (`anthropic_client()`,

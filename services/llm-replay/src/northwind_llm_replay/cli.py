@@ -17,7 +17,7 @@ from dotenv import dotenv_values
 
 from northwind_common import localenv
 from northwind_llm_replay.ledger import CHECKPOINT_EXCLUDED_SUITES, Ledger
-from northwind_llm_replay.scan import scan_paths
+from northwind_llm_replay.scan import load_canaries, scan_paths
 
 CHECKPOINT_CALLS = 20
 PROXY_LOG_DIR = Path(".llm-proxy-log")
@@ -58,9 +58,9 @@ def cmd_scan(args: argparse.Namespace) -> int:
     if args.paths:
         roots = [Path(p) for p in args.paths]
     else:
-        roots = [Path("cassettes"), localenv.ledger_path(), PROXY_LOG_DIR]
+        roots = [Path("cassettes"), Path("evals/contexts"), localenv.ledger_path(), PROXY_LOG_DIR]
     secret = _secret(args.env_file)
-    findings = scan_paths(roots, secret=secret)
+    findings = scan_paths(roots, secret=secret, canaries=load_canaries(Path(".")))
     for f in findings:
         print(f, file=sys.stderr)
     mode = "regex + key-fragment" if secret else "regex only (no key file)"

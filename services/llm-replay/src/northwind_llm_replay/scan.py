@@ -7,7 +7,9 @@ Fails on:
 - Luhn-valid 13–19 digit runs with a non-digit (or start/end of text) on both sides, plus
   4-4-4-4 groups split by one space or dash. There is no allowlist: sandbox test PANs fail too,
   because card numbers never belong in model traffic;
-- a cassette whose `recorded_at` is not ISO-8601.
+- a cassette whose `recorded_at` is not ISO-8601;
+- an internal-only canary from the answer key (hard rule 7; pulled forward from #5 by RAG-12):
+  shopper traffic must never carry internal text, so a recording holding one is refused.
 
 Findings never contain the matched secret, only its kind and position.
 """
@@ -22,6 +24,7 @@ from datetime import datetime
 from pathlib import Path
 
 KEY_FRAGMENT_LEN = 16
+ANSWER_KEY = Path("data/fixtures/_answer_key.json")
 
 _KEY_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("anthropic-api-key", re.compile(r"sk-ant-[A-Za-z0-9_\-]{8,}")),
@@ -62,7 +65,21 @@ def key_fragments(key: str) -> set[str]:
     return {key[i : i + KEY_FRAGMENT_LEN] for i in range(len(key) - KEY_FRAGMENT_LEN + 1)}
 
 
-def scan_text(text: str, path: str = "<text>", secret: str | None = None) -> list[Finding]:
+def load_canaries(repo_root: Path) -> frozenset[str]:
+    """`internal_only[].canary` from the answer key; empty where the key file doesn't exist."""
+    key = repo_root / ANSWER_KEY
+    if not key.exists():
+        return frozenset()
+    entries = json.loads(key.read_text(encoding="utf-8")).get("internal_only", [])
+    return frozenset(e["canary"] for e in entries)
+
+
+def scan_text(
+    text: str,
+    path: str = "<text>",
+    secret: str | None = None,
+    canaries: frozenset[str] = frozenset(),
+) -> list[Finding]:
     findings: list[Finding] = []
     fragments = key_fragments(secret) if secret else set()
     for lineno, line in enumerate(text.splitlines() or [text], start=1):
@@ -71,6 +88,8 @@ def scan_text(text: str, path: str = "<text>", secret: str | None = None) -> lis
                 findings.append(Finding(path, lineno, kind))
         if fragments and any(f in line for f in fragments):
             findings.append(Finding(path, lineno, "api-key-fragment"))
+        if any(c in line for c in canaries):
+            findings.append(Finding(path, lineno, "internal-canary"))
         for m in _PAN_RUN.finditer(line):
             if luhn_ok(m.group(0)):
                 findings.append(Finding(path, lineno, "luhn-valid-pan"))
@@ -107,13 +126,17 @@ def is_cassette(path: Path) -> bool:
     return path.suffix == ".json" and "cassettes" in path.parts
 
 
-def scan_paths(roots: Iterable[Path], secret: str | None = None) -> list[Finding]:
+def scan_paths(
+    roots: Iterable[Path],
+    secret: str | None = None,
+    canaries: frozenset[str] = frozenset(),
+) -> list[Finding]:
     findings: list[Finding] = []
     for path in _files(roots):
         if path.suffix == ".lock":
             continue
         text = path.read_text(encoding="utf-8", errors="replace")
-        findings.extend(scan_text(text, str(path), secret))
+        findings.extend(scan_text(text, str(path), secret, canaries))
         if is_cassette(path):
             findings.extend(_check_recorded_at(path, text))
     return findings
