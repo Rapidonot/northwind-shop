@@ -86,6 +86,8 @@ class GateResult:
     # Scored now but absent from the baseline: the gate cannot compare it, so it fails. Promoting
     # is what brings it in, so promotion accepts it.
     new_metrics: list[str] = field(default_factory=list)
+    # Gated by the baseline but absent now. Unlike a regression, no reason can accept this.
+    lost_metrics: list[str] = field(default_factory=list)
 
     def passed(self, allow_stale: bool = False) -> bool:
         return (
@@ -94,6 +96,7 @@ class GateResult:
             and not self.problems
             and not self.containment
             and not self.new_metrics
+            and not self.lost_metrics
             and (allow_stale or not self.stale)
         )
 
@@ -111,7 +114,7 @@ def _compare(result: GateResult, metrics: Sequence[str], baseline: Scores, curre
             result.new_metrics.append(metric)
             continue
         if now is None:
-            result.problems.append(f"{metric} is missing from the current scores")
+            result.lost_metrics.append(metric)
             continue
         worsened = now - before if metric in LOWER_IS_BETTER else before - now
         result.rows.append((metric, before, now, worsened <= TOLERANCES[metric] + 1e-9))

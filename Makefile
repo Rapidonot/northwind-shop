@@ -110,7 +110,7 @@ eval-rescore: ingest ## Rebuild the baseline candidate from the recordings after
 	LLM_MODE=replay uv run python -m northwind_evals.cli rescore
 
 eval-promote: ## Replace the baseline with the candidate (a regression needs ACCEPT_REGRESSION="reason", which is recorded)
-	uv run python -m northwind_evals.cli promote $(if $(ACCEPT_REGRESSION),--accept-regression "$(ACCEPT_REGRESSION)")
+	uv run python -m northwind_evals.cli promote $(if $(ACCEPT_REGRESSION),--accept-regression "$$ACCEPT_REGRESSION")
 
 eval-snapshot: ## Save each eval item's retrieved context, the input for answers (no LLM; RAG-12)
 	uv run python -m northwind_evals.cli snapshot

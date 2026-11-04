@@ -317,7 +317,8 @@ def test_a_metric_missing_from_the_baseline_is_reported_not_skipped() -> None:
 def test_a_metric_missing_from_current_scores_is_reported_not_skipped() -> None:
     now = {"EV-1": {"relevance": 1.0}}
     result = compare(baseline(), {"EV-1": {"recall@5": 0.8, "mrr": 0.5}}, now, [], [])
-    assert any("groundedness is missing" in line for line in result.problems)
+    assert "groundedness" in result.lost_metrics
+    assert not result.passed()
 
 
 def test_citations_below_the_absolute_floor_fail_even_with_a_matching_baseline() -> None:

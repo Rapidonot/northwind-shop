@@ -119,9 +119,11 @@ def _stale_ids(
 def _context_leaks(contexts: dict[str, SavedContext], items: Sequence[EvalItem]) -> list[str]:
     """Checked before anything is saved or sent: scanning a recording afterwards is too late."""
     canaries = load_canaries(Path("."), required=True)
-    unsafe = leaks(contexts, internal_sources(FIXTURES), canaries)
+    internal = internal_sources(FIXTURES)
+    unsafe = leaks(contexts, internal, canaries)
     for item in items:
-        if scan_text("\n".join((item.query, *item.reference_facts)), canaries=canaries):
+        text = "\n".join((item.query, *item.reference_facts))
+        if scan_text(text, canaries=canaries) or any(source in text for source in internal):
             unsafe.append(item.id)
     return unsafe
 
@@ -292,6 +294,7 @@ def cmd_promote(args: argparse.Namespace) -> int:
         result = compare(baseline, candidate.retrieval, candidate.answers, [], [], segments, known)
         _print_rows(result)
         final += result.containment
+        final += [f"{metric} is missing from the candidate" for metric in result.lost_metrics]
         overridable += result.problems
         overridable += [f"{row[0]} regressed" for row in result.rows if not row[3]]
     else:
@@ -343,8 +346,9 @@ def cmd_gate(args: argparse.Namespace) -> int:
     _print_rows(result)
     print(f"  answers replayed {len(answers)}/{len(baseline.answers)}, stale {len(result.stale)}")
     stale_lines = [f"STALE {i}" for i in result.stale]
-    new_metrics = [f"{metric} is missing from the baseline" for metric in result.new_metrics]
-    for line in [*result.containment, *new_metrics, *result.problems, *result.errors, *stale_lines]:
+    missing = [f"{metric} is missing from the baseline" for metric in result.new_metrics]
+    missing += [f"{metric} is missing from the current scores" for metric in result.lost_metrics]
+    for line in [*result.containment, *missing, *result.problems, *result.errors, *stale_lines]:
         print(f"  {line}")
     allow_stale = os.environ.get(ALLOW_STALE_ENV) == "1"
     passed = result.passed(allow_stale)
