@@ -11,6 +11,11 @@ override BOOTSTRAP := $(value BOOTSTRAP)
 override APPROVED_BY := $(value APPROVED_BY)
 export ACCEPT_REGRESSION BOOTSTRAP APPROVED_BY
 
+# The same for `ship`, which runs in your terminal with your GitHub login (AUTO-1).
+override PR := $(value PR)
+override SHA := $(value SHA)
+export PR SHA
+
 export COREPACK_ENABLE_DOWNLOAD_PROMPT := 0
 PNPM ?= corepack pnpm
 # --env-file only when the file exists: compose exits 1 on a missing one, and linked worktrees never
@@ -51,7 +56,7 @@ endif
 
 .PHONY: help setup up down dev dev-gateway dev-portal data model ingest fmt lint test \
 	test-integration ci scan-cassettes llm-spend llm-proxy llm-runner runner-sync runner-check \
-	record eval-live eval-rescore eval-gate eval-integrity eval-gate-stale-ok eval-promote \
+	ship review-diff record eval-live eval-rescore eval-gate eval-integrity eval-gate-stale-ok eval-promote \
 	eval-snapshot eval-review-list e2e e2e-scripted
 
 # A stable cache, not fastembed's temp-dir default: Claude's sandbox has a different temp dir and
@@ -139,11 +144,15 @@ llm-runner: ## Open one spending window (SUITE=name RUN_BUDGET=usd; own terminal
 	@$(RUNNER_SYNC) --check >/dev/null || (echo ".venv-runner does not match uv.lock: run runner-sync" && exit 2)
 	$(RUNNER_PYTHON) -m northwind_llm_replay.cli runner --suite "$$SUITE" --run-budget "$$RUN_BUDGET" --minutes "$${RUNNER_MINUTES:-30}" --idle-minutes "$${RUNNER_IDLE_MINUTES:-10}"
 
-# Key-loaded code, what builds the environment, and what `model` and `up` run beside the key.
-RUNNER_SYNC_PATHS := services/llm-replay services/common services/rag data/src infra Makefile pyproject.toml uv.lock uv.toml .python-version .gitattributes ':(glob)**/pyproject.toml' ':(glob)**/sitecustomize.py' ':(glob)**/usercustomize.py'
+# Key-loaded code, what builds the environment, what `model` and `up` run beside the key, and what
+# `ship` runs with the user's GitHub login.
+RUNNER_SYNC_PATHS := services/llm-replay services/common services/rag data/src infra Makefile tools/ship.sh tools/refused-paths.sh pyproject.toml uv.lock uv.toml .python-version .gitattributes .gitignore ':(glob)**/.gitignore' ':(glob)**/pyproject.toml' ':(glob)**/sitecustomize.py' ':(glob)**/usercustomize.py'
 RUNNER_INCOMING := refs/runner/incoming
-RUNNER_DIFF := git --no-pager diff --text --no-ext-diff --no-textconv
+# --icase-pathspecs: on a case-insensitive clone `Services/common/x.py` lands on the reviewed path.
+RUNNER_DIFF := git --no-pager --icase-pathspecs diff --text --no-ext-diff --no-textconv
 RUNNER_SYNC := UV_PROJECT_ENVIRONMENT=.venv-runner uv sync --frozen --no-dev --package northwind-llm-replay
+# Succeeds while a window is open: the runner must not have its code or environment moved under it.
+RUNNER_BUSY := (exec 3<>/dev/tcp/127.0.0.1/$${LLM_RUNNER_PORT:-19990}) 2>/dev/null
 
 # Shows what the key-holding code gains before it gains it, since HEAD, the last sync: every commit
 # and changed file, then the full diff of the paths that load with the key or build the environment.
@@ -151,15 +160,35 @@ RUNNER_SYNC := UV_PROJECT_ENVIRONMENT=.venv-runner uv sync --frozen --no-dev --p
 # `cat -v` because a commit subject is text the sandbox wrote.
 runner-sync: ## Show what changed in the runner clone, ask, then fast-forward to origin/main
 	@[[ "$(CURDIR)" == "$(realpath $(RUNNER_DIR))" ]] || (echo "only in the clone: make -C $(RUNNER_DIR) runner-sync" && exit 2)
+	@! $(RUNNER_BUSY) || (echo "a spending window is open: close it first" && exit 2)
 	git fetch --refmap= origin +refs/heads/main:$(RUNNER_INCOMING)
 	@git --no-pager log --oneline HEAD..$(RUNNER_INCOMING) | cat -v
 	@$(RUNNER_DIFF) --stat HEAD $(RUNNER_INCOMING) | cat -v
 	@$(RUNNER_DIFF) HEAD $(RUNNER_INCOMING) -- $(RUNNER_SYNC_PATHS) | cat -v
+	@/bin/bash tools/refused-paths.sh HEAD $(RUNNER_INCOMING)
 	@read -r -p "Fast-forward the runner to origin/main? [y/N] " answer; [[ "$$answer" =~ ^[yY]$$ ]] || (echo "not merged" && exit 1)
 	git merge --ff-only $(RUNNER_INCOMING)
 	git update-ref refs/remotes/origin/main $(RUNNER_INCOMING)
 	$(RUNNER_SYNC)
 	UV_PROJECT_ENVIRONMENT=.venv-model uv sync --frozen --no-dev --package northwind-rag
+
+# Your own terminal, from the clean clone, as `make -C ~/.northwind/runner ship PR=<n> SHA=<reviewed>`:
+# from a worktree, this file and the script are ones the sandbox can edit. SHA is the commit the reviewers
+# read. Merges only after every check in the script passes and you confirm; runner-sync then asks again
+# before the clone moves (AUTO-1).
+ship: ## Check a PR, wait for CI, ask, merge, then runner-sync (PR=<n> SHA=<reviewed>; runner clone only)
+	@[[ "$(CURDIR)" == "$(realpath $(RUNNER_DIR))" ]] || (echo "only in the clone: make -C $(RUNNER_DIR) ship PR=<n> SHA=<reviewed>" && exit 2)
+	@[[ "$$PR" =~ ^[0-9]+$$ && "$$SHA" =~ ^[0-9a-f]{40}$$ ]] || (echo "usage: make -C $(RUNNER_DIR) ship PR=<n> SHA=<reviewed>" && exit 2)
+	@! $(RUNNER_BUSY) || (echo "a spending window is open: close it first" && exit 2)
+	@/bin/bash tools/ship.sh "$$PR" "$$SHA" $(RUNNER_SYNC_PATHS)
+	@$(MAKE) --no-print-directory runner-sync
+
+# The one diff advisor-reviewer accepts: base and head SHA first, so it can tell what it read. Refuses
+# uncommitted work, because the head line would not describe it (AUTO-1).
+REVIEW_DIFF ?= $(or $(TMPDIR),/tmp)/northwind-review.diff
+review-diff: ## Write the committed diff against origin/main for review, SHAs first
+	@[[ -z "$$(git status --porcelain)" ]] || (echo "commit first: review-diff covers commits only" && exit 2)
+	@base=$$(git merge-base origin/main HEAD) && head=$$(git rev-parse HEAD) && { echo "base $$base"; echo "head $$head"; git --no-pager diff --text --no-ext-diff --no-textconv --no-renames "$$base" "$$head"; } > "$(REVIEW_DIFF)" && echo "$(REVIEW_DIFF)"
 
 # Must run sandboxed: from a terminal every write succeeds, and it reports exactly that.
 runner-check: ## From the sandbox: measure that nothing the runner loads is writable here (CC-27)

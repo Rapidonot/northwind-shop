@@ -79,6 +79,8 @@ make llm-proxy        # dev LLM proxy on this worktree's port (LLM_MODE, default
 make llm-runner SUITE=… RUN_BUDGET=<usd>  # USER ONLY, own terminal, `make -C ~/.northwind/runner`: open one spending window
 make runner-sync      # USER ONLY, in the runner clone: show what changed, ask, fast-forward to origin/main
 make runner-check     # from the sandbox, in each checkout: measure that nothing the runner loads is writable
+make ship PR=<n> SHA=<reviewed>  # USER ONLY, `make -C ~/.northwind/runner`: check a PR, wait for CI, ask, merge, runner-sync
+make review-diff      # write the committed diff for advisor-reviewer, base and head SHA first
 ```
 Only `make record` and `make eval-live` spend API credit, and only
 through a window the user opened with `make llm-runner`; everything else runs in replay. Everything Claude runs stays in
@@ -133,9 +135,8 @@ Toolchain notes:
 - One requirement per session. Start by reading PROGRESS.md, pick the next ID, and
   restate its acceptance criteria from docs/PRD.md. Use plan mode for anything beyond a
   one-file change.
-- Per-requirement flow: `/req-start <ID>` → plan → implement → `test-writer` subagent →
-  `security-reviewer` subagent (read-only: write the diff to a file and pass the path) →
-  `/req-done` → the user reviews and merges. Only the user can run the two skills.
+- Per-requirement flow: `/req-start <ID>` → plan → the chain in "Running a row" below → gate report
+  → `/req-done` → the user reviews and merges. Only the user can run `/req-start` and `/req-done`.
 - Every acceptance criterion gets at least one automated test. Tag it with the ID:
   pytest `@pytest.mark.req("RAG-03")` / Vitest/Playwright `describe("[SA-01] …")`.
   A requirement is done only when its tagged tests pass, lint passes and
@@ -166,3 +167,49 @@ Toolchain notes:
   put an API key in CI secrets. Cassettes hold synthetic data only and must pass the
   secret/PAN scanner. A cassette miss means the model input changed: re-record on purpose,
   never hand-edit a cassette.
+
+## Running a row (AUTO-1, decision 0008)
+Once the user approves a plan, carry on without waiting for prompts. The chain:
+
+implement → `test-writer` → `security-reviewer` (read-only: write the diff to a file and pass the
+path) → fix → one scoped re-review → `make ci` + `make eval-gate` → commit → PR body →
+`advisor-reviewer` → gate report
+
+Commit on the row's branch; never push. Any revised plan goes to `advisor-reviewer` before it is shown
+to the user.
+
+`advisor-reviewer` reviews one diff, from one fixed command: `make review-diff`. It writes the committed
+diff against `origin/main`, with `base <sha>` and `head <sha>` as its first two lines. Pass the path, both
+SHAs, the failing-first log, the plan and the list of requested changes. If the SHA lines are missing or
+do not match, the review is `unconfirmed`.
+
+Stop only for:
+1. Plan approval.
+2. A spending window.
+3. Terminal-only steps: push, PR, merge, settings install, runner-sync, Docker.
+4. Any git output with one of the five error strings in "How we work".
+5. Weakening a test after a failure, or loosening any check, gate, cap, scanner, baseline or
+   `known_failures.json`.
+6. An unsafe security finding that changes the design.
+7. A scope question.
+8. In a row not about them, changing anything on the control surface below.
+9. Two failed attempts to fix the same failure.
+10. Any high or critical finding still open after the re-review.
+
+When stopping for a decision, first finish all work that does not depend on it (local fixes, tests,
+records). Then stop with the stopped-variant note, listing what is waiting on the answer.
+
+These add to the ask-first rules above; they do not replace them. Changing a human-reviewed eval label
+and raising a budget cap still need asking.
+
+The control surface: `CLAUDE.md`, `.claude/**`, `.github/workflows/**`, `Makefile`, `tools/*.proposed*`,
+`tools/ship.sh`, `tools/refused-paths.sh`, the files in `RUNNER_SYNC_PATHS`, `evals/baselines/**`,
+`evals/src/**`, `evals/fixtures/**`, `cassettes/**`, `**/conftest.py`, `.gitignore`, the root
+`pyproject.toml` and the `package.json` files. `make ship` lists these above its question, and asks for the
+PR number instead of `y` when any changed.
+
+Gate report (`tools/gate-report.proposed.SKILL.md`, once installed the `gate-report` skill) has four
+sections: what's done; evidence (base and head SHA, the exact diff command, `make llm-spend` total before
+and after); open findings; the exact terminal commands, ending `/req-done`, a docs-only commit of what it
+wrote, push, PR, `ship`, with `SHA` the head the reviewers read. If the chain stopped, write the stopped
+variant instead: where it stopped, why, what is waiting on the answer, and exactly what the user must do.

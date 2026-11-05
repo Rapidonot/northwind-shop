@@ -813,9 +813,10 @@ def test_the_pins_come_before_the_first_shell_call() -> None:
         if "$(shell" in line or "${shell" in line or re.search(r"\s!=\s", line)
     )
     first_include = next(n for n, line in enumerate(code) if line.startswith("-include"))
-    pins = [n for n, line in enumerate(code) if re.match(r"override \w+ := \$\(value ", line)]
-    assert len(pins) == len(PROMOTE_FLAGS)
-    assert max(pins) < min(first_shell, first_include)
+    found = [(n, re.match(r"override (\w+) := \$\(value ", line)) for n, line in enumerate(code)]
+    pins = {match.group(1): n for n, match in found if match}
+    assert set(pins) == {*PROMOTE_FLAGS, "PR", "SHA"}  # PR and SHA: `ship` (AUTO-1)
+    assert max(pins.values()) < min(first_shell, first_include)
 
 
 def test_eval_promote_passes_an_approver_with_spaces_as_one_argument(tmp_path: Path) -> None:

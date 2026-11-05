@@ -26,12 +26,22 @@ SHIM = '#!/bin/sh\necho "$(basename "$0") $*"\n'
 
 def rig(tmp_path: Path, *tools: str) -> dict[str, str]:
     (tmp_path / "Makefile").write_text((REPO / "Makefile").read_text())
+    (tmp_path / "tools").mkdir(exist_ok=True)
+    (tmp_path / "tools" / "refused-paths.sh").write_text(
+        (REPO / "tools" / "refused-paths.sh").read_text()
+    )
+    (tmp_path / "tmp").mkdir(exist_ok=True)
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir(exist_ok=True)
     for tool in tools:
         (bin_dir / tool).write_text(SHIM)
         (bin_dir / tool).chmod(0o755)
-    return {"PATH": f"{bin_dir}{os.pathsep}/usr/bin:/bin:/usr/local/bin", "HOME": str(tmp_path)}
+    return {
+        "PATH": f"{bin_dir}{os.pathsep}/usr/bin:/bin:/usr/local/bin",
+        "HOME": str(tmp_path),
+        "TMPDIR": str(tmp_path / "tmp"),
+        "LLM_RUNNER_PORT": "1",
+    }
 
 
 def make(
