@@ -290,7 +290,7 @@ def main() -> int:
     work = plan_work(chunks, cache)
     total = sum(len(group) for _, group in work)
     if not work:
-        print("every chunk has an entry: nothing to call")
+        print("every allowed chunk has an entry: nothing to call")
         return 0
     canaries = load_canaries(Path("."), required=True)
     try:

@@ -3,6 +3,11 @@
 Read-only on both: it never writes a baseline, a context or a known failure. Answers replay against
 `evals/contexts`, so an item's answer goes stale only if its top chunks change (`is_stale`).
 Generated text is not in `text`, so that takes a change of IDs or order.
+
+A top 5 here is one unfiltered query, which is not what a shopper's model gets: `retrieve_context`
+filters by region, and the assistant can search up to three times a turn. Filtering moves lower
+chunks up, so a chunk at rank 6 here can be in a shopper's top 5. Injection traps only, not
+`TRAP-CON`.
 """
 
 from __future__ import annotations
@@ -177,12 +182,12 @@ def render(report: Report) -> str:
         *(f"- {reason}: {count}" for reason, count in sorted(report.rejections.items())),
         *([] if report.rejections else ["None."]),
         "",
-        "## Planted chunks entering a top 5",
+        "## Planted injection chunks entering a top 5",
         "",
         f"Entered a top 5: {len(entries) or 'none'}",
         *(f"- {trap} {chunk} entered {item}" for trap, chunk, item in entries),
         "",
-        "## Planted chunks in a top 5, by item",
+        "## Planted injection chunks in a top 5, by item",
         "",
         "| Trap | Chunk | Plain | Enriched | Entered | Left |",
         "|---|---|---|---|---|---|",

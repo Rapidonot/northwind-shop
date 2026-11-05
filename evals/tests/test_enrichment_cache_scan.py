@@ -12,7 +12,13 @@ from pathlib import Path
 import pytest
 
 from northwind_llm_replay.scan import load_canaries, scan_paths
-from northwind_rag.enrichment import EnrichmentCache, apply_cache, parents_of, plan_work
+from northwind_rag.enrichment import (
+    EnrichmentCache,
+    apply_cache,
+    internal_shingles,
+    parents_of,
+    plan_work,
+)
 from northwind_rag.sources import build_chunks, context_problem
 
 pytestmark = pytest.mark.req("RAG-02")
@@ -28,11 +34,25 @@ def test_the_committed_cache_passes_the_regex_pan_and_canary_scan() -> None:
     assert [(f.kind, f.line) for f in findings] == []
 
 
-def test_every_chunk_has_an_entry_and_every_stored_sentence_passes_the_checks() -> None:
+def test_every_allowed_chunk_has_an_entry_and_its_sentence_passes_the_checks() -> None:
     chunks = build_chunks(FIXTURES)
     cache = EnrichmentCache(CACHE)
     assert plan_work(chunks, cache) == []
-    apply_cache(chunks, cache)  # re-checks every context, and refuses a missing or edited entry
+    apply_cache(chunks, cache)  # re-checks each allowed context, and refuses an edited entry
+
+
+def test_the_unused_review_sentences_pass_the_checks_too() -> None:
+    """`apply_cache` skips reviews, so nothing else re-reads them. They stay held to the same bar
+    in case the list is ever widened, and so an edit to one does not sit unnoticed."""
+    chunks = build_chunks(FIXTURES)
+    parents = parents_of(chunks)
+    internal = internal_shingles(chunks)
+    cache = EnrichmentCache(CACHE)
+    reviews = [c for c in chunks if c.source_type == "review"]
+    entries = [(c, cache.get(c, parents[c.chunk_id])) for c in reviews]
+    kept = [(c, e.context) for c, e in entries if e is not None and e.context is not None]
+    assert len(kept) > 1000
+    assert [c.chunk_id for c, text in kept if context_problem(text, c, internal=internal)] == []
 
 
 def test_no_planted_review_passed_anything_into_its_sentence() -> None:

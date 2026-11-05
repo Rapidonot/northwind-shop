@@ -55,7 +55,9 @@ def test_a_review_stays_plain_even_with_a_clean_entry_in_the_cache(
 ) -> None:
     review = first(chunks, "review")
     cache = cache_with(chunks, tmp_path, review)
-    assert cache.get(review, parents_of(chunks)[review.chunk_id]) is not None
+    entry = cache.get(review, parents_of(chunks)[review.chunk_id])
+    assert entry is not None
+    assert entry.context == SENTENCE  # a usable sentence, so staying plain proves the rule
     [applied] = [c for c in apply_cache([review], cache) if c.chunk_id == review.chunk_id]
     assert applied.context is None
     assert applied.embed_text == review.text
@@ -77,6 +79,18 @@ def test_a_type_nobody_has_listed_gets_none(chunks: list[Chunk], tmp_path: Path)
     chunk = replace(review, source_type=other)
     [applied] = apply_cache([chunk], EnrichmentCache(tmp_path))
     assert applied.context is None
+
+
+def test_a_type_nobody_has_listed_needs_no_call(chunks: list[Chunk], tmp_path: Path) -> None:
+    other: Any = "question"
+    chunk = replace(first(chunks, "review"), source_type=other)
+    assert plan_work([chunk], EnrichmentCache(tmp_path)) == []
+
+
+def test_a_type_nobody_has_listed_is_refused_at_the_index(chunks: list[Chunk]) -> None:
+    other: Any = "question"
+    with pytest.raises(ChunkError, match="may not have a context"):
+        check_chunk(replace(first(chunks, "review"), source_type=other, context=SENTENCE))
 
 
 def test_no_review_needs_a_call(chunks: list[Chunk], tmp_path: Path) -> None:

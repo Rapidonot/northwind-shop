@@ -40,8 +40,8 @@ holds the key.
 7. **Failed text is not kept.** A context that fails a check is stored as a reason code, and the chunk
    is indexed plain. Typographic quotes and dashes fold to ASCII first, the folded text must be
    printable ASCII, and that form is what is checked and stored. Every ingest re-checks every context
-   and refuses a public one that repeats internal text, so a cache edited by hand gets no further than
-   a model reply would. The patterns cannot catch every paraphrase, which is why rule 4 matters more
+   it uses and refuses a public one that repeats internal text, so a cache edited by hand gets no
+   further than a model reply would. The unused review sentences are checked by a test instead. The patterns cannot catch every paraphrase, which is why rule 4 matters more
    than they do: the advisor reads the 15 trap entries after the run.
 8. **Two planted reviews state a discount on purpose.** R00881 (TRAP-INJ-013) and R00712
    (TRAP-INJ-003) pass the new source scan for that exact text only. Generated text has no exemption.
@@ -69,6 +69,24 @@ first run stay in the cache, unused.
 
 Measured on the isolated index: recall@5 0.789, recall@10 0.852, MRR 0.649, against 0.750, 0.832 and
 0.608. The three lifts are gone.
+
+**What it costs.** The rule removes a lever the attacker's own text controls. It does not remove planted
+reviews from results:
+
+| | Planted appearances in a top 5 | Reviews' share of all top 5s |
+|---|---|---|
+| Plain | 20 | 25.0% |
+| Allow-list (adopted) | 23 | 26.8% |
+| Everything enriched | 16 | 39.0% |
+
+Three planted reviews entered a top 5 under the allow-list and none left: R00970 on EV-030, R00033 on
+EV-084, R00810 on EV-096. Their stored vectors are unchanged and each sat at rank 6, so enriching their
+neighbours moved those away from the query. The rise looks systematic, not specific to the planted
+ones: every plain review gains a little on enriched catalog chunks. Planted count alone flatters the
+all-enriched index, whose reviews fill 39% of top 5s.
+
+These figures are one unfiltered query per item. A shopper's search filters by region and can run three
+times a turn, so a chunk at rank 6 here can reach a shopper's top 5.
 
 **That delta does not satisfy the criterion.** It is on the same 64 items, after the fact. Nine
 configurations were looked at, and the choice was made having seen all of them:

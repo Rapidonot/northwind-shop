@@ -37,7 +37,7 @@ from northwind_rag.ingest import (
 from northwind_rag.models import Chunk, ChunkError
 from northwind_rag.retrieval import dense_search, retrieve_context
 from northwind_rag.sources import CONTEXT_SOURCE_TYPES, build_chunks
-from northwind_rag.store import IndexVersion, apply_migrations, sync_chunks
+from northwind_rag.store import IndexVersion, apply_migrations, sync_chunks, vector_literal
 from northwind_rag.testing import FakeEmbedder
 
 from .enrich_support import NEUTRAL, neutral_entries, write_complete_cache  # noqa: TID252
@@ -178,6 +178,43 @@ def test_dropping_a_context_goes_back_to_embedding_the_plain_text(
     assert (report.embedded, report.updated) == (5, 5)
     assert embedder.embedded[before:] == [c.text for c in chunks[:5]]
     assert count(conn, "context IS NOT NULL") == 0
+
+
+@pytest.mark.integration
+def test_a_review_that_loses_its_context_gets_its_plain_vector_back(
+    conn: psycopg.Connection, chunks: list[Chunk]
+) -> None:
+    """The row as the first run left it, seeded by SQL because `sync_chunks` now refuses it. The
+    enriched vector must not survive: that is what the allow-list exists to prevent."""
+    review = next(c for c in chunks if c.source_type == "review")
+    embedder = FakeEmbedder()
+    version = IndexVersion(data_version=1, dataset_sha256="0" * 64, chunker_version=1)
+    apply_migrations(conn)  # without this `rag_chunks` is the real table, next on search_path
+    sync_chunks(conn, [review], embedder, version)
+    [enriched_vector] = embedder.embed([f"{NEUTRAL}\n\n{review.text}"])
+    conn.execute(
+        "UPDATE rag_chunks SET context = %s, embed_hash = %s, content_hash = %s, "
+        "embedding = %s::vector WHERE chunk_id = %s",
+        (
+            NEUTRAL,
+            replace(review, context=NEUTRAL).embed_hash,
+            replace(review, context=NEUTRAL).content_hash,
+            vector_literal(enriched_vector),
+            review.chunk_id,
+        ),
+    )
+    report = sync_chunks(conn, [review], embedder, version)
+    assert (report.updated, report.embedded) == (1, 1)
+    row = conn.execute(
+        "SELECT context, embed_hash, embedding::text FROM rag_chunks WHERE chunk_id = %s",
+        (review.chunk_id,),
+    ).fetchone()
+    assert row is not None
+    [plain_vector] = embedder.embed([review.text])
+    stored = [float(x) for x in row[2].strip("[]").split(",")]
+    assert row[:2] == (None, None)
+    assert stored == pytest.approx(list(plain_vector), abs=1e-6)
+    assert stored != pytest.approx(list(enriched_vector), abs=1e-6)
 
 
 @pytest.mark.integration

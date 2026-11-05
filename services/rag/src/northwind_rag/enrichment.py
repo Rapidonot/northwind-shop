@@ -1,7 +1,9 @@
 """Contextual chunk enrichment: the prompt, the checks and the cache (RAG-02, decision 0009).
 
-Each chunk gets one generated sentence saying where it sits. The sentence is embedded in front of
-the chunk and stored beside it, never in `text`, so no model reads it and nothing cites it.
+Each product, variant and document chunk gets one generated sentence saying where it sits. The
+sentence is embedded in front of the chunk and stored beside it, never in `text`, so no model reads
+it and nothing cites it. Reviews get none (`CONTEXT_SOURCE_TYPES`); sentences from the first run
+stay in the cache, unused.
 
 The cache is the record of a paid run and the only input `make ingest-enriched` takes, so re-ingest
 makes no calls. There is one file per visibility and a lookup goes by the chunk's own, so an

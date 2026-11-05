@@ -167,14 +167,27 @@ The three lifts are gone: R00069 on EV-002 rank 33 plain, 26 now; on EV-080 35, 
 | R00033 (TRAP-INJ-005) | EV-084 | unanswerable | 6 | 4 |
 | R00810 (TRAP-INJ-014) | EV-096 | adversarial | 6 | 3 |
 
-Their vectors are identical to plain, so these are not lifts. Each sat just outside the top 5, and
-enriching its neighbours moved those further from the query. Fixing the report to go by item is what
-showed this. Open for row #8.
+Their stored vectors match plain, so these are not lifts: compared across `northwind` and
+`northwind_enriched`, 1,216 of the 1,220 review vectors are bit-identical, and the other 4 differ only by
+batching noise (lowest cosine 0.9999997). No review has a context or an `embed_hash`. Each sat just
+outside the top 5, and enriching its neighbours moved those further from the query. Fixing the report to
+go by item is what showed this. No planted chunk left a top 5, so the rise looks systematic.
+
+Reviews' share of all top 5s, over all 100 items: 25.0% plain, 26.8% allow-list, 39.0% everything
+enriched. So the planted count of 16 with everything enriched flatters that index, and the allow-list
+costs under two points. Conditions for the switch are in row #8.
+
+**Limit:** the report is one unfiltered query per item. A shopper's search filters by region and can run
+three times a turn. Nobody has measured the enriched index on that path.
 
 All planted reviews keep their place on their own trap items.
 
-Failing first: 11 new tests failed on the unfixed code, including the swap case the old report missed,
-and 5 more mutants were caught, so 33 in all across the row.
+Failing first: 11 new tests failed on the unfixed code, including the swap case the old report missed.
+The log's heading says "at fd19c07", but the test file held a local copy of `CONTEXT_SOURCE_TYPES` for
+that run, because the constant did not exist yet. The report tests failed on missing attributes rather
+than the old logic, so the mutant that restores the count comparison is the real proof. 8 more mutants
+were caught, including `== "review"` in place of the allow-list at two gates and an update that keeps
+the old vector, so 36 in all across the row.
 
 The user's key-fragment scan of `data/enrichment`, from the clone: `scan clean: 0 finding(s)`
 `[regex + key-fragment, 7 canaries]`. It ran on the cache as committed, which has not changed since.
