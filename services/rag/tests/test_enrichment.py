@@ -46,7 +46,10 @@ FAKE_KEY = "nwfake-" + "runnerkey" * 6  # fake; built at runtime
 # A hash of the prompt text and the two request settings that shape output. Edit SYSTEM_PROMPT,
 # MAX_OUTPUT_TOKENS or EFFORT and this fails until ENRICH_PROMPT_VERSION is bumped and the new
 # digest is pinned beside the new version (the version is part of every cache key).
-PROMPT_PINS = {1: "b571697d877793b10e278d7773567f4e5f42a1b7a240e71cb14e02daa4203613"}
+PROMPT_PINS = {
+    1: "b571697d877793b10e278d7773567f4e5f42a1b7a240e71cb14e02daa4203613",
+    2: "168b6520fab6433f44e151d962a130d22ae3fa97dfa6edc56c3a171ea8407ac9",
+}
 
 
 @pytest.fixture(scope="module")
@@ -429,10 +432,10 @@ def test_a_cache_edited_by_hand_to_hold_a_violating_context_is_refused(
     chunk = first_of(chunks, "product")
     good = judge(chunk, parents[chunk.chunk_id], MODEL, NEUTRAL, "end_turn")
     write_entries(tmp_path, [replace(good, context=violation)])  # an `ok` entry, edited by hand
-    [loaded] = apply_cache([chunk], EnrichmentCache(tmp_path))
-    assert loaded.context == violation  # the cache itself is only a file
+    with pytest.raises(EnrichmentError, match="cached context refused"):
+        apply_cache([chunk], EnrichmentCache(tmp_path))
     with pytest.raises(ChunkError, match="generated context refused"):
-        check_chunk(loaded)
+        check_chunk(replace(chunk, context=violation))  # the last check, on whatever reaches it
 
 
 # -- 6. context_problem shapes ------------------------------------------------------------------
@@ -442,9 +445,13 @@ def test_a_good_sentence_has_no_problem(chunks: list[Chunk]) -> None:
     assert context_problem(NEUTRAL, chunks[0]) is None
 
 
-@pytest.mark.parametrize("text", ["", "   ", "​", "\n"])
+@pytest.mark.parametrize("text", ["", "   ", "\n"])
 def test_empty_is_a_problem(chunks: list[Chunk], text: str) -> None:
     assert context_problem(text, chunks[0]) == "empty"
+
+
+def test_an_invisible_character_alone_is_refused_too(chunks: list[Chunk]) -> None:
+    assert context_problem("\u200b", chunks[0]) == "non-ascii"
 
 
 def test_two_lines_are_a_problem(chunks: list[Chunk]) -> None:
@@ -472,7 +479,7 @@ def test_a_canary_is_a_problem(chunks: list[Chunk]) -> None:
 
 def test_five_words_copied_from_a_review_body_are_a_problem() -> None:
     chunk = review_chunk("The sleeves run long but the collar sits flat against the neck.")
-    copied = "A reviewer notes the sleeves run long but little else."
+    copied = "This reviewer notes the sleeves run long but little else."
     assert context_problem(copied, chunk) == "copied-from-review"
 
 

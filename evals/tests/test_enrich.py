@@ -41,6 +41,7 @@ from northwind_evals.enrich import (
     Run,
     RunReport,
 )
+from northwind_llm_replay.runner import RunnerUnavailableError
 from northwind_rag.enrichment import (
     CacheEntry,
     EnrichmentCache,
@@ -597,7 +598,7 @@ def test_main_builds_its_client_without_sdk_retries(
         yield SimpleNamespace(url="http://127.0.0.1:9")
 
     class StubRun:
-        def __init__(self, client: object, *args: object) -> None:
+        def __init__(self, client: object, *args: object, **kwargs: object) -> None:
             self.client = client
 
         def all(self, work: object) -> RunReport:
@@ -665,3 +666,74 @@ def test_make_enrich_with_no_window_open_exits_before_any_call_and_leaves_every_
     if real_before is not None:
         assert real.read_bytes() == real_before
     assert list(cache_dir.iterdir()) == []
+
+
+def _stub_main(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[str, Any]:
+    """Runs `main` up to the window, and hands back what `proxy_config` was given."""
+    arm(monkeypatch, tmp_path)
+    seen: dict[str, Any] = {}
+
+    def config(*args: object, **kwargs: object) -> object:
+        seen.update(kwargs)
+        raise RunnerUnavailableError("no window")
+
+    monkeypatch.setattr(enrich, "proxy_config", config)
+    assert enrich.main() == 2
+    return seen
+
+
+def test_main_keeps_request_bodies_out_of_the_proxy_log(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The log holds whole requests, and internal chunks carry canaries the scan would refuse."""
+    assert _stub_main(monkeypatch, tmp_path)["log_path"] is None
+
+
+class _Boom(Exception):
+    pass
+
+
+def test_a_worker_that_slept_through_a_stop_sends_nothing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[object] = []
+
+    class StopWhileWaiting(enrich.Pacer):
+        def wait(self) -> None:
+            run._stop("stopped elsewhere")
+
+    client = SimpleNamespace(messages=SimpleNamespace(create=lambda **k: calls.append(k)))
+    cache: Any = None
+    run = enrich.Run(client, cache, "m", 1, frozenset(), pacer=StopWhileWaiting())
+    monkeypatch.setattr(enrich, "build_request", lambda *a: {})
+    chunk: Any = object()
+    parent: Any = object()
+    assert run.one(chunk, parent) is None
+    assert calls == []
+
+
+def test_paid_entries_are_kept_when_a_later_chunk_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    kept: list[object] = []
+    cache: Any = SimpleNamespace(add=lambda entries: kept.extend(entries))
+    run = enrich.Run(None, cache, "m", 2, frozenset())
+    replies = iter(["paid"])
+
+    def one(chunk: object, parent: object) -> object:
+        for reply in replies:
+            return reply
+        raise _Boom
+
+    monkeypatch.setattr(run, "one", one)
+    work: Any = (object(), [object(), object()])
+    with pytest.raises(_Boom):
+        run.parent_job(work)
+    assert kept == ["paid"]
+
+
+def test_a_failure_that_is_not_a_429_pauses_without_counting_as_one() -> None:
+    pacer = enrich.Pacer(clock=lambda: 0.0, sleep=lambda _: None, jitter=lambda: 1.0)
+    pacer.pause()
+    assert pacer.rate_limited_count == 0
+    assert pacer.rpm == enrich.START_RPM

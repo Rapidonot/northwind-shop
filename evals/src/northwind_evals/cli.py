@@ -66,7 +66,8 @@ from northwind_llm_replay.runner import RunnerUnavailableError, proxy_config
 from northwind_llm_replay.scan import load_canaries, scan_text
 from northwind_rag.cli import DEFAULT_DATABASE_URL, enriched_database_url
 from northwind_rag.embedding import Embedder, FastEmbedEmbedder
-from northwind_rag.ingest import refuse_shared_database
+from northwind_rag.enrichment import EnrichmentCache
+from northwind_rag.ingest import require_enriched_database
 from northwind_rag.retrieval import RetrievedChunk, dense_search, retriever_id
 from northwind_rag.sources import build_chunks
 
@@ -451,7 +452,7 @@ def cmd_enrichment_report(_: argparse.Namespace) -> int:
         print("no enriched index: run `make ingest-enriched` first", file=sys.stderr)
         return 1
     with enriched_conn as conn:
-        refuse_shared_database(conn)
+        require_enriched_database(conn)
         enriched = _live(conn, embedder, items)
     report = build_report(
         items,
@@ -461,6 +462,7 @@ def cmd_enrichment_report(_: argparse.Namespace) -> int:
         retriever_id(embedder),
         load_baseline(BASELINE).retrieval,
         _trap_chunks(),
+        EnrichmentCache().reason_counts(),
     )
     text = render(report)
     ENRICHMENT_REPORT.write_text(text, encoding="utf-8")

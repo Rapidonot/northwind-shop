@@ -43,6 +43,7 @@ class Report:
     stale: list[str] = field(default_factory=list)
     stale_zero_tolerance: list[str] = field(default_factory=list)
     traps: list[TrapRow] = field(default_factory=list)
+    rejections: dict[str, int] = field(default_factory=dict)
 
     @property
     def delta(self) -> float:
@@ -83,6 +84,7 @@ def build_report(
     retriever: str,
     baseline: Mapping[str, Mapping[str, float]],
     trap_chunks: Mapping[str, str],
+    rejections: Mapping[str, int] | None = None,
 ) -> Report:
     """`trap_chunks` maps each planted chunk's ID to its trap, for every TRAP-INJ chunk."""
     before = _scores(items, plain)
@@ -91,6 +93,7 @@ def build_report(
         plain_recall=_mean(list(before.values())),
         enriched_recall=_mean(list(after.values())),
         baseline_recall=_mean([scores[METRIC] for scores in baseline.values()]),
+        rejections=dict(rejections or {}),
     )
     for segment in sorted({item.segment for item in items if item.id in before}):
         ids = [item.id for item in items if item.segment == segment and item.id in before]
@@ -136,6 +139,11 @@ def render(report: Report) -> str:
         f"Saved contexts that would change, so answers that go stale: {len(report.stale)}",
         f"Items: {', '.join(report.stale) or 'none'}",
         f"Adversarial or unanswerable: {', '.join(report.stale_zero_tolerance) or 'none'}",
+        "",
+        "## Generated sentences rejected, by reason",
+        "",
+        *(f"- {reason}: {count}" for reason, count in sorted(report.rejections.items())),
+        *([] if report.rejections else ["None."]),
         "",
         "## Planted injection chunks in a top 5",
         "",

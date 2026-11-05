@@ -114,13 +114,13 @@ def test_eval_live_takes_the_slice_from_the_shell_too(tmp_path: Path) -> None:
 # --- who may spend ---------------------------------------------------------------------------
 
 
-def test_only_record_and_eval_live_recipes_can_run_in_a_spending_mode() -> None:
+def test_only_record_eval_live_and_enrich_recipes_can_run_in_a_spending_mode() -> None:
     spenders = set()
     for match in re.finditer(r"^([a-z][\w-]*):.*\n((?:\t.*\n|#.*\n)*)", MAKEFILE, re.MULTILINE):
         target, body = match.groups()
         if re.search(r"LLM_MODE=(record|live)", body):
             spenders.add(target)
-    assert spenders == {"record", "eval-live"}
+    assert spenders == {"record", "eval-live", "enrich"}
 
 
 @pytest.mark.parametrize("target", ["eval-snapshot", "eval-review-list", "eval-gate"])

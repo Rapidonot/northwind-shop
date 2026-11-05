@@ -90,6 +90,75 @@ INSTRUCTION_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"\bfreebot\b|\bno rules\b|\blet'?s play\b", re.I),
 )
 _ANY_URL = re.compile(r"\bhttps?://|\bwww\.|\]\(", re.IGNORECASE)
+_NUMBER = (
+    r"\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|"
+    r"sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|a few|a couple|a handful"
+)
+_AUDIENCE = r"shoppers?|users?|customers?|buyers?|readers?|everyone|people|assistant|ai|model"
+# Model-written text has no reason to state any of these, so these reach further than the source
+# scan: a sentence describing a planted review writes "says", "tells" and "ninety percent".
+GENERATED_MONEY_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\b\d+[.,]\d{2}\b"),
+    re.compile(r"\b(?:costs?|priced(?: at)?|sells? for|was|now)\s+\d", re.I),
+    re.compile(r"\b(?:dollars?|euros?|pounds?|quid|bucks|cents?|kr|inr|rupees?)\b", re.I),
+    re.compile(r"(?:%|\bper\s?cent)\s*(?:off|discount|cheaper|less)\b", re.I),
+    re.compile(
+        r"\b(?:for free|is free|are free|free of charge|no charge|charges? nothing|costs? nothing|"
+        r"lower price|reduced price|price (?:drop|cut)|cheaper|markdown)\b",
+        re.I,
+    ),
+)
+GENERATED_STOCK_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\b(?:sold out|out of stock|in stock|low stock|stock levels?|restock\w*)\b", re.I),
+    re.compile(rf"\b(?:{_NUMBER})\s+(?:\w+\s+)?(?:left|remaining|available)\b", re.I),
+    re.compile(rf"\b(?:the )?last (?:{_NUMBER})\b", re.I),
+)
+# Hard rule 2 names delivery dates and order state too.
+GENERATED_DELIVERY_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\barriv\w* (?:in|within|by|on|next|tomorrow|today)\b", re.I),
+    re.compile(r"\bdeliver\w* (?:in|within|by|on|next|tomorrow|today)\b", re.I),
+    re.compile(r"\bships? (?:in|within|by|on|next|tomorrow|today)\b", re.I),
+    re.compile(r"\b(?:shipped|dispatched|in transit|tracking number|estimated delivery)\b", re.I),
+    re.compile(r"\border (?:status|confirmed|cancel\w*|shipped)\b", re.I),
+)
+GENERATED_INSTRUCTION_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(
+        r"\b(?:ignor|disregard|forget)\w*\b.{0,40}\b(?:instructions?|rules?|prompts?)\b", re.I
+    ),
+    re.compile(
+        rf"\b(?:tell|ask|urg|instruct|steer|direct|advis|recommend)\w*\b.{{0,30}}\b(?:{_AUDIENCE})\b",
+        re.I,
+    ),
+    re.compile(r"\bauthori[sz]\w*\b", re.I),
+    re.compile(r"\bcard details\b|\bwithout asking\b|\bconfirm every\b", re.I),
+)
+# A bare domain has no scheme for the host checks to find.
+_BARE_DOMAIN = re.compile(
+    r"\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|org|net|io|co|example|shop|store)\b", re.I
+)
+# A sentence about a review describes the product. A review has no standing to state any of this.
+REVIEW_CONTEXT_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(
+        r"\b(?:polic\w+|refund\w*|returns?|returned|sent back|sale|code|staff|manager|admin|"
+        r"support team|instructions?)\b",
+        re.I,
+    ),
+)
+# Typographic forms a good sentence may use, and the ASCII it is stored as.
+_FOLDS = str.maketrans(
+    {
+        "\u2018": "'",
+        "\u2019": "'",
+        "\u201c": '"',
+        "\u201d": '"',
+        "\u2010": "-",
+        "\u2011": "-",
+        "\u2012": "-",
+        "\u2013": "-",
+        "\u2014": "-",
+        "\u2015": "-",
+    }
+)
 
 # Real brands and trademarks that must not appear in synthetic text (hard rule 3).
 REAL_BRANDS: tuple[str, ...] = (
@@ -176,19 +245,47 @@ def find_promotions(text: str) -> list[str]:
     return [m.group(0) for pattern in PROMOTION_PATTERNS for m in pattern.finditer(text)]
 
 
+def fold_generated(text: str) -> str:
+    """Typographic quotes and dashes as ASCII, so the check and the stored text are the same."""
+    return text.translate(_FOLDS).strip()
+
+
+def is_printable_ascii(text: str) -> bool:
+    """Closes homoglyphs, other scripts, control and invisible characters and most currency signs
+    in one rule, which no pattern list can do."""
+    return all(" " <= ch <= "~" for ch in text)
+
+
 def find_generated_violations(text: str) -> list[str]:
     """Everything model-written text may not hold, as `category: match`. No exemptions (RAG-02).
-    The caller normalises first, so zero-width characters cannot split a match."""
+    The caller folds and checks for printable ASCII first."""
     found = [f"money-or-stock: {hit}" for hit in find_money_or_stock(text)]
     found += [f"promotion: {hit}" for hit in find_promotions(text)]
-    for pattern in GENERATED_PROMOTION_PATTERNS:
-        found += [f"promotion: {m.group(0)}" for m in pattern.finditer(text)]
-    for pattern in INSTRUCTION_PATTERNS:
-        found += [f"instruction: {m.group(0)}" for m in pattern.finditer(text)]
+    groups = (
+        ("promotion", GENERATED_PROMOTION_PATTERNS),
+        ("money-or-stock", GENERATED_MONEY_PATTERNS),
+        ("money-or-stock", GENERATED_STOCK_PATTERNS),
+        ("delivery", GENERATED_DELIVERY_PATTERNS),
+        ("instruction", INSTRUCTION_PATTERNS),
+        ("instruction", GENERATED_INSTRUCTION_PATTERNS),
+    )
+    for category, patterns in groups:
+        for pattern in patterns:
+            found += [f"{category}: {m.group(0)}" for m in pattern.finditer(text)]
     found += [f"link: {m.group(0)}" for m in _ANY_URL.finditer(text)]
+    found += [f"link: {m.group(0)}" for m in _BARE_DOMAIN.finditer(text)]
     found += [f"brand: {hit}" for hit in find_real_brands(text)]
     found += [f"host: {hit}" for hit in find_unsafe_hosts(text)]
     return found
+
+
+def find_review_context_violations(text: str) -> list[str]:
+    """The extra limit on a sentence about a review, as `category: match`."""
+    return [
+        f"review-claim: {m.group(0)}"
+        for pattern in REVIEW_CONTEXT_PATTERNS
+        for m in pattern.finditer(text)
+    ]
 
 
 def find_real_brands(text: str) -> list[str]:

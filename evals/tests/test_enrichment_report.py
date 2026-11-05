@@ -279,3 +279,10 @@ def test_building_and_rendering_a_report_writes_nothing_under_evals(
     render(report)
     assert tree_state(REPO / "evals") == before
     assert list(tmp_path.iterdir()) == []
+
+
+def test_rejections_are_reported_by_reason() -> None:
+    report = Report(0.5, 0.5, 0.5, rejections={"instruction": 2, "non-ascii": 1})
+    text = render(report)
+    assert "- instruction: 2" in text
+    assert "- non-ascii: 1" in text

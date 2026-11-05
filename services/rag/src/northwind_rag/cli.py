@@ -13,7 +13,7 @@ from psycopg import sql
 from psycopg.conninfo import conninfo_to_dict, make_conninfo
 
 from northwind_rag.embedding import FastEmbedEmbedder
-from northwind_rag.ingest import SHARED_DATABASE, ingest, ingest_enriched
+from northwind_rag.ingest import ENRICHED_DATABASES, ingest, ingest_enriched
 
 DEFAULT_DATABASE_URL = "postgresql://northwind:northwind-local@localhost:5432/northwind"
 DEFAULT_ENRICHED_DATABASE_URL = (
@@ -23,20 +23,19 @@ DEFAULT_ENRICHED_DATABASE_URL = (
 
 def enriched_database_url() -> str:
     """Its own variable: nothing that sets DATABASE_URL can point this at the shared index."""
-    return os.environ.get("ENRICHED_DATABASE_URL", DEFAULT_ENRICHED_DATABASE_URL)
+    return os.environ.get("ENRICHED_DATABASE_URL") or DEFAULT_ENRICHED_DATABASE_URL
 
 
 def create_enriched_database(url: str) -> None:
     """Creates the database and its vector extension if they are missing."""
-    settings = conninfo_to_dict(url)
-    name = str(settings.get("dbname"))
-    if name == SHARED_DATABASE:
-        raise SystemExit(f"ENRICHED_DATABASE_URL must not name {SHARED_DATABASE!r}")
+    name = conninfo_to_dict(url).get("dbname")
+    if name not in ENRICHED_DATABASES:
+        raise SystemExit(f"ENRICHED_DATABASE_URL must name one of {sorted(ENRICHED_DATABASES)}")
     admin_url = make_conninfo(url, dbname="postgres")
     with psycopg.connect(admin_url, autocommit=True) as admin:
         found = admin.execute("SELECT 1 FROM pg_database WHERE datname = %s", (name,)).fetchone()
         if found is None:
-            admin.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(name)))
+            admin.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(str(name))))
     with psycopg.connect(url, autocommit=True) as conn:
         conn.execute("CREATE EXTENSION IF NOT EXISTS vector")
 
@@ -55,7 +54,8 @@ def main() -> None:
         connection = psycopg.connect(url)
     except psycopg.Error:
         # libpq echoes parts of a malformed URL, password included (hard rule 4).
-        raise SystemExit("could not connect to the database; check DATABASE_URL") from None
+        variable = "ENRICHED_DATABASE_URL" if args.enriched else "DATABASE_URL"
+        raise SystemExit(f"could not connect to the database; check {variable}") from None
     with connection as conn:
         run = ingest_enriched if args.enriched else ingest
         report = run(conn, args.fixtures, FastEmbedEmbedder())

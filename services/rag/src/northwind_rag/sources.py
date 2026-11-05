@@ -20,6 +20,9 @@ from northwind_data.textscan import (
     find_generated_violations,
     find_money_or_stock,
     find_promotions,
+    find_review_context_violations,
+    fold_generated,
+    is_printable_ascii,
 )
 from northwind_rag.chunking import chunk_markdown, with_prefix
 from northwind_rag.models import (
@@ -85,7 +88,8 @@ PLANTED_PROMOTIONS: dict[str, tuple[str, str]] = {
 }
 # A generated context says where a chunk sits, in one short line (RAG-02).
 MAX_CONTEXT_CHARS = 240
-_MARKUP = frozenset("<>{}[]`")
+_MARKUP = frozenset("<>{}[]`@")
+_CONTEXT_START = "This "
 # Words in a row that may match a review. A review is untrusted, and a context has no need to quote.
 _COPY_WORDS = 5
 # Every product, variant and review chunk must have these.
@@ -143,33 +147,48 @@ def _scan(text: str, where: str, review_id: str | None = None) -> None:
         raise ChunkError(f"{where}: promotion in chunk text: {promotions}")
 
 
-def _shingles(text: str) -> set[tuple[str, ...]]:
+def shingles(text: str) -> set[tuple[str, ...]]:
     words = re.findall(r"[a-z0-9']+", _normalised(text).lower())
     return {tuple(words[i : i + _COPY_WORDS]) for i in range(len(words) - _COPY_WORDS + 1)}
 
 
 def context_problem(
-    context: str, chunk: Chunk, canaries: frozenset[str] = frozenset()
+    context: str,
+    chunk: Chunk,
+    canaries: frozenset[str] = frozenset(),
+    internal: frozenset[tuple[str, ...]] = frozenset(),
 ) -> str | None:
     """Why a generated context may not be indexed, as a short code that holds none of its text, or
-    None. Every ingest runs this again, so a cache edited by hand gets no further than the model."""
-    normal = _normalised(context).strip()
-    if not normal:
+    None. Every ingest runs this again, so a cache edited by hand gets no further than the model.
+
+    It reads the folded text, and `fold_generated` is what gets stored, so what is checked is what
+    is kept. `internal` is the five-word runs of internal chunks: ingest may not read the answer
+    key for canaries, and this catches copied internal text with or without one."""
+    text = fold_generated(context)
+    if not text:
         return "empty"
-    if len(context.strip().splitlines()) > 1:
+    if len(text.splitlines()) > 1:
         return "multi-line"
-    if len(normal) > MAX_CONTEXT_CHARS:
+    if not is_printable_ascii(text):
+        return "non-ascii"
+    if len(text) > MAX_CONTEXT_CHARS:
         return "too-long"
-    if _MARKUP & set(normal):
+    if _MARKUP & set(text):
         return "markup"
-    violations = find_generated_violations(normal)
+    if not text.startswith(_CONTEXT_START):
+        return "shape"
+    violations = find_generated_violations(text)
+    if chunk.source_type == "review":
+        violations += find_review_context_violations(text)
     if violations:
         return violations[0].split(":", 1)[0]
-    if any(canary in normal for canary in canaries):
+    if any(canary in text for canary in canaries):
         return "canary"
+    if chunk.metadata.visibility == "public" and shingles(text) & internal:
+        return "internal-text"
     if chunk.source_type == "review":
         _, _, body = chunk.text.partition("\n\n")  # the first part is our own heading
-        if _shingles(normal) & _shingles(body):
+        if shingles(text) & shingles(body):
             return "copied-from-review"
     return None
 

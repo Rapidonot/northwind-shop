@@ -35,7 +35,16 @@ def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 def entry(context: str) -> str:
-    row = {"chunk_id": "product:P1:0", "context": context, "status": "ok", "visibility": "public"}
+    row = {
+        "chunk_id": "product:P1:0",
+        "context": context,
+        "key": "g" * 64,  # the digit-free shape `cache_key` writes
+        "model": "claude-haiku-5-5",
+        "prompt_version": 2,
+        "reason": None,
+        "status": "ok",
+        "visibility": "public",
+    }
     return json.dumps(row) + "\n"
 
 

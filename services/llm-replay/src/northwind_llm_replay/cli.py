@@ -22,7 +22,7 @@ from northwind_llm_replay.scan import load_canaries, printable, scan_paths
 CHECKPOINT_CALLS = 20
 PROXY_LOG_DIR = Path(".llm-proxy-log")
 # Committed eval files carry retrieved text and labels, and the enrichment cache carries model
-# output, so they get the same scan as cassettes.
+# output, so they get the regex, PAN and canary scan too. They read as raw text, not decoded JSON.
 EVAL_ROOTS = [
     Path("evals/contexts"),
     Path("evals/fixtures"),

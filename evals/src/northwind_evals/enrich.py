@@ -17,25 +17,28 @@ import random
 import sys
 import threading
 import time
+from collections import Counter
 from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 import anthropic
 
-from northwind_common.llm import ROUTINE_MODEL, anthropic_client
+from northwind_common.llm import anthropic_client
 from northwind_common.pricing import cost_usd
 from northwind_llm_replay.proxy import RunningProxy
 from northwind_llm_replay.runner import RunnerUnavailableError, proxy_config
 from northwind_llm_replay.scan import load_canaries
 from northwind_rag.enrichment import (
     CACHE_DIR,
+    ENRICH_MODEL,
     CacheEntry,
     EnrichmentCache,
     Parent,
     build_request,
+    internal_shingles,
     judge,
     plan_work,
 )
@@ -54,7 +57,8 @@ MAX_ATTEMPTS = 3  # for a failure that is not a 429
 MAX_FAILURES_IN_A_ROW = 5
 SELF_CHECK_CALLS = 20
 PROJECTION_LIMIT_USD = 1.50
-REQUEST_TIMEOUT_SECONDS = 60.0
+# Above any real reply: a call that times out here can still be charged upstream, then be retried.
+REQUEST_TIMEOUT_SECONDS = 180.0
 RETRYABLE_STATUS = frozenset({500, 503, 504, 529})
 
 
@@ -116,6 +120,7 @@ class RunReport:
     cache_write_tokens: int = 0
     rate_limited: int = 0
     stopped: str | None = None
+    reasons: Counter[str] = field(default_factory=Counter)
 
 
 def _retryable(error: anthropic.APIStatusError) -> bool:
@@ -141,12 +146,14 @@ class Run:
         canaries: frozenset[str],
         pacer: Pacer | None = None,
         out: Callable[[str], None] = print,
+        internal: frozenset[tuple[str, ...]] = frozenset(),
     ) -> None:
         self._client = client
         self._cache = cache
         self._model = model
         self._total = total
         self._canaries = canaries
+        self._internal = internal
         self._pacer = pacer or Pacer()
         self._out = out
         self._lock = threading.Lock()
@@ -168,6 +175,8 @@ class Run:
             report.calls += 1
             report.ok += entry.status == "ok"
             report.rejected += entry.status == "rejected"
+            if entry.reason:
+                report.reasons[entry.reason] += 1
             report.cost_usd += cost_usd(self._model, usage)
             report.cache_read_tokens += usage.get("cache_read_input_tokens") or 0
             report.cache_write_tokens += usage.get("cache_creation_input_tokens") or 0
@@ -182,7 +191,7 @@ class Run:
         self._out(
             f"after {report.calls} calls: ${report.cost_usd:.6f}, "
             f"cache read {report.cache_read_tokens}, written {report.cache_write_tokens}, "
-            f"projected ${projected:.2f} for {self._total}"
+            f"{report.rate_limited} rate limited, projected ${projected:.2f} for {self._total}"
         )
         if report.cache_read_tokens == 0:
             self._out("warning: no cache reads yet")
@@ -203,6 +212,8 @@ class Run:
         attempts = 0
         while not self.stopped:
             self._pacer.wait()
+            if self.stopped:  # a worker that slept through a stop sends nothing more
+                return None
             try:
                 response = self._client.messages.create(**request)
             except anthropic.RateLimitError:
@@ -227,6 +238,7 @@ class Run:
                     _text(response),
                     response.stop_reason,
                     self._canaries,
+                    self._internal,
                 )
                 self._account(response, entry)
                 return entry
@@ -241,14 +253,16 @@ class Run:
     def parent_job(self, work: tuple[Parent, Sequence[Chunk]]) -> None:
         parent, chunks = work
         entries: list[CacheEntry] = []
-        for chunk in chunks:
-            entry = self.one(chunk, parent)
-            if entry is not None:
-                entries.append(entry)
-            if self.stopped:
-                break
-        with self._lock:
-            self._cache.add(entries)
+        try:
+            for chunk in chunks:
+                entry = self.one(chunk, parent)
+                if entry is not None:
+                    entries.append(entry)
+                if self.stopped:
+                    break
+        finally:  # paid for, whatever happened next
+            with self._lock:
+                self._cache.add(entries)
 
     def all(self, work: list[tuple[Parent, list[Chunk]]]) -> RunReport:
         """The first call runs alone, so the shared system prompt is cached before the rest."""
@@ -284,20 +298,23 @@ def main() -> int:
             "live",
             SUITE,
             cassette_root=Path("cassettes"),
-            log_path=Path(f".llm-proxy-log/{SUITE}.jsonl"),
+            log_path=None,  # the log holds request bodies, and internal chunks carry canaries
         )
     except RunnerUnavailableError as exc:
         print(str(exc), file=sys.stderr)
         return 2
     with RunningProxy(config) as running:
         client = anthropic_client(running.url, max_retries=0, timeout=REQUEST_TIMEOUT_SECONDS)
-        report = Run(client, cache, ROUTINE_MODEL, total, canaries).all(work)
+        internal = internal_shingles(chunks)
+        report = Run(client, cache, ENRICH_MODEL, total, canaries, internal=internal).all(work)
     cache.compact()
     print(
         f"{report.calls} calls, {report.ok} ok, {report.rejected} rejected, "
         f"{report.skipped} skipped, {report.rate_limited} rate limited, "
         f"${report.cost_usd:.6f}, cache read {report.cache_read_tokens}"
     )
+    for reason, count in sorted(report.reasons.items()):
+        print(f"  rejected, {reason}: {count}")
     if report.stopped:
         print(f"stopped: {report.stopped}. Open another window to resume.", file=sys.stderr)
         return 1

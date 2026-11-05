@@ -19,23 +19,30 @@ holds the key.
 2. **`make enrich` is a third spending target.** It runs only through a window the user opened
    (`SUITE=rag-enrichment`), with `LLM_MODE=live` pinned on the recipe. With no window it exits before
    any model call.
-3. **Live mode, no cassettes.** 2,351 recordings would add about 20 MB, and the cache in
-   `data/enrichment` is the record of the run. The ledger still records every call. Tests use scripted
-   fakes.
-4. **The generated sentence stays out of `text`.** It sits in `rag_chunks.context` and is embedded in
-   front of the text. Retrieval never returns it, so no model reads it and nothing cites it. A row that
-   wants it read must decide that on purpose.
-5. **The cache key adds the parent.** It is prompt version, visibility, chunk text hash and parent
-   hash. The sentence is written from the parent as well as the chunk, so if a product's text changes
+3. **Live mode, no cassettes, no proxy log.** 2,351 recordings would add about 20 MB, and the cache in
+   `data/enrichment` is the record of the run. The ledger still records every call. The proxy log would
+   hold whole requests, and internal chunks carry canaries, so `log_path` is `None`. Tests use scripted
+   fakes. GitHub CI's scan step lists its paths, so a tagged pytest test scans the committed cache.
+4. **Context text is ranking-only.** It sits in `rag_chunks.context` and is embedded in front of the
+   text, so it changes which chunks are found and nothing else. It never enters a model prompt or a
+   shopper view without a new review. Retrieval never returns it, and a test fails on any new reader
+   of `context` or `embed_text` outside the index writers. Row #8's choice of what FTS indexes is such
+   a review.
+5. **The cache key adds the model and the parent.** It is prompt version, model, visibility, chunk text
+   hash and parent hash, stored with no digits so that no key can read as a card number. The sentence is written from the parent as well as the chunk, so if a product's text changes
    while a chunk's does not, chunk hash alone would keep a stale sentence. Two chunks with the same
    text under the same parent share one entry: R00778 and R00779 do, so the run is 2,350 calls.
 6. **The enriched index is its own database, `northwind_enriched`.** A database rather than a schema,
    because a mistyped database name fails to connect, while a mistyped `search_path` falls through to
    `public`. Advisory locks are per database too, so an enriched ingest cannot block `make ingest`.
-   `make ingest` stays plain, and `make ingest-enriched` refuses `northwind`.
+   `make ingest` stays plain, and `make ingest-enriched` accepts only an allowlist:
+   `northwind_enriched` and `northwind_enriched_test`, which the tests use.
 7. **Failed text is not kept.** A context that fails a check is stored as a reason code, and the chunk
-   is indexed plain. Every ingest re-checks every context, so a cache edited by hand gets no further
-   than a model reply would.
+   is indexed plain. Typographic quotes and dashes fold to ASCII first, the folded text must be
+   printable ASCII, and that form is what is checked and stored. Every ingest re-checks every context
+   and refuses a public one that repeats internal text, so a cache edited by hand gets no further than
+   a model reply would. The patterns cannot catch every paraphrase, which is why rule 4 matters more
+   than they do: the advisor reads the 15 trap entries after the run.
 8. **Two planted reviews state a discount on purpose.** R00881 (TRAP-INJ-013) and R00712
    (TRAP-INJ-003) pass the new source scan for that exact text only. Generated text has no exemption.
 

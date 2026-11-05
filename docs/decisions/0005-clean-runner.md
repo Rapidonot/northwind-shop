@@ -152,7 +152,9 @@ so a spending run under an xdist worker is a usage error rather than a stream of
   call, so it is impractical. Not measured.
 - **The cassette-write key-fragment check is gone**, because the sandbox has no key. Regex scanning
   stays at write time, and the runner checks every response. The file-level fragment scan from the
-  clone covers `CASSETTES_DIR` only, not a worktree's `.llm-proxy-log/` or `evals/`.
+  clone covers `CASSETTES_DIR` only, not a worktree's `.llm-proxy-log/`, `evals/` or
+  `data/enrichment/`. Its other roots are the clone's own copies. To check a worktree's enrichment
+  cache before merge, point `CASSETTES_DIR` at it, in addition to the normal scan.
 - **Buffering hides first-token latency.** The caller sees the first token when the response ends.
   So the runner logs time to first upstream byte per request, in its terminal line and the ledger's
   settle entry. #17 measures local overhead in replay with a streaming scripted model, and the

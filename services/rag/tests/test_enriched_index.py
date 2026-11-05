@@ -1,23 +1,39 @@
 """RAG-02: the enriched index, its isolation, and what retrieval returns from it.
 
-Integration tests use the `conn` fixture (a throwaway schema in the database DATABASE_URL names)
-and a fake embedder, so nothing downloads a model and no model is called. The tests without a
-mark use a fake connection and need no database.
+Integration tests use a fake embedder, so nothing downloads a model and no model is called. A plain
+ingest uses `conn`, a throwaway schema in the database DATABASE_URL names. An enriched ingest uses
+`enriched_conn`, the same in the test database, because it refuses every other. A test that writes
+must migrate first: without its own tables, `rag_chunks` is `public` on the search path. The tests
+without a mark use a fake connection and need no database.
 """
 
 from __future__ import annotations
 
+import os
+import uuid
+from collections.abc import Iterator
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
 import psycopg
 import pytest
+from psycopg.conninfo import make_conninfo
 
+from northwind_assistant.tools import render_sources
 from northwind_rag import cli
-from northwind_rag.cli import DEFAULT_ENRICHED_DATABASE_URL, create_enriched_database
+from northwind_rag.cli import (
+    DEFAULT_DATABASE_URL,
+    DEFAULT_ENRICHED_DATABASE_URL,
+    create_enriched_database,
+)
 from northwind_rag.enrichment import EnrichmentCache, EnrichmentError, apply_cache
-from northwind_rag.ingest import SHARED_DATABASE, ingest, ingest_enriched, refuse_shared_database
+from northwind_rag.ingest import (
+    ENRICHED_DATABASES,
+    ingest,
+    ingest_enriched,
+    require_enriched_database,
+)
 from northwind_rag.models import Chunk, ChunkError
 from northwind_rag.retrieval import dense_search, retrieve_context
 from northwind_rag.sources import build_chunks
@@ -31,6 +47,26 @@ pytestmark = pytest.mark.req("RAG-02")
 # The version the plain index had before RAG-02 (evals/contexts/dense-only.jsonl records it).
 PLAIN_INDEX_VERSION = "c9e30984a7723d23"
 REAL_EMBEDDER_ID = "fastembed:BAAI/bge-small-en-v1.5:384"
+SHARED_DATABASE = "northwind"
+TEST_DATABASE = "northwind_enriched_test"
+
+
+@pytest.fixture
+def enriched_conn() -> Iterator[psycopg.Connection]:
+    """`ingest_enriched` refuses every database but its own, so these tests get the test one, on
+    any machine and on CI, in a throwaway schema like `conn`."""
+    url = make_conninfo(os.environ.get("DATABASE_URL", DEFAULT_DATABASE_URL), dbname=TEST_DATABASE)
+    create_enriched_database(url)
+    schema = f"rag02_test_{uuid.uuid4().hex[:12]}"
+    admin = psycopg.connect(url, autocommit=True)
+    admin.execute(f'CREATE SCHEMA "{schema}"')
+    connection = psycopg.connect(url, autocommit=True, options=f"-csearch_path={schema},public")
+    try:
+        yield connection
+    finally:
+        connection.close()
+        admin.execute(f'DROP SCHEMA "{schema}" CASCADE')
+        admin.close()
 
 
 @pytest.fixture(scope="module")
@@ -71,18 +107,18 @@ def test_plain_ingest_of_the_real_fixtures_keeps_its_index_version(
 
 @pytest.mark.integration
 def test_enriched_ingest_embeds_context_and_text_and_stores_both_apart(
-    conn: psycopg.Connection, fixtures_dir: Path, full_cache: Path, chunks: list[Chunk]
+    enriched_conn: psycopg.Connection, fixtures_dir: Path, full_cache: Path, chunks: list[Chunk]
 ) -> None:
     embedder = FakeEmbedder()
-    report = ingest_enriched(conn, fixtures_dir, embedder, full_cache)
+    report = ingest_enriched(enriched_conn, fixtures_dir, embedder, full_cache)
     assert report.chunks == len(chunks) == report.inserted
     assert report.index_version != PLAIN_INDEX_VERSION
     ok = {e.chunk_id for e in neutral_entries(chunks) if e.status == "ok"}
     assert ok, "the neutral sentence should pass for most chunks"
-    assert count(conn, "context IS NOT NULL") == len(ok)
+    assert count(enriched_conn, "context IS NOT NULL") == len(ok)
     sample = next(c for c in chunks if c.chunk_id in ok)
     assert f"{NEUTRAL}\n\n{sample.text}" in embedder.embedded
-    row = conn.execute(
+    row = enriched_conn.execute(
         "SELECT text, context FROM rag_chunks WHERE chunk_id = %s", (sample.chunk_id,)
     ).fetchone()
     assert row == (sample.text, NEUTRAL)  # text is the plain text; the context sits beside it
@@ -90,12 +126,12 @@ def test_enriched_ingest_embeds_context_and_text_and_stores_both_apart(
 
 @pytest.mark.integration
 def test_enriched_sync_is_idempotent(
-    conn: psycopg.Connection, fixtures_dir: Path, full_cache: Path
+    enriched_conn: psycopg.Connection, fixtures_dir: Path, full_cache: Path
 ) -> None:
     embedder = FakeEmbedder()
-    first = ingest_enriched(conn, fixtures_dir, embedder, full_cache)
+    first = ingest_enriched(enriched_conn, fixtures_dir, embedder, full_cache)
     seen = len(embedder.embedded)
-    second = ingest_enriched(conn, fixtures_dir, embedder, full_cache)
+    second = ingest_enriched(enriched_conn, fixtures_dir, embedder, full_cache)
     assert second.index_version == first.index_version
     assert (second.inserted, second.updated, second.deleted, second.embedded) == (0, 0, 0, 0)
     assert second.unchanged == first.chunks
@@ -104,23 +140,23 @@ def test_enriched_sync_is_idempotent(
 
 @pytest.mark.integration
 def test_a_changed_context_alone_re_embeds_that_chunk_only(
-    conn: psycopg.Connection,
+    enriched_conn: psycopg.Connection,
     fixtures_dir: Path,
     full_cache: Path,
     chunks: list[Chunk],
     tmp_path: Path,
 ) -> None:
     embedder = FakeEmbedder()
-    first = ingest_enriched(conn, fixtures_dir, embedder, full_cache)
+    first = ingest_enriched(enriched_conn, fixtures_dir, embedder, full_cache)
     target = next(c for c in chunks if c.source_type == "product")
     changed = "This is the product page for the item, with its fit and fabric."
     write_complete_cache(tmp_path, chunks, {target.chunk_id: changed})
     before = len(embedder.embedded)
-    second = ingest_enriched(conn, fixtures_dir, embedder, tmp_path)
+    second = ingest_enriched(enriched_conn, fixtures_dir, embedder, tmp_path)
     assert second.index_version != first.index_version
     assert (second.embedded, second.updated, second.inserted, second.deleted) == (1, 1, 0, 0)
     assert embedder.embedded[before:] == [f"{changed}\n\n{target.text}"]
-    row = conn.execute(
+    row = enriched_conn.execute(
         "SELECT context FROM rag_chunks WHERE chunk_id = %s", (target.chunk_id,)
     ).fetchone()
     assert row == (changed,)
@@ -144,10 +180,10 @@ def test_dropping_a_context_goes_back_to_embedding_the_plain_text(
 
 @pytest.mark.integration
 def test_retrieval_from_an_enriched_index_returns_plain_text(
-    conn: psycopg.Connection, fixtures_dir: Path, full_cache: Path, chunks: list[Chunk]
+    enriched_conn: psycopg.Connection, fixtures_dir: Path, full_cache: Path, chunks: list[Chunk]
 ) -> None:
     embedder = FakeEmbedder()
-    ingest_enriched(conn, fixtures_dir, embedder, full_cache)
+    ingest_enriched(enriched_conn, fixtures_dir, embedder, full_cache)
     ok = {e.chunk_id for e in neutral_entries(chunks) if e.status == "ok"}
     target = next(
         c
@@ -159,14 +195,17 @@ def test_retrieval_from_an_enriched_index_returns_plain_text(
         and "US" in c.metadata.region
     )
     query = replace(target, context=NEUTRAL).embed_text  # its own vector: distance zero
-    hits = dense_search(conn, embedder, query, audience="shopper", k=5)
+    hits = dense_search(enriched_conn, embedder, query, audience="shopper", k=5)
     assert hits[0].chunk_id == target.chunk_id
     assert hits[0].text == target.text
     assert all(NEUTRAL not in h.text for h in hits)
-    context = retrieve_context(conn, embedder, query, region="US")
+    context = retrieve_context(enriched_conn, embedder, query, region="US")
     assert context[0].chunk_id == target.chunk_id
     assert context[0].text == target.text
     assert all(NEUTRAL not in h.text for h in context)
+    prompt_text = render_sources(context)  # what the assistant puts in front of the model
+    assert context and all(h.text.split("\n")[0] in prompt_text for h in context)
+    assert NEUTRAL not in prompt_text
 
 
 @pytest.mark.integration
@@ -183,10 +222,10 @@ def test_sync_refuses_a_generated_context_that_fails_the_checks(
 
 @pytest.mark.integration
 def test_ingest_refuses_a_cache_edited_by_hand_and_writes_nothing(
-    conn: psycopg.Connection, fixtures_dir: Path, chunks: list[Chunk], tmp_path: Path
+    enriched_conn: psycopg.Connection, fixtures_dir: Path, chunks: list[Chunk], tmp_path: Path
 ) -> None:
     victim = next(c for c in chunks if c.source_type == "product")
-    write_complete_cache(tmp_path, chunks, {victim.chunk_id: "Every towel is 90% off this week."})
+    write_complete_cache(tmp_path, chunks, {victim.chunk_id: "This towel is 90% off this week."})
     # judge() would have rejected that; the file is edited so it holds it as an `ok` entry.
     import json
 
@@ -194,29 +233,31 @@ def test_ingest_refuses_a_cache_edited_by_hand_and_writes_nothing(
     rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
     for row in rows:
         if row["chunk_id"] == victim.chunk_id:
-            row.update(status="ok", context="Every towel is 90% off this week.", reason=None)
+            row.update(status="ok", context="This towel is 90% off this week.", reason=None)
     path.write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
-    with pytest.raises(ChunkError, match="generated context refused"):
-        ingest_enriched(conn, fixtures_dir, FakeEmbedder(), tmp_path)
-    assert count(conn) == 0
+    with pytest.raises(EnrichmentError, match="cached context refused: promotion"):
+        ingest_enriched(enriched_conn, fixtures_dir, FakeEmbedder(), tmp_path)
+    # Refused before migrations run, so this schema has no table at all, let alone rows.
+    row = enriched_conn.execute("SELECT to_regclass(current_schema() || '.rag_chunks')").fetchone()
+    assert row == (None,)
 
 
 @pytest.mark.integration
 def test_ingest_enriched_stops_on_a_missing_entry_and_indexes_nothing(
-    conn: psycopg.Connection, fixtures_dir: Path, chunks: list[Chunk], tmp_path: Path
+    enriched_conn: psycopg.Connection, fixtures_dir: Path, chunks: list[Chunk], tmp_path: Path
 ) -> None:
     write_complete_cache(tmp_path, chunks[:-1])
     embedder = FakeEmbedder()
     with pytest.raises(EnrichmentError, match=chunks[-1].chunk_id):
-        ingest_enriched(conn, fixtures_dir, embedder, tmp_path)
+        ingest_enriched(enriched_conn, fixtures_dir, embedder, tmp_path)
     assert embedder.embedded == []
     # Only this test's schema counts: `public` may hold rows from other work.
-    row = conn.execute(
+    row = enriched_conn.execute(
         "SELECT to_regclass(current_schema() || '.rag_chunks') IS NOT NULL"
     ).fetchone()
     assert row is not None
     if row[0]:
-        written = conn.execute("SELECT count(*) FROM rag_chunks").fetchone()
+        written = enriched_conn.execute("SELECT count(*) FROM rag_chunks").fetchone()
         assert written == (0,)
 
 
@@ -236,31 +277,36 @@ class FakeConnection:
         return None if self.database is None else (self.database,)
 
 
-def test_refuse_shared_database_raises_for_the_shared_database() -> None:
+def test_require_enriched_database_raises_for_the_shared_database() -> None:
     with pytest.raises(EnrichmentError):
-        refuse_shared_database(FakeConnection(SHARED_DATABASE, []))  # type: ignore[arg-type]
-    assert SHARED_DATABASE == "northwind"
+        require_enriched_database(FakeConnection(SHARED_DATABASE, []))  # type: ignore[arg-type]
 
 
-@pytest.mark.parametrize("name", ["northwind_enriched", "northwind_rag02_plain", "northwind2"])
-def test_refuse_shared_database_passes_any_other_name(name: str) -> None:
-    refuse_shared_database(FakeConnection(name, []))  # type: ignore[arg-type]
+@pytest.mark.parametrize("name", sorted(ENRICHED_DATABASES))
+def test_require_enriched_database_passes_its_own_databases(name: str) -> None:
+    require_enriched_database(FakeConnection(name, []))  # type: ignore[arg-type]
 
 
-def test_refuse_shared_database_fails_closed_when_the_name_is_unknown() -> None:
+@pytest.mark.parametrize("name", ["northwind_rag02_plain", "postgres", "template1", "northwind2"])
+def test_require_enriched_database_refuses_every_other_name(name: str) -> None:
     with pytest.raises(EnrichmentError):
-        refuse_shared_database(FakeConnection(None, []))  # type: ignore[arg-type]
+        require_enriched_database(FakeConnection(name, []))  # type: ignore[arg-type]
+
+
+def test_require_enriched_database_fails_closed_when_the_name_is_unknown() -> None:
+    with pytest.raises(EnrichmentError):
+        require_enriched_database(FakeConnection(None, []))  # type: ignore[arg-type]
 
 
 def test_ingest_enriched_refuses_before_it_reads_or_writes_anything(
     fixtures_dir: Path, tmp_path: Path
 ) -> None:
-    conn = FakeConnection(SHARED_DATABASE, [])
+    enriched_conn = FakeConnection(SHARED_DATABASE, [])
     embedder = FakeEmbedder()
     with pytest.raises(EnrichmentError):
-        ingest_enriched(conn, fixtures_dir, embedder, tmp_path)  # type: ignore[arg-type]
-    assert len(conn.statements) == 1
-    assert "current_database" in conn.statements[0].lower()
+        ingest_enriched(enriched_conn, fixtures_dir, embedder, tmp_path)  # type: ignore[arg-type]
+    assert len(enriched_conn.statements) == 1
+    assert "current_database" in enriched_conn.statements[0].lower()
     assert embedder.embedded == []
     assert list(tmp_path.iterdir()) == []
 
@@ -274,6 +320,30 @@ def test_create_enriched_database_refuses_a_url_naming_the_shared_database(
     monkeypatch.setattr(psycopg, "connect", no_connection)
     with pytest.raises(SystemExit):
         create_enriched_database("postgresql://u:p@localhost:5432/northwind")
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "postgresql://u:p@localhost:5432/template1",
+        "postgresql://u:p@localhost:5432/northwind_rag02_plain",
+        "postgresql://u:p@localhost:5432",  # no name: libpq would fall back to the user's
+    ],
+)
+def test_create_enriched_database_refuses_anything_but_its_own(
+    url: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def no_connection(*args: object, **kwargs: object) -> None:
+        raise AssertionError("it connected before refusing")
+
+    monkeypatch.setattr(psycopg, "connect", no_connection)
+    with pytest.raises(SystemExit):
+        create_enriched_database(url)
+
+
+def test_a_blank_enriched_url_means_the_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ENRICHED_DATABASE_URL", "")
+    assert cli.enriched_database_url() == DEFAULT_ENRICHED_DATABASE_URL
 
 
 def test_enriched_database_url_ignores_database_url(monkeypatch: pytest.MonkeyPatch) -> None:
