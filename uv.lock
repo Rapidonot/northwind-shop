@@ -5,6 +5,7 @@ requires-python = "==3.12.*"
 [manifest]
 members = [
     "northwind-assistant",
+    "northwind-backend",
     "northwind-common",
     "northwind-data",
     "northwind-evals",
@@ -717,6 +718,17 @@ requires-dist = [
 ]
 
 [[package]]
+name = "northwind-backend"
+version = "0.0.0"
+source = { editable = "services/backend" }
+dependencies = [
+    { name = "northwind-common" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "northwind-common", editable = "services/common" }]
+
+[[package]]
 name = "northwind-common"
 version = "0.0.0"
 source = { editable = "services/common" }
@@ -830,6 +842,7 @@ version = "0.0.0"
 source = { virtual = "." }
 dependencies = [
     { name = "northwind-assistant" },
+    { name = "northwind-backend" },
     { name = "northwind-common" },
     { name = "northwind-data" },
     { name = "northwind-evals" },
@@ -849,6 +862,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "northwind-assistant", editable = "services/assistant" },
+    { name = "northwind-backend", editable = "services/backend" },
     { name = "northwind-common", editable = "services/common" },
     { name = "northwind-data", editable = "data" },
     { name = "northwind-evals", editable = "evals" },
