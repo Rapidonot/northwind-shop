@@ -1,8 +1,8 @@
 # Row 5a gate hardening: evidence (2026-11-04)
 
-**Status:** rig runs 2 and 3 are below; run 3 measured the proposal as it stands. The settings proposal
-is not installed. That and its checks are the user's steps, below. Decision:
-`docs/decisions/0006-eval-gate-hardening.md`.
+**Status:** rig runs 2 and 3 are below. The proposal is installed (PR #19, `cf31e00`). The post-install
+checks passed in the linked worktree; `make runner-check` in the main checkout is the one left. Results
+are under "Post-install results". Decision: `docs/decisions/0006-eval-gate-hardening.md`.
 
 ## Make expansion, failing test first
 
@@ -281,6 +281,37 @@ Pass: the commit exits 0, `git log` prints the subject, and neither `git switch`
 - `make test` passes under the new `denyWrite`.
 
 **Then tell Claude the results.** The row can only go to `done` once these pass.
+
+### Post-install results (2026-11-05)
+
+Run by Claude in a session on the installed settings, in the linked worktree `northwind-shop-b`, in the
+auto-mode session the user set up for these checks. The user declined each prompt.
+
+| Check | Result |
+|---|---|
+| `Edit` on `evals/baselines/dense-only.json` | Prompted, declined, nothing written |
+| `Write` of `evals/baselines/probe.json` | Prompted, declined, not created. So the `Edit` rule covers the Write tool |
+| `Edit` on `evals/fixtures/known_failures.json` | Prompted, declined, nothing written |
+| Sandboxed commit from inside the linked worktree | Passed: commit exit 0, subject shown, both `git switch` calls clean, branch deleted |
+| `make eval-promote` | Prompted, declined. No candidate existed, so nothing could have been promoted |
+| Sandboxed write to a new file under `evals/baselines` | Refused: `Operation not permitted`, by `touch` and by a shell redirect |
+| `make runner-check` in the linked worktree | Exit 0, 0 problem(s), so `gitdir` is refused |
+| `make test` under the new `denyWrite` | Passed, as part of `make ci` |
+| `make runner-check` in the main checkout | **Not run.** It needs a session in that checkout |
+
+`git branch -D` printed `could not lock config file …/.git/config`, because the sandbox refuses that
+file, and still deleted the branch. The same refusal should apply to anything else that writes
+`.git/config`, such as `git push -u`, which is the user's step anyway.
+
+**Decisions by the user, 2026-11-05:**
+
+- Criterion 6 is accepted on rig runs 2 and 3 as its evidence: a process item with no tagged test, like
+  row 4's 20-call checkpoint.
+- Recovery step 3 was read by the user's advisor, and has had no `security-reviewer` pass.
+- The `main()` test commit gets no further review.
+
+**GitHub CI on PRs #18 and #19:** not recorded. The user's message held an unfilled placeholder, and
+Claude cannot read the result.
 
 ## Rig results
 
@@ -587,7 +618,8 @@ End control: yes.
 ## `Write` rules are never matched
 
 Also from run 1: Claude Code warned that `Write(path)` rules are never matched, and that only
-`Edit(path)` rules cover the Write tool. That comes from the warning; this row has not measured it.
+`Edit(path)` rules cover the Write tool. The post-install check confirmed it: a Write under
+`evals/baselines` prompted through the `Edit` rule.
 
 **Nothing is exposed.** All 8 `Write` rules in `tools/settings.proposed.json` have an `Edit` twin in the
 same list, checked by script: 6 `deny` and the 2 `ask` rules this row added. The ninth is
@@ -599,8 +631,7 @@ a control, and every session repeats the warning. It is not trivial here, though
 - They are pinned in three test tables (`PERMISSIONS`, `USER_FILE`, `ENV_DENY`), and `ENV_DENY` also
   checks the installed settings.
 - Both proposal files are the user's to install.
-- The rig is measuring this proposal, and changing it now would change what is measured.
-- The removal should wait for evidence: the post-install check that a Write to `evals/baselines` prompts
-  shows the `Edit` rule really does cover it.
+- The rig was measuring this proposal, and changing it then would have changed what was measured.
 
-So they stay for now, and go in the next settings change after that check passes.
+The post-install check that a Write under `evals/baselines` prompts has now passed, so they can go in
+the next settings change.
