@@ -25,9 +25,10 @@ holds the key.
    fakes. GitHub CI's scan step lists its paths, so a tagged pytest test scans the committed cache.
 4. **Context text is ranking-only.** It sits in `rag_chunks.context` and is embedded in front of the
    text, so it changes which chunks are found and nothing else. It never enters a model prompt or a
-   shopper view without a new review. Retrieval never returns it, and a test fails on any new reader
-   of `context` or `embed_text` outside the index writers. Row #8's choice of what FTS indexes is such
-   a review.
+   shopper view without a new review. Retrieval never returns it, and a test fails on a new reader that
+   names `context` or `embed_text` outside the index writers. That test misses raw SQL and
+   `asdict(chunk)`, so tightening it is a prerequisite of row #10. Row #8's choice of what FTS indexes
+   is such a review.
 5. **The cache key adds the model and the parent.** It is prompt version, model, visibility, chunk text
    hash and parent hash, stored with no digits so that no key can read as a card number. The sentence is written from the parent as well as the chunk, so if a product's text changes
    while a chunk's does not, chunk hash alone would keep a stale sentence. Two chunks with the same

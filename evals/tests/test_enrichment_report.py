@@ -307,3 +307,10 @@ def test_all_three_metrics_are_reported_overall_and_per_segment() -> None:
     text = render(report)
     assert "| Metric | Plain | Enriched | Delta |" in text
     assert "| policy | 1 | 0.000 | 1.000 | 0.000 | 1.000 | 0.000 | 1.000 |" in text
+
+
+def test_the_report_states_its_own_limits() -> None:
+    text = render(Report(0.5, 0.5, 0.5))
+    assert "do not confirm the RAG-02 criterion" in text
+    assert "no region filter" in text
+    assert "TRAP-INJ reviews only" in text

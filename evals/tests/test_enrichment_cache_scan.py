@@ -42,8 +42,8 @@ def test_every_allowed_chunk_has_an_entry_and_its_sentence_passes_the_checks() -
 
 
 def test_the_unused_review_sentences_pass_the_checks_too() -> None:
-    """`apply_cache` skips reviews, so nothing else re-reads them. They stay held to the same bar
-    in case the list is ever widened, and so an edit to one does not sit unnoticed."""
+    """`apply_cache` skips reviews, so nothing else re-reads them. They stay held to the content
+    checks in case the list is ever widened. The stored-form and chunk checks run only at use."""
     chunks = build_chunks(FIXTURES)
     parents = parents_of(chunks)
     internal = internal_shingles(chunks)

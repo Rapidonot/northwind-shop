@@ -2,6 +2,10 @@
 
 recall@5: plain 0.750 (baseline file 0.750), enriched 0.789, delta +0.039
 
+Enriched means the index in `northwind_enriched`, with context only on the allow-listed source types.
+These figures are on the items the configuration was chosen with, so they do not confirm the RAG-02 criterion (decision 0009).
+A top 5 here is one query with no region filter, which is not what a shopper's model gets. Planted chunks means the TRAP-INJ reviews only.
+
 | Metric | Plain | Enriched | Delta |
 |---|---|---|---|
 | recall@5 | 0.750 | 0.789 | +0.039 |

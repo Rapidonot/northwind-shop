@@ -143,6 +143,16 @@ def test_changing_visibility_changes_the_key(chunks: list[Chunk]) -> None:
     assert cache_key(chunk, parent) != cache_key(internal(chunk), parent)
 
 
+def test_two_allowed_chunks_with_one_key_cost_one_call(chunks: list[Chunk], tmp_path: Path) -> None:
+    """Restores what the real pair used to prove: that pair is reviews, which are no longer work,
+    so this needs a same-key pair of an allowed type."""
+    variant = first_of(chunks, "variant")
+    twin = replace(variant, source_id=f"{variant.source_id}-TWIN")
+    assert twin.text_hash == variant.text_hash
+    planned = plan_work([variant, twin], EnrichmentCache(tmp_path))
+    assert [c.chunk_id for _, group in planned for c in group] == [variant.chunk_id]
+
+
 def test_a_new_prompt_version_means_a_new_call_for_every_chunk(
     chunks: list[Chunk], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

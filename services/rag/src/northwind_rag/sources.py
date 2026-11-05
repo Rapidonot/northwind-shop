@@ -163,7 +163,8 @@ def context_problem(
     internal: frozenset[tuple[str, ...]] = frozenset(),
 ) -> str | None:
     """Why a generated context may not be indexed, as a short code that holds none of its text, or
-    None. Every ingest runs this again, so a cache edited by hand gets no further than the model.
+    None. Every ingest runs this on each context it uses, so a cache edited by hand gets no further
+    than the model.
 
     It reads the folded text, and `fold_generated` is what gets stored, so what is checked is what
     is kept. `internal` is the five-word runs of internal chunks: ingest may not read the answer

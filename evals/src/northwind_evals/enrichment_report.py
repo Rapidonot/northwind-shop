@@ -154,6 +154,13 @@ def render(report: Report) -> str:
         f"{report.baseline_recall:.3f}), enriched {report.enriched_recall:.3f}, "
         f"delta {report.delta:+.3f}",
         "",
+        "Enriched means the index in `northwind_enriched`, with context only on the allow-listed "
+        "source types.",
+        "These figures are on the items the configuration was chosen with, so they do not confirm "
+        "the RAG-02 criterion (decision 0009).",
+        "A top 5 here is one query with no region filter, which is not what a shopper's model "
+        "gets. Planted chunks means the TRAP-INJ reviews only.",
+        "",
         "| Metric | Plain | Enriched | Delta |",
         "|---|---|---|---|",
     ]
