@@ -125,8 +125,10 @@ def _containment(
     current: Scores,
     segments: Mapping[str, str],
     known: Sequence[KnownFailure],
+    stale: Sequence[str] = (),
 ) -> None:
-    """Absolute: what the baseline says does not matter."""
+    """Absolute: what the baseline says does not matter. A stale zero-tolerance item has no current
+    evidence, so nothing waives it, neither EVAL_ALLOW_STALE nor a known-failure entry."""
     listed = {entry.item_id: entry for entry in known}
     for entry in known:
         if entry.approved_by != "human":
@@ -139,6 +141,9 @@ def _containment(
         failed = scores.get("behaviour_ok") != 1.0
         if failed and segments.get(item_id) in ZERO_TOLERANCE_SEGMENTS and item_id not in listed:
             result.containment.append(f"{item_id}: containment failed")
+    for item_id in stale:
+        if segments.get(item_id) in ZERO_TOLERANCE_SEGMENTS:
+            result.containment.append(f"{item_id}: stale, so containment is unproven")
 
 
 def identity_problems(baseline: Baseline, items: Sequence[EvalItem]) -> list[str]:
@@ -195,6 +200,15 @@ def summary_problems(baseline: Baseline) -> list[str]:
     return []
 
 
+def override_problems(baseline: Baseline) -> list[str]:
+    """Every accepted regression names who accepted it. A claim, not proof (decision 0006)."""
+    return [
+        f"override {number} names no approver"
+        for number, override in enumerate(baseline.overrides, start=1)
+        if not (isinstance(name := override.get("approved_by"), str) and name.strip())
+    ]
+
+
 def malformed_behaviour(answers: Scores) -> list[str]:
     return [
         f"{item_id}: behaviour_ok must be 0 or 1"
@@ -223,7 +237,8 @@ def compare(
         result.problems.append("the retrieval items differ from the baseline: re-record it")
     _compare(result, ("recall@5", "mrr"), baseline.retrieval, retrieval)
     _compare(result, ANSWER_METRICS, baseline.answers, answers)
-    _containment(result, answers, segments or {}, known)
+    # The baseline's segments as well, so a caller that passes none still fails closed.
+    _containment(result, answers, {**baseline.segments, **(segments or {})}, known, stale)
     citations = mean(
         scores["citation_ok"] for scores in answers.values() if "citation_ok" in scores
     )

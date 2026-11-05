@@ -59,6 +59,30 @@ def file_is_writable(path: Path) -> bool:
         return False
 
 
+def can_create(path: Path) -> bool:
+    """For a file that should not exist yet. Removed again at once when the attempt works."""
+    try:
+        path.touch(exist_ok=False)
+    except OSError:
+        return False
+    path.unlink()
+    return True
+
+
+def git_redirect_files(git_dir: Path, worktrees: Iterable[Path]) -> tuple[list[Path], list[Path]]:
+    """What redirects or configures git for a linked worktree, as (existing, absent).
+
+    Your terminal's git trusts these, so a write here is code outside (decision 0006). HEAD, index,
+    refs and logs are left out on purpose: a sandboxed commit writes them. A main checkout's `.git`
+    is a directory, and a commit needs it, so only a pointer file is ever listed.
+    """
+    pointers = [tree / ".git" for tree in worktrees if (tree / ".git").is_file()]
+    admin = git_dir / "worktrees"
+    names = sorted(admin.iterdir()) if present(admin) else []
+    files = [*pointers, *(d / n for d in names for n in ("gitdir", "commondir", "config.worktree"))]
+    return [f for f in files if present(f)], [f for f in files if not present(f)]
+
+
 def is_hidden(path: Path) -> bool:
     """A stat only: this never opens the key file. A sandbox denial raises PermissionError. A
     file that simply is not there proves nothing, so `check` reports it."""
@@ -135,7 +159,9 @@ def main(python: Path) -> int:
     ]
     ledger = localenv.ledger_path()
     files = [ledger, ledger.with_suffix(".lock"), git_dir / "config", Path.home() / ".gitconfig"]
-    problems = check(directories, files, [localenv.env_file()])
+    existing, absent = git_redirect_files(git_dir, checkouts())
+    problems = check(directories, [*files, *existing], [localenv.env_file()])
+    problems += [f"WRITABLE {f}" for f in absent if can_create(f)]
     for checkout in checkouts():
         problems += excluded_commands(checkout / ".claude" / "settings.json")
         local = checkout / ".claude" / "settings.local.json"

@@ -34,4 +34,5 @@ baseline was never gated, and one override could remove an item's protection for
 - `approved_by` and override reasons are plain strings, so they record a claim, not proof. Stronger
   proof needs something Claude cannot produce: permission rules, a second reviewer or signed commits.
 - After the credits expire, stale recordings need `EVAL_ALLOW_STALE=1` in CI, which is a separate
-  decision to record then.
+  decision to record then. **Replaced by decision 0006:** that flag no longer waives a stale
+  adversarial or unanswerable item, so those need re-recording.

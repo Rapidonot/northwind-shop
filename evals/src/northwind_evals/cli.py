@@ -43,13 +43,14 @@ from northwind_evals.gate import (
     load_baseline,
     load_known_failures,
     malformed_behaviour,
+    override_problems,
     save_baseline,
     score_drift,
     summary_of,
     summary_problems,
 )
 from northwind_evals.harness import RETRIEVAL_K, ItemResult, run_answers, score_retrieval
-from northwind_evals.integrity import integrity_problems
+from northwind_evals.integrity import added_known_failures, integrity_problems, merge_base
 from northwind_evals.items import (
     MIN_HUMAN_REVIEWED,
     EvalItem,
@@ -244,7 +245,7 @@ def _build_candidate(chosen_size: str, mode: str) -> int:
     print(f"candidate written to {CANDIDATE} ({len(answers)} answers, {len(retrieval)} retrieval)")
     _print_summary(summary["retrieval"])
     _print_summary(summary["answers"])
-    print("the baseline is unchanged: `make eval-promote` replaces it")
+    print("the baseline is unchanged: promotion waits for row 5b (decision 0006)")
     return 0
 
 
@@ -273,8 +274,8 @@ def cmd_rescore(_: argparse.Namespace) -> int:
 
 
 def cmd_promote(args: argparse.Namespace) -> int:
-    """Replaces the baseline with the candidate. A regression needs a recorded reason. A containment
-    failure or a dropped item cannot be overridden here at all."""
+    """Replaces the baseline with the candidate. A regression needs a recorded reason and approver.
+    A containment failure or a dropped item cannot be overridden here at all."""
     if not CANDIDATE.exists():
         print("no candidate: run `make eval-rescore` or `make eval-live` first", file=sys.stderr)
         return 1
@@ -286,11 +287,16 @@ def cmd_promote(args: argparse.Namespace) -> int:
     overridable: list[str] = []
     overrides: list[dict[str, Any]] = []
     bootstrap = (args.bootstrap or "").strip()
+    reason = (args.accept_regression or "").strip()
+    approver = (args.approved_by or "").strip()
+    if (reason or bootstrap) and not approver:
+        final.append("a recorded reason needs --approved-by NAME")
     if BASELINE.exists():
         baseline = load_baseline(BASELINE)
         overrides = list(baseline.overrides)
         final += [f"would stop gating {i}" for i in dropped_items(baseline, candidate, items)]
         final += identity_problems(baseline, items)
+        final += override_problems(baseline)
     elif not bootstrap:
         final.append("no baseline to compare with: --bootstrap REASON starts a new one")
         baseline = candidate
@@ -304,7 +310,6 @@ def cmd_promote(args: argparse.Namespace) -> int:
     overridable += [f"{row[0]} regressed" for row in result.rows if not row[3]]
     for problem in [*final, *overridable]:
         print(f"  {problem}", file=sys.stderr)
-    reason = (args.accept_regression or "").strip()
     if final or (overridable and not reason):
         print("not promoted", file=sys.stderr)
         return 1
@@ -313,9 +318,14 @@ def cmd_promote(args: argparse.Namespace) -> int:
         return 0
     today = date.today().isoformat()
     if bootstrap:
-        overrides.append({"on": today, "reason": bootstrap, "accepted": ["no earlier baseline"]})
+        accepted = ["no earlier baseline"]
+        overrides.append(
+            {"on": today, "reason": bootstrap, "approved_by": approver, "accepted": accepted}
+        )
     if overridable:
-        overrides.append({"on": today, "reason": reason, "accepted": overridable})
+        overrides.append(
+            {"on": today, "reason": reason, "approved_by": approver, "accepted": overridable}
+        )
     summary = summary_of(candidate.retrieval, candidate.answers, candidate.segments)
     save_baseline(BASELINE, replace(candidate, overrides=overrides, summary=summary))
     CANDIDATE.unlink()
@@ -349,6 +359,9 @@ def cmd_gate(args: argparse.Namespace) -> int:
     result.problems += coverage_problems(baseline, items)
     result.problems += score_drift(baseline, answers)
     result.problems += summary_problems(baseline)
+    result.problems += override_problems(baseline)
+    if not answers:
+        result.problems.append("no answers replayed, so nothing proves the recorded answers")
 
     _print_rows(result)
     print(f"  answers replayed {len(answers)}/{len(baseline.answers)}, stale {len(result.stale)}")
@@ -403,9 +416,12 @@ def cmd_integrity(args: argparse.Namespace) -> int:
     """Compares this branch with the base branch. Never spends and needs no database."""
     try:
         problems = integrity_problems(args.base, BASELINE)
+        added = added_known_failures(merge_base(args.base), KNOWN_FAILURES)
     except RuntimeError as error:
         print(f"eval-integrity FAILED: {error}", file=sys.stderr)
         return 1
+    for entry in added:  # one JSON line each, so text inside an entry cannot pose as output
+        print(f"  known failure added: {json.dumps(entry, sort_keys=True)}")
     for problem in problems:
         print(f"  {problem}", file=sys.stderr)
     print(f"eval-integrity {'FAILED' if problems else 'passed'} against {args.base}")
@@ -428,6 +444,7 @@ def main(argv: list[str] | None = None) -> int:
     promote = commands.add_parser("promote")
     promote.add_argument("--accept-regression", metavar="REASON", help="recorded in the baseline")
     promote.add_argument("--bootstrap", metavar="REASON", help="start with no baseline; recorded")
+    promote.add_argument("--approved-by", metavar="NAME", help="who accepted it; recorded")
     promote.add_argument("--check", action="store_true", help="report only; change nothing")
     promote.set_defaults(func=cmd_promote)
     commands.add_parser("review-list").set_defaults(func=cmd_review_list)
