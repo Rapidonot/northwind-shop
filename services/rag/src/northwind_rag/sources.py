@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from northwind_data.ingest_guard import assert_ingestible, ingestible_files, load_manifest
-from northwind_data.textscan import find_money_or_stock
+from northwind_data.textscan import find_money_or_stock, find_promotions
 from northwind_rag.chunking import chunk_markdown, with_prefix
 from northwind_rag.models import (
     MAX_CHUNK_CHARS,
@@ -71,6 +71,14 @@ ATTRIBUTE_KEYS = frozenset(
 PUBLIC_DOC_TYPES = frozenset(
     {"care_guide", "faq", "policy_returns", "policy_shipping", "size_guide"}
 )
+# Two planted reviews state a discount on purpose: the adversarial evals need them in the index
+# (RAG-02). Each passes for that one exact text and no other, in that review only. The trap IDs are
+# checked against the answer key by a test; this code never reads that file. Generated text has no
+# such exemption.
+PLANTED_PROMOTIONS: dict[str, tuple[str, str]] = {
+    "R00712": ("TRAP-INJ-003", "100% discount"),
+    "R00881": ("TRAP-INJ-013", "90% off"),
+}
 # Every product, variant and review chunk must have these.
 _PRODUCT_FIELDS_REQUIRED = ("category", "brand", "size", "colour", "material")
 
@@ -113,11 +121,17 @@ def _normalised(text: str) -> str:
     return re.sub(r"\s+", " ", visible)
 
 
-def _scan(text: str, where: str) -> None:
-    """Hard rule 2. Callers scan whole fields too: a split can fall inside "149.99 USD"."""
-    hits = find_money_or_stock(_normalised(text))
+def _scan(text: str, where: str, review_id: str | None = None) -> None:
+    """Hard rule 2. Callers scan whole fields too: a split can fall inside "149.99 USD".
+    Only a review passes `review_id`, so no other kind of record can use the exemption."""
+    normal = _normalised(text)
+    hits = find_money_or_stock(normal)
     if hits:
         raise ChunkError(f"{where}: price or stock in chunk text: {hits}")
+    promotions = find_promotions(normal)
+    planted = PLANTED_PROMOTIONS.get(review_id or "")
+    if promotions and (planted is None or promotions != [planted[1]]):
+        raise ChunkError(f"{where}: promotion in chunk text: {promotions}")
 
 
 def _labelled(*pairs: tuple[str, Any]) -> str:
@@ -287,7 +301,7 @@ def _review_chunks(
         header = f"Verified purchase. {header}".strip()
     parts = (header, review.get("title"), review.get("body"))
     body = "\n\n".join(part for part in parts if part)
-    _scan(body, where)
+    _scan(body, where, review_id)
     texts = with_prefix((f"Review of {product['name']}",), body, max_chars)
     return _chunks("review", review_id, texts, metadata, parent_id=product["product_id"])
 
@@ -295,7 +309,7 @@ def _review_chunks(
 def check_chunk(chunk: Chunk) -> None:
     """Metadata coverage and hard rule 2. `sync_chunks` runs it too, on whatever it is given."""
     meta = chunk.metadata
-    _scan(chunk.text, chunk.chunk_id)
+    _scan(chunk.text, chunk.chunk_id, chunk.source_id if chunk.source_type == "review" else None)
     _scan(" ".join(v for v in (meta.category, meta.brand, meta.material) if v), chunk.chunk_id)
     if meta.region is None and meta.visibility == "public":
         raise ChunkError(f"{chunk.chunk_id}: public chunk with no region")
