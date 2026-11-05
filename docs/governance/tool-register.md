@@ -64,9 +64,9 @@ code without one (decision 0005).
 
 | Tool | Row | Tier | Limit | Approver | Enforced at |
 |---|---|---|---|---|---|
-| `make enrich` | #7, `req/RAG-02-enrichment`, not on main | `irreversible or monetary` | The open window's limits, `SUITE=rag-enrichment`; chunks already cached make no call | The user, through the window. **No `ask` rule:** the branch does not change `tools/settings.proposed.json`. The window is still the gate | `req/RAG-02-enrichment:Makefile`, decision 0009 on the branch |
-| `make ingest-enriched`, `make eval-enrichment-report` | #7, not on main | `reversible write` | A separate database, allow-listed by name; no LLM | None: local | `req/RAG-02-enrichment:Makefile`, decision 0009 on the branch |
-| Promotion entry point in the runner clone; `baseline-change` CI check | 5b, no commits yet | `irreversible or monetary` | As `make eval-promote`, plus the label | The user | `PROGRESS.md` row 5b |
+| `make enrich` | #7, `req/RAG-02-enrichment`, not on main | `irreversible or monetary` | The open window's limits, `SUITE=rag-enrichment`; chunks already cached make no call | The user, through the window. **No `ask` rule:** the branch does not change `tools/settings.proposed.json`. The window is still the gate | `req/RAG-02-enrichment:Makefile`, the enrichment decision on the branch |
+| `make ingest-enriched`, `make eval-enrichment-report` | #7, not on main | `reversible write` | A separate database, allow-listed by name; no LLM | None: local | `req/RAG-02-enrichment:Makefile`, the enrichment decision on the branch |
+| Promotion entry point in the runner clone; `baseline-change` CI check | 5b, `req/5b-promotion-control` at `b645576`, not on main | `irreversible or monetary` | As `make eval-promote`, plus the label | The user | `PROGRESS.md` row 5b, `req/5b-promotion-control:services/llm-replay/src/northwind_llm_replay/promotion.py`, `req/5b-promotion-control:.github/workflows/guard.yml` |
 
 ## Planned (PRD §7)
 
