@@ -22,6 +22,6 @@ branch. If no ID was given, read `PROGRESS.md`, name the next `todo` row and sto
    first. Label them "inferred". List each with its status. If any is not `done`, stop and ask the
    user whether to go on; do not create the branch.
 4. **Create the branch.** Stop if `git status --short` shows changes. Otherwise run `git fetch
-   origin`, then `git switch -c req/<ID>-<slug> origin/main`, with a short kebab-case slug.
+   origin`, then `git switch --no-track -c req/<ID>-<slug> origin/main`, with a short kebab-case slug.
 5. **Propose a plan.** End with a plan that maps each criterion to the change and to at least one
    tagged test. Do not start implementing until the user approves it.
