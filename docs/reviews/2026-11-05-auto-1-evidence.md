@@ -393,3 +393,32 @@ two passes are history: they describe earlier code.
   `git merge --ff-only` wrote `evil.py` into `services/` from such a path.
 - `PR='$(shell touch expanded)'` created the file before any guard ran, until `PR` and `SHA` were pinned.
 - Neither the terminal temp directory nor `/tmp` is writable from the sandbox, so finding 4 did not apply.
+
+## Advisor review and triage
+
+`advisor-reviewer` read `make review-diff` at base `45707cc`, head `4fd3d77`, and returned `findings`: no
+critical or high, three medium, three low. The user's triage is that none blocks this row.
+
+| # | Severity | Finding | Triage |
+|---|---|---|---|
+| 1 | Medium | 12 refusals have no test and no mutant: 9 in `tools/ship.sh`, 3 in `tools/pre-push.proposed.sh` | Accepted for this row. AUTO-2 adds them, at least the `ship.sh` fetch, merge-base and post-merge confirmation, and the pre-push `ls-remote` and merge-base |
+| 2 | Medium | Decision F2's "those same paths" was read without `.github/**`, and the reading was not recorded | Intended reading, now in decision 0008. F2's refusals are paths the runner loads; `.github/**` is refused at push by the hook; in `ship`, workflows are label-gated, and the other `.github` paths join the control surface in AUTO-2 |
+| 3 | Medium | The fixes for the re-review's two highs were never reviewed | The user's advisor read `tools/pre-push.proposed.sh`, `tools/refused-paths.sh`, `tools/ship.sh` and the `Makefile` changes at `5840f97`, and accepted the F1 and F2 fixes in place of a second `security-reviewer` pass. Recorded from the user's triage; the subagent did not give this acceptance |
+| 4 | Low | Failing-first was replaced by mutation, with no recorded approval | Accepted: each mutant is the guard removed, which is failing-first. AUTO-2 commits the mutation script so it can be rerun |
+| 5 | Low | Two existing tests were edited without being logged | Logged below |
+| 6 | Low | Records are stale at the reviewed head | `/req-done` corrects them |
+
+The review also left items `unconfirmed`, including what local fixes 5, 11, 14 and 15 were and whether the
+`runner-sync` change went to the re-review as a separate diff. The triage did not cover those, and this
+section does not settle them.
+
+### Existing tests edited in this row
+
+Neither edit weakens a check.
+
+- `evals/tests/test_rag12_followup.py`, `test_the_pins_come_before_the_first_shell_call`. Pinning `PR` and
+  `SHA` broke its count, `len(pins) == len(PROMOTE_FLAGS)`. It now requires the exact set of pinned names,
+  `PROMOTE_FLAGS` plus `PR` and `SHA`, which is stricter. The ordering assertion is unchanged.
+- `services/llm-replay/tests/test_runner_support.py`, `rig()` only. It copies `tools/refused-paths.sh`,
+  creates a `tmp` directory, and sets `TMPDIR` and `LLM_RUNNER_PORT=1`, which the new `runner-sync` needs. No
+  assertion changed. This file is in `RUNNER_SYNC_PATHS`, so it is on the control surface.

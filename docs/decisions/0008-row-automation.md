@@ -58,6 +58,21 @@ The review found that the design assumed too much around `ship`. The user's deci
   row 5b. `tests/**` stays off the surface by the user's choice.
 - **Spending window (finding 13).** `ship` and `runner-sync` refuse while the runner port answers.
 
+## What the advisor review changed
+
+`advisor-reviewer` read `45707cc..4fd3d77` and returned `findings`: three medium, three low, no high. The
+user's triage is that none blocks this row. All six are in `docs/reviews/2026-11-05-auto-1-evidence.md`.
+Two of them settle something here:
+
+- **`.github` is not a refused path, on purpose.** The refusals in decision F2 are for paths the runner
+  loads, so `tools/refused-paths.sh` leaves `.github/**` out, although the F1 list it refers to starts with
+  it. `.github/**` is refused at push by the hook. In `ship`, workflows need the `ci-change` label. Other
+  `.github` paths get no label and no control surface entry until AUTO-2 adds them.
+- **The fixes for re-review F1 and F2 had no second `security-reviewer` pass.** The user's advisor read
+  `tools/pre-push.proposed.sh`, `tools/refused-paths.sh`, `tools/ship.sh` and the `Makefile` changes at
+  `5840f97`, and accepted the fixes in place of that pass. This is recorded from the user's triage. The
+  `advisor-reviewer` subagent did not give this acceptance: its finding is that no reviewer had read them.
+
 ## How `ship` decides
 
 - **Paths come from `git diff`, not from `gh`.** `gh`'s file list hides the old side of a rename.
