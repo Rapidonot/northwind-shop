@@ -1152,7 +1152,7 @@ def test_m1_a_path_under_a_dangling_symlinked_folder_is_not_read_as_safe(
     link.symlink_to(tmp_path / "nowhere")
     path = link / "config"
     problems = runner_check.check([] if as_file else [path], [path] if as_file else [], [])
-    assert problems, "a path behind a dangling link was read as refused"
+    assert problems == [f"SYMLINK {link}"], "a path behind a dangling link was read as refused"
     assert not (tmp_path / "nowhere").exists()
 
 
@@ -1161,9 +1161,10 @@ def test_m1_a_dangling_symlinked_admin_folder_reaches_the_report(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     main, _, python = wired(tmp_path, monkeypatch)
-    (main / ".git" / "worktrees" / "planted").symlink_to(tmp_path / "nowhere")
+    planted = main / ".git" / "worktrees" / "planted"
+    planted.symlink_to(tmp_path / "nowhere")
     assert runner_check.main(python) == 1
-    assert "planted" in capsys.readouterr().out
+    assert f"SYMLINK {planted}" in capsys.readouterr().out.splitlines()
 
 
 @pytest.mark.req("RAG-12")

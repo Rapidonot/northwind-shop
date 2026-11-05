@@ -866,6 +866,7 @@ def test_integrity_passes_members_holding_only_their_own_package(integrity_repo:
         integrity_repo,
         {
             "services/assistant/src/northwind_assistant/__init__.py": "",
+            "services/mcp-catalog/pyproject.toml": MEMBER_TOML,
             "services/mcp-catalog/src/northwind_mcp_catalog/__init__.py": "",
             "data/src/northwind_data/__init__.py": "",
         },
@@ -914,6 +915,25 @@ BAD_MEMBERS = {
         'northwind-common = [{ path = "../../vendor/x", marker = "os_name == \'posix\'" }]',
     ),
     "a nested workspace": MEMBER_TOML + '[tool.uv.workspace]\nmembers = ["lib/*"]\n',
+    "an in-tree wheel": MEMBER_TOML.replace(
+        "northwind-common = { workspace = true }",
+        'northwind-common = { path = "../evil-0.0.0-py3-none-any.whl" }',
+    ),
+    "a member shape with nothing there": MEMBER_TOML.replace(
+        "northwind-common = { workspace = true }", 'northwind-common = { path = "../nothing" }'
+    ),
+    "a git source": MEMBER_TOML.replace(
+        "northwind-common = { workspace = true }",
+        'northwind-common = { git = "https://example.invalid/x" }',
+    ),
+    "a url source": MEMBER_TOML.replace(
+        "northwind-common = { workspace = true }",
+        'northwind-common = { url = "https://example.invalid/x.whl" }',
+    ),
+    "a replaced uv_build by source": MEMBER_TOML.replace(
+        "northwind-common = { workspace = true }",
+        'uv_build = { url = "https://example.invalid/evil.whl" }',
+    ),
     "not toml": "this is = = not toml",
 }
 
@@ -936,6 +956,9 @@ BAD_ROOTS = {
         "northwind-assistant = { workspace = true }",
         'northwind-assistant = { path = "vendor/assistant" }',
     ),
+    "a dot member": ROOT_TOML.replace('"evals"]', '"evals", "services/."]'),
+    "a dot dot member": ROOT_TOML.replace('"evals"]', '"evals", "services/.."]'),
+    "an exclude": ROOT_TOML.replace('"evals"]', '"evals"]\nexclude = ["services/src"]'),
     "a package root": ROOT_TOML.replace("package = false", "package = true"),
     "no package line": ROOT_TOML.replace("package = false\n", ""),
     "a root build system": ROOT_TOML + '[build-system]\nbuild-backend = "uv_build"\n',
@@ -987,7 +1010,10 @@ def test_the_measured_module_root_move_is_refused(integrity_repo: Path) -> None:
     ids=["a sibling service", "data"],
 )
 def test_a_path_source_to_a_real_member_shape_passes(integrity_repo: Path, good: str) -> None:
-    commit(integrity_repo, {ASSISTANT: good})
+    common = "services/common/pyproject.toml"
+    commit(
+        integrity_repo, {ASSISTANT: good, common: MEMBER_TOML, "data/pyproject.toml": MEMBER_TOML}
+    )
     done = integrity(integrity_repo)
     assert done.returncode == 0, done.stderr
 
@@ -1003,3 +1029,49 @@ def test_the_repo_as_it_stands_passes_the_workspace_rule(
     monkeypatch.chdir(REPO)
     assert module.workspace_problems() == []
     assert module.member_problems() == []
+
+
+def test_the_measured_dot_member_is_refused(integrity_repo: Path) -> None:
+    """Measured: with `exclude`, `uv sync --locked` makes `services/.` a member, and its `.pth`
+    points at `services/src`, which neither rule walks."""
+    root = BAD_ROOTS["a dot member"].replace(
+        '"services/."]', '"services/."]\nexclude = ["services/src"]'
+    )
+    commit(
+        integrity_repo,
+        {
+            "pyproject.toml": root,
+            "services/pyproject.toml": MEMBER_TOML,
+            "services/src/evil_pkg/__init__.py": "",
+        },
+    )
+    assert integrity(integrity_repo).returncode == 1
+
+
+def test_the_measured_in_tree_wheel_is_refused(integrity_repo: Path) -> None:
+    """Measured: `uv sync --locked` installed the `.pth` from a wheel a path source named."""
+    commit(
+        integrity_repo,
+        {
+            ASSISTANT: BAD_MEMBERS["an in-tree wheel"],
+            "services/evil-0.0.0-py3-none-any.whl": "a wheel\n",
+        },
+    )
+    done = integrity(integrity_repo)
+    assert done.returncode == 1
+    assert "source northwind-common" in done.stderr
+
+
+@pytest.mark.parametrize(
+    "planted",
+    ["services/plain/setup.py", "services/Odd_Name/pyproject.toml"],
+    ids=["no toml", "odd"],
+)
+def test_a_folder_in_services_that_is_not_a_member_is_refused(
+    integrity_repo: Path, planted: str
+) -> None:
+    """Skipped, a `setup.py` there would go unchecked, where the root file is required."""
+    commit(integrity_repo, {planted: "x = 1\n"})
+    done = integrity(integrity_repo)
+    assert done.returncode == 1
+    assert planted.split("/")[1] in done.stderr

@@ -27,7 +27,8 @@ working files, not what gets committed. And CI ran the PR's own gate code, so a 
 4. **Three files are read from the checkout, and no git runs in it:**
    - the candidate, parsed strictly;
    - the item set, which may add items and reword the query of an item that is neither zero-tolerance nor
-     human-reviewed, but may not lose an item or move one to another segment. Any other change is a relabel;
+     human-reviewed, but may not lose an item or move one to another segment. A change to a field in clause 5
+     is a relabel;
    - `known_failures.json`, which may only shrink, word for word.
 5. **A relabel needs a reason and an approver.** These decide what an item is tested for:
    `expected_behaviour`, `reviewed_by`, `relevant_sources`, `reference_facts`, `region` and `trap_id`, and the
@@ -55,17 +56,20 @@ working files, not what gets committed. And CI ran the PR's own gate code, so a 
     `python3 -I`, no `uv sync`, and main's `evals/src` as the only addition to the path. Nothing accepts a failure
     of this job. It also checks, reading files only:
     - each workspace `src/` holds only `northwind_<member>`;
-    - the root `pyproject.toml` stays `package = false` with no build system, and its workspace `members` are
-      `services/*`, `services/<name>`, `data` or `evals`;
+    - the root `pyproject.toml` stays `package = false` with no build system and no workspace `exclude`, and its
+      `members` are `services/*`, `services/<name>`, `data` or `evals`, where `<name>` is one plain folder name;
+    - every folder in `services/` is such a member with a `pyproject.toml`;
     - each member's `pyproject.toml` has no `[tool.uv.build-backend]` and no workspace of its own, builds with
       `uv_build` alone, with no `backend-path` and no requirement beyond `uv_build` and a version;
-    - a `path` entry in any `[tool.uv.sources]`, root or member, leads to `services/<name>`, `data` or `evals`.
+    - every `[tool.uv.sources]` entry, root or member, has no `git` or `url`, and a `path` must lead to a real
+      member's folder.
 
-    So `services/<name>/src`, `data/src` and `evals/src` are the only workspace load paths, and a member's
-    `[build-system]` cannot run PR code. **This does not cover** what `uv.lock` pins: a new or changed registry,
-    git or URL dependency, including a wheel carrying its own `.pth`. Nor does it cover `uv.toml` and
-    `.python-version`, a file planted in `evals/src`, which the restore removes before this check sees it, or an
-    edit to this script or the workflow. Those are in `ship`'s full diff, or stated below.
+    A PR that breaks any of these fails this job. **It does not stop the code running:** `eval-gate-main` has
+    already run `uv sync` on that tree, so a member's `[build-system]` does run there, and this check makes the
+    PR unshippable, nothing more. **It does not cover** what `uv.lock` pins: a new or changed registry dependency,
+    including a wheel carrying its own `.pth`. Nor `[tool.uv]` settings in a `pyproject.toml` such as `index` or
+    `find-links`, `uv.toml` and `.python-version`, a file planted in `evals/src`, which the restore removes before
+    this check sees it, or an edit to this script or the workflow. Those are in `ship`'s full diff, or stated below.
 12. **`Guard / eval-gate-main` runs main's `evals/src` beside the PR's services.** `PYTHONPATH` puts it first.
     `assert-main-code.py` then reads each module's origin from the import system, because a module sets its
     own `__file__`, and refuses a folder on `sys.path` that is not a member's `src`, by its exact place. It runs

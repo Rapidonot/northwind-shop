@@ -35,7 +35,8 @@ BASE = "refs/remotes/origin/main"
 BASELINE = Path("evals/baselines/dense-only.json")
 KNOWN_FAILURES = Path("evals/fixtures/known_failures.json")
 # The folders whose `src` is a load path: `services/<name>/src`, `data/src`, `evals/src`.
-MEMBER_DIR = re.compile(r"services/[^/*?\[\]]+|data|evals")
+# One plain name: with `exclude`, uv makes `services/.` a member (measured).
+MEMBER_DIR = re.compile(r"services/[a-z0-9][a-z0-9-]*|data|evals")
 # `uv_build`, by name and version only: a direct URL would replace the backend under its own name.
 BUILD_REQUIRES = re.compile(r"uv_build[<>=!~0-9.,\s]*")
 
@@ -57,13 +58,19 @@ def read_toml(path: Path) -> dict[str, Any]:
 
 
 def source_problems(path: Path, base: str, config: dict[str, Any]) -> list[str]:
-    """A `path` source must lead to a member's folder, whichever file declares it."""
+    """A `path` source must lead to a real member, whichever file declares it: a wheel in
+    `services/` has the right shape as a string, and `uv sync --locked` installs its `.pth`
+    (measured). No git or URL source: none is used, and one on `uv_build` would replace the backend.
+    """
     problems = []
     for name, entries in config.get("tool", {}).get("uv", {}).get("sources", {}).items():
         for entry in entries if isinstance(entries, list) else [entries]:
+            if "git" in entry or "url" in entry:
+                problems.append(f"{path}: source {name} is a git or URL source")
             if "path" in entry:
                 target = os.path.normpath(os.path.join(base, entry["path"]))
-                if not MEMBER_DIR.fullmatch(target):
+                project = Path(target) / "pyproject.toml"
+                if not MEMBER_DIR.fullmatch(target) or not project.is_file():
                     problems.append(f"{path}: source {name} is not a member's folder")
     return problems
 
@@ -76,6 +83,8 @@ def root_problems(path: Path) -> list[str]:
         problems.append(f"{path}: the root must stay `package = false`")
     if "build-system" in config:
         problems.append(f"{path}: the root must have no build system")
+    if "exclude" in uv.get("workspace", {}):
+        problems.append(f"{path}: a workspace `exclude` can hide a folder from the member glob")
     members = uv.get("workspace", {}).get("members")
     if not isinstance(members, list) or not members:
         return [*problems, f"{path}: no workspace members"]
@@ -111,11 +120,21 @@ def checked(step: Any, path: Path) -> list[str]:
 
 
 def workspace_problems() -> list[str]:
+    """`data` and `evals` are read if present. A folder in `services/` must be a member: skipped, a
+    `setup.py` there would go unchecked."""
     problems = checked(root_problems, Path("pyproject.toml"))
-    for folder in [*sorted(Path("services").glob("*")), Path("data"), Path("evals")]:
-        path = folder / "pyproject.toml"
-        if path.exists():
-            problems += checked(member_config_problems, path)
+    for folder in sorted(p for p in Path("services").glob("*") if p.is_dir()):
+        if folder.name == "__pycache__":
+            continue
+        if not MEMBER_DIR.fullmatch(folder.as_posix()):
+            problems.append(f"{folder} is not a plain member name")
+        elif not (folder / "pyproject.toml").is_file():
+            problems.append(f"{folder} has no pyproject.toml")
+        else:
+            problems += checked(member_config_problems, folder / "pyproject.toml")
+    for folder in (Path("data"), Path("evals")):
+        if (folder / "pyproject.toml").exists():
+            problems += checked(member_config_problems, folder / "pyproject.toml")
     return problems
 
 
