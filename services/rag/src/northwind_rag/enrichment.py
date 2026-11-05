@@ -25,7 +25,7 @@ from typing import Any, Literal, get_args
 
 from northwind_data.textscan import fold_generated
 from northwind_rag.models import Chunk, Visibility
-from northwind_rag.sources import context_problem, shingles
+from northwind_rag.sources import CONTEXT_SOURCE_TYPES, context_problem, shingles
 
 # Bump with any change to the prompt or the request: the version is part of the cache key.
 ENRICH_PROMPT_VERSION = 2
@@ -288,6 +288,8 @@ def plan_work(chunks: Sequence[Chunk], cache: EnrichmentCache) -> list[tuple[Par
     groups: dict[str, tuple[Parent, list[Chunk]]] = {}
     seen: set[str] = set()
     for chunk in chunks:
+        if chunk.source_type not in CONTEXT_SOURCE_TYPES:
+            continue
         parent = parents[chunk.chunk_id]
         key = cache_key(chunk, parent)
         if key in seen or cache.get(chunk, parent) is not None:
@@ -307,8 +309,9 @@ def internal_shingles(chunks: Sequence[Chunk]) -> frozenset[tuple[str, ...]]:
 
 
 def apply_cache(chunks: Sequence[Chunk], cache: EnrichmentCache) -> list[Chunk]:
-    """Every chunk with its context, or plain where the context was rejected. A chunk with no entry
-    stops the run, because a partly enriched index would give a recall figure that means nothing.
+    """Every chunk with its context, or plain where it was rejected or its type is not allowed.
+    An allowed chunk with no entry stops the run: a partly enriched index would give a recall
+    figure that means nothing.
     So does an entry for another chunk, or a public one that repeats internal text: a real run
     writes neither, so the cache was edited."""
     parents = parents_of(chunks)
@@ -320,6 +323,9 @@ def apply_cache(chunks: Sequence[Chunk], cache: EnrichmentCache) -> list[Chunk]:
     enriched: list[Chunk] = []
     missing: list[str] = []
     for chunk in chunks:
+        if chunk.source_type not in CONTEXT_SOURCE_TYPES:
+            enriched.append(chunk)  # entries from the first run stay in the cache, unused
+            continue
         entry = cache.get(chunk, parents[chunk.chunk_id])
         if entry is None:
             missing.append(chunk.chunk_id)

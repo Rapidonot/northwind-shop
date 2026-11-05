@@ -86,6 +86,10 @@ PLANTED_PROMOTIONS: dict[str, tuple[str, str]] = {
     "R00712": ("TRAP-INJ-003", "100% discount"),
     "R00881": ("TRAP-INJ-013", "90% off"),
 }
+# Who may get a generated context. A security rule, not a recall choice: reviews are written by
+# shoppers, and a planted review's own sentence lifted it into top 5s (decision 0009). The chunk
+# body is the attack, and retrieval returns the body. An allow-list: a new source type gets none.
+CONTEXT_SOURCE_TYPES: frozenset[str] = frozenset({"product", "variant", "document"})
 # A generated context says where a chunk sits, in one short line (RAG-02).
 MAX_CONTEXT_CHARS = 240
 _MARKUP = frozenset("<>{}[]`@")
@@ -371,6 +375,8 @@ def check_chunk(chunk: Chunk) -> None:
     _scan(chunk.text, chunk.chunk_id, chunk.source_id if chunk.source_type == "review" else None)
     _scan(" ".join(v for v in (meta.category, meta.brand, meta.material) if v), chunk.chunk_id)
     if chunk.context is not None:
+        if chunk.source_type not in CONTEXT_SOURCE_TYPES:
+            raise ChunkError(f"{chunk.chunk_id}: a {chunk.source_type} may not have a context")
         problem = context_problem(chunk.context, chunk)
         if problem:
             raise ChunkError(f"{chunk.chunk_id}: generated context refused: {problem}")

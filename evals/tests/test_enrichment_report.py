@@ -118,8 +118,8 @@ def test_recall_delta_and_the_segment_table() -> None:
     assert report.worsened == ["D"]
     text = render(report)
     assert "delta +0.250" in text
-    assert "| specification | 2 | 0.500 | 1.000 | +0.500 |" in text
-    assert "| comparison | 1 | 1.000 | 0.000 | -1.000 |" in text
+    assert "| specification | 2 | 0.500 | 1.000 |" in text
+    assert "| comparison | 1 | 1.000 | 0.000 |" in text
     assert "Improved: B, C" in text and "Worsened: D" in text
 
 
@@ -197,41 +197,49 @@ def trap_report(plain_items: Sequence[str], enriched_items: Sequence[str]) -> Re
     return make(items, plain, enriched, traps=TRAP)
 
 
-def test_a_trap_chunk_in_more_top_fives_is_flagged_and_rendered() -> None:
+def cells_of(report: Report) -> list[str]:
+    line = next(x for x in render(report).splitlines() if x.startswith("| TRAP-INJ-001 "))
+    return [c.strip() for c in line.strip("|").split("|")]
+
+
+def test_every_item_a_planted_chunk_enters_is_listed_and_rendered() -> None:
     report = trap_report(["EV-1"], ["EV-1", "EV-2", "EV-3"])
     [row] = report.traps
     assert (row.trap_id, row.chunk_id) == ("TRAP-INJ-001", "review:R00002:0")
     assert row.plain == ("EV-1",)
     assert row.enriched == ("EV-1", "EV-2", "EV-3")
-    assert row.increased
-    assert report.trap_increases == [row]
-    text = render(report)
-    line = next(line for line in text.splitlines() if line.startswith("| TRAP-INJ-001 "))
-    cells = [c.strip() for c in line.strip("|").split("|")]
-    assert cells[:5] == ["TRAP-INJ-001", "review:R00002:0", "1", "3", "yes"]
-    assert "EV-2" in cells[5] and "EV-3" in cells[5]
+    assert row.entered == ("EV-2", "EV-3")
+    assert report.planted_entries == [
+        ("TRAP-INJ-001", "review:R00002:0", "EV-2"),
+        ("TRAP-INJ-001", "review:R00002:0", "EV-3"),
+    ]
+    cells = cells_of(report)
+    assert cells[:2] == ["TRAP-INJ-001", "review:R00002:0"]
+    assert cells[2:6] == ["EV-1", "EV-1, EV-2, EV-3", "EV-2, EV-3", "-"]
 
 
-def test_a_trap_chunk_in_the_same_number_of_top_fives_is_not_flagged() -> None:
+def test_a_planted_chunk_in_the_same_items_enters_nothing() -> None:
     report = trap_report(["EV-1", "EV-2"], ["EV-1", "EV-2"])
-    assert report.trap_increases == []
-    text = render(report)
-    line = next(line for line in text.splitlines() if line.startswith("| TRAP-INJ-001 "))
-    assert "| no |" in line
+    assert report.planted_entries == []
+    assert "Entered a top 5: none" in render(report)
 
 
-def test_a_trap_chunk_in_fewer_top_fives_is_not_flagged() -> None:
+def test_a_planted_chunk_in_fewer_items_enters_nothing_and_shows_what_it_left() -> None:
     report = trap_report(["EV-1", "EV-2", "EV-3"], ["EV-1"])
     [row] = report.traps
-    assert len(row.enriched) < len(row.plain)
-    assert report.trap_increases == []
-    line = next(x for x in render(report).splitlines() if x.startswith("| TRAP-INJ-001 "))
-    assert "| no |" in line
+    assert row.left == ("EV-2", "EV-3")
+    assert report.planted_entries == []
+    assert cells_of(report)[5] == "EV-2, EV-3"
 
 
-def test_a_trap_that_moves_to_other_items_without_a_net_increase_is_not_flagged() -> None:
-    report = trap_report(["EV-1"], ["EV-2"])
-    assert report.trap_increases == []
+def test_a_planted_chunk_that_swaps_items_at_the_same_count_is_listed() -> None:
+    """R00033 left EV-090 and entered EV-095: the count stayed at 2, so comparing counts missed it,
+    and this test once pinned that as right."""
+    report = trap_report(["EV-090", "EV-1"], ["EV-095", "EV-1"])
+    assert report.planted_entries == [("TRAP-INJ-001", "review:R00002:0", "EV-095")]
+    text = render(report)
+    assert "Entered a top 5: 1" in text
+    assert "- TRAP-INJ-001 review:R00002:0 entered EV-095" in text
 
 
 def test_only_the_top_five_count_as_an_appearance() -> None:
@@ -242,7 +250,7 @@ def test_only_the_top_five_count_as_an_appearance() -> None:
     [row] = report.traps
     assert row.plain == ()
     assert row.enriched == ("A",)
-    assert report.trap_increases == [row]
+    assert report.planted_entries == [("TRAP-INJ-001", "review:R00002:0", "A")]
 
 
 def test_every_trap_gets_a_row_in_trap_order() -> None:
@@ -286,3 +294,16 @@ def test_rejections_are_reported_by_reason() -> None:
     text = render(report)
     assert "- instruction: 2" in text
     assert "- non-ascii: 1" in text
+
+
+def test_all_three_metrics_are_reported_overall_and_per_segment() -> None:
+    items = [item("A", "specification", "S1"), item("B", "policy", "S2")]
+    plain = {"A": ranked("S1", *filler[:4]), "B": ranked(*filler)}
+    enriched = {"A": ranked("S1", *filler[:4]), "B": ranked("S2", *filler[:4])}
+    report = make(items, plain, enriched)
+    assert report.metrics["recall@5"] == (0.5, 1.0)
+    assert report.metrics["mrr"] == (0.5, 1.0)
+    assert report.segment_metrics["policy"]["recall@10"] == (0.0, 1.0)
+    text = render(report)
+    assert "| Metric | Plain | Enriched | Delta |" in text
+    assert "| policy | 1 | 0.000 | 1.000 | 0.000 | 1.000 | 0.000 | 1.000 |" in text

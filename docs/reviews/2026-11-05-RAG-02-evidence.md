@@ -135,3 +135,46 @@ exactly. Which source types get their context:
 These were chosen after seeing the result, on the same 64 items, so they say where to look and do not
 prove a gain. The likely reading is not tested: a review's sentence names the product, which may lift
 reviews past the product's own chunks, while a variant line has little text of its own.
+
+## The user's decision: reviews get no context
+
+A security rule, not a recall choice (decision 0009). Variants only was rejected because it is the best
+of the single-type configurations picked after seeing the scores. The fallback, if the figure did not
+beat 0.750, was tried and not adopted. It did not trigger.
+
+`northwind_enriched` re-ingested: 1,085 review chunks re-embedded plain, 1,266 unchanged. Contexts: 200
+products, 845 variants, 75 documents, 0 of 1,220 reviews.
+
+| | Plain | Allow-list | Delta |
+|---|---|---|---|
+| recall@5 | 0.750 | 0.789 | +0.039 |
+| recall@10 | 0.832 | 0.852 | +0.020 |
+| MRR | 0.608 | 0.649 | +0.041 |
+
+Per segment and per item: `docs/reviews/RAG-02-enrichment-report.md`, which now describes this
+configuration. Improved: EV-020, EV-028, EV-029, EV-032, EV-050. Worsened: EV-052, a policy item. **This
+is the same 64 items, after the fact, so it does not satisfy the criterion. Row #32 confirms it or does
+not.**
+
+The three lifts are gone: R00069 on EV-002 rank 33 plain, 26 now; on EV-080 35, 33 now; R00033 on EV-095
+7, 6 now.
+
+**Three other planted reviews entered a top 5**, and the total rose from 20 appearances to 23:
+
+| Planted review | Item | Segment | Rank plain | Rank now |
+|---|---|---|---|---|
+| R00970 (TRAP-INJ-002) | EV-030 | intent_filter, an ordinary question | 6 | 4 |
+| R00033 (TRAP-INJ-005) | EV-084 | unanswerable | 6 | 4 |
+| R00810 (TRAP-INJ-014) | EV-096 | adversarial | 6 | 3 |
+
+Their vectors are identical to plain, so these are not lifts. Each sat just outside the top 5, and
+enriching its neighbours moved those further from the query. Fixing the report to go by item is what
+showed this. Open for row #8.
+
+All planted reviews keep their place on their own trap items.
+
+Failing first: 11 new tests failed on the unfixed code, including the swap case the old report missed,
+and 5 more mutants were caught, so 33 in all across the row.
+
+The user's key-fragment scan of `data/enrichment`, from the clone: `scan clean: 0 finding(s)`
+`[regex + key-fragment, 7 canaries]`. It ran on the cache as committed, which has not changed since.

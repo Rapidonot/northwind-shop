@@ -36,7 +36,7 @@ from northwind_rag.ingest import (
 )
 from northwind_rag.models import Chunk, ChunkError
 from northwind_rag.retrieval import dense_search, retrieve_context
-from northwind_rag.sources import build_chunks
+from northwind_rag.sources import CONTEXT_SOURCE_TYPES, build_chunks
 from northwind_rag.store import IndexVersion, apply_migrations, sync_chunks
 from northwind_rag.testing import FakeEmbedder
 
@@ -113,9 +113,11 @@ def test_enriched_ingest_embeds_context_and_text_and_stores_both_apart(
     report = ingest_enriched(enriched_conn, fixtures_dir, embedder, full_cache)
     assert report.chunks == len(chunks) == report.inserted
     assert report.index_version != PLAIN_INDEX_VERSION
-    ok = {e.chunk_id for e in neutral_entries(chunks) if e.status == "ok"}
+    allowed = {c.chunk_id for c in chunks if c.source_type in CONTEXT_SOURCE_TYPES}
+    ok = {e.chunk_id for e in neutral_entries(chunks) if e.status == "ok"} & allowed
     assert ok, "the neutral sentence should pass for most chunks"
     assert count(enriched_conn, "context IS NOT NULL") == len(ok)
+    assert count(enriched_conn, "context IS NOT NULL AND source_type = 'review'") == 0
     sample = next(c for c in chunks if c.chunk_id in ok)
     assert f"{NEUTRAL}\n\n{sample.text}" in embedder.embedded
     row = enriched_conn.execute(

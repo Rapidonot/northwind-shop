@@ -18,6 +18,7 @@ from northwind_rag.retrieval import RetrievedChunk
 
 Live = Mapping[str, Sequence[RetrievedChunk]]
 METRIC = "recall@5"
+METRICS = ("recall@5", "recall@10", "mrr")
 
 
 @dataclass(frozen=True)
@@ -28,8 +29,12 @@ class TrapRow:
     enriched: tuple[str, ...]
 
     @property
-    def increased(self) -> bool:
-        return len(self.enriched) > len(self.plain)
+    def entered(self) -> tuple[str, ...]:
+        return tuple(sorted(set(self.enriched) - set(self.plain)))
+
+    @property
+    def left(self) -> tuple[str, ...]:
+        return tuple(sorted(set(self.plain) - set(self.enriched)))
 
 
 @dataclass
@@ -44,21 +49,36 @@ class Report:
     stale_zero_tolerance: list[str] = field(default_factory=list)
     traps: list[TrapRow] = field(default_factory=list)
     rejections: dict[str, int] = field(default_factory=dict)
+    metrics: dict[str, tuple[float, float]] = field(default_factory=dict)
+    segment_metrics: dict[str, dict[str, tuple[float, float]]] = field(default_factory=dict)
 
     @property
     def delta(self) -> float:
         return self.enriched_recall - self.plain_recall
 
     @property
-    def trap_increases(self) -> list[TrapRow]:
-        return [row for row in self.traps if row.increased]
+    def planted_entries(self) -> list[tuple[str, str, str]]:
+        """(trap, chunk, item) for every top 5 a planted chunk entered. By item, because comparing
+        counts hides a chunk that left one item and entered another: R00033 did on EV-095."""
+        return [(row.trap_id, row.chunk_id, item) for row in self.traps for item in row.entered]
 
 
-def _scores(items: Sequence[EvalItem], live: Live) -> dict[str, float]:
+def _all_scores(items: Sequence[EvalItem], live: Live) -> dict[str, dict[str, float]]:
     return {
-        item.id: score_retrieval(item, [c.source_id for c in live[item.id]])[METRIC]
+        item.id: score_retrieval(item, [c.source_id for c in live[item.id]])
         for item in items
         if item.retrieval_scored
+    }
+
+
+def _pairs(
+    ids: Sequence[str],
+    before: Mapping[str, Mapping[str, float]],
+    after: Mapping[str, Mapping[str, float]],
+) -> dict[str, tuple[float, float]]:
+    return {
+        metric: (_mean([before[i][metric] for i in ids]), _mean([after[i][metric] for i in ids]))
+        for metric in METRICS
     }
 
 
@@ -87,13 +107,16 @@ def build_report(
     rejections: Mapping[str, int] | None = None,
 ) -> Report:
     """`trap_chunks` maps each planted chunk's ID to its trap, for every TRAP-INJ chunk."""
-    before = _scores(items, plain)
-    after = _scores(items, enriched)
+    full_before = _all_scores(items, plain)
+    full_after = _all_scores(items, enriched)
+    before = {item_id: scores[METRIC] for item_id, scores in full_before.items()}
+    after = {item_id: scores[METRIC] for item_id, scores in full_after.items()}
     report = Report(
         plain_recall=_mean(list(before.values())),
         enriched_recall=_mean(list(after.values())),
         baseline_recall=_mean([scores[METRIC] for scores in baseline.values()]),
         rejections=dict(rejections or {}),
+        metrics=_pairs(list(before), full_before, full_after),
     )
     for segment in sorted({item.segment for item in items if item.id in before}):
         ids = [item.id for item in items if item.segment == segment and item.id in before]
@@ -102,6 +125,7 @@ def build_report(
             _mean([before[i] for i in ids]),
             _mean([after[i] for i in ids]),
         )
+        report.segment_metrics[segment] = _pairs(ids, full_before, full_after)
     report.improved = sorted(i for i in before if after[i] > before[i])
     report.worsened = sorted(i for i in before if after[i] < before[i])
     for item in items:
@@ -117,6 +141,7 @@ def build_report(
 
 
 def render(report: Report) -> str:
+    entries = report.planted_entries
     lines = [
         "# RAG-02: enriched index against the plain index",
         "",
@@ -124,13 +149,20 @@ def render(report: Report) -> str:
         f"{report.baseline_recall:.3f}), enriched {report.enriched_recall:.3f}, "
         f"delta {report.delta:+.3f}",
         "",
-        "| Segment | Items | Plain | Enriched | Delta |",
-        "|---|---|---|---|---|",
+        "| Metric | Plain | Enriched | Delta |",
+        "|---|---|---|---|",
     ]
-    for segment, (count, before, after) in report.by_segment.items():
-        lines.append(
-            f"| {segment} | {count} | {before:.3f} | {after:.3f} | {after - before:+.3f} |"
-        )
+    for metric, (before, after) in report.metrics.items():
+        lines.append(f"| {metric} | {before:.3f} | {after:.3f} | {after - before:+.3f} |")
+    lines += [
+        "",
+        "| Segment | Items | recall@5 plain | enriched | recall@10 plain | enriched "
+        "| MRR plain | enriched |",
+        "|---|---|---|---|---|---|---|---|",
+    ]
+    for segment, scores in report.segment_metrics.items():
+        cells = " | ".join(f"{v:.3f}" for metric in METRICS for v in scores[metric])
+        lines.append(f"| {segment} | {report.by_segment[segment][0]} | {cells} |")
     lines += [
         "",
         f"Improved: {', '.join(report.improved) or 'none'}",
@@ -145,15 +177,18 @@ def render(report: Report) -> str:
         *(f"- {reason}: {count}" for reason, count in sorted(report.rejections.items())),
         *([] if report.rejections else ["None."]),
         "",
-        "## Planted injection chunks in a top 5",
+        "## Planted chunks entering a top 5",
         "",
-        "| Trap | Chunk | Plain | Enriched | Increase | Items added |",
+        f"Entered a top 5: {len(entries) or 'none'}",
+        *(f"- {trap} {chunk} entered {item}" for trap, chunk, item in entries),
+        "",
+        "## Planted chunks in a top 5, by item",
+        "",
+        "| Trap | Chunk | Plain | Enriched | Entered | Left |",
         "|---|---|---|---|---|---|",
     ]
     for row in report.traps:
-        added = sorted(set(row.enriched) - set(row.plain))
-        lines.append(
-            f"| {row.trap_id} | {row.chunk_id} | {len(row.plain)} | {len(row.enriched)} | "
-            f"{'yes' if row.increased else 'no'} | {', '.join(added) or '-'} |"
-        )
+        groups = (row.plain, row.enriched, row.entered, row.left)
+        shown = " | ".join(", ".join(group) or "-" for group in groups)
+        lines.append(f"| {row.trap_id} | {row.chunk_id} | {shown} |")
     return "\n".join(lines) + "\n"

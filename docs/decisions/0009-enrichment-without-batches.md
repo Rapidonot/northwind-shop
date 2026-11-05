@@ -55,7 +55,40 @@ stop at 150 rate-limit replies. SDK retries are off, because a hidden retry is a
 
 ## Result
 
-The run cost $0.113222. recall@5 was 0.742 against 0.750 plain, so the RAG-02 criterion was not met.
+The run cost $0.113222. Enriching every chunk gave recall@5 0.742 against 0.750 plain, so the RAG-02
+criterion was not met, and a planted review's own sentence lifted it into top 5s it had no place in:
+R00069 from rank 33 to 5 on EV-002, and 35 to 2 on EV-080, and R00033 from 7 to 5 on EV-095. The chunk
+body is the attack, and retrieval returns the body.
+
+## Reviews get no context
+
+**A security rule, not a recall choice.** Reviews are written by shoppers. Context goes only to an
+allow-list of source types: product, variant and document, matching row #8's list. Reviews get none, a
+new source type gets none, and the index refuses a review that holds one. The review sentences from the
+first run stay in the cache, unused.
+
+Measured on the isolated index: recall@5 0.789, recall@10 0.852, MRR 0.649, against 0.750, 0.832 and
+0.608. The three lifts are gone.
+
+**That delta does not satisfy the criterion.** It is on the same 64 items, after the fact. Nine
+configurations were looked at, and the choice was made having seen all of them:
+
+| Enriched | recall@5 | recall@10 | MRR |
+|---|---|---|---|
+| None (plain) | 0.750 | 0.832 | 0.608 |
+| All | 0.742 | 0.837 | 0.610 |
+| Variants only | 0.805 | 0.852 | 0.654 |
+| Products only | 0.719 | 0.852 | 0.572 |
+| Reviews only | 0.727 | 0.816 | 0.581 |
+| Documents only | 0.734 | 0.832 | 0.623 |
+| All but reviews (adopted, on security grounds) | 0.789 | 0.852 | 0.649 |
+| All but products | 0.773 | 0.840 | 0.629 |
+| All but documents | 0.750 | 0.837 | 0.595 |
+| All but variants | 0.641 | 0.832 | 0.543 |
+
+Variants only scored highest and was rejected for that reason: it is the best of the single-type
+configurations picked after seeing the scores. **The criterion counts only once it is confirmed on items
+not used for this choice**, which row #32's new items can do. Until then RAG-02 stays partial.
 
 ## Not decided here
 

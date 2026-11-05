@@ -31,7 +31,13 @@ from northwind_rag.enrichment import (
     plan_work,
 )
 from northwind_rag.models import Chunk, ChunkError, ChunkMetadata, Visibility
-from northwind_rag.sources import MAX_CONTEXT_CHARS, build_chunks, check_chunk, context_problem
+from northwind_rag.sources import (
+    CONTEXT_SOURCE_TYPES,
+    MAX_CONTEXT_CHARS,
+    build_chunks,
+    check_chunk,
+    context_problem,
+)
 
 from .enrich_support import MODEL, NEUTRAL, write_complete_cache, write_entries  # noqa: TID252
 
@@ -116,15 +122,11 @@ def test_the_real_duplicate_pair_shares_a_parent_so_it_shares_one_entry(
     chunks: list[Chunk], parents: dict[str, Parent]
 ) -> None:
     """The fixtures hold exactly one pair of equal chunk text. Both reviews are of the same
-    product, so their parent is the same: one key, one call."""
+    product, so their parent is the same: one key. It cost one call in the first run."""
     first, second = by_id(chunks, "review:R00778:0"), by_id(chunks, "review:R00779:0")
     assert first.text_hash == second.text_hash
     assert parents[first.chunk_id] == parents[second.chunk_id]
     assert cache_key(first, parents[first.chunk_id]) == cache_key(second, parents[second.chunk_id])
-    planned = [c.chunk_id for _, group in plan_work(chunks, EnrichmentCache(Path("/nonexistent")))
-               for c in group]  # fmt: skip
-    assert len(planned) == len(chunks) - 1
-    assert not {first.chunk_id, second.chunk_id} <= set(planned)
 
 
 def test_changing_the_prompt_version_changes_the_key(
@@ -149,7 +151,9 @@ def test_a_new_prompt_version_means_a_new_call_for_every_chunk(
     assert plan_work(subset, EnrichmentCache(tmp_path)) == []
     monkeypatch.setattr(enrichment, "ENRICH_PROMPT_VERSION", ENRICH_PROMPT_VERSION + 1)
     planned = [c for _, group in plan_work(subset, EnrichmentCache(tmp_path)) for c in group]
-    assert {c.chunk_id for c in planned} == {c.chunk_id for c in subset}
+    allowed = {c.chunk_id for c in subset if c.source_type in CONTEXT_SOURCE_TYPES}
+    assert allowed
+    assert {c.chunk_id for c in planned} == allowed
 
 
 # -- 1. re-ingest makes no calls ----------------------------------------------------------------
@@ -159,7 +163,9 @@ def test_a_complete_cache_leaves_nothing_to_plan(chunks: list[Chunk], tmp_path: 
     write_complete_cache(tmp_path, chunks)
     cache = EnrichmentCache(tmp_path)
     assert plan_work(chunks, cache) == []
-    assert all(c.context == NEUTRAL for c in apply_cache(chunks, cache))
+    for chunk in apply_cache(chunks, cache):
+        allowed = chunk.source_type in CONTEXT_SOURCE_TYPES
+        assert chunk.context == (NEUTRAL if allowed else None)
 
 
 def test_plan_groups_by_parent_and_skips_what_is_cached(
@@ -618,7 +624,8 @@ def test_apply_cache_raises_when_one_entry_is_missing(chunks: list[Chunk], tmp_p
 def test_apply_cache_keeps_a_rejected_chunk_plain_and_the_rest_enriched(
     chunks: list[Chunk], parents: dict[str, Parent], tmp_path: Path
 ) -> None:
-    subset = of_product(chunks, "P0001")
+    subset = [c for c in of_product(chunks, "P0001") if c.source_type in CONTEXT_SOURCE_TYPES]
+    assert len(subset) > 1
     local = parents_of(subset)
     entries = [
         judge(c, local[c.chunk_id], MODEL, NEUTRAL, "refusal" if i == 0 else "end_turn")

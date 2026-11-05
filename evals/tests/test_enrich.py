@@ -167,13 +167,13 @@ META = ChunkMetadata(
 )  # fmt: skip
 
 
-def review(i: int, product: str = "P9999") -> Chunk:
+def variant(i: int, product: str = "P9999") -> Chunk:
     text = f"Review of Test Item\n\nVerified purchase. Rating: 4 of 5.\n\nTitle {i}\n\nBody {i}."
-    return Chunk("review", f"R9{i:04d}", 0, text, META, parent_id=product)
+    return Chunk("variant", f"V9{i:04d}", 0, text, META, parent_id=product)
 
 
 def one_group(n: int) -> tuple[list[Chunk], list[tuple[Parent, list[Chunk]]]]:
-    chunks = [review(i) for i in range(n)]
+    chunks = [variant(i) for i in range(n)]
     work = plan_work(chunks, EnrichmentCache(Path("/nonexistent")))
     assert len(work) == 1
     return chunks, work
@@ -285,7 +285,7 @@ def test_calls_are_spaced_by_the_rate() -> None:
 def test_a_429_pauses_halves_the_rate_and_retries_the_same_chunk(tmp_path: Path) -> None:
     client = FakeClient([rate_limited()])
     run, clock, _ = make_run(tmp_path, client)
-    chunk = review(1)
+    chunk = variant(1)
     entry = run.one(chunk, parent_of(chunk))
     assert entry is not None and entry.status == "ok"
     assert client.calls == 2
@@ -299,7 +299,7 @@ def test_a_429_pauses_halves_the_rate_and_retries_the_same_chunk(tmp_path: Path)
 def test_a_streak_of_429s_halves_once_and_the_pause_grows(tmp_path: Path) -> None:
     client = FakeClient([rate_limited() for _ in range(4)])
     run, clock, _ = make_run(tmp_path, client)
-    chunk = review(1)
+    chunk = variant(1)
     assert run.one(chunk, parent_of(chunk)) is not None
     assert run._pacer.rpm == START_RPM / 2
     pauses = [s for s in clock.sleeps if s > 1.0]
@@ -310,7 +310,7 @@ def test_a_streak_of_429s_halves_once_and_the_pause_grows(tmp_path: Path) -> Non
 def test_the_pause_reaches_the_cap_and_stays(tmp_path: Path) -> None:
     client = FakeClient([rate_limited() for _ in range(12)])
     run, clock, _ = make_run(tmp_path, client)
-    chunk = review(1)
+    chunk = variant(1)
     assert run.one(chunk, parent_of(chunk)) is not None
     assert max(clock.sleeps) == pytest.approx(MAX_PAUSE_SECONDS)
 
@@ -343,7 +343,7 @@ def test_budget_request_and_auth_errors_stop_at_once_with_no_retry(
 ) -> None:
     client = FakeClient([status_error(cls, status)])
     run, _, _ = make_run(tmp_path, client)
-    chunk = review(1)
+    chunk = variant(1)
     assert run.one(chunk, parent_of(chunk)) is None
     assert client.calls == 1
     assert run.report.stopped is not None and str(status) in run.report.stopped
@@ -356,7 +356,7 @@ def test_a_502_that_is_not_marked_retryable_is_the_key_block_and_stops(
 ) -> None:
     client = FakeClient([status_error(anthropic.InternalServerError, 502, body)])
     run, _, _ = make_run(tmp_path, client)
-    chunk = review(1)
+    chunk = variant(1)
     assert run.one(chunk, parent_of(chunk)) is None
     assert client.calls == 1
     assert run.report.stopped is not None and "502" in run.report.stopped
@@ -366,7 +366,7 @@ def test_a_502_marked_retryable_is_retried(tmp_path: Path) -> None:
     error = status_error(anthropic.InternalServerError, 502, {"isRetryable": True})
     client = FakeClient([error])
     run, _, _ = make_run(tmp_path, client)
-    chunk = review(1)
+    chunk = variant(1)
     entry = run.one(chunk, parent_of(chunk))
     assert entry is not None and entry.status == "ok"
     assert client.calls == 2
@@ -379,7 +379,7 @@ def test_a_server_error_retries_up_to_the_attempt_limit_then_skips(
 ) -> None:
     client = FakeClient(default=lambda: status_error(anthropic.InternalServerError, status))
     run, _, _ = make_run(tmp_path, client)
-    chunk = review(1)
+    chunk = variant(1)
     assert run.one(chunk, parent_of(chunk)) is None
     assert client.calls == MAX_ATTEMPTS == 3
     assert run.report.skipped == 1
@@ -389,7 +389,7 @@ def test_a_server_error_retries_up_to_the_attempt_limit_then_skips(
 def test_a_dropped_connection_is_retried(tmp_path: Path) -> None:
     client = FakeClient([connection_error()])
     run, _, _ = make_run(tmp_path, client)
-    chunk = review(1)
+    chunk = variant(1)
     entry = run.one(chunk, parent_of(chunk))
     assert entry is not None and client.calls == 2
 
@@ -398,13 +398,13 @@ def test_five_failures_in_a_row_stop_the_run(tmp_path: Path) -> None:
     assert MAX_FAILURES_IN_A_ROW == 5
     client = FakeClient(default=lambda: status_error(anthropic.InternalServerError, 500))
     run, _, _ = make_run(tmp_path, client)
-    first, second = review(1), review(2)
+    first, second = variant(1), variant(2)
     assert run.one(first, parent_of(first)) is None
     assert run.report.stopped is None  # three failures
     assert run.one(second, parent_of(second)) is None
     assert run.report.stopped is not None and "5 failures in a row" in run.report.stopped
     calls = client.calls
-    assert run.one(review(3), parent_of(review(3))) is None
+    assert run.one(variant(3), parent_of(variant(3))) is None
     assert client.calls == calls  # a stopped run makes no more calls
 
 
@@ -414,7 +414,7 @@ def test_a_success_resets_the_failure_count(tmp_path: Path) -> None:
     client = FakeClient(script, default=lambda: boom)
     run, _, _ = make_run(tmp_path, client)
     for i in (1, 2):
-        chunk = review(i)
+        chunk = variant(i)
         run.one(chunk, parent_of(chunk))
     # 2 failures, a success, then 3 more: five in all, but never five in a row.
     assert run.report.stopped is None
@@ -424,7 +424,7 @@ def test_a_success_resets_the_failure_count(tmp_path: Path) -> None:
 
 
 def test_the_first_call_runs_alone_before_the_pool(tmp_path: Path) -> None:
-    chunks = [review(i, product=f"P{i % 4}") for i in range(8)]
+    chunks = [variant(i, product=f"P{i % 4}") for i in range(8)]
     work = plan_work(chunks, EnrichmentCache(Path("/nonexistent")))
     assert len(work) == 4
     client = FakeClient(delay=0.05)
@@ -436,7 +436,7 @@ def test_the_first_call_runs_alone_before_the_pool(tmp_path: Path) -> None:
 
 
 def test_concurrency_never_exceeds_the_worker_count(tmp_path: Path) -> None:
-    chunks = [review(i, product=f"P{i}") for i in range(18)]
+    chunks = [variant(i, product=f"P{i}") for i in range(18)]
     work = plan_work(chunks, EnrichmentCache(Path("/nonexistent")))
     client = FakeClient(delay=0.03)
     run, _, _ = make_run(tmp_path, client)
