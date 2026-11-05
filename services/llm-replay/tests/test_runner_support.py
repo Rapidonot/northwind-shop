@@ -3,9 +3,12 @@ nothing real starts, and nothing here reaches the network or a real key."""
 
 from __future__ import annotations
 
+import errno
 import json
 import os
+import re
 import subprocess
+import threading
 from pathlib import Path
 
 import pytest
@@ -310,7 +313,7 @@ def test_inside_the_clone_uv_stays_off_the_shared_cache_and_pythonpath_goes(tmp_
     (tmp_path / "bin" / "uv").write_text(
         '#!/bin/sh\necho "uv cache=$UV_CACHE_DIR frozen=$UV_FROZEN path=$PYTHONPATH"\n'
     )
-    done = make(tmp_path, env, "llm-spend", f"RUNNER_DIR={tmp_path}")
+    done = make(tmp_path, env, "data", f"RUNNER_DIR={tmp_path}")
     assert done.stdout.strip() == f"uv cache={tmp_path}/.northwind/uv-cache frozen=1 path="
 
 
@@ -576,17 +579,26 @@ def test_check_passes_what_it_cannot_write(tmp_path: Path) -> None:
 def test_a_denied_stat_counts_as_refused_and_does_not_crash(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A path in denyRead raises on stat, as the ledger lock does after install."""
+    """A path in denyRead raises on stat, as the ledger lock does after install, and the sandbox
+    refuses the open too. Row 5b: the open is now really tried, so the rig has to refuse it. A
+    denied stat over a file that can be opened is reported: see the M1 test below."""
     path = tmp_path / "lock"
     path.write_text("")
     real_stat = Path.stat
+    real_open = os.open
 
     def denied(self: Path, **kwargs: object) -> os.stat_result:
         if self == path:
             raise PermissionError(1, "Operation not permitted")
         return real_stat(self, **kwargs)  # type: ignore[arg-type]
 
+    def refused(name: object, *args: object, **kwargs: object) -> int:
+        if name == path:
+            raise PermissionError(1, "Operation not permitted")
+        return real_open(name, *args, **kwargs)  # type: ignore[arg-type]
+
     monkeypatch.setattr(Path, "stat", denied)
+    monkeypatch.setattr(os, "open", refused)
     assert runner_check.check([], [path], []) == []
 
 
@@ -820,3 +832,607 @@ def test_main_reports_a_writable_path_a_creatable_file_and_a_pricing_failure(
     assert f"WRITABLE {admin / 'config.worktree'}" in lines  # a creatable absent file
     assert "PRICING the runner cannot load its prices: no module named pricing" in lines
     assert not (admin / "config.worktree").exists()
+
+
+# --- row 5b: the merge review's findings on runner_check.py -----------------------------------
+
+
+def wired(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, trees: list[Path] | None = None
+) -> tuple[Path, Path, Path]:
+    """`main()` against a throwaway repo and home. Returns the main checkout, tree and python."""
+    main, tree = linked_worktree(tmp_path)
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr(runner_check, "load_paths", lambda _python: [])
+    monkeypatch.setattr(runner_check, "checkouts", lambda: trees or [main, tree])
+    monkeypatch.setattr(localenv, "main_checkout", lambda: main)
+    monkeypatch.setattr(localenv, "ledger_path", lambda: tmp_path / "ledger.jsonl")
+    monkeypatch.setattr(localenv, "env_file", lambda: tmp_path / "key-file")
+    python = tmp_path / "fake-python"
+    python.write_text("#!/bin/sh\necho northwind_common.pricing\n")
+    python.chmod(0o755)
+    return main, tree, python
+
+
+def stat_denied(monkeypatch: pytest.MonkeyPatch, path: Path) -> None:
+    """A path in denyRead raises on stat and lstat alike, as the ledger lock does."""
+    real_stat = Path.stat
+
+    def denied(self: Path, **kwargs: object) -> os.stat_result:
+        if self == path:
+            raise PermissionError(1, "Operation not permitted")
+        return real_stat(self, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(Path, "stat", denied)
+
+
+@pytest.mark.req("RAG-12")
+def test_m1_an_absent_file_that_could_be_created_is_reported(tmp_path: Path) -> None:
+    path = tmp_path / "gitconfig"
+    assert runner_check.check([], [path], []) == [f"WRITABLE {path}"]
+    assert not path.exists()
+
+
+@pytest.mark.req("RAG-12")
+def test_m1_an_absent_directory_that_could_be_created_is_reported(tmp_path: Path) -> None:
+    path = tmp_path / "a" / "b"
+    assert runner_check.check([path], [], []) == [f"WRITABLE {path}"]
+    assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.req("RAG-12")
+def test_m1_a_file_under_an_absent_directory_is_not_read_as_safe(tmp_path: Path) -> None:
+    """`~/.config/git/config` with no `~/.config/git`: creating it gives ENOENT, which is not a
+    refusal. Only the first missing component says whether the path could come to exist."""
+    path = tmp_path / "a" / "b" / "config"
+    assert runner_check.check([], [path], []) == [f"WRITABLE {path}"]
+    assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.req("RAG-12")
+def test_m1_absent_paths_under_a_refused_parent_pass(tmp_path: Path) -> None:
+    if os.geteuid() == 0:
+        pytest.skip("root ignores file modes")
+    locked = tmp_path / "locked"
+    locked.mkdir(mode=0o555)
+    try:
+        assert runner_check.check([locked / "d"], [locked / "f", locked / "g" / "f"], []) == []
+    finally:
+        locked.chmod(0o755)
+
+
+@pytest.mark.req("RAG-12")
+def test_m1_a_stat_denied_file_is_probed_in_place_and_never_read_as_absent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Creating an existing file fails with EEXIST, which would read as refused."""
+    path = tmp_path / "lock"
+    path.write_text("x")
+    stat_denied(monkeypatch, path)
+    assert runner_check.check([], [path], []) == [f"WRITABLE {path}"]
+    assert path.read_text() == "x"
+
+
+@pytest.mark.req("RAG-12")
+def test_m1_main_measures_the_user_git_config_and_the_main_config_worktree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    main, _, python = wired(tmp_path, monkeypatch)
+    assert runner_check.main(python) == 1
+    lines = capsys.readouterr().out.splitlines()
+    assert f"WRITABLE {tmp_path / 'home' / '.config' / 'git' / 'config'}" in lines
+    assert f"WRITABLE {main / '.git' / 'config.worktree'}" in lines
+    assert not (main / ".git" / "config.worktree").exists()
+    assert not (tmp_path / "home" / ".config").exists()
+
+
+@pytest.mark.req("RAG-12")
+@pytest.mark.parametrize("shape", ["directory", "missing", "fifo"])
+def test_m2_a_linked_worktree_whose_git_is_not_a_regular_file_is_reported(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    shape: str,
+) -> None:
+    _, tree, python = wired(tmp_path, monkeypatch)
+    pointer = tree / ".git"
+    pointer.unlink()
+    if shape == "directory":
+        pointer.mkdir()
+    elif shape == "fifo":
+        os.mkfifo(pointer)
+    assert runner_check.main(python) == 1
+    assert f"NOT A FILE {pointer}" in capsys.readouterr().out.splitlines()
+
+
+@pytest.mark.req("RAG-12")
+def test_m2_only_the_main_checkout_is_exempt(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    main, _, python = wired(tmp_path, monkeypatch)
+    runner_check.main(python)
+    assert f"NOT A FILE {main / '.git'}" not in capsys.readouterr().out.splitlines()
+
+
+@pytest.mark.req("RAG-12")
+def test_m3_a_dangling_symlink_is_reported_not_read_as_refused(tmp_path: Path) -> None:
+    link = tmp_path / "gitdir"
+    link.symlink_to(tmp_path / "nowhere")
+    assert runner_check.check([], [link], []) == [f"SYMLINK {link}"]
+    assert not (tmp_path / "nowhere").exists()
+
+
+@pytest.mark.req("RAG-12")
+def test_m3_a_live_symlink_is_reported_and_its_target_is_left_alone(tmp_path: Path) -> None:
+    target = tmp_path / "target"
+    target.write_text("x")
+    link = tmp_path / "gitdir"
+    link.symlink_to(target)
+    assert runner_check.check([], [link], []) == [f"SYMLINK {link}"]
+    assert target.read_text() == "x"
+
+
+@pytest.mark.req("RAG-12")
+def test_m3_a_dangling_symlink_at_an_admin_file_reaches_the_report(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    main, _, python = wired(tmp_path, monkeypatch)
+    admin = main / ".git" / "worktrees" / "tree" / "config.worktree"
+    admin.symlink_to(tmp_path / "nowhere")
+    assert runner_check.main(python) == 1
+    assert f"SYMLINK {admin}" in capsys.readouterr().out.splitlines()
+
+
+@pytest.mark.req("RAG-12")
+def test_l1_a_failing_stage_is_a_line_and_keeps_what_was_collected(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _, tree, python = wired(tmp_path, monkeypatch)
+
+    def boom(_python: Path) -> tuple[str | None, list[str]]:
+        raise OSError("no such thing")
+
+    monkeypatch.setattr(runner_check, "pricing_module", boom)
+    assert runner_check.main(python) == 1
+    lines = capsys.readouterr().out.splitlines()
+    assert f"WRITABLE {tree / '.git'}" in lines
+    assert any(line.startswith("ERROR pricing: ") for line in lines)
+
+
+@pytest.mark.req("RAG-12")
+def test_l1_a_failing_worktree_list_still_runs_the_other_stages(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _, _, python = wired(tmp_path, monkeypatch)
+
+    def boom() -> list[Path]:
+        raise subprocess.CalledProcessError(128, "git")
+
+    monkeypatch.setattr(runner_check, "checkouts", boom)
+    assert runner_check.main(python) == 1
+    lines = capsys.readouterr().out.splitlines()
+    assert any(line.startswith("ERROR checkouts: ") for line in lines)
+    assert f"WRITABLE {tmp_path / 'ledger.jsonl'}" in lines
+    assert "runner prices from: northwind_common.pricing" in lines
+
+
+@pytest.mark.req("RAG-12")
+def test_l1_checkouts_is_called_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    main, tree, python = wired(tmp_path, monkeypatch)
+    calls: list[int] = []
+
+    def counted() -> list[Path]:
+        calls.append(1)
+        return [main, tree]
+
+    monkeypatch.setattr(runner_check, "checkouts", counted)
+    runner_check.main(python)
+    assert len(calls) == 1
+
+
+@pytest.mark.req("RAG-12")
+def test_l2_a_missing_admin_folder_is_the_only_empty_one(tmp_path: Path) -> None:
+    main = tmp_path / "main"
+    (main / ".git").mkdir(parents=True)
+    assert runner_check.git_redirect_files(main / ".git", [main]) == ([], [])
+    (main / ".git" / "worktrees").write_text("not a folder")
+    with pytest.raises(OSError):
+        runner_check.git_redirect_files(main / ".git", [main])
+
+
+@pytest.mark.req("RAG-12")
+def test_l2_an_unlistable_admin_folder_is_reported_not_read_as_empty(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    if os.geteuid() == 0:
+        pytest.skip("root ignores file modes")
+    main, _, python = wired(tmp_path, monkeypatch)
+    admin = main / ".git" / "worktrees"
+    admin.chmod(0o000)
+    try:
+        assert runner_check.main(python) == 1
+    finally:
+        admin.chmod(0o755)
+    lines = capsys.readouterr().out.splitlines()
+    assert any(line.startswith("ERROR redirect files: ") for line in lines)
+
+
+@pytest.mark.req("RAG-12")
+def test_l2_a_git_dir_that_is_not_a_directory_is_reported(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    fake = tmp_path / "fake-main"
+    fake.mkdir()
+    (fake / ".git").write_text("gitdir: elsewhere\n")
+    _, tree, python = wired(tmp_path, monkeypatch)
+    monkeypatch.setattr(localenv, "main_checkout", lambda: fake)
+    assert runner_check.main(python) == 1
+    assert f"NOT A DIRECTORY {fake / '.git'}" in capsys.readouterr().out.splitlines()
+
+
+@pytest.mark.req("RAG-12")
+def test_l3_the_replacement_limit_is_stated_in_the_output(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _, _, python = wired(tmp_path, monkeypatch)
+    runner_check.main(python)
+    assert runner_check.REPLACEMENT_LIMIT in capsys.readouterr().out.splitlines()
+    assert "replacing a file through its folder" in runner_check.REPLACEMENT_LIMIT
+
+
+@pytest.mark.req("RAG-12")
+def test_l4_a_failed_cleanup_is_reported_and_does_not_raise(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = tmp_path / "config.worktree"
+
+    def refused(*_args: object, **_kwargs: object) -> None:
+        raise PermissionError(1, "Operation not permitted")
+
+    monkeypatch.setattr(os, "unlink", refused)
+    assert runner_check.can_create(path)
+    assert runner_check.dir_is_writable(tmp_path)
+    out = capsys.readouterr().out
+    assert f"LEFT BEHIND {path}" in out
+    assert f"LEFT BEHIND {tmp_path}/.runner-check-" in out
+
+
+@pytest.mark.req("RAG-12")
+def test_l5_a_fifo_with_no_reader_does_not_hang_and_is_reported(tmp_path: Path) -> None:
+    fifo = tmp_path / "ledger"
+    os.mkfifo(fifo)
+    result: list[object] = []
+
+    def probe() -> None:
+        result.append(runner_check.file_is_writable(fifo))
+        result.append(runner_check.check([], [fifo], []))
+
+    worker = threading.Thread(target=probe, daemon=True)
+    worker.start()
+    worker.join(timeout=5)
+    assert not worker.is_alive(), "opening a FIFO hung"
+    assert result == [False, [f"NOT A FILE {fifo}"]]
+
+
+@pytest.mark.req("RAG-12")
+def test_l5_probing_an_absent_file_never_creates_it(tmp_path: Path) -> None:
+    path = tmp_path / "absent"
+    assert runner_check.file_is_writable(path) is False
+    assert not path.exists()
+
+
+@pytest.mark.req("RAG-12")
+def test_l6_printed_paths_are_escaped(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Names are the sandbox's to choose, and an escape sequence could hide a failing line."""
+    hostile = tmp_path / "tree\x1b[2Kok"
+    hostile.mkdir()
+    (hostile / ".git").write_text("gitdir: elsewhere\n")
+    main = tmp_path / "main"
+    _, _, python = wired(tmp_path, monkeypatch, trees=[main, hostile])
+    assert runner_check.main(python) == 1
+    out = capsys.readouterr().out
+    assert "\x1b" not in out
+    assert "tree\\x1b[2Kok" in out
+
+
+# --- row 5b: gaps found by trying to break the findings above ---------------------------------
+
+
+@pytest.mark.req("RAG-12")
+@pytest.mark.parametrize("as_file", [True, False])
+def test_m1_a_path_under_a_dangling_symlinked_folder_is_not_read_as_safe(
+    tmp_path: Path, as_file: bool
+) -> None:
+    """ENOENT through a dangling link says nothing: creating the target makes the path real."""
+    link = tmp_path / "dir"
+    link.symlink_to(tmp_path / "nowhere")
+    path = link / "config"
+    problems = runner_check.check([] if as_file else [path], [path] if as_file else [], [])
+    assert problems, "a path behind a dangling link was read as refused"
+    assert not (tmp_path / "nowhere").exists()
+
+
+@pytest.mark.req("RAG-12")
+def test_m1_a_dangling_symlinked_admin_folder_reaches_the_report(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    main, _, python = wired(tmp_path, monkeypatch)
+    (main / ".git" / "worktrees" / "planted").symlink_to(tmp_path / "nowhere")
+    assert runner_check.main(python) == 1
+    assert "planted" in capsys.readouterr().out
+
+
+@pytest.mark.req("RAG-12")
+def test_m1_a_probe_never_leaves_a_folder_it_made_when_it_cannot_remove_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def refused(*_args: object, **_kwargs: object) -> None:
+        raise PermissionError(1, "Operation not permitted")
+
+    monkeypatch.setattr(os, "rmdir", refused)
+    path = tmp_path / "a" / "config"
+    assert runner_check.check([], [path], []) == [f"WRITABLE {path}"]
+    assert f"LEFT BEHIND {tmp_path / 'a'}" in capsys.readouterr().out
+
+
+@pytest.mark.req("RAG-12")
+def test_m1_a_file_in_the_way_of_a_path_is_not_a_creatable_one(tmp_path: Path) -> None:
+    """Row 5b review: nothing was measured there, so it is a finding, not a clean result."""
+    (tmp_path / "f").write_text("x")
+    problems = runner_check.check([tmp_path / "f" / "d"], [tmp_path / "f" / "g"], [])
+    assert problems == [f"NOT A DIRECTORY {tmp_path / 'f'}"] * 2
+    assert (tmp_path / "f").read_text() == "x"
+
+
+@pytest.mark.req("RAG-12")
+def test_m2_a_linked_worktree_whose_git_is_a_symlink_is_reported(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _, tree, python = wired(tmp_path, monkeypatch)
+    pointer = tree / ".git"
+    real = tmp_path / "real-pointer"
+    pointer.rename(real)
+    pointer.symlink_to(real)
+    assert runner_check.main(python) == 1
+    out = capsys.readouterr().out.splitlines()
+    assert f"SYMLINK {pointer}" in out
+    assert real.read_text().startswith("gitdir:")
+
+
+@pytest.mark.req("RAG-12")
+def test_m2_the_main_checkout_listed_by_a_symlinked_path_is_still_exempt(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    main, tree, python = wired(tmp_path, monkeypatch)
+    alias = tmp_path / "alias-of-main"
+    alias.symlink_to(main)
+    monkeypatch.setattr(runner_check, "checkouts", lambda: [alias, tree])
+    runner_check.main(python)
+    out = capsys.readouterr().out
+    assert "NOT A FILE" not in out
+
+
+@pytest.mark.req("RAG-12")
+def test_m3_a_main_git_dir_that_is_a_symlink_is_reported(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _, _, python = wired(tmp_path, monkeypatch)
+    fake = tmp_path / "fake-main"
+    fake.mkdir()
+    (fake / ".git").symlink_to(tmp_path / "main" / ".git")
+    monkeypatch.setattr(localenv, "main_checkout", lambda: fake)
+    assert runner_check.main(python) == 1
+    assert f"NOT A DIRECTORY {fake / '.git'}" in capsys.readouterr().out.splitlines()
+
+
+@pytest.mark.req("RAG-12")
+@pytest.mark.parametrize("stage", ["load_paths", "checkouts", "pricing_module"])
+def test_l1_every_stage_failure_is_a_line_and_the_exit_is_one(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    stage: str,
+) -> None:
+    _, tree, python = wired(tmp_path, monkeypatch)
+
+    def boom(*_args: object) -> None:
+        raise RuntimeError("stage broke")
+
+    monkeypatch.setattr(runner_check, stage, boom)
+    assert runner_check.main(python) == 1
+    lines = capsys.readouterr().out.splitlines()
+    assert any(line.startswith("ERROR ") and "stage broke" in line for line in lines)
+    assert f"WRITABLE {tmp_path / 'ledger.jsonl'}" in lines or stage == "checkouts"
+    assert any(line.startswith("runner-check: ") for line in lines)
+
+
+@pytest.mark.req("RAG-12")
+def test_l1_a_failing_measurement_keeps_the_redirect_and_settings_findings(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _, tree, python = wired(tmp_path, monkeypatch)
+
+    def boom() -> Path:
+        raise OSError("no ledger path")
+
+    monkeypatch.setattr(localenv, "ledger_path", boom)
+    assert runner_check.main(python) == 1
+    lines = capsys.readouterr().out.splitlines()
+    assert any(line.startswith("ERROR measure: ") for line in lines)
+    assert f"WRITABLE {tree / '.git'}" in lines
+    assert any(line.startswith("UNREADABLE ") for line in lines)
+
+
+@pytest.mark.req("RAG-12")
+def test_l1_a_clean_run_with_no_findings_exits_zero(tmp_path: Path) -> None:
+    """The other side: a path can still read as safe, or the check proves nothing."""
+    if os.geteuid() == 0:
+        pytest.skip("root ignores file modes")
+    locked = tmp_path / "locked"
+    locked.mkdir(mode=0o555)
+    gone = tmp_path / "gone"
+    try:
+        assert runner_check.check([locked], [locked / "f"], []) == []
+        assert runner_check.check([gone], [], []) == [f"WRITABLE {gone}"]
+    finally:
+        locked.chmod(0o755)
+
+
+@pytest.mark.req("RAG-12")
+@pytest.mark.parametrize("hostile", ["x\x1b[2Kok", "x\nrunner-check: 0 directories, 0 problem(s)"])
+def test_l6_every_printed_line_escapes_what_it_prints(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    hostile: str,
+) -> None:
+    """Not only paths: an error's own text, the module name and the interpreter path as well."""
+    _, _, python = wired(tmp_path, monkeypatch)
+    python.write_text(f"#!/bin/sh\nprintf '%s\\n' '{hostile}'\n")
+    boom = RuntimeError(hostile)
+
+    def raising(*_args: object) -> None:
+        raise boom
+
+    monkeypatch.setattr(runner_check, "settings_problems", raising)
+    runner_check.main(python)
+    out = capsys.readouterr().out
+    assert "\x1b" not in out
+    assert sum(line.startswith("runner-check: ") for line in out.splitlines()) == 1
+
+
+@pytest.mark.req("RAG-12")
+def test_l6_a_bidi_override_in_a_name_is_escaped(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    hostile = tmp_path / "tree‮ok"
+    hostile.mkdir()
+    (hostile / ".git").write_text("gitdir: elsewhere\n")
+    _, _, python = wired(tmp_path, monkeypatch, trees=[tmp_path / "main", hostile])
+    runner_check.main(python)
+    assert "‮" not in capsys.readouterr().out
+
+
+@pytest.mark.req("RAG-12")
+def test_l6_a_missing_interpreter_path_is_escaped(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert runner_check.main(tmp_path / "py\x1b[2Kthon") == 2
+    assert "\x1b" not in capsys.readouterr().out
+
+
+# -- after the triage (Runner 5, 13; addition b) ------------------------------------------------
+
+
+@pytest.mark.req("RAG-12")
+def test_a_file_at_a_directory_path_is_reported(tmp_path: Path) -> None:
+    path = tmp_path / "hooks"
+    path.write_text("x")
+    assert runner_check.check([path], [], []) == [f"NOT A DIRECTORY {path}"]
+
+
+@pytest.mark.req("RAG-12")
+def test_a_stat_denied_absent_file_is_still_tried_with_a_create(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Append needs the file to exist, so on its own it cannot see that one could be created."""
+    path = tmp_path / "lock"
+    stat_denied(monkeypatch, path)
+    assert runner_check.check([], [path], []) == [f"WRITABLE {path}"]
+    assert not os.path.lexists(path)  # `Path.exists` would hit the denied stat
+
+
+@pytest.mark.req("RAG-12")
+@pytest.mark.parametrize("code", [errno.EMFILE, errno.ENOSPC, errno.EIO])
+def test_only_a_refusal_counts_as_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, code: int
+) -> None:
+    """A full disk proves nothing about the sandbox, so it must not read as a clean result."""
+    path = tmp_path / "ledger"
+    path.write_text("x")
+
+    def failing(*_args: object, **_kwargs: object) -> int:
+        raise OSError(code, os.strerror(code))
+
+    monkeypatch.setattr(os, "open", failing)
+    [line] = runner_check.check([], [path], [])
+    assert line.startswith(f"ERROR {path}")
+
+
+@pytest.mark.req("RAG-12")
+def test_one_path_that_cannot_be_measured_keeps_the_others(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    good, bad = tmp_path / "good", tmp_path / "bad"
+    good.write_text("x")
+    bad.write_text("x")
+    real_kind = runner_check.kind
+
+    def failing(path: Path) -> str:
+        if path == bad:
+            raise OSError(errno.EIO, "I/O error")
+        return real_kind(path)
+
+    monkeypatch.setattr(runner_check, "kind", failing)
+    lines = runner_check.check([], [bad, good], [])
+    assert lines[0].startswith(f"ERROR {bad}")
+    assert lines[1] == f"WRITABLE {good}"
+
+
+@pytest.mark.req("RAG-12")
+def test_main_measures_what_promote_trusts_in_the_clone(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _, _, python = wired(tmp_path, monkeypatch)
+    runner_check.main(python)
+    lines = capsys.readouterr().out.splitlines()
+    clone = tmp_path / "home" / ".northwind" / "runner" / "evals"
+    for path in (clone / "src" / "northwind_evals", clone / "fixtures", clone / "baselines"):
+        assert f"WRITABLE {path}" in lines
+
+
+@pytest.mark.req("RAG-12")
+def test_l2_a_main_checkout_that_does_not_exist_is_reported(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Addition b: the case `isolate_main` used to rely on, now asserted on purpose."""
+    gone = tmp_path / "gone"
+    _, _, python = wired(tmp_path, monkeypatch)
+    monkeypatch.setattr(localenv, "main_checkout", lambda: gone)
+    assert runner_check.main(python) == 1
+    assert f"NOT A DIRECTORY {gone / '.git'}" in capsys.readouterr().out.splitlines()
+
+
+CLONE_TARGETS = {
+    "llm-runner": ["SUITE=a", "RUN_BUDGET=1"],
+    "scan-cassettes": [],
+    "model": [],
+    "eval-promote": [],
+    "llm-spend": [],
+    "runner-sync": [],
+}
+
+
+@pytest.mark.req("RAG-12")
+@pytest.mark.parametrize("target", CLONE_TARGETS)
+def test_every_target_the_clone_runs_uses_an_isolated_python(tmp_path: Path, target: str) -> None:
+    """Addition a: unsandboxed, so no recipe may load a working directory or a PYTHONPATH. Your
+    shell's PYTHONPATH starts with `:`, which is an empty entry: the working directory."""
+    env = rig(tmp_path)
+    done = subprocess.run(  # noqa: S603
+        ["make", "-n", target, f"RUNNER_DIR={tmp_path}", *CLONE_TARGETS[target]],  # noqa: S607
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
+    )
+    assert done.returncode == 0, done.stderr
+    for line in done.stdout.splitlines():
+        assert "uv run" not in line, line
+        if re.search(r"\bpython3?\b", line) and "/bin/python" in line:
+            assert re.search(r"/bin/python -I\b", line), line

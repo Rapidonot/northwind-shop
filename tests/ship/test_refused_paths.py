@@ -128,3 +128,27 @@ def test_refused_paths_error_on_ls_tree(repo: Repo) -> None:
     done = repo.run()
     assert done.returncode != 0
     assert "git ls-tree failed" in done.stderr
+
+
+@pytest.mark.req("RAG-12")
+def test_a_tracked_symlink_is_refused(repo: Repo) -> None:
+    """Row 5b: promote trusts the clone's data, and `git status` stays clean over a merged link."""
+    (repo.path / "evals-link").symlink_to("/somewhere/a/session/can/write")
+    repo.git("add", "evals-link")
+    repo.git("commit", "-qm", "link")
+    done = repo.run()
+    assert done.returncode != 0
+    assert "symlink" in done.stderr
+
+
+@pytest.mark.req("RAG-12")
+def test_a_file_changed_into_a_symlink_is_refused(repo: Repo) -> None:
+    target = repo.path / "tracked.txt"
+    target.write_text("x\n")
+    repo.git("add", "tracked.txt")
+    repo.git("commit", "-qm", "file")
+    target.unlink()
+    target.symlink_to("/somewhere/else")
+    repo.git("add", "tracked.txt")
+    repo.git("commit", "-qm", "now a link")
+    assert repo.run().returncode != 0
