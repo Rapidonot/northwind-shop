@@ -33,6 +33,7 @@ from northwind_evals.contexts import (
     load_contexts,
     save_contexts,
 )
+from northwind_evals.enrichment_report import build_report, render
 from northwind_evals.gate import (
     Baseline,
     GateResult,
@@ -63,9 +64,11 @@ from northwind_evals.judge import Judge
 from northwind_llm_replay.proxy import ProxyState, RunningProxy, encode_test_id
 from northwind_llm_replay.runner import RunnerUnavailableError, proxy_config
 from northwind_llm_replay.scan import load_canaries, scan_text
-from northwind_rag.cli import DEFAULT_DATABASE_URL
+from northwind_rag.cli import DEFAULT_DATABASE_URL, enriched_database_url
 from northwind_rag.embedding import Embedder, FastEmbedEmbedder
+from northwind_rag.ingest import refuse_shared_database
 from northwind_rag.retrieval import RetrievedChunk, dense_search, retriever_id
+from northwind_rag.sources import build_chunks
 
 ITEMS = Path("evals/fixtures/starter_set.jsonl")
 CONTEXTS = Path("evals/contexts/dense-only.jsonl")
@@ -75,6 +78,7 @@ FIXTURES = Path("data/fixtures")
 KNOWN_FAILURES = Path("evals/fixtures/known_failures.json")
 LAST_RUN = Path(".llm-proxy-log/eval-last-run.json")
 REVIEW_LIST = Path("docs/reviews/RAG-12-eval-review.md")
+ENRICHMENT_REPORT = Path("docs/reviews/RAG-02-enrichment-report.md")
 SUITE = "eval-answers"
 ALLOW_STALE_ENV = "EVAL_ALLOW_STALE"
 
@@ -428,6 +432,42 @@ def cmd_integrity(args: argparse.Namespace) -> int:
     return 1 if problems else 0
 
 
+def _trap_chunks() -> dict[str, str]:
+    """Every chunk of a planted injection review. Evals may read the answer key; ingest may not."""
+    key = json.loads((FIXTURES / "_answer_key.json").read_text(encoding="utf-8"))
+    traps = {entry["review_id"]: entry["trap_id"] for entry in key["injection_reviews"]}
+    return {c.chunk_id: traps[c.source_id] for c in build_chunks(FIXTURES) if c.source_id in traps}
+
+
+def cmd_enrichment_report(_: argparse.Namespace) -> int:
+    """Compares the plain and the enriched index. Reads both and changes neither (RAG-02)."""
+    items = load_items(ITEMS)
+    embedder = FastEmbedEmbedder()
+    with _connect() as conn:
+        plain = _live(conn, embedder, items)
+    try:
+        enriched_conn = psycopg.connect(enriched_database_url())
+    except psycopg.Error:
+        print("no enriched index: run `make ingest-enriched` first", file=sys.stderr)
+        return 1
+    with enriched_conn as conn:
+        refuse_shared_database(conn)
+        enriched = _live(conn, embedder, items)
+    report = build_report(
+        items,
+        plain,
+        enriched,
+        load_contexts(CONTEXTS),
+        retriever_id(embedder),
+        load_baseline(BASELINE).retrieval,
+        _trap_chunks(),
+    )
+    text = render(report)
+    ENRICHMENT_REPORT.write_text(text, encoding="utf-8")
+    print(text)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="northwind_evals.cli")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -448,6 +488,7 @@ def main(argv: list[str] | None = None) -> int:
     promote.add_argument("--check", action="store_true", help="report only; change nothing")
     promote.set_defaults(func=cmd_promote)
     commands.add_parser("review-list").set_defaults(func=cmd_review_list)
+    commands.add_parser("enrichment-report").set_defaults(func=cmd_enrichment_report)
     integrity = commands.add_parser("integrity")
     integrity.add_argument("--base", default="origin/main")
     integrity.set_defaults(func=cmd_integrity)

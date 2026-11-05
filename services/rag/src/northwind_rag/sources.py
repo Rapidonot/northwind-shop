@@ -16,7 +16,11 @@ from pathlib import Path
 from typing import Any
 
 from northwind_data.ingest_guard import assert_ingestible, ingestible_files, load_manifest
-from northwind_data.textscan import find_money_or_stock, find_promotions
+from northwind_data.textscan import (
+    find_generated_violations,
+    find_money_or_stock,
+    find_promotions,
+)
 from northwind_rag.chunking import chunk_markdown, with_prefix
 from northwind_rag.models import (
     MAX_CHUNK_CHARS,
@@ -79,6 +83,11 @@ PLANTED_PROMOTIONS: dict[str, tuple[str, str]] = {
     "R00712": ("TRAP-INJ-003", "100% discount"),
     "R00881": ("TRAP-INJ-013", "90% off"),
 }
+# A generated context says where a chunk sits, in one short line (RAG-02).
+MAX_CONTEXT_CHARS = 240
+_MARKUP = frozenset("<>{}[]`")
+# Words in a row that may match a review. A review is untrusted, and a context has no need to quote.
+_COPY_WORDS = 5
 # Every product, variant and review chunk must have these.
 _PRODUCT_FIELDS_REQUIRED = ("category", "brand", "size", "colour", "material")
 
@@ -132,6 +141,37 @@ def _scan(text: str, where: str, review_id: str | None = None) -> None:
     planted = PLANTED_PROMOTIONS.get(review_id or "")
     if promotions and (planted is None or promotions != [planted[1]]):
         raise ChunkError(f"{where}: promotion in chunk text: {promotions}")
+
+
+def _shingles(text: str) -> set[tuple[str, ...]]:
+    words = re.findall(r"[a-z0-9']+", _normalised(text).lower())
+    return {tuple(words[i : i + _COPY_WORDS]) for i in range(len(words) - _COPY_WORDS + 1)}
+
+
+def context_problem(
+    context: str, chunk: Chunk, canaries: frozenset[str] = frozenset()
+) -> str | None:
+    """Why a generated context may not be indexed, as a short code that holds none of its text, or
+    None. Every ingest runs this again, so a cache edited by hand gets no further than the model."""
+    normal = _normalised(context).strip()
+    if not normal:
+        return "empty"
+    if len(context.strip().splitlines()) > 1:
+        return "multi-line"
+    if len(normal) > MAX_CONTEXT_CHARS:
+        return "too-long"
+    if _MARKUP & set(normal):
+        return "markup"
+    violations = find_generated_violations(normal)
+    if violations:
+        return violations[0].split(":", 1)[0]
+    if any(canary in normal for canary in canaries):
+        return "canary"
+    if chunk.source_type == "review":
+        _, _, body = chunk.text.partition("\n\n")  # the first part is our own heading
+        if _shingles(normal) & _shingles(body):
+            return "copied-from-review"
+    return None
 
 
 def _labelled(*pairs: tuple[str, Any]) -> str:
@@ -311,6 +351,10 @@ def check_chunk(chunk: Chunk) -> None:
     meta = chunk.metadata
     _scan(chunk.text, chunk.chunk_id, chunk.source_id if chunk.source_type == "review" else None)
     _scan(" ".join(v for v in (meta.category, meta.brand, meta.material) if v), chunk.chunk_id)
+    if chunk.context is not None:
+        problem = context_problem(chunk.context, chunk)
+        if problem:
+            raise ChunkError(f"{chunk.chunk_id}: generated context refused: {problem}")
     if meta.region is None and meta.visibility == "public":
         raise ChunkError(f"{chunk.chunk_id}: public chunk with no region")
     if chunk.source_type == "document":
