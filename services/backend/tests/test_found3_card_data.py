@@ -154,6 +154,26 @@ class TestCardLookingValuesAreRefused:
             0,
             carrier,
         )
+        _assert_clean_refusal(
+            carrier.create_shipment(
+                idempotency_key="k", order_id="O000001", region=bad, postal_code="US-7099"
+            ),
+            bad,
+            0,
+            carrier,
+        )
+        _assert_clean_refusal(
+            carrier.create_shipment(
+                idempotency_key="k",
+                order_id="O000001",
+                region="US",
+                postal_code="US-7099",
+                service=bad,
+            ),
+            bad,
+            0,
+            carrier,
+        )
         _assert_clean_refusal(carrier.track(bad), bad, 0, carrier)
         fraud = FraudFake()
         _assert_clean_refusal(

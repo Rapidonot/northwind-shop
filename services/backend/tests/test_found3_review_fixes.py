@@ -221,6 +221,50 @@ def test_a_dry_run_waits_for_an_effect_in_progress() -> None:
     assert order == ["effect", "dry"]
 
 
+class _SlowPayment(PaymentFake):
+    """Pauses a real authorize inside its effect, after the store lock is taken."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.entered, self.release = threading.Event(), threading.Event()
+
+    def _has_live_intent(self, order_id: str) -> bool:
+        if threading.current_thread().name == "real":
+            self.entered.set()
+            self.release.wait(5)
+        return super()._has_live_intent(order_id)
+
+
+@pytest.mark.req("FOUND-3")
+def test_a_fakes_dry_run_waits_for_a_real_call_and_then_sees_its_result() -> None:
+    fake = _SlowPayment()
+    dry_results: list[Result[Any]] = []
+
+    def dry() -> None:
+        dry_results.append(
+            fake.authorize(
+                idempotency_key="k2",
+                payment_token=SANDBOX_APPROVED,
+                amount=USD,
+                order_id="O000001",
+                dry_run=True,
+            )
+        )
+
+    real = threading.Thread(target=_authorize, args=(fake, "k1"), name="real")
+    real.start()
+    assert fake.entered.wait(5)
+    reader = threading.Thread(target=dry, name="dry")
+    reader.start()
+    reader.join(0.1)
+    waited = reader.is_alive()
+    fake.release.set()
+    real.join(5)
+    reader.join(5)
+    assert waited
+    assert _code(dry_results[0]) == "order_already_authorized"
+
+
 @pytest.mark.req("FOUND-3")
 def test_a_refused_second_authorization_does_not_promise_a_void_will_work() -> None:
     fake = PaymentFake()

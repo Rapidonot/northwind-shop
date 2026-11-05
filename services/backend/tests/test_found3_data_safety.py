@@ -97,6 +97,14 @@ def test_the_no_pan_checks_can_fail() -> None:
     assert not contains_pan("tok_sandbox_ok_0103")
 
 
+@pytest.mark.req("FOUND-3")
+def test_the_host_brand_and_money_checks_can_fail() -> None:
+    assert find_unsafe_hosts("marlo.alderwick.0001@mailbox.org")
+    assert find_real_brands("a Patagonia jacket")
+    assert find_money_or_stock("$19.99")
+    assert find_money_or_stock("only 3 left")
+
+
 # ---- synthetic only -----------------------------------------------------------------------
 
 

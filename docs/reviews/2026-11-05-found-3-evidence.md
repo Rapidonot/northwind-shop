@@ -1,8 +1,8 @@
 # FOUND-3 evidence: scope decisions, stop, reviews and failing-first log
 
 Date: 2026-11-05 · Branch: `req/FOUND-3-backend-scaffold` · Base: `f50f7c8`
-Row 19, narrowed by the user, so **partial**. Written before the row's commit, so it names no head SHA:
-the gate report gives the head and the `make ci` and `make eval-gate` results at it.
+Row 19, narrowed by the user, so **partial**. A commit can't name its own SHA, so the gate report gives
+the final head and the `make ci` and `make eval-gate` results at it.
 
 ## The stop, now resolved
 
@@ -56,6 +56,7 @@ none of them and exited 0, so the tree did not change. The chain then resumed at
 | Refund cap values | Chosen here, none is given: USD 150.00, CAD 200.00, GBP 120.00, EUR 140.00, set in `DEFAULT_REFUND_CAPS` |
 | Per-caller scoped views (security finding 3) | Not built, recorded. A partial-scope test per port was added |
 | Portal confirmation on the port (security finding 4) | Not built, recorded: a decision for the user |
+| Plan said every string argument goes through the card checks, including `reason` | Deviation: `refund` has no `reason` parameter, so there is nothing to check. `region`, `service` and currency skip `card_data_in` and are refused by allow-list or pattern instead, with fixed messages and nothing stored |
 | Soft decline `isRetryable` | False: the result is recorded, so the same call can't succeed. A new attempt takes a new key |
 
 ## Reviews
@@ -63,7 +64,8 @@ none of them and exited 0, so the tree did not change. The chain then resumed at
 **Plan review** (`advisor-reviewer`, `findings`): three medium, three low, no high, no hard rule broken,
 so the row proceeded under the user's condition. All six taken into the work or this file.
 
-**`security-reviewer`** (full diff): nothing high or critical. Four medium, three low.
+**`security-reviewer`** (code and tests; `data/backend/*` was not in the diff, so only tests have checked
+the generated data): nothing high or critical. Four medium, three low.
 
 | # | Sev | Finding | Outcome |
 |---|---|---|---|
@@ -77,7 +79,8 @@ so the row proceeded under the user's condition. All six taken into the work or 
 
 **Scoped re-review** (`security-reviewer`, fixes only): no high or critical open. Fixes 1, 2, 5 and 7
 closed. Findings 3 and 4 accepted as open mediums if tracked, which `PROGRESS.md` row 19 now does. Four
-lows, all handled **after** the one allowed re-review, so **no reviewer has seen these last changes**:
+lows, all handled **after** the one allowed re-review, so **`security-reviewer` has not seen these last
+changes**. `advisor-reviewer` read them in the row review as a process read, not a security review:
 
 - Dry-run `authorize` could raise during a concurrent insert. Fixed: dry runs take the store lock
   (`IdempotencyStore.exclusive`).
@@ -90,6 +93,20 @@ lows, all handled **after** the one allowed re-review, so **no reviewer has seen
 Finding 4 re-rates to **high** as soon as anything calls `authorize` or `capture` without a
 confirmation layer. Finding 3's per-caller views must share intents, store and caps, because the
 one-intent-per-order rule and the refund cap hold only within one instance.
+
+**Row review** (`advisor-reviewer` at `b79caac`, `findings`): no high or critical, no stop condition.
+Three medium and five low, all about what the evidence proves. Handled in a second commit:
+
+| # | Sev | Finding | Outcome |
+|---|---|---|---|
+| M1 | Medium | The dry-run lock in `_commit` had no test through a fake, and its test's failing-first claim was unsupported | Fixed: `test_a_fakes_dry_run_waits_for_a_real_call_and_then_sees_its_result`. With the line reverted it failed and the other 206 passed. Claim corrected below |
+| M2 | Medium | "75 of 75" was wrong: `store lock` had become the same mutation as `dry run holds the lock`, so the lock in `run` had no mutant on the final code | Fixed: the script now refuses duplicate mutants. The real figure then was 74 distinct. Now 76, each lock with its own killer |
+| M3 | Medium | "All other tests are proved by the mutants" was false for `test_found3_data_safety.py` | Fixed: a planted-data pass below, and a control for the three detectors that had none |
+| L1 | Low | "Full diff" overstated the first security review; "not reviewed" became half true | Corrected above |
+| L2 | Low | `PROGRESS.md` named the user as running the switch | Corrected: Claude ran it on the user's instruction |
+| L3 | Low | "The same count as AUTO-1" was true of xfails only | Corrected in Results |
+| L4 | Low | Two plan deviations unrecorded | Recorded in the scope table. `region` and `service` added to `test_as_other_string_fields` |
+| L5 | Low | The PR body left out the unreviewed fixes and the possibly stale `origin/main` | Added |
 
 ## Failing-first
 
@@ -105,17 +122,29 @@ Seen failing before their fix, on real defects:
   `test_every_id_pattern_takes_ascii_digits_only` (5), `test_a_second_key_cannot_authorize_an_order_again`,
   `test_a_lost_key_cannot_charge_an_order_twice`, `test_a_dry_run_also_reports_an_order_already_authorized`,
   `test_track_refuses_an_unknown_carrier_prefix_without_raising`
-- 2 tests from the re-review: `test_a_dry_run_waits_for_an_effect_in_progress`,
-  `test_a_refused_second_authorization_does_not_promise_a_void_will_work`
+- 1 test from the re-review: `test_a_refused_second_authorization_does_not_promise_a_void_will_work`
+- 1 test from the row review: `test_a_fakes_dry_run_waits_for_a_real_call_and_then_sees_its_result`, with
+  the dry-run lock reverted (`assert waited`; the other 206 passed)
 
-All other tests passed first time and are proved only by the mutants below. That includes the
-partial-scope, voided-frees-the-order, declined-attempt and refund-reset tests.
+Not a real defect, though earlier versions of this file listed it as one:
+`test_a_dry_run_waits_for_an_effect_in_progress` failed first, but `exclusive` did not exist yet, so it
+probably failed on the missing method, not on the race. The log holds only the `FAILED` line. Its proof
+is the `dry run holds the lock` mutant below.
+
+All other tests passed first time. That includes the partial-scope, voided-frees-the-order,
+declined-attempt and refund-reset tests. Mutants run with `-x`, so each one proves only the test it
+names, not every test that covers that guard. Many tests are named by no mutant, so they have not been
+seen failing at all.
+
+`test_found3_data_safety.py` reads the committed data, so no generator mutant reaches it. It was proved
+by planting one bad value at a time in `data/backend/`, restored by bytes (see below).
 
 The one test input changed after a failure: the `_intent` helper now uses a distinct order per intent,
 which fix 2 requires. No assertion changed; `security-reviewer` confirmed that.
 
-Mutation script: run from a scratch copy, not committed (AUTO-2 item 8 covers committing one). Source
-hashes matched before and after every pass.
+Mutation script: kept in the scratchpad, not committed (AUTO-2 item 8 covers committing one). Source
+hashes matched before and after every pass. The final pass logs the source hash, and refuses two mutants
+that produce the same source.
 
 ### First pass: 61 mutants, 31 survived
 
@@ -156,10 +185,12 @@ SURVIVED    priced in region only
 ### Final pass: on the final code
 
 ```
+source sha256: b9509c62fad91f0e0676319c69c3cbfa3f43472e5fae576d5a5932f24f70decf
 killed      replay returns first: test_found3_guards.py::test_a_transient_result_from_an_effect_is_not_recorded
 killed      key conflict refused: test_found3_idempotency.py::test_a_different_request_on_a_used_key_is_refused
 killed      transient not recorded: test_found3_guards.py::test_a_transient_result_from_an_effect_is_not_recorded
-killed      store lock: test_found3_review_fixes.py::test_a_dry_run_waits_for_an_effect_in_progress
+killed      store lock: test_found3_guards.py::test_the_store_runs_a_slow_effect_once_under_concurrent_replays
+killed      fake dry run takes the lock: test_found3_review_fixes.py::test_a_fakes_dry_run_waits_for_a_real_call_and_then_sees_its_result
 killed      only transient retryable: test_found3_idempotency.py::test_a_transient_failure_is_not_recorded_so_a_retry_does_the_effect_once[authorize]
 killed      business not retryable: test_found3_refund_and_errors.py::test_refund_at_the_cap_passes_and_one_minor_unit_over_is_refused[CAD]
 killed      scope is per operation: test_found3_review_fixes.py::test_a_refund_only_payment_credential_cannot_capture_or_void
@@ -215,10 +246,10 @@ killed      undeliverable: test_found3_generator.py::test_address_error_orders_a
 killed      one shipment per order: test_found3_guards.py::test_a_second_key_cannot_ship_an_order_twice
 killed      unknown tracking: test_found3_guards.py::test_a_malformed_tracking_number_is_not_reported_as_an_unknown_one
 killed      tracking pattern: test_found3_guards.py::test_a_malformed_tracking_number_is_not_reported_as_an_unknown_one
-killed      region check: test_found3_guards.py::test_the_carrier_names_a_bad_destination[overrides0-invalid_region]
+killed      region check: test_found3_card_data.py::TestCardLookingValuesAreRefused::test_as_other_string_fields[4111111111111111]
 killed      region str first: test_found3_guards.py::test_the_carrier_names_a_bad_destination[overrides1-invalid_region]
 killed      postal pattern: test_found3_guards.py::test_the_carrier_names_a_bad_destination[overrides2-invalid_postal_code]
-killed      service check: test_found3_guards.py::test_the_carrier_names_a_bad_destination[overrides3-invalid_service]
+killed      service check: test_found3_card_data.py::TestCardLookingValuesAreRefused::test_as_other_string_fields[4111111111111111]
 killed      service str first: test_found3_guards.py::test_the_carrier_names_a_bad_destination[overrides4-invalid_service]
 killed      track card check: test_found3_guards.py::test_read_calls_refuse_card_data_by_name
 killed      public variants only: test_found3_guards.py::test_only_public_active_priced_variants_are_sellable
@@ -232,19 +263,45 @@ killed      held orders get no tracking: test_found3_generator.py::test_committe
 killed      sorted stock order: test_found3_generator.py::test_committed_data_backend_equals_a_fresh_build
 killed      cli refuses fixtures: test_found3_generator.py::test_the_cli_refuses_an_output_directory_inside_the_fixtures
 
-75 mutants, 0 survived, 0 no match; source restored: True
+76 mutants, 0 survived, 0 no match; source restored: True
+```
+
+### Planted data: `test_found3_data_safety.py`
+
+The 17th test is the control added for M3. It has no data input, so planted data can't reach it.
+
+```
+PAN in orders: 4 failed: test_no_digit_run_of_13_or_more_anywhere[orders.jsonl], test_no_string_field_contains_a_pan, test_the_cassette_scanner_finds_nothing_in_data_backend[orders.jsonl], test_the_no_pan_checks_can_fail
+PAN in shoppers: 3 failed: test_no_digit_run_of_13_or_more_anywhere[shoppers.jsonl], test_no_string_field_contains_a_pan, test_the_cassette_scanner_finds_nothing_in_data_backend[shoppers.jsonl]
+PAN in tracking: 3 failed: test_no_digit_run_of_13_or_more_anywhere[tracking.jsonl], test_no_string_field_contains_a_pan, test_the_cassette_scanner_finds_nothing_in_data_backend[tracking.jsonl]
+PAN in manifest: 3 failed: test_no_digit_run_of_13_or_more_anywhere[manifest.json], test_no_string_field_contains_a_pan, test_the_cassette_scanner_finds_nothing_in_data_backend[manifest.json]
+unreserved email: 1 failed: test_emails_use_only_reserved_domains
+real brand: 1 failed: test_no_real_brand_or_carrier_name_appears_anywhere
+real carrier: 2 failed: test_every_carrier_is_a_fictional_one_from_carriers, test_no_real_brand_or_carrier_name_appears_anywhere
+unlisted carrier: 1 failed: test_every_carrier_is_a_fictional_one_from_carriers
+unknown variant: 1 failed: test_every_product_and_variant_resolves_in_fixtures_and_is_public_and_priced
+price key on a line: 1 failed: test_a_line_carries_only_ids_and_a_quantity_and_orders_carry_no_money_or_stock
+money in a string: 1 failed: test_a_line_carries_only_ids_and_a_quantity_and_orders_carry_no_money_or_stock
+order in the wrong region: 2 failed: test_every_order_refers_to_a_generated_shopper_in_the_same_region, test_every_product_and_variant_resolves_in_fixtures_and_is_public_and_priced
+planted token gone: 1 failed: test_the_no_pan_checks_can_fail
+
+17 tests, 16 seen failing; never failed: ['test_the_host_brand_and_money_checks_can_fail']; data restored: True
 ```
 
 ## Results
 
-On the final code before the commit, base `f50f7c8`. `make ci` and `make eval-gate` were run again on the
-commit; the gate report has those results.
+At `b79caac`, the first commit, clean tree, make's own exit codes:
 
-- `make ci`: exit 0. Lint clean; cassette scan clean; 2,483 passed, 22 xfailed (the same count as AUTO-1);
-  34 portal; 86 integration; `eval-integrity` passed against local `origin/main`.
+- `make ci`: exit 0. Lint clean; cassette scan clean; 2,483 passed, 22 xfailed; 34 portal; 86 integration;
+  `eval-integrity` passed against local `origin/main`. AUTO-1 was 2,278 passed and 22 xfailed, so the xfails
+  are unchanged and the passes are AUTO-1's plus this row's 205.
 - `make eval-gate`: exit 0, equal to the baseline on every metric, 100/100 replayed, 0 stale.
-- FOUND-3 tagged tests: 205 passed, none skipped or xfailed.
-- Mutants: 75 of 75 killed on the final code.
+
+The second commit adds two tests and widens one, with no source change. The gate report has the results
+at the final head. On that tree:
+
+- FOUND-3 tagged tests: 207 passed, none skipped or xfailed.
+- Mutants: 76 of 76 distinct mutants killed. Planted data: 16 of 16 data-safety tests seen failing.
 - Spend: total $1.150794 before and after, 2,598 settled calls before and after. This row added no call,
   and every suite is unchanged. The $0.113222 above the $1.037572 in the AUTO-1 row is exactly suite
   `rag-enrichment`, another window's.
