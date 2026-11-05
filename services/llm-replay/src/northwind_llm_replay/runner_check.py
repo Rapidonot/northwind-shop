@@ -3,6 +3,9 @@
 The runner is only as clean as what it imports. This asks the runner's own Python where it loads
 code from, then tries to write in each place. It has to run sandboxed: from a terminal every write
 succeeds, so it reports failure there, correctly (CC-27, decision 0005).
+
+It also proves the runner can still price a call. Prices moved to `northwind_common` (RAG-13), and
+`.venv-runner` holds only that package and llm-replay. A broken import stops the runner starting.
 """
 
 from __future__ import annotations
@@ -22,6 +25,14 @@ PROBE = (
     " *sys.path]}))"
 )
 
+# Imports the runner itself and prices a token. Passes before and after `runner-sync`; the printed
+# module shows which side of the move the clone is on.
+PRICING_PROBE = (
+    "import northwind_llm_replay.ledger, northwind_llm_replay.runner; "
+    "from northwind_llm_replay.pricing import cost_usd; "
+    "cost_usd('claude-sonnet-5-5', {'input_tokens': 1}); print(cost_usd.__module__)"
+)
+
 
 def load_paths(python: Path) -> list[Path]:
     """Every directory `python -I` loads from, and where its interpreter really lives."""
@@ -38,6 +49,21 @@ def load_paths(python: Path) -> list[Path]:
         found.add(Path(tool).resolve().parent)
     # A missing entry such as python312.zip can still be created in its parent.
     return sorted({p if p.is_dir() else p.parent for p in found})
+
+
+def pricing_module(python: Path) -> tuple[str | None, list[str]]:
+    """The module the runner's `cost_usd` comes from, or the problem that stopped it loading."""
+    done = subprocess.run(  # noqa: S603 - the runner's own interpreter, fixed arguments
+        [str(python), "-I", "-c", PRICING_PROBE],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+    )
+    if done.returncode != 0:
+        last = done.stderr.strip().splitlines()[-1:] or ["no error text"]
+        return None, [f"PRICING the runner cannot load its prices: {last[0]}"]
+    return done.stdout.strip(), []
 
 
 def dir_is_writable(directory: Path) -> bool:
@@ -162,6 +188,8 @@ def main(python: Path) -> int:
     existing, absent = git_redirect_files(git_dir, checkouts())
     problems = check(directories, [*files, *existing], [localenv.env_file()])
     problems += [f"WRITABLE {f}" for f in absent if can_create(f)]
+    pricing, pricing_problems = pricing_module(python)
+    problems += pricing_problems
     for checkout in checkouts():
         problems += excluded_commands(checkout / ".claude" / "settings.json")
         local = checkout / ".claude" / "settings.local.json"
@@ -170,5 +198,6 @@ def main(python: Path) -> int:
     for line in problems:
         print(line)
     print(f"runner-check: {len(directories)} directories, {len(problems)} problem(s)")
+    print(f"runner prices from: {pricing or 'unavailable'}")
     print("this proves the settings of this checkout: run it in each one")
     return 1 if problems else 0

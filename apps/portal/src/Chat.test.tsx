@@ -112,7 +112,6 @@ describe("[SA-02] Chat", () => {
     ["retrieval_failed", /Search isn't available/],
     ["model_unavailable", /isn't available right now/],
     ["replay_miss", /no recorded answer/],
-    ["turn_limit", /too many steps/],
     ["internal", /Something went wrong/],
   ])("shows fixed text for %s", async (code, text) => {
     mockFetch(streamOf(frame("error", { code })));

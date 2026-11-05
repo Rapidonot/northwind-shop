@@ -4,7 +4,6 @@ export type ErrorCode =
   | "retrieval_failed"
   | "model_unavailable"
   | "replay_miss"
-  | "turn_limit"
   | "internal";
 
 export type ChatEvent =

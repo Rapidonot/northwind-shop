@@ -127,6 +127,38 @@ Rig results to read with care:
 - **`ask` rows use `--permission-mode default`,** so they do not measure auto mode.
 - **There is no true-merge row,** so that table row in 0006 stays `chmod`-only.
 
+## Merge with RAG-13 (2026-11-05)
+
+`origin/main` at `c4040fb` was merged into this branch for PR #18: a merge, not a rebase. Main touched no
+path under `denyWrite`, and the merge printed no denied-write error. Conflicts were in `COVERAGE.md`,
+`PROGRESS.md` and `runner_check.py`, and both sides were kept. A script confirmed that every run of text
+either side added survives. The first resolution of four `COVERAGE.md` rows interleaved two sentences,
+and that check caught it, so those rows were rebuilt whole.
+
+`make ci` exit 0: 1,763 Python passed and 22 xfailed, 34 portal, 86 integration, `eval-integrity`
+passed. `make eval-gate` passed, 100/100 replayed, 0 stale. `make runner-check` on the merged code ran
+both checks: it flagged `gitdir`, as expected until the install, and the runner prices from
+`northwind_common.pricing`.
+
+**Security check of the merged `runner_check.py`:** one `security-reviewer` pass, reading only. No
+critical or high findings: the merge lost nothing, no exception gives exit 0, and no key can reach the
+output. Decision 0005 accepts that this check proves things only for an honest session, which bounds
+severity at medium. **All open; none fixed in the merge.**
+
+| Finding | Severity | Status |
+|---|---|---|
+| M1 Absent paths are never measured, except the admin files. `~/.config/git/config` is not listed | Medium | Open |
+| M2 A linked worktree whose `.git` is not a regular file drops out of the check | Medium | Open |
+| M3 A dangling symlink at an admin file reads as refused | Medium | Open |
+| M4 Nothing tests the merged `main()` wiring | Medium | **Confirmed by running it:** with the 5a wiring removed, all 579 tests in `services/llm-replay/tests` passed. Open |
+| M4, second half: `isolate_main` does not stub `git_dir`, so two tests probe the real repo and may fail from an unsandboxed terminal | Medium | Traced, not run. Open |
+| L1 An exception drops the problems already collected | Low | Open |
+| L2 The admin list can be silently empty | Low | Open |
+| L3 An append test cannot see replacement through a writable folder | Low | Open. The rig covers the pointer move |
+| L4 `can_create` has an unguarded cleanup and a small race | Low | Open |
+| L5 `file_is_writable` can hang on a FIFO | Low | Open |
+| L6 Printed text is not escaped | Low | Open |
+
 ## For the user to run
 
 The rig is done (runs 2 and 3, below). What is left is the install and its checks. The user-level file

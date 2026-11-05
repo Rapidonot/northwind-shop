@@ -22,7 +22,7 @@ import psycopg
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from fastapi.sse import EventSourceResponse, ServerSentEvent
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from northwind_assistant.caller import Caller
 from northwind_assistant.retriever import IndexRetriever
@@ -48,6 +48,13 @@ class ChatRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     message: str = Field(min_length=1, max_length=MAX_MESSAGE_CHARS)
+
+    @field_validator("message")
+    @classmethod
+    def _has_text(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("blank")  # the handler answers with fixed text, not this
+        return value
 
 
 class CardNumberRefused(Exception):

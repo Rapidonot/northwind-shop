@@ -30,7 +30,7 @@ pytestmark = pytest.mark.req("SA-02")
 CARD = "4242" * 4
 MARKER = "PLANTED-MARKER-31bb"
 SOURCE = RetrievedChunk("c1", "document", "FAQ-001", "faq", "Wash cold.")
-FIXED_CODES = {"retrieval_failed", "model_unavailable", "replay_miss", "turn_limit", "internal"}
+FIXED_CODES = {"retrieval_failed", "model_unavailable", "replay_miss", "internal"}
 REFUSAL = {"isError": True, "errorCategory": "validation", "isRetryable": False}
 
 
@@ -38,12 +38,13 @@ class Retriever:
     def __init__(self, fail: bool = False) -> None:
         self.fail = fail
         self.calls = 0
+        self.chunks: list[RetrievedChunk] = [SOURCE]
 
     def search(self, query: str, caller: Caller) -> Sequence[RetrievedChunk]:
         self.calls += 1
         if self.fail:
             raise RuntimeError(f"postgresql://user:hunter2@db/prod {MARKER}")
-        return [SOURCE]
+        return self.chunks
 
 
 class Stack:
@@ -107,7 +108,7 @@ def test_a_failed_search_is_the_retrieval_failed_code(broken_stack: Stack) -> No
     assert MARKER not in response.text and "hunter2" not in response.text
 
 
-@pytest.mark.parametrize("scenario", ["upstream", "turn_limit", "retrieval"])
+@pytest.mark.parametrize("scenario", ["upstream", "retrieval"])
 def test_an_error_event_has_only_a_code_and_nothing_follows_it(
     stack: Stack, broken_stack: Stack, scenario: str
 ) -> None:
@@ -115,10 +116,6 @@ def test_an_error_event_has_only_a_code_and_nothing_follows_it(
         use = stack
         for _ in range(4):
             use.llm.reply_raw(401, json.dumps({"type": "error", "error": {"message": MARKER}}))
-    elif scenario == "turn_limit":
-        use = stack
-        for n in range(6):
-            use.llm.reply_tool_use(ALLOWED_TOOL, {"query": f"q{n}"}, tool_id=f"toolu_{n}")
     else:
         use = broken_stack
         use.llm.reply_tool_use(ALLOWED_TOOL, {"query": "q"})
@@ -134,6 +131,7 @@ def test_a_second_request_is_independent_of_the_first(stack: Stack) -> None:
     stack.llm.reply_stream("Wash cold [FAQ-001].")
     stack.llm.reply_stream("No sources used [FAQ-001].")
     first = events(stack.client.post("/api/chat", json={"message": "hi"}).text)
+    stack.retriever.chunks = []
     second = events(stack.client.post("/api/chat", json={"message": "hi"}).text)
     assert ("citations", {"source_ids": ["FAQ-001"]}) in first
     assert ("citations", {"source_ids": []}) in second
