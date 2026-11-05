@@ -124,7 +124,8 @@ def workspace_problems() -> list[str]:
     `setup.py` there would go unchecked."""
     problems = checked(root_problems, Path("pyproject.toml"))
     for folder in sorted(p for p in Path("services").glob("*") if p.is_dir()):
-        if folder.name == "__pycache__":
+        # uv takes even this name as a member once it holds a project file (measured).
+        if folder.name == "__pycache__" and not (folder / "pyproject.toml").exists():
             continue
         if not MEMBER_DIR.fullmatch(folder.as_posix()):
             problems.append(f"{folder} is not a plain member name")

@@ -1075,3 +1075,36 @@ def test_a_folder_in_services_that_is_not_a_member_is_refused(
     done = integrity(integrity_repo)
     assert done.returncode == 1
     assert planted.split("/")[1] in done.stderr
+
+
+def test_the_measured_pycache_member_is_refused(integrity_repo: Path) -> None:
+    """Measured: `uv sync --locked` takes `services/__pycache__` as a member, with its `.pth` at
+    `lib`. `ship` refuses the path through `.gitignore`; a required check must not rely on that."""
+    commit(
+        integrity_repo,
+        {
+            "services/__pycache__/pyproject.toml": BAD_MEMBERS["module root"],
+            "services/__pycache__/lib/northwind_common/__init__.py": "",
+        },
+    )
+    done = integrity(integrity_repo)
+    assert done.returncode == 1
+    assert "__pycache__" in done.stderr
+
+
+def test_a_plain_pycache_folder_is_not_a_member(integrity_repo: Path) -> None:
+    """Python makes these. With no project file, uv has nothing to build there."""
+    commit(integrity_repo, {"services/__pycache__/x.pyc": "bytes\n"})
+    done = integrity(integrity_repo)
+    assert done.returncode == 0, done.stderr
+
+
+@pytest.mark.parametrize("name", ["Odd_Name", "under_score", ".hidden", "dotted.name"])
+def test_a_badly_named_folder_with_a_valid_project_is_refused(
+    integrity_repo: Path, name: str
+) -> None:
+    """A valid project file, so only the name can refuse it."""
+    commit(integrity_repo, {f"services/{name}/pyproject.toml": MEMBER_TOML})
+    done = integrity(integrity_repo)
+    assert done.returncode == 1
+    assert f"services/{name} is not a plain member name" in done.stderr

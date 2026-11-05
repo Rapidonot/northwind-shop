@@ -57,19 +57,24 @@ working files, not what gets committed. And CI ran the PR's own gate code, so a 
     of this job. It also checks, reading files only:
     - each workspace `src/` holds only `northwind_<member>`;
     - the root `pyproject.toml` stays `package = false` with no build system and no workspace `exclude`, and its
-      `members` are `services/*`, `services/<name>`, `data` or `evals`, where `<name>` is one plain folder name;
-    - every folder in `services/` is such a member with a `pyproject.toml`;
+      `members` are `services/*`, `services/<name>`, `data` or `evals`, where `<name>` is lower-case letters,
+      digits and hyphens;
+    - every folder in `services/` is such a member with a `pyproject.toml`, apart from a `__pycache__` with no
+      `pyproject.toml`, where uv has nothing to build;
     - each member's `pyproject.toml` has no `[tool.uv.build-backend]` and no workspace of its own, builds with
       `uv_build` alone, with no `backend-path` and no requirement beyond `uv_build` and a version;
     - every `[tool.uv.sources]` entry, root or member, has no `git` or `url`, and a `path` must lead to a real
       member's folder.
 
-    A PR that breaks any of these fails this job. **It does not stop the code running:** `eval-gate-main` has
-    already run `uv sync` on that tree, so a member's `[build-system]` does run there, and this check makes the
-    PR unshippable, nothing more. **It does not cover** what `uv.lock` pins: a new or changed registry dependency,
-    including a wheel carrying its own `.pth`. Nor `[tool.uv]` settings in a `pyproject.toml` such as `index` or
+    A PR that breaks any of these fails this job. **It does not stop the code running:** `eval-gate-main` runs
+    `uv sync` on that tree in parallel, so a member's `[build-system]` does run there, and this check makes the PR
+    unshippable, nothing more. **It reads only** the tables named above, so it does not cover what `uv.lock` pins:
+    a new or changed registry dependency, or a direct reference such as `name @ https://…` in `dependencies`,
+    `optional-dependencies`, `dependency-groups`, `override-dependencies` or `constraint-dependencies`, including a
+    wheel carrying its own `.pth`. Nor does it cover `[tool.uv]` settings in a `pyproject.toml` such as `index` or
     `find-links`, `uv.toml` and `.python-version`, a file planted in `evals/src`, which the restore removes before
     this check sees it, or an edit to this script or the workflow. Those are in `ship`'s full diff, or stated below.
+    A row that adds a workspace member anywhere else, such as `agents-external/`, has to change this rule.
 12. **`Guard / eval-gate-main` runs main's `evals/src` beside the PR's services.** `PYTHONPATH` puts it first.
     `assert-main-code.py` then reads each module's origin from the import system, because a module sets its
     own `__file__`, and refuses a folder on `sys.path` that is not a member's `src`, by its exact place. It runs
