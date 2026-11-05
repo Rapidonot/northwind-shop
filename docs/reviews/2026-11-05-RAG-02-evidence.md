@@ -171,11 +171,22 @@ Their stored vectors match plain, so these are not lifts: compared across `north
 `northwind_enriched`, 1,216 of the 1,220 review vectors are bit-identical, and the other 4 differ only by
 batching noise (lowest cosine 0.9999997). No review has a context or an `embed_hash`. Each sat just
 outside the top 5, and enriching its neighbours moved those further from the query. Fixing the report to
-go by item is what showed this. No planted chunk left a top 5, so the rise looks systematic.
+go by item is what showed this. No injection chunk left a top 5. Whether they rose more than ordinary
+reviews was not measured.
+
+**On the only direct measure, the adopted configuration is the worst of the three: 23 appearances,
+against 20 plain and 16 with everything enriched.** It was chosen because it removes the lever the
+attacker's own text controls, not because it lowers that count.
 
 Reviews' share of all top 5s, over all 100 items: 25.0% plain, 26.8% allow-list, 39.0% everything
-enriched. So the planted count of 16 with everything enriched flatters that index, and the allow-list
-costs under two points. Conditions for the switch are in row #8.
+enriched. That counts ordinary reviews, so it does not answer the planted question: as a share of review
+slots, injection reviews go 16.0%, 17.2% and 8.2%. Conditions for the switch are in row #8.
+
+Method, so the figures can be compared later. All from one script, in memory, run on `4c4a06c`'s parent
+code against the committed cache, not kept in the repo: public chunks only, the same embedder, all 100
+items, top 5 by cosine, no region filter. The vector comparison read `embedding::text` for all
+`source_type = 'review'` rows from `northwind` and `northwind_enriched`, and compared each pair by largest
+element difference and cosine. `enrichment_report.py` does not compute review share; row #8 should add it.
 
 **Limit:** the report is one unfiltered query per item. A shopper's search filters by region and can run
 three times a turn. Nobody has measured the enriched index on that path.

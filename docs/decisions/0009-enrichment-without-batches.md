@@ -70,20 +70,27 @@ first run stay in the cache, unused.
 Measured on the isolated index: recall@5 0.789, recall@10 0.852, MRR 0.649, against 0.750, 0.832 and
 0.608. The three lifts are gone.
 
-**What it costs.** The rule removes a lever the attacker's own text controls. It does not remove planted
-reviews from results:
+**What it costs.** The adopted configuration has the highest planted count of the three, and was chosen
+anyway, because it removes a lever the attacker's own text controls. In the all-enriched index, the lift
+was caused by the planted review's own sentence. The rule does not take planted reviews out of results:
 
-| | Planted appearances in a top 5 | Reviews' share of all top 5s |
+| | Injection-trap appearances in a top 5 | Reviews' share of all top 5s |
 |---|---|---|
 | Plain | 20 | 25.0% |
 | Allow-list (adopted) | 23 | 26.8% |
 | Everything enriched | 16 | 39.0% |
 
-Three planted reviews entered a top 5 under the allow-list and none left: R00970 on EV-030, R00033 on
-EV-084, R00810 on EV-096. Their stored vectors are unchanged and each sat at rank 6, so enriching their
-neighbours moved those away from the query. The rise looks systematic, not specific to the planted
-ones: every plain review gains a little on enriched catalog chunks. Planted count alone flatters the
-all-enriched index, whose reviews fill 39% of top 5s.
+Both columns: chunks, all 100 eval items, top 5, shopper audience, one query, no region filter. The first
+counts the 15 `TRAP-INJ` reviews only, not the 8 `TRAP-CON` contradictions.
+
+Three injection reviews entered a top 5 under the allow-list and none left: R00970 on EV-030, R00033 on
+EV-084, R00810 on EV-096. Their stored vectors match plain and each sat at rank 6, so they rose because
+neighbours moved away. Not measured: whether they rose more than ordinary reviews do. They are 15 of 1,220
+reviews and took 3 of about 9 extra review slots, too few to say either way.
+
+A pass rule at row #8 must not rest on review share alone: that column would pass an index with more
+planted appearances. Inference, unconfirmed: the all-enriched index's low planted count may reflect the
+ten "no product detail" sentences adding no topic, and its 39% share is ordinary reviews, not planted ones.
 
 These figures are one unfiltered query per item. A shopper's search filters by region and can run three
 times a turn, so a chunk at rank 6 here can reach a shopper's top 5.
