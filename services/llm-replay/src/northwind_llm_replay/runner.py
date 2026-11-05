@@ -286,10 +286,13 @@ def _text_leaves(value: Any) -> Iterator[str]:
 
 def readable_forms(text: str) -> list[str]:
     """The raw text, each JSON document decoded (so `\\uXXXX` escapes count), and all model text
-    joined up, because a key split across two SSE deltas only shows once they are joined."""
+    joined up, because a key split across two SSE deltas only shows once they are joined.
+
+    Split on `\\n` only: `splitlines()` also breaks on U+2028 and friends, which are legal inside a
+    JSON string, so a delta holding one would stop parsing and fall out of the joined text."""
     decoded: list[str] = []
     leaves: list[str] = []
-    for candidate in [text, *(s[5:] for s in text.splitlines() if s.startswith("data:"))]:
+    for candidate in [text, *(s[5:] for s in text.split("\n") if s.startswith("data:"))]:
         try:  # ValueError too: an oversized integer. Text that cannot parse is still scanned raw.
             document = json.loads(candidate)
             decoded.append(json.dumps(document, ensure_ascii=False))
