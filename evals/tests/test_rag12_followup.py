@@ -321,7 +321,7 @@ def test_containment_cannot_be_promoted_even_with_a_known_failure_not_approved(
     rig.setup(item(**ADVERSARIAL))
     rig.write_known(entry(approved_by="model"))
     rig.write_candidate({"EV-1": dict(CONTAIN_BAD)}, {})
-    assert cli.main(["promote", "--accept-regression", "agreed"]) == 1
+    assert cli.main(["promote", "--accept-regression", "agreed", "--approved-by", "the user"]) == 1
     assert load_baseline(cli.BASELINE).answers["EV-1"]["behaviour_ok"] == 1.0
     assert cli.CANDIDATE.exists()
 
@@ -330,14 +330,19 @@ def test_containment_cannot_be_promoted_when_a_known_failure_now_passes(rig: Rig
     rig.setup(item(**ADVERSARIAL))
     rig.write_known(entry())
     rig.write_candidate({"EV-1": dict(CONTAIN_GOOD)}, {})
-    assert cli.main(["promote", "--accept-regression", "agreed"]) == 1
+    assert cli.main(["promote", "--accept-regression", "agreed", "--approved-by", "the user"]) == 1
 
 
 def test_check_with_a_reason_changes_nothing_and_records_no_override(rig: Rig) -> None:
     rig.setup()
     rig.write_candidate({"EV-1": {**GOOD, "relevance": 0.0}})
     before = (cli.BASELINE.read_bytes(), cli.CANDIDATE.read_bytes())
-    assert cli.main(["promote", "--check", "--accept-regression", "agreed"]) == 0
+    assert (
+        cli.main(
+            ["promote", "--check", "--accept-regression", "agreed", "--approved-by", "the user"]
+        )
+        == 0
+    )
     assert (cli.BASELINE.read_bytes(), cli.CANDIDATE.read_bytes()) == before
     assert load_baseline(cli.BASELINE).overrides == []
 
@@ -354,14 +359,25 @@ def test_check_on_a_regression_without_a_reason_fails_and_changes_nothing(rig: R
 def test_a_blank_reason_is_no_reason(rig: Rig, reason: str) -> None:
     rig.setup()
     rig.write_candidate({"EV-1": {**GOOD, "relevance": 0.0}})
-    assert cli.main(["promote", "--accept-regression", reason]) == 1
+    assert cli.main(["promote", "--accept-regression", reason, "--approved-by", "the user"]) == 1
     assert load_baseline(cli.BASELINE).overrides == []
 
 
 def test_a_reason_is_stored_trimmed_with_the_date_and_what_it_accepted(rig: Rig) -> None:
     rig.setup()
     rig.write_candidate({"EV-1": {**GOOD, "relevance": 0.0}})
-    assert cli.main(["promote", "--accept-regression", "  judge was recalibrated  "]) == 0
+    assert (
+        cli.main(
+            [
+                "promote",
+                "--accept-regression",
+                "  judge was recalibrated  ",
+                "--approved-by",
+                "the user",
+            ]
+        )
+        == 0
+    )
     [override] = load_baseline(cli.BASELINE).overrides
     assert override["reason"] == "judge was recalibrated"
     assert re.fullmatch(r"\d{4}-\d{2}-\d{2}", override["on"])
@@ -372,7 +388,9 @@ def test_every_reason_survives_a_chain_of_promotions(rig: Rig) -> None:
     rig.setup()
     for reason, relevance in (("first", 0.5), ("second", 0.0)):
         rig.write_candidate({"EV-1": {**GOOD, "relevance": relevance}})
-        assert cli.main(["promote", "--accept-regression", reason]) == 0
+        assert (
+            cli.main(["promote", "--accept-regression", reason, "--approved-by", "the user"]) == 0
+        )
     rig.write_candidate({"EV-1": {**GOOD, "relevance": 0.0}})
     assert cli.main(["promote"]) == 0
     assert [o["reason"] for o in load_baseline(cli.BASELINE).overrides] == ["first", "second"]
@@ -383,7 +401,7 @@ def test_a_dropped_item_cannot_be_overridden_and_leaves_both_files_alone(rig: Ri
     rig.write_baseline({"EV-1": dict(GOOD), "EV-2": dict(GOOD)})
     rig.write_candidate({"EV-1": dict(GOOD)})
     before = (cli.BASELINE.read_bytes(), cli.CANDIDATE.read_bytes())
-    assert cli.main(["promote", "--accept-regression", "because"]) == 1
+    assert cli.main(["promote", "--accept-regression", "because", "--approved-by", "the user"]) == 1
     assert (cli.BASELINE.read_bytes(), cli.CANDIDATE.read_bytes()) == before
 
 
@@ -393,14 +411,14 @@ def test_a_candidate_that_loses_an_adversarial_item_is_refused_with_no_baseline_
     rig.setup(item(**ADVERSARIAL), item("EV-2", **ADVERSARIAL))
     cli.BASELINE.unlink()
     rig.write_candidate({"EV-1": dict(GOOD)})
-    assert cli.main(["promote", "--accept-regression", "because"]) == 1
+    assert cli.main(["promote", "--accept-regression", "because", "--approved-by", "the user"]) == 1
     assert not cli.BASELINE.exists()
 
 
 def test_a_missing_gated_metric_cannot_be_promoted_even_with_a_reason(rig: Rig) -> None:
     rig.setup()
     rig.write_candidate({"EV-1": {k: v for k, v in GOOD.items() if k != "citation_ok"}})
-    assert cli.main(["promote", "--accept-regression", "because"]) == 1
+    assert cli.main(["promote", "--accept-regression", "because", "--approved-by", "the user"]) == 1
     assert "citation_ok" in load_baseline(cli.BASELINE).answers["EV-1"]
     assert cli.CANDIDATE.exists()
 
@@ -748,6 +766,63 @@ def test_eval_promote_passes_a_reason_from_the_shell_environment(tmp_path: Path)
     assert code == 0
     [(_, args)] = calls(lines)
     assert args[-2:] == ["--accept-regression", "two  spaces here"]
+
+
+PROMOTE_FLAGS = {
+    "APPROVED_BY": "--approved-by",
+    "ACCEPT_REGRESSION": "--accept-regression",
+    "BOOTSTRAP": "--bootstrap",
+}
+HOSTILE_VALUES = [
+    "$(touch pwned)",
+    "$(shell touch pwned)",
+    "`touch pwned`",
+    '"; touch pwned; "',
+    "'; touch pwned; '",
+    "a; touch pwned",
+    "$$(touch pwned)",
+    "${shell touch pwned}",
+]
+
+
+@pytest.mark.parametrize("route", ["command line", "environment"])
+@pytest.mark.parametrize("value", HOSTILE_VALUES)
+@pytest.mark.parametrize("variable", PROMOTE_FLAGS)
+def test_eval_promote_passes_a_value_literally_and_runs_nothing(
+    tmp_path: Path, variable: str, value: str, route: str
+) -> None:
+    """Make expands `$(...)` before the shell sees it, so shell quoting alone is not enough."""
+    if route == "command line":
+        code, lines = make(tmp_path, "eval-promote", f"{variable}={value}")
+    else:
+        code, lines = make(tmp_path, "eval-promote", env={variable: value})
+    assert not (tmp_path / "pwned").exists()
+    assert code == 0
+    [(_, args)] = calls(lines)
+    assert args[-2:] == [PROMOTE_FLAGS[variable], value]
+
+
+def test_the_pins_come_before_the_first_shell_call() -> None:
+    """Make 4.4 and later reportedly export variables to `$(shell ...)`, which expands them. Only
+    3.81 is on the development machine, so this pins the order rather than running that behaviour.
+    The pins also come before the include, so that file cannot preset an approver."""
+    code = [line for line in MAKEFILE.splitlines() if not line.startswith("#")]
+    first_shell = next(
+        n
+        for n, line in enumerate(code)
+        if "$(shell" in line or "${shell" in line or re.search(r"\s!=\s", line)
+    )
+    first_include = next(n for n, line in enumerate(code) if line.startswith("-include"))
+    pins = [n for n, line in enumerate(code) if re.match(r"override \w+ := \$\(value ", line)]
+    assert len(pins) == len(PROMOTE_FLAGS)
+    assert max(pins) < min(first_shell, first_include)
+
+
+def test_eval_promote_passes_an_approver_with_spaces_as_one_argument(tmp_path: Path) -> None:
+    code, lines = make(tmp_path, "eval-promote", "APPROVED_BY=Sam  Lee, on call")
+    assert code == 0
+    [(_, args)] = calls(lines)
+    assert args[-2:] == ["--approved-by", "Sam  Lee, on call"]
 
 
 @pytest.mark.parametrize("args", [[], ["ACCEPT_REGRESSION="]], ids=["unset", "empty"])

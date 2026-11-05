@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from northwind_common import localenv
 from northwind_llm_replay import cli, runner_check
 from northwind_llm_replay.ledger import Ledger
 from northwind_llm_replay.scan import SYMLINK_REFUSED, scan_paths
@@ -689,3 +690,123 @@ def test_replay_runs_under_xdist_workers(
     monkeypatch.setenv("PYTEST_XDIST_WORKER", "gw0")
     pytester.makepyfile("def test_x(): pass")
     assert pytester.runpytest_subprocess().ret == pytest.ExitCode.OK
+
+
+# --- git redirect files (row 5a, second review finding 1) ---------------------------------------
+
+
+def linked_worktree(tmp_path: Path) -> tuple[Path, Path]:
+    """A real main checkout and one real linked worktree."""
+    main, tree = tmp_path / "main", tmp_path / "tree"
+    main.mkdir()
+    for args in (
+        ["init", "-q", "-b", "main"],
+        [
+            "-c",
+            "user.email=t@example.invalid",
+            "-c",
+            "user.name=t",
+            "commit",
+            "-q",
+            "--allow-empty",
+            "-m",
+            "base",
+        ],
+        ["worktree", "add", "-q", "-b", "side", str(tree)],
+    ):
+        subprocess.run(["git", *args], cwd=main, check=True, capture_output=True)  # noqa: S603, S607
+    return main, tree
+
+
+@pytest.mark.req("RAG-12")
+def test_redirect_files_are_the_pointer_and_three_admin_files(tmp_path: Path) -> None:
+    main, tree = linked_worktree(tmp_path)
+    admin = main / ".git" / "worktrees" / "tree"
+    existing, absent = runner_check.git_redirect_files(main / ".git", [main, tree])
+    assert existing == [tree / ".git", admin / "gitdir", admin / "commondir"]
+    assert absent == [admin / "config.worktree"]
+
+
+@pytest.mark.req("RAG-12")
+def test_a_main_checkouts_git_directory_is_never_listed(tmp_path: Path) -> None:
+    """A commit there needs that directory, and the session in it must be able to commit."""
+    main, _ = linked_worktree(tmp_path)
+    existing, absent = runner_check.git_redirect_files(main / ".git", [main])
+    assert main / ".git" not in [*existing, *absent]
+
+
+@pytest.mark.req("RAG-12")
+def test_commit_state_is_not_listed(tmp_path: Path) -> None:
+    main, tree = linked_worktree(tmp_path)
+    existing, absent = runner_check.git_redirect_files(main / ".git", [main, tree])
+    names = {path.name for path in [*existing, *absent]}
+    assert not names & {"HEAD", "ORIG_HEAD", "index", "refs", "logs", "config"}
+
+
+@pytest.mark.req("RAG-12")
+def test_no_linked_worktree_means_nothing_to_list(tmp_path: Path) -> None:
+    main = tmp_path / "main"
+    main.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=main, check=True)  # noqa: S603, S607
+    assert runner_check.git_redirect_files(main / ".git", [main]) == ([], [])
+
+
+@pytest.mark.req("RAG-12")
+def test_checking_a_redirect_file_leaves_it_unchanged(tmp_path: Path) -> None:
+    main, tree = linked_worktree(tmp_path)
+    existing, _ = runner_check.git_redirect_files(main / ".git", [main, tree])
+    before = [path.read_bytes() for path in existing]
+    assert runner_check.check([], existing, []) == [f"WRITABLE {path}" for path in existing]
+    assert [path.read_bytes() for path in existing] == before
+
+
+@pytest.mark.req("RAG-12")
+def test_can_create_reports_a_creatable_file_and_leaves_nothing(tmp_path: Path) -> None:
+    path = tmp_path / "config.worktree"
+    assert runner_check.can_create(path)
+    assert not path.exists()
+
+
+@pytest.mark.req("RAG-12")
+def test_can_create_is_false_when_refused_and_never_touches_an_existing_file(
+    tmp_path: Path,
+) -> None:
+    locked = tmp_path / "locked"
+    locked.mkdir(mode=0o555)
+    try:
+        assert not runner_check.can_create(locked / "config.worktree")
+    finally:
+        locked.chmod(0o755)
+    existing = tmp_path / "config.worktree"
+    existing.write_text("keep", encoding="utf-8")
+    assert not runner_check.can_create(existing)
+    assert existing.read_text(encoding="utf-8") == "keep"
+
+
+@pytest.mark.req("RAG-12")
+def test_main_reports_a_writable_path_a_creatable_file_and_a_pricing_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The wiring in `main()`: the real `check`, `git_redirect_files` and `can_create`, against a
+    throwaway repo. Unit tests of those functions stay green if `main()` stops calling them."""
+    main, tree = linked_worktree(tmp_path)
+    admin = main / ".git" / "worktrees" / "tree"
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr(runner_check, "load_paths", lambda _python: [])
+    monkeypatch.setattr(runner_check, "checkouts", lambda: [main, tree])
+    monkeypatch.setattr(localenv, "main_checkout", lambda: main)
+    monkeypatch.setattr(localenv, "ledger_path", lambda: tmp_path / "ledger.jsonl")
+    monkeypatch.setattr(localenv, "env_file", lambda: tmp_path / "key-file")
+    python = tmp_path / "fake-python"
+    python.write_text("#!/bin/sh\necho 'no module named pricing' >&2\nexit 1\n")
+    python.chmod(0o755)
+
+    assert runner_check.main(python) == 1
+
+    lines = capsys.readouterr().out.splitlines()
+    assert f"WRITABLE {tree / '.git'}" in lines  # a writable path
+    assert f"WRITABLE {admin / 'config.worktree'}" in lines  # a creatable absent file
+    assert "PRICING the runner cannot load its prices: no module named pricing" in lines
+    assert not (admin / "config.worktree").exists()
