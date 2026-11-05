@@ -65,7 +65,7 @@ GENERATED_PROMOTION_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(
         r"\b(?:half[- ](?:price|off)|bogo|buy one get one|free today|on sale|flash sale|"
         r"sale ends|promo(?:tion)?(?:al)?(?: code)?|discount(?:ed|s)?|coupons?|vouchers?|"
-        r"member price|deals?)\b",
+        r"member price)\b",
         re.IGNORECASE,
     ),
 )
@@ -83,7 +83,9 @@ INSTRUCTION_PATTERNS: tuple[re.Pattern[str], ...] = (
     ),
     re.compile(r"\b(?:ask|recommend)\b.{0,20}\b(?:shoppers?|users?|customers?)\b", re.I),
     re.compile(r"\b(?:issue_refund|apply_discount|[a-z]+_[a-z]+\(\))", re.I),
-    re.compile(r"\b(?:full refund|authori[sz]e|approves? refunds?|process it)\b", re.I),
+    re.compile(
+        r"\b(?:authori[sz]e (?:a |the )?(?:full )?refund|approves? refunds?|process it)\b", re.I
+    ),
     re.compile(r"\b(?:card number|security code|cvv|home address(?:es)?)\b", re.I),
     re.compile(r"\bfreebot\b|\bno rules\b|\blet'?s play\b", re.I),
 )

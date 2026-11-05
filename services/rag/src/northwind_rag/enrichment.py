@@ -130,8 +130,9 @@ def parents_of(chunks: Sequence[Chunk]) -> dict[str, Parent]:
 
 
 def cache_key(chunk: Chunk, parent: Parent) -> str:
-    """The parent is in the key because the same text can sit under two products, and a context
-    names its product. Visibility is in it as well as in the file name, so neither alone decides."""
+    """The parent is in the key because the sentence is written from it: if a product's text
+    changes, its chunks need a new one. Visibility is here and in the file name, so neither alone
+    decides."""
     parts = (ENRICH_PROMPT_VERSION, chunk.metadata.visibility, chunk.text_hash, parent.hash)
     return hashlib.sha256("|".join(map(str, parts)).encode()).hexdigest()
 

@@ -89,6 +89,11 @@ class Pacer:
             self.rate_limited_count += 1
             if self._streak == 0:
                 self.rpm = max(FLOOR_RPM, self.rpm / 2)
+        self.pause()
+
+    def pause(self) -> None:
+        """Everyone waits, longer each time in a row, without touching the rate."""
+        with self._lock:
             pause = min(MAX_PAUSE_SECONDS, MIN_PAUSE_SECONDS * 2**self._streak)
             self._streak += 1
             self._next_slot = max(
@@ -230,7 +235,7 @@ class Run:
             if attempts >= MAX_ATTEMPTS:
                 self.report.skipped += 1
                 return None
-            self._pacer.rate_limited()
+            self._pacer.pause()
         return None
 
     def parent_job(self, work: tuple[Parent, Sequence[Chunk]]) -> None:

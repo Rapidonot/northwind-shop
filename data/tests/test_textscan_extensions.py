@@ -109,6 +109,7 @@ def test_generated_text_is_held_to_the_wider_check(text: str, category: str) -> 
         "This variant line lists the navy colour and medium size of the Harrowgate Fleece.",
         "This section of the US returns policy covers clearance items and final sale terms.",
         "This care guide section explains how to wash and dry cotton towels.",
+        "This section of the UK returns policy deals with refunds, including a full refund.",
     ],
 )
 def test_a_good_context_passes(text: str) -> None:
