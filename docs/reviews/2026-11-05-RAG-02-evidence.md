@@ -35,6 +35,32 @@ background `make ci` reported exit 0 from a wrapper `echo` when `make` itself ha
 - Review fixes, written before their tests, so proven by mutation: each fix reverted in turn, its test
   seen failing, the file restored. 23 mutants, all caught. The first pass left one alive, the `@` rule,
   because the bare-domain rule caught the same sentence, so it gained its own test.
+- The scan root and Makefile wiring, the same way: 5 mutants, all caught (`advisor-reviewer` asked for
+  this). Removing `data/enrichment` from the roots fails its tests, and so does dropping `LLM_MODE=live`
+  from `enrich` or adding it to `ingest-enriched` or `eval-enrichment-report`.
+
+## Where the row differs from the approved plan
+
+All approved by the user, and listed because the plan file was not revised.
+
+- The split is CRLF, CR and LF (answer 5), not `\n` only.
+- `data/enrichment` joined the default scan roots, so `services/llm-replay/.../cli.py` changed as well as
+  `runner.py`, and `pricing.py` had its docstring corrected. These appear in `runner-sync`.
+- The spending-target pin widened in `evals/tests/test_wiring.py` (answer 2). New wiring tests went in
+  `test_makefile_enrich.py`, not `test_makefile_targets.py`.
+- The enriched index guard is an allowlist, and the tests use `northwind_enriched_test`.
+- `ENRICH_PROMPT_VERSION` is 2, because the prompt now says to start with "This".
+
+## Key-fragment scan of the cache
+
+`EVAL_ROOTS` paths are relative, so from the clone they name the clone's own copy, and before merge the
+worktree's cache would not be read. `CASSETTES_DIR` is what reaches it:
+
+    make -C ~/.northwind/runner scan-cassettes CASSETTES_DIR=/Users/rapido/Projects/northwind-shop/data/enrichment
+
+Checked in the sandbox with a temp directory: the same Makefile path reads the directory, fails on a
+planted card number and passes when it is removed. The fragment comparison itself runs only from the
+clone. The clone at `f50f7c8` already has `--cassettes-dir`, so this needs no sync.
 
 ## Security review triage (decided by the user)
 
