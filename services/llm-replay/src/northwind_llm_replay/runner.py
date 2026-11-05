@@ -105,6 +105,7 @@ METADATA_KEYS = frozenset({"user_id"})
 CONTEXT_EDIT = {"type": "clear_thinking_20251015", "keep": "all"}
 TEXT_FIELDS = frozenset({"text", "thinking", "partial_json"})
 KEY_PREFIX = re.compile(r"sk-ant-[a-z0-9]+-")  # public: the same in every key of a kind
+SSE_LINE_END = re.compile(r"\r\n|\r|\n")
 MAX_BODY_BYTES = 2 * 1024 * 1024
 MAX_CLAIM_BYTES = 1024
 MAX_IN_FLIGHT = 4
@@ -288,11 +289,12 @@ def readable_forms(text: str) -> list[str]:
     """The raw text, each JSON document decoded (so `\\uXXXX` escapes count), and all model text
     joined up, because a key split across two SSE deltas only shows once they are joined.
 
-    Split on `\\n` only: `splitlines()` also breaks on U+2028 and friends, which are legal inside a
-    JSON string, so a delta holding one would stop parsing and fall out of the joined text."""
+    Lines end where SSE says they do: CRLF, CR or LF. `splitlines()` also breaks on U+2028, U+2029
+    and NEL, which are legal inside a JSON string, so a delta holding one would stop parsing and
+    fall out of the joined text. A raw CR cannot be inside a JSON string, so that split is safe."""
     decoded: list[str] = []
     leaves: list[str] = []
-    for candidate in [text, *(s[5:] for s in text.split("\n") if s.startswith("data:"))]:
+    for candidate in [text, *(s[5:] for s in SSE_LINE_END.split(text) if s.startswith("data:"))]:
         try:  # ValueError too: an oversized integer. Text that cannot parse is still scanned raw.
             document = json.loads(candidate)
             decoded.append(json.dumps(document, ensure_ascii=False))
