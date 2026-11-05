@@ -143,21 +143,22 @@ both checks: it flagged `gitdir`, as expected until the install, and the runner 
 **Security check of the merged `runner_check.py`:** one `security-reviewer` pass, reading only. No
 critical or high findings: the merge lost nothing, no exception gives exit 0, and no key can reach the
 output. Decision 0005 accepts that this check proves things only for an honest session, which bounds
-severity at medium. **All open; none fixed in the merge.**
+severity at medium. None was fixed in the merge commit. M4 was fixed in the next commit, and the rest
+moved to row 5b, both by the user's decision.
 
 | Finding | Severity | Status |
 |---|---|---|
-| M1 Absent paths are never measured, except the admin files. `~/.config/git/config` is not listed | Medium | Open |
-| M2 A linked worktree whose `.git` is not a regular file drops out of the check | Medium | Open |
-| M3 A dangling symlink at an admin file reads as refused | Medium | Open |
-| M4 Nothing tests the merged `main()` wiring | Medium | **Confirmed by running it:** with the 5a wiring removed, all 579 tests in `services/llm-replay/tests` passed. Open |
-| M4, second half: `isolate_main` does not stub `git_dir`, so two tests probe the real repo and may fail from an unsandboxed terminal | Medium | Traced, not run. Open |
-| L1 An exception drops the problems already collected | Low | Open |
-| L2 The admin list can be silently empty | Low | Open |
-| L3 An append test cannot see replacement through a writable folder | Low | Open. The rig covers the pointer move |
-| L4 `can_create` has an unguarded cleanup and a small race | Low | Open |
-| L5 `file_is_writable` can hang on a FIFO | Low | Open |
-| L6 Printed text is not escaped | Low | Open |
+| M1 Absent paths are never measured, except the admin files. `~/.config/git/config` is not listed | Medium | Moved to row 5b |
+| M2 A linked worktree whose `.git` is not a regular file drops out of the check | Medium | Moved to row 5b |
+| M3 A dangling symlink at an admin file reads as refused | Medium | Moved to row 5b |
+| M4 Nothing tests the merged `main()` wiring | Medium | **Fixed.** Before: with the 5a wiring removed, all 579 tests in `services/llm-replay/tests` passed. Now `test_main_reports_a_writable_path_a_creatable_file_and_a_pricing_failure` fails with all of it removed, and with each of the three pieces removed alone, and passes restored |
+| M4, second half: `isolate_main` probed the real repo | Medium | **Fixed.** Measured by a plugin recording every probe: 4 probes in 2 tests before, 0 after, across `services/llm-replay/tests` and `services/common/tests` |
+| L1 An exception drops the problems already collected | Low | Moved to row 5b |
+| L2 The admin list can be silently empty | Low | Moved to row 5b |
+| L3 An append test cannot see replacement through a writable folder | Low | Moved to row 5b. The rig covers the pointer move |
+| L4 `can_create` has an unguarded cleanup and a small race | Low | Moved to row 5b |
+| L5 `file_is_writable` can hang on a FIFO | Low | Moved to row 5b |
+| L6 Printed text is not escaped | Low | Moved to row 5b |
 
 ## For the user to run
 

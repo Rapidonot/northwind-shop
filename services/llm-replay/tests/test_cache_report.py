@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pytest
 
+from northwind_common import localenv
 from northwind_common import pricing as common_pricing
 from northwind_llm_replay import cli, runner_check
 from northwind_llm_replay import pricing as replay_pricing
@@ -233,10 +234,13 @@ def test_a_failed_import_with_only_blank_stderr_lines_still_fails(tmp_path: Path
 
 
 def isolate_main(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Only the pricing probe decides the exit code, so the sandbox cannot fail these tests."""
+    """Only the pricing probe decides the exit code, and nothing here touches the real repo, so
+    neither the sandbox nor a terminal can fail these tests."""
     monkeypatch.setattr(runner_check, "load_paths", lambda _python: [])
     monkeypatch.setattr(runner_check, "check", lambda *_args: [])
     monkeypatch.setattr(runner_check, "checkouts", lambda: [])
+    monkeypatch.setattr(runner_check, "git_redirect_files", lambda *_args: ([], []))
+    monkeypatch.setattr(localenv, "main_checkout", lambda: Path("/nonexistent"))
 
 
 def test_main_exits_1_and_names_pricing_when_the_import_fails(
