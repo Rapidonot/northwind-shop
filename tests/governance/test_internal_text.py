@@ -1,8 +1,9 @@
 """NFR-07: the claims `data-flow.md` makes about internal text in recordings stay true (GOV-1).
 
 Main's recordings only. Row #7's enrichment keeps no cassette, so this says nothing about that run.
-Cassettes hold the request and the response, with the response body as a JSON string and retrieved
-text escaped for the prompt, so a sentence is compared with what the model saw, not the raw file.
+Cassettes hold the request and the response. A response body is a JSON string, or for a streamed
+reply a run of events whose deltas can split a word, and retrieved text is escaped for the prompt.
+So a sentence is compared with what the model saw and said, not with the raw file.
 """
 
 from __future__ import annotations
@@ -23,6 +24,8 @@ FIXTURES = REPO / "data" / "fixtures"
 CONTEXTS = REPO / "evals" / "contexts" / "dense-only.jsonl"
 MIN_LENGTH = 40
 INTERNAL_PRODUCT = "P0009"
+# A reply, thinking, and the input of a tool call. A tool call has no text delta at all.
+STREAMED_KEYS = ("text", "thinking", "partial_json")
 
 
 def read_jsonl(path: Path) -> list[dict[str, Any]]:
@@ -42,8 +45,15 @@ def sentences(documents: Iterable[dict[str, Any]], visibility: str) -> set[str]:
     return found
 
 
+def streamed_text(body: str) -> str:
+    """All the model wrote in a streamed response, joined back together."""
+    events = [json.loads(line[6:]) for line in body.splitlines() if line.startswith("data: ")]
+    deltas = [event["delta"] for event in events if event["type"] == "content_block_delta"]
+    return "".join(delta[key] for delta in deltas for key in STREAMED_KEYS if key in delta)
+
+
 def strings(value: Any) -> Iterator[str]:
-    """Every string in a parsed cassette, opening strings that are JSON themselves."""
+    """Every string in a parsed cassette, opening strings that are JSON or a stream themselves."""
     if isinstance(value, dict):
         for item in value.values():
             yield from strings(item)
@@ -52,6 +62,8 @@ def strings(value: Any) -> Iterator[str]:
             yield from strings(item)
     elif isinstance(value, str):
         yield value
+        if value.startswith("event: "):
+            yield streamed_text(value)
         if value.startswith(("{", "[")):
             try:
                 yield from strings(json.loads(value))
@@ -119,6 +131,24 @@ def test_a_sentence_in_a_response_body_is_found(tmp_path: Path) -> None:
     cassette = {"body": json.dumps({"content": [{"type": "text", "text": sentence}]})}
     (tmp_path / "a.json").write_text(json.dumps(cassette))
     assert found_in({sentence}, recorded_text(tmp_path)) == {sentence}
+
+
+@pytest.mark.parametrize("key", ["text", "thinking", "partial_json"])
+def test_a_sentence_split_across_a_stream_is_found(tmp_path: Path, key: str) -> None:
+    """A streamed response is not JSON, and a delta can end in the middle of a word."""
+    parts = (SENTENCE[:30], SENTENCE[30:])
+    deltas = [{"type": "content_block_delta", "delta": {key: part}} for part in parts]
+    body = "".join(f"event: content_block_delta\ndata: {json.dumps(d)}\n\n" for d in deltas)
+    (tmp_path / "a.json").write_text(json.dumps({"kind": "sse", "body": body}))
+    assert found_in({SENTENCE}, recorded_text(tmp_path)) == {SENTENCE}
+
+
+def test_every_streamed_recording_gives_its_answer_to_the_scan() -> None:
+    """Without this control, a scan that lost a streamed answer would still find nothing."""
+    cassettes = [json.loads(path.read_text()) for path in (REPO / "cassettes").rglob("*.json")]
+    streamed = [cassette for cassette in cassettes if cassette["kind"] == "sse"]
+    assert streamed, "no streamed recording to read"
+    assert all(streamed_text(cassette["body"]) for cassette in streamed)
 
 
 def test_a_sentence_escaped_for_the_prompt_is_found(tmp_path: Path) -> None:

@@ -103,7 +103,7 @@ means the PRD names a limit but gives no value yet.** Enforcement is the PRD's d
 | The PRD gives no value for the refund cap or the spend, velocity, partner and order ceilings | Rows above, when built |
 | Kill switches by agent, tool and payment route do not exist (NFR-12) | Window B, P6 |
 | No audit log exists yet, so no tool here writes one (NFR-10, BE-08) | #20 |
-| `make -s record` and `make SUITE=x record` miss the `ask` rules. Read from the rule text, not run. The window still holds | FOUND-2 review; no change planned |
+| `make -s record` and `make SUITE=x record` miss the `ask` rules. Read from the rule text, not run. The window still holds | FOUND-2 review; no change planned, no row owns this |
 | `make eval-promote` still works if someone runs it; the block is policy until 5b. Its input, `CANDIDATE` in `evals/src/northwind_evals/cli.py`, is a local file a session can write | 5b |
 | No run of `ship` on real `gh` is recorded: `unconfirmed` whether PR #22 merged through it | `PROGRESS.md` row A1, partial for this reason |
 | 12 `ship` and pre-push refusals have no test | AUTO-2, `docs/reviews/2026-11-05-auto-1-evidence.md` |
