@@ -154,11 +154,11 @@ Toolchain notes:
   go on `evals/fixtures/known_failures.json`, which can only shrink: Claude only ever
   writes `approved_by: model`, and only the user sets `human`. Nobody promotes until
   row 5b lands; after that only the user does, from the runner clone (decision 0006).
-- After any git command that updates the working tree (`switch`, `checkout`, `merge`, `pull`,
-  `rebase`, `cherry-pick`, `revert`, `am`, `reset`, `restore`, `stash`), check the output for
-  `unable to unlink`, `unable to create file` or `cannot create directory`, whatever the exit code. A
-  switch that fails on `evals/baselines` or `known_failures.json` can still exit 0. Stop, do not
-  commit, and tell the user. Decision 0006 has a recovery for `switch` and `merge` only.
+- After any git command, check the output for `Operation not permitted` or
+  `could not lock config file`, as well as `unable to unlink`, `unable to create file` and
+  `cannot create directory`, whatever the exit code. A switch that fails on `evals/baselines` or
+  `known_failures.json` can still exit 0. Stop, do not commit, and tell the user. Decision 0006 has a
+  recovery for `switch` and `merge` only.
 - Record decisions that change this file or the PRD defaults in docs/decisions/.
 - LLM calls (decision 0001): tests and evals run in replay by default. Live calls only
   through `make record` / `make eval-live`, on 10–20-item slices during development, with

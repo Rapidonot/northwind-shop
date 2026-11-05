@@ -137,9 +137,17 @@ This was measured too. So does anything else that stages the two files.
 
 ### Detect
 
-After any git command that updates the working tree, look for `unable to unlink`,
-`unable to create file` or `cannot create directory` in the output, whatever the exit code. Claude
-stops and reports this, and does not commit, because it cannot repair the state from the sandbox.
+After any git command, look for `Operation not permitted` or `could not lock config file`, as well as
+`unable to unlink`, `unable to create file` and `cannot create directory`, whatever the exit code.
+Claude stops and reports this, and does not commit, because it cannot repair the state from the
+sandbox.
+
+Both new strings are needed, because neither catches everything. Every switch and merge failure above
+printed `Operation not permitted`, and so did `git branch <name> origin/main`, which could not write
+upstream tracking to `.git/config`. That left the branch created but with no upstream. `git branch -D`
+printed only `could not lock config file`, and still deleted the branch. So a new branch off a
+remote ref needs `--no-track` in the sandbox. A config-only failure leaves the working tree alone, but
+stop and report it all the same.
 
 **Only `switch` and `merge` were measured and have a recovery.** If `pull`, `rebase`, `cherry-pick`,
 `reset`, `stash` or any other command prints one of these, stop: no recovery is written for it.
