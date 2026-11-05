@@ -21,7 +21,21 @@
       "Write(~/.northwind/**)"
     ],
     "allow": ["Bash(make *)", "Bash(uv run *)", "Bash(uv sync*)", "Bash(corepack pnpm *)", "Bash(docker compose *)"],
-    "ask": ["Bash(git push*)", "Bash(make record*)", "Bash(make eval-live*)", "Bash(make llm-proxy*)"]
+    "ask": [
+      "Bash(git push*)",
+      "Bash(make record*)",
+      "Bash(make eval-live*)",
+      "Bash(make llm-proxy*)",
+      "Bash(make *eval-promote*)",
+      "Bash(make *eval-gate-stale-ok*)",
+      "Bash(uv run *eval-promote*)",
+      "Bash(uv run *eval-gate-stale-ok*)",
+      "Bash(uv run *northwind_evals*promote*)",
+      "Edit(./evals/baselines/**)",
+      "Write(./evals/baselines/**)",
+      "Edit(./evals/fixtures/known_failures.json)",
+      "Write(./evals/fixtures/known_failures.json)"
+    ]
   },
   "hooks": {
     "PreToolUse": [
@@ -39,7 +53,19 @@
     "allowUnsandboxedCommands": false,
     "autoAllowBashIfSandboxed": false,
     "filesystem": {
-      "denyWrite": ["./.claude/settings*", "./.claude/hooks", "./.env*", "~/.northwind", "~/.northwind/secrets"],
+      "denyWrite": [
+        "./.claude/settings*",
+        "./.claude/hooks",
+        "./.env*",
+        "~/.northwind",
+        "~/.northwind/secrets",
+        "./evals/baselines",
+        "./evals/fixtures/known_failures.json",
+        "~/Projects/northwind-shop-*/.git",
+        "~/Projects/northwind-shop/.git/worktrees/*/gitdir",
+        "~/Projects/northwind-shop/.git/worktrees/*/commondir",
+        "~/Projects/northwind-shop/.git/worktrees/*/config.worktree"
+      ],
       "denyRead": ["./.env*", "~/Projects/northwind-shop/.env*", "~/Library/Keychains", "~/.northwind/secrets", "~/.northwind/ledger.lock"],
       "allowWrite": ["~/.cache/uv", "~/Library/pnpm/store", "/private/tmp/pnpm-store-operation-locks-502"]
     },

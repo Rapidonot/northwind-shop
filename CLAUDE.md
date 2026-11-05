@@ -68,8 +68,8 @@ make e2e-scripted     # the Playwright smoke test on a canned model (no recordin
 make record SUITE=…   # SPENDS through an open runner window: re-record one cassette suite
 make eval-live EVAL_SLICE=<n>  # SPENDS through an open runner window (SUITE=eval-answers): record answers + verdicts into a baseline candidate (digits only; n >= item count is a full run)
 make eval-rescore     # rebuild the candidate from the recordings after a scoring change (never spends)
-make eval-promote     # replace the baseline with the candidate (refuses a regression)
-make eval-integrity   # refuse edited cassettes and lost overrides, against origin/main
+make eval-promote     # DO NOT RUN until row 5b lands (decision 0006): replace the baseline with the candidate (refuses a regression; a reason needs APPROVED_BY)
+make eval-integrity   # refuse edited cassettes and lost overrides, print added known failures, against origin/main
 make eval-gate        # regression gate: live retrieval + replayed answers vs the baseline (RAG-12)
 make eval-snapshot    # save each eval item's retrieved context, the input for answers (no LLM)
 make eval-review-list # write the list of eval items waiting for human review
@@ -152,8 +152,13 @@ Toolchain notes:
   without asking.
 - Containment on adversarial and unanswerable items is absolute. A failure may only
   go on `evals/fixtures/known_failures.json`, which can only shrink: Claude only ever
-  writes `approved_by: model`, and only the user sets `human`. Claude never runs
-  `make eval-promote` with `ACCEPT_REGRESSION` unless the user gave the reason.
+  writes `approved_by: model`, and only the user sets `human`. Nobody promotes until
+  row 5b lands; after that only the user does, from the runner clone (decision 0006).
+- After any git command that updates the working tree (`switch`, `checkout`, `merge`, `pull`,
+  `rebase`, `cherry-pick`, `revert`, `am`, `reset`, `restore`, `stash`), check the output for
+  `unable to unlink`, `unable to create file` or `cannot create directory`, whatever the exit code. A
+  switch that fails on `evals/baselines` or `known_failures.json` can still exit 0. Stop, do not
+  commit, and tell the user. Decision 0006 has a recovery for `switch` and `merge` only.
 - Record decisions that change this file or the PRD defaults in docs/decisions/.
 - LLM calls (decision 0001): tests and evals run in replay by default. Live calls only
   through `make record` / `make eval-live`, on 10–20-item slices during development, with

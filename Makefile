@@ -2,6 +2,15 @@
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
 
+# Free text for `eval-promote`, so make must never expand it: `$(VAR)` would run a `$(shell ...)` in
+# the value, and so would exporting a command-line value. Pin the raw text; the recipe tests it in
+# the shell instead. Keep this above every `$(shell ...)`: make 4.4 and later export variables to
+# them, which expands these too (decision 0006).
+override ACCEPT_REGRESSION := $(value ACCEPT_REGRESSION)
+override BOOTSTRAP := $(value BOOTSTRAP)
+override APPROVED_BY := $(value APPROVED_BY)
+export ACCEPT_REGRESSION BOOTSTRAP APPROVED_BY
+
 export COREPACK_ENABLE_DOWNLOAD_PROMPT := 0
 PNPM ?= corepack pnpm
 # --env-file only when the file exists: compose exits 1 on a missing one, and linked worktrees never
@@ -194,8 +203,8 @@ eval-rescore: ingest ## Rebuild the baseline candidate from the recordings after
 eval-integrity: ## Refuse edited cassettes and lost overrides, against origin/main (decision 0003)
 	uv run python -m northwind_evals.cli integrity
 
-eval-promote: ## Replace the baseline with the candidate (a regression needs ACCEPT_REGRESSION="reason", which is recorded)
-	uv run python -m northwind_evals.cli promote $(if $(ACCEPT_REGRESSION),--accept-regression "$$ACCEPT_REGRESSION") $(if $(BOOTSTRAP),--bootstrap "$$BOOTSTRAP")
+eval-promote: ## DO NOT RUN until row 5b lands (decision 0006). Replace the baseline with the candidate (a regression needs ACCEPT_REGRESSION="reason" and APPROVED_BY="name")
+	uv run python -m northwind_evals.cli promote $${ACCEPT_REGRESSION:+--accept-regression "$$ACCEPT_REGRESSION"} $${BOOTSTRAP:+--bootstrap "$$BOOTSTRAP"} $${APPROVED_BY:+--approved-by "$$APPROVED_BY"}
 
 eval-snapshot: ## Save each eval item's retrieved context, the input for answers (no LLM; RAG-12)
 	uv run python -m northwind_evals.cli snapshot
