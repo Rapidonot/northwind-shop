@@ -1,7 +1,7 @@
 # 0006: Eval gate hardening
 
 Date: 2026-11-04. Requirement: RAG-12, row 5a. Addresses third-pass findings F10, F5 and F6: F10 in
-full, F5 by printing only, and F6's prompt only once the proposal is installed. Extends decision 0003
+full, F5 by printing only, and F6's prompt through the installed settings (PR #19). Extends decision 0003
 and replaces its last consequence.
 
 ## Context
@@ -21,16 +21,17 @@ overrides named no approver, and nothing stood between Claude and `make eval-pro
 4. A recorded reason needs an approver: `ACCEPT_REGRESSION` and `BOOTSTRAP` both need `APPROVED_BY`.
    The gate refuses a baseline holding an override with no approver.
 5. **No promotion at all until row 5b lands.** After that, promotion is the user's, from the runner
-   clone through a new entry point, not from a checkout. Once installed,
+   clone through a new entry point, not from a checkout.
    `sandbox.filesystem.denyWrite` on `evals/baselines` and `evals/fixtures/known_failures.json` stops
    sandboxed Bash writing those two paths in this checkout, and `ask` rules cover the file tools, which
    the sandbox does not reach. Claude Code warns that `Write(path)` rules are never matched and
-   `Edit(path)` rules cover both tools, so the `Edit` rules are the ones doing this. This protects the
+   `Edit(path)` rules cover both tools, so the `Edit` rules are the ones doing this. The post-install
+   check confirmed it: the Write tool prompted. This protects the
    working-tree files, not the committed content the gate reads in CI. See "Open limits".
 6. The `ask` rules on `make eval-promote`, `make eval-gate-stale-ok` and the `uv run` promote command
    are a courtesy. `Bash(make *)` and `Bash(uv run *)` reach the same code, and some ways of writing a
-   command miss the rules. The rig results list which. Once installed, a miss costs a prompt, and the
-   write to those two paths is still refused: the rig's write and rename rows held under the real
+   command miss the rules. The rig results list which. A miss costs a prompt, and the write to those
+   two paths is still refused: the rig's write and rename rows held under the real
    sandbox. A form with no `allow` rule stops in default mode only. In auto mode the classifier
    decides, so `denyWrite` is the control there.
 7. The three free-text `eval-promote` variables are pinned, so a hostile value is passed literally.
@@ -84,9 +85,9 @@ From the row 5a security reviews. None of these is closed by this row.
   `commondir` refuse writes, `config.worktree` cannot be created, and `gitdir` **is** writable. Hooks
   and `.git/config` already refuse writes. What refuses them is the session's sandbox policy, not an
   entry of ours, so rule 8 states them explicitly. With rule 8's entries, rig run 2 saw all four
-  refused, and a move of the pointer refused, with the globs working in their absolute form. Until the
-  proposal is installed, `gitdir` stays writable. The recovery below still starts by checking the
-  pointer.
+  refused, and a move of the pointer refused, with the globs working in their absolute form. The installed
+  settings refuse `gitdir` too: `make runner-check` reported 0 problem(s) in the linked worktree on
+  2026-11-05. The recovery below still starts by checking the pointer.
 - **A forged new cassette can make a stale item look fresh (first review, finding 11).**
   `make eval-integrity` refuses modified cassettes, not added ones.
 - **The added-entry line sits in a passing CI step (first review, finding 7).** Nothing makes anyone
@@ -136,9 +137,17 @@ This was measured too. So does anything else that stages the two files.
 
 ### Detect
 
-After any git command that updates the working tree, look for `unable to unlink`,
-`unable to create file` or `cannot create directory` in the output, whatever the exit code. Claude
-stops and reports this, and does not commit, because it cannot repair the state from the sandbox.
+After any git command, look for `Operation not permitted` or `could not lock config file`, as well as
+`unable to unlink`, `unable to create file` and `cannot create directory`, whatever the exit code.
+Claude stops and reports this, and does not commit, because it cannot repair the state from the
+sandbox.
+
+Both new strings are needed, because neither catches everything. Every switch and merge failure above
+printed `Operation not permitted`, and so did `git branch <name> origin/main`, which could not write
+upstream tracking to `.git/config`. That left the branch created but with no upstream. `git branch -D`
+printed only `could not lock config file`, and still deleted the branch. So a new branch off a
+remote ref needs `--no-track` in the sandbox. A config-only failure leaves the working tree alone, but
+stop and report it all the same.
 
 **Only `switch` and `merge` were measured and have a recovery.** If `pull`, `rebase`, `cherry-pick`,
 `reset`, `stash` or any other command prints one of these, stop: no recovery is written for it.
