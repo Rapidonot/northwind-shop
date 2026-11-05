@@ -68,3 +68,45 @@ The two reviews, of the runner-side diff and of the rest, gave no critical findi
 finding came in as high and the user rated it medium, because context is ranking-only and nothing reads
 it. The CI scan gap is closed by a tagged pytest test, staying out of the workflow. Open items are in
 `PROGRESS.md`.
+
+## The spending window
+
+`make enrich` through one window: 2,350 calls, $0.113222 ($0.000048 per call), 91.7% cache hit, no 429s,
+no skips. 2,205 sentences kept and 145 rejected. Rerun: "every chunk has an entry: nothing to call". The
+full comparison is in `docs/reviews/RAG-02-enrichment-report.md`.
+
+**Result: the criterion is not met.** recall@5 0.750 plain, 0.742 enriched, delta -0.008 (5 items better,
+5 worse, of 64). recall@10 0.832 to 0.837, MRR 0.608 to 0.610. The shared index is unchanged.
+
+Rejections: copied-from-review 124, internal-text 8, money-or-stock 4, delivery 3, instruction 2,
+review-claim 2, promotion 1, multi-line 1. The 8 internal-text rejections are false positives: all are
+public reviews of public products, and the overlap is stock wording such as "fit runs true to size",
+which the internal product's text shares with public products. No internal text was involved.
+
+Eval impact if switched: 97 of 100 saved contexts would change. Those answers go stale, and that
+includes the adversarial and unanswerable items listed in the report. Promotion stays blocked until 5b.
+
+Planted chunks in a top 5: 20 appearances plain, 16 enriched. One increase: TRAP-INJ-006 (R00069), 3 to 4,
+added to EV-002 and EV-080. All 15 trap sentences are clean.
+
+### Exploratory, not a result
+
+Computed in memory from the same cache, writing nothing. The figures for all and none reproduce the index
+exactly. Which source types get their context:
+
+| Enriched | recall@5 | recall@10 | MRR |
+|---|---|---|---|
+| None (plain) | 0.750 | 0.832 | 0.608 |
+| All | 0.742 | 0.837 | 0.610 |
+| Variants only | 0.805 | 0.852 | 0.654 |
+| Products only | 0.719 | 0.852 | 0.572 |
+| Reviews only | 0.727 | 0.816 | 0.581 |
+| Documents only | 0.734 | 0.832 | 0.623 |
+| All but reviews | 0.789 | 0.852 | 0.649 |
+| All but products | 0.773 | 0.840 | 0.629 |
+| All but documents | 0.750 | 0.837 | 0.595 |
+| All but variants | 0.641 | 0.832 | 0.543 |
+
+These were chosen after seeing the result, on the same 64 items, so they say where to look and do not
+prove a gain. The likely reading is not tested: a review's sentence names the product, which may lift
+reviews past the product's own chunks, while a variant line has little text of its own.

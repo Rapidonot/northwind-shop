@@ -53,6 +53,10 @@ The runner settles a 429 at worst case and the proxy drops `retry-after`, so the
 stop at 150 rate-limit replies. SDK retries are off, because a hidden retry is a hidden charge.
 `thinking` stays unset, since the runner refuses `disabled`, and `effort: low` keeps output short.
 
+## Result
+
+The run cost $0.113222. recall@5 was 0.742 against 0.750 plain, so the RAG-02 criterion was not met.
+
 ## Not decided here
 
 Switching the shared index to enriched. That changes saved contexts and needs `make eval-snapshot`,
