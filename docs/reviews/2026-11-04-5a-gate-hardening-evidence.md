@@ -1,8 +1,8 @@
 # Row 5a gate hardening: evidence (2026-11-04)
 
-**Status:** rig runs 2 and 3 are below. The proposal is installed (PR #19, `cf31e00`). The post-install
-checks passed in the linked worktree; `make runner-check` in the main checkout is the one left. Results
-are under "Post-install results". Decision: `docs/decisions/0006-eval-gate-hardening.md`.
+**Status:** row 5a is done. Rig runs 2 and 3 are below. The proposal is installed (PR #19, `cf31e00`), and
+the post-install checks passed: see "Post-install results". Open findings are in row 5b. Decision:
+`docs/decisions/0006-eval-gate-hardening.md`.
 
 ## Make expansion, failing test first
 
@@ -297,11 +297,12 @@ auto-mode session the user set up for these checks. The user declined each promp
 | Sandboxed write to a new file under `evals/baselines` | Refused: `Operation not permitted`, by `touch` and by a shell redirect |
 | `make runner-check` in the linked worktree | Exit 0, 0 problem(s), so `gitdir` is refused |
 | `make test` under the new `denyWrite` | Passed, as part of `make ci` |
-| `make runner-check` in the main checkout | **Not run.** It needs a session in that checkout |
+| `make runner-check` in the main checkout | 0 problems, reported by the user from a session there |
 
 `git branch -D` printed `could not lock config file …/.git/config`, because the sandbox refuses that
-file, and still deleted the branch. The same refusal should apply to anything else that writes
-`.git/config`, such as `git push -u`, which is the user's step anyway.
+file, and still deleted the branch. `git branch <name> origin/main` was refused the same way when
+writing upstream tracking, and left the branch with no upstream. So the stop rule now covers those
+strings, and `/req-start` needs `--no-track`, which the user is changing.
 
 **Decisions by the user, 2026-11-05:**
 
@@ -310,8 +311,7 @@ file, and still deleted the branch. The same refusal should apply to anything el
 - Recovery step 3 was read by the user's advisor, and has had no `security-reviewer` pass.
 - The `main()` test commit gets no further review.
 
-**GitHub CI on PRs #18 and #19:** not recorded. The user's message held an unfilled placeholder, and
-Claude cannot read the result.
+**GitHub CI on PRs #18 and #19:** green, reported by the user. Claude cannot read it directly.
 
 ## Rig results
 
