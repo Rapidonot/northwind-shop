@@ -1,7 +1,8 @@
 # FOUND-3 evidence: scope decisions, stop, reviews and failing-first log
 
 Date: 2026-11-05, refreshed 2026-11-06 · Branch: `req/FOUND-3-backend-scaffold` · Base: `f50f7c8`, then
-`6f920a1` from the merge in `30ef7f1` (see "Refresh after main")
+`6f920a1` from the merge in `30ef7f1` (see "Refresh after main"), then `0a0e096` from the merge in
+`e1f0919` (see "Refresh after GOV-1")
 Row 19, narrowed by the user, so **partial**. A commit can't name its own SHA, so the gate report gives
 the final head and the `make ci` and `make eval-gate` results at it.
 
@@ -453,4 +454,27 @@ two places in the log. Claude resolved it keeping both sides and committed it as
   `northwind_backend`, and its source opens no network, database or environment access.
 - **Not changed:** the three docs' baseline line stays `6f920a1`, because
   `test_the_three_docs_share_one_baseline` ties them together, and only the row was in scope.
+- **The database:** `make ci` and `make eval-gate` ran with no `DATABASE_URL` override on the command line,
+  unlike part 1. The shared `northwind` was already on `0002`, so the reason for a scratch database had gone,
+  and none was made. Its migrations, rows, index versions and schemas were identical before and after.
+- **At `04a9369`, make's own exit codes:** `make ci` 0 (3614 passed, 22 xfailed, 34 portal, 96 integration,
+  scan clean, `eval-integrity` passed against `origin/main`); `make eval-gate` 0, equal to the baseline on all
+  seven metrics, 100/100 replayed, stale 0. Spend $1.150794 before and after. These logs carry no head line;
+  `advisor-reviewer` placed them at `04a9369` from the reflog and the count (3453 + 161).
+- **Failing first:** the one new requirement was seen failing, 1 failed and 160 passed, and then passing,
+  161 passed. No log file was kept: the record is a copy of the session's output. No test changed.
 - **Results at the reviewed head:** in the gate report, which names that head.
+
+**`advisor-reviewer` at `04a9369`** (scoped to the commits after `d399b32`, so it has now read `d77ee3c`;
+`findings`): no high or critical, four lows.
+
+| # | Sev | Finding | Outcome |
+|---|---|---|---|
+| 1 | Low | `data-flow.md` says nothing reads prices and stock on main, which stops being true at this merge, because the generator reads both | The new row now says so. The older line is left alone, and the gate report lists it |
+| 2 | Low | Row 19 pointed to results in the last FOUND-3 log line, which held none | Results at `04a9369` added to that line |
+| 3 | Low | This file's header still gave `6f920a1` as the base | Corrected |
+| 4 | Low | Four wordings in the row were looser than the code | Reworded; `cli.py` and `_base.py` cited |
+
+It could not confirm two statements in the part 1 section: that the mutants began at about 18:23, and that
+only `advisor-reviewer` was running at 18:18:41. No log has a timestamp for either, so they rest on this
+session's account.
