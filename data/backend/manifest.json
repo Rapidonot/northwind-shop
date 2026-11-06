@@ -1,0 +1,16 @@
+{
+  "backend_data_version": 1,
+  "counts": {
+    "orders": 1000,
+    "shoppers": 200,
+    "tracking": 900
+  },
+  "files": {
+    "orders.jsonl": "c97fcdce1b216a768ba53845e1e212fa74206ec7925d28c7b75af417cf406db2",
+    "shoppers.jsonl": "3cde1288649d2b906b60d86cd6e941bcee8a9f10533b694773a84ebc6c10a260",
+    "tracking.jsonl": "9879b56f3eaf476327cf8f69a200ef1ad6cc1c26dbabe395fa0a6b4ca6070e4f"
+  },
+  "generator": "northwind_backend",
+  "seed": 20261105,
+  "source_dataset_sha256": "36951eaef8dea2570fa385b965d2fdfacb67fe3b2b8cec2cbc8b5e1ba8de4f68"
+}
