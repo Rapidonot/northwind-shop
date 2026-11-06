@@ -437,3 +437,20 @@ strings can't be shown complete. `advisor-reviewer` read the reflog: no `merge`,
 the wording of the four lows, because no file held it.
 
 The stopped note gives the final head and the `make ci` and `make eval-gate` results at it.
+
+## Refresh after GOV-1 (2026-11-06)
+
+The user merged `origin/main` at `0a0e096` (GOV-1) into this worktree. It stopped on `PROGRESS.md` only, at
+two places in the log. Claude resolved it keeping both sides and committed it as `e1f0919`. The merge added
+`docs/governance/`, `tests/governance/` and `COVERAGE.md` changes, and no source, Makefile, `evals` or
+`pyproject.toml` change, so the mutant and planted-data passes at `a953b20` were not repeated.
+
+- **What `tests/governance` asked for:** after the merge, 1 failed and 160 passed. The failure was
+  `test_every_service_directory_has_a_row`, for `services/backend/`. Nothing asks for tool-register rows:
+  the register tests compare against Makefile targets and `@tool(` in the code, and FOUND-3 adds neither.
+- **The row:** its Status says row #19 and `partial`, not "On main", so it reads true before and after the
+  merge. Its claims were checked against the code: outside its own tests nothing imports
+  `northwind_backend`, and its source opens no network, database or environment access.
+- **Not changed:** the three docs' baseline line stays `6f920a1`, because
+  `test_the_three_docs_share_one_baseline` ties them together, and only the row was in scope.
+- **Results at the reviewed head:** in the gate report, which names that head.
