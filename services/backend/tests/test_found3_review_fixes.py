@@ -1,8 +1,8 @@
 """FOUND-3: tests from the security-reviewer findings.
 
 Some of these failed before their fix. The others pin behaviour a fix relies on and passed from the
-start. Removing a guard made most of those fail, but four are named by no mutant, so they have not
-been seen failing. The evidence file says which is which.
+start. Removing a guard made those fail too, four of them only in a separate run without `-x`. The
+evidence file says which is which.
 """
 
 from __future__ import annotations
