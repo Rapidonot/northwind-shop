@@ -75,10 +75,15 @@ class Chunk:
     metadata: ChunkMetadata
     parent_id: str | None = None
     doc_type: str | None = None
+    # Generated, and only for finding the chunk (RAG-02). Kept out of `text` on purpose: `text`
+    # is what a model reads and cites, so generated words never reach an answer (hard rules 5, 6).
+    context: str | None = None
 
     def __post_init__(self) -> None:
         if not self.text.strip():
             raise ChunkError(f"{self.chunk_id}: empty text")
+        if self.context is not None and not self.context.strip():
+            raise ChunkError(f"{self.chunk_id}: use None for no context, got {self.context!r}")
 
     @property
     def chunk_id(self) -> str:
@@ -90,13 +95,25 @@ class Chunk:
         return hashlib.sha256(self.text.encode("utf-8")).hexdigest()
 
     @property
+    def embed_text(self) -> str:
+        """What gets embedded: the context, when there is one, in front of the text."""
+        return f"{self.context}\n\n{self.text}" if self.context else self.text
+
+    @property
+    def embed_hash(self) -> str:
+        return hashlib.sha256(self.embed_text.encode("utf-8")).hexdigest()
+
+    @property
     def content_hash(self) -> str:
-        """Covers everything stored for the chunk except the embedding."""
-        payload = {
+        """Covers everything stored for the chunk except the embedding. A plain chunk hashes as it
+        did before RAG-02, so a plain index keeps its version."""
+        payload: dict[str, object] = {
             "text_hash": self.text_hash,
             "parent_id": self.parent_id,
             "doc_type": self.doc_type,
             "metadata": asdict(self.metadata),
         }
+        if self.context is not None:
+            payload["context"] = self.context
         canonical = json.dumps(payload, sort_keys=True, default=str, ensure_ascii=False)
         return hashlib.sha256(canonical.encode("utf-8")).hexdigest()

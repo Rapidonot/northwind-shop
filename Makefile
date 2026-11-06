@@ -57,10 +57,10 @@ SCAN_PYTHON := $(RUNNER_PYTHON)
 MODEL_PYTHON := .venv-model/bin/python -I
 endif
 
-.PHONY: help setup up down dev dev-gateway dev-portal data model ingest fmt lint test \
+.PHONY: help setup up down dev dev-gateway dev-portal data model ingest ingest-enriched enrich fmt lint test \
 	test-integration ci scan-cassettes llm-spend llm-proxy llm-runner runner-sync runner-check \
 	ship review-diff record eval-live eval-rescore eval-gate eval-integrity eval-gate-stale-ok eval-promote \
-	eval-snapshot eval-review-list e2e e2e-scripted
+	eval-snapshot eval-review-list eval-enrichment-report e2e e2e-scripted
 
 # A stable cache, not fastembed's temp-dir default: Claude's sandbox has a different temp dir and
 # cannot reach the model's download hosts, so `make -C ~/.northwind/runner model` fills this (CC-27).
@@ -105,6 +105,9 @@ model: ## Pre-fetch the embedding model (own terminal, from the runner clone onl
 ingest: ## Load data/fixtures into the RAG index (needs `make up`; idempotent; RAG-01)
 	uv run python -m northwind_rag.cli --fixtures data/fixtures
 
+ingest-enriched: ## Load data/fixtures with cached context into its own database (RAG-02; no LLM)
+	uv run python -m northwind_rag.cli --fixtures data/fixtures --enriched
+
 fmt: ## Auto-format and auto-fix Python
 	uv run ruff format
 	uv run ruff check --fix
@@ -127,7 +130,7 @@ test-integration: ## Integration tests against the local stack (run `make up` fi
 
 # CASSETTES_DIR scans a worktree's cassettes from the runner clone, where the key-fragment check can
 # run. The walk follows no symlink and findings carry no matched text (decision 0005).
-scan-cassettes: ## Secret/PAN scan of cassettes, ledger and proxy log (FOUND-2; CASSETTES_DIR=/abs/path)
+scan-cassettes: ## Secret/PAN scan of cassettes, data/enrichment, ledger and proxy log (FOUND-2; CASSETTES_DIR=/abs/path)
 	@[[ -z "$$CASSETTES_DIR" || "$$CASSETTES_DIR" =~ ^/[A-Za-z0-9._/-]+$$ ]] || (echo "usage: make scan-cassettes CASSETTES_DIR=/absolute/path" && exit 2)
 	$(SCAN_PYTHON) -m northwind_llm_replay.cli scan $${CASSETTES_DIR:+--cassettes-dir "$$CASSETTES_DIR"}
 
@@ -213,6 +216,12 @@ eval-live: ## Run answer evals live and record them (EVAL_SLICE=<n>; spends API 
 	@[[ "$$EVAL_SLICE" =~ ^[0-9]+$$ ]] || (echo "usage: make eval-live EVAL_SLICE=<n>" && exit 2)
 	LLM_MODE=record uv run python -m northwind_evals.cli run --slice "$$EVAL_SLICE"
 
+# SPENDS API CREDIT, through the window you opened with `llm-runner SUITE=rag-enrichment`. Fills
+# data/enrichment; chunks with an entry make no call, so a second run spends nothing (RAG-02,
+# decision 0010).
+enrich: ## Generate chunk context with Haiku (spends API credit through an open window)
+	LLM_MODE=live uv run python -m northwind_evals.enrich
+
 # Replay only. Needs the assistant-smoke cassette, and a browser (`playwright install chromium`).
 e2e: ingest ## Smoke test: assistant in replay, then Playwright against a replayed answer (SA-02)
 	LLM_MODE=replay uv run pytest -m e2e
@@ -250,6 +259,9 @@ eval-promote: ## Replace the baseline in CHECKOUT with its candidate (CHECKOUT=/
 
 eval-snapshot: ## Save each eval item's retrieved context, the input for answers (no LLM; RAG-12)
 	uv run python -m northwind_evals.cli snapshot
+
+eval-enrichment-report: ## Compare the enriched index with the plain one; changes neither (RAG-02)
+	uv run python -m northwind_evals.cli enrichment-report
 
 eval-review-list: ## Write the list of eval items waiting for human review (RAG-12)
 	uv run python -m northwind_evals.cli review-list

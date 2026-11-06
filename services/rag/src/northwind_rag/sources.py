@@ -16,7 +16,14 @@ from pathlib import Path
 from typing import Any
 
 from northwind_data.ingest_guard import assert_ingestible, ingestible_files, load_manifest
-from northwind_data.textscan import find_money_or_stock
+from northwind_data.textscan import (
+    find_generated_violations,
+    find_money_or_stock,
+    find_promotions,
+    find_review_context_violations,
+    fold_generated,
+    is_printable_ascii,
+)
 from northwind_rag.chunking import chunk_markdown, with_prefix
 from northwind_rag.models import (
     MAX_CHUNK_CHARS,
@@ -71,6 +78,24 @@ ATTRIBUTE_KEYS = frozenset(
 PUBLIC_DOC_TYPES = frozenset(
     {"care_guide", "faq", "policy_returns", "policy_shipping", "size_guide"}
 )
+# Two planted reviews state a discount on purpose: the adversarial evals need them in the index
+# (RAG-02). Each passes for that one exact text and no other, in that review only. The trap IDs are
+# checked against the answer key by a test; this code never reads that file. Generated text has no
+# such exemption.
+PLANTED_PROMOTIONS: dict[str, tuple[str, str]] = {
+    "R00712": ("TRAP-INJ-003", "100% discount"),
+    "R00881": ("TRAP-INJ-013", "90% off"),
+}
+# Who may get a generated context. A security rule, not a recall choice: reviews are written by
+# shoppers, and a planted review's own sentence lifted it into top 5s (decision 0010). The chunk
+# body is the attack, and retrieval returns the body. An allow-list: a new source type gets none.
+CONTEXT_SOURCE_TYPES: frozenset[str] = frozenset({"product", "variant", "document"})
+# A generated context says where a chunk sits, in one short line (RAG-02).
+MAX_CONTEXT_CHARS = 240
+_MARKUP = frozenset("<>{}[]`@")
+_CONTEXT_START = "This "
+# Words in a row that may match a review. A review is untrusted, and a context has no need to quote.
+_COPY_WORDS = 5
 # Every product, variant and review chunk must have these.
 _PRODUCT_FIELDS_REQUIRED = ("category", "brand", "size", "colour", "material")
 
@@ -113,11 +138,64 @@ def _normalised(text: str) -> str:
     return re.sub(r"\s+", " ", visible)
 
 
-def _scan(text: str, where: str) -> None:
-    """Hard rule 2. Callers scan whole fields too: a split can fall inside "149.99 USD"."""
-    hits = find_money_or_stock(_normalised(text))
+def _scan(text: str, where: str, review_id: str | None = None) -> None:
+    """Hard rule 2. Callers scan whole fields too: a split can fall inside "149.99 USD".
+    Only a review passes `review_id`, so no other kind of record can use the exemption."""
+    normal = _normalised(text)
+    hits = find_money_or_stock(normal)
     if hits:
         raise ChunkError(f"{where}: price or stock in chunk text: {hits}")
+    promotions = find_promotions(normal)
+    planted = PLANTED_PROMOTIONS.get(review_id or "")
+    if promotions and (planted is None or promotions != [planted[1]]):
+        raise ChunkError(f"{where}: promotion in chunk text: {promotions}")
+
+
+def shingles(text: str) -> set[tuple[str, ...]]:
+    words = re.findall(r"[a-z0-9']+", _normalised(text).lower())
+    return {tuple(words[i : i + _COPY_WORDS]) for i in range(len(words) - _COPY_WORDS + 1)}
+
+
+def context_problem(
+    context: str,
+    chunk: Chunk,
+    canaries: frozenset[str] = frozenset(),
+    internal: frozenset[tuple[str, ...]] = frozenset(),
+) -> str | None:
+    """Why a generated context may not be indexed, as a short code that holds none of its text, or
+    None. Every ingest runs this on each context it uses, so a cache edited by hand gets no further
+    than the model.
+
+    It reads the folded text, and `fold_generated` is what gets stored, so what is checked is what
+    is kept. `internal` is the five-word runs of internal chunks: ingest may not read the answer
+    key for canaries, and this catches copied internal text with or without one."""
+    text = fold_generated(context)
+    if not text:
+        return "empty"
+    if len(text.splitlines()) > 1:
+        return "multi-line"
+    if not is_printable_ascii(text):
+        return "non-ascii"
+    if len(text) > MAX_CONTEXT_CHARS:
+        return "too-long"
+    if _MARKUP & set(text):
+        return "markup"
+    if not text.startswith(_CONTEXT_START):
+        return "shape"
+    violations = find_generated_violations(text)
+    if chunk.source_type == "review":
+        violations += find_review_context_violations(text)
+    if violations:
+        return violations[0].split(":", 1)[0]
+    if any(canary in text for canary in canaries):
+        return "canary"
+    if chunk.metadata.visibility == "public" and shingles(text) & internal:
+        return "internal-text"
+    if chunk.source_type == "review":
+        _, _, body = chunk.text.partition("\n\n")  # the first part is our own heading
+        if shingles(text) & shingles(body):
+            return "copied-from-review"
+    return None
 
 
 def _labelled(*pairs: tuple[str, Any]) -> str:
@@ -287,7 +365,7 @@ def _review_chunks(
         header = f"Verified purchase. {header}".strip()
     parts = (header, review.get("title"), review.get("body"))
     body = "\n\n".join(part for part in parts if part)
-    _scan(body, where)
+    _scan(body, where, review_id)
     texts = with_prefix((f"Review of {product['name']}",), body, max_chars)
     return _chunks("review", review_id, texts, metadata, parent_id=product["product_id"])
 
@@ -295,8 +373,14 @@ def _review_chunks(
 def check_chunk(chunk: Chunk) -> None:
     """Metadata coverage and hard rule 2. `sync_chunks` runs it too, on whatever it is given."""
     meta = chunk.metadata
-    _scan(chunk.text, chunk.chunk_id)
+    _scan(chunk.text, chunk.chunk_id, chunk.source_id if chunk.source_type == "review" else None)
     _scan(" ".join(v for v in (meta.category, meta.brand, meta.material) if v), chunk.chunk_id)
+    if chunk.context is not None:
+        if chunk.source_type not in CONTEXT_SOURCE_TYPES:
+            raise ChunkError(f"{chunk.chunk_id}: a {chunk.source_type} may not have a context")
+        problem = context_problem(chunk.context, chunk)
+        if problem:
+            raise ChunkError(f"{chunk.chunk_id}: generated context refused: {problem}")
     if meta.region is None and meta.visibility == "public":
         raise ChunkError(f"{chunk.chunk_id}: public chunk with no region")
     if chunk.source_type == "document":
