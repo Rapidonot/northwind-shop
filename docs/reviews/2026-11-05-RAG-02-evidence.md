@@ -235,3 +235,25 @@ allow-list change, and a scoped re-review of that. `advisor-reviewer` ran on the
 
 The user's key-fragment scan of `data/enrichment`, from the clone: `scan clean: 0 finding(s)`
 `[regex + key-fragment, 7 canaries]`. It ran on the cache as committed, which has not changed since.
+
+## The merge of 5b (2026-11-06)
+
+The user ran `git merge origin/main` (`a9baf8e`). `PROGRESS.md` and `COVERAGE.md` conflicted, and were
+resolved keeping both sides, with 5b's inserted text kept byte for byte (asserted by script). 5b took
+decision 0009, so the enrichment decision is 0010, and only this row's references moved. Merge commit
+`c9c28f6`, parents `b802eb2` and `a9baf8e`.
+
+The mutant totals above stand at 50: the last 6 ran after the last commit before the merge.
+
+At `c9c28f6`, on `northwind_rag02_plain`, make's own exit codes: `make ci` 0 (3246 passed, 22 xfailed, 34
+portal, 96 integration), `make eval-gate` 0, equal to the baseline, 100/100 replayed, `make runner-check` 0,
+21 directories, 0 problem(s).
+
+`Guard / eval-gate-main`, simulated locally: main's `evals/src` from `git archive a9baf8e`, ahead on
+`PYTHONPATH`, with `PYTHONSAFEPATH` and `UV_NO_SYNC` as in the job. `northwind_evals.enrich` does not load.
+This branch's `northwind_rag.cli` kept index version `c9e30984a7723d23`, with nothing written. Main's gate:
+exit 0, all seven metrics equal to the baseline. What the simulation is not: macOS, not Linux, and on an
+existing index, not a fresh one.
+
+`security-reviewer` on the merged `Makefile`, `CLAUDE.md` and both `cli.py` files: no high or critical. Ten
+lows, in `PROGRESS.md`.
