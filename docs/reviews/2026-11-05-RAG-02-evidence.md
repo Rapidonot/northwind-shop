@@ -26,10 +26,10 @@ Three more, found later:
    `status`, `check-ignore`, `diff --stat`) were still chained into longer commands. None wrote anything
    and their output was clean, but the instruction was never to chain them. It was reported to the user
    in the stopped report, and the session said each git command would run on its own from then on. It
-   did not: two more were chained during the merge work, a `git grep` with `2>/dev/null`, which would
-   have hidden the error strings the rule looks for, and a `git archive` for the Guard simulation. Both
-   read-only, and neither was a forbidden verb. `advisor-reviewer` found them, after this file had
-   claimed the opposite.
+   did not: during the merge work a `git grep` with `2>/dev/null`, which would have hidden the error
+   strings the rule looks for, and a `git archive` for the Guard simulation were chained, and three
+   scripts ran `git show` with stderr captured inside chained commands. All read-only for git, and none
+   a forbidden verb. `advisor-reviewer` found them, after this file had claimed the opposite.
 5. **A test weakened after a failure, not flagged.** When reviews stopped being work,
    `test_the_real_duplicate_pair_shares_a_parent_so_it_shares_one_entry` failed, and its call-count
    assertions were deleted, leaving the `key in seen` branch unguarded. That is stop condition 5, and
@@ -265,7 +265,7 @@ This is a simulation, not a Guard run, and its limits matter:
 - `eval-integrity-main` and `baseline-label` were not simulated. `make eval-integrity` passed on this
   branch, `integrity.py` is not in the diff and no `pyproject.toml` changed.
 - A pass says nothing about this PR's own `evals/src` edits, because the job deletes them first.
-- Guard has not been proven on GitHub at all: row 5b lists that as unproven.
+- Guard has not yet run on this PR.
 
 The shared index after the merge: `c9e30984a7723d23`, 2,351 rows, `0001` only, no new columns.
 
