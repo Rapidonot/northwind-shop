@@ -6,8 +6,10 @@ Each threat has either a control that exists today, with its evidence, or `open`
 decisions and cited, not re-derived.
 
 **Baseline:** main at `6f920a1`, 2026-11-06, with 5b (decision 0009) and #7 (decision 0010) landed. Landed
-is not done: both rows are `partial` in `PROGRESS.md`, and the cells below say what is left. Rows are
-`PROGRESS.md` rows. A boundary with nothing built says so: its threats are `open` by design, not by
+is not done: both rows are `partial` in `PROGRESS.md`, and the cells below say what is left. Landed means
+the code is on main and its tests pass. `PROGRESS.md` has no record of `Guard` running on GitHub, so a control
+that rests on it is unproven there. The runner clone was read at `6f920a1` on 2026-11-06, so what loads there
+has moved. Rows are `PROGRESS.md` rows. A boundary with nothing built says so: its threats are `open` by design, not by
 oversight.
 
 **OWASP edition:** LLM Top 10 **2026**, from https://genai.owasp.org/resource/owasp-genai-llm-top-10-2026/.
@@ -82,7 +84,7 @@ index exists only in `northwind_enriched` (decision 0010).
 | Spoofing | A review poses as a policy or system source | LLM01 | Source text escaped and labelled: `services/assistant/tests/test_tool_loop.py::test_the_retrieved_text_is_labelled_and_escaped_data`. Reviews cannot set policy: `services/assistant/tests/test_smoke_e2e.py::test_a_review_cannot_set_the_return_policy`. Fullwidth lookalikes of a source tag: **open**, medium, unconfirmed, #9 (NFKC) and #13 (RAG-13 review, scoped check 1) |
 | Tampering | Planted instruction in a review is followed or relayed | LLM01 | R00712 not followed in four recordings; that is one review of 15 planted traps. **Open:** its meaning still reaches the shopper; the test is a strict xfail, and the output check is the primary control, #13 (decision 0007; RAG-13 review) |
 | Tampering | Poisoned content in the index | LLM05 | Ingest guard (`services/rag/tests/test_sources.py::test_pipeline_runs_the_ingest_guard`), allow-listed fixtures (`services/rag/tests/test_sources.py::test_guard_refuses_a_file_not_listed_as_ingestible`), no injection filter at ingest on purpose. Flagging at ingestion: **open**, Window B NFR-03. `dataset_sha256` copied but not verified: **open**, #10 (`PROGRESS.md` row 3) |
-| Tampering | Generated context lifts a planted review in ranking | LLM09 | Landed, #7, on the isolated index only. Reviews get no context: `services/rag/tests/test_context_allowlist.py::test_a_review_holding_a_context_is_refused_at_the_index`, `services/rag/tests/test_context_allowlist.py::test_the_real_cache_gives_no_review_a_context`. Context is ranking-only: `services/rag/tests/test_context_checks.py::test_what_retrieval_returns_has_no_context_field`. That removes the lift, not the planted reviews: 23 injection-trap appearances in a top 5 against 20 plain. The switch to the shared index carries five conditions: **open**, #8 (decision 0010, "Reviews get no context"; `PROGRESS.md` row 8) |
+| Tampering | Generated context lifts a planted review in ranking | LLM09 | Landed, #7, on the isolated index only. Reviews get no context: `services/rag/tests/test_context_allowlist.py::test_a_review_holding_a_context_is_refused_at_the_index`, `services/rag/tests/test_context_allowlist.py::test_the_real_cache_gives_no_review_a_context`. Context is ranking-only: `services/rag/tests/test_context_checks.py::test_what_retrieval_returns_has_no_context_field`. That pin misses raw SQL and `asdict(chunk)`, so tightening it is a prerequisite of #10 (decision 0010, rule 4). Reviews getting none removes the lift, not the planted reviews: 23 injection-trap appearances in a top 5 against 20 plain. The switch to the shared index carries five conditions: **open**, #8 (decision 0010, "Reviews get no context"; `PROGRESS.md` row 8) |
 | Repudiation | An answer cannot be traced to its sources | LLM07 | Citations limited to sources returned this turn: `services/assistant/tests/test_tool_loop.py::test_an_invented_citation_is_dropped`. Uncited claims stay in the text: **open**, #13 (SA-02 review, finding 5) |
 | Information disclosure | Internal documents reach a shopper | LLM02, LLM09 | Filter by server-bound audience: `services/rag/tests/test_retrieve_context.py::test_no_internal_chunk_reaches_a_shopper_even_when_quoted_exactly`, `services/rag/tests/test_retrieve_context_isolation.py::test_an_internal_document_in_the_shoppers_own_region_is_still_hidden`. Red-team set: **open**, #9. Same rule on catalog tools: **open**, #10 |
 | Information disclosure | Another region's policy reaches a shopper | LLM07 | `services/rag/tests/test_retrieve_context.py::test_one_context_never_holds_two_regions_return_rules`. Evals still score an unfiltered context: **open**, #8 |
@@ -163,7 +165,7 @@ review text and, from #7's window, internal-only text. Which data crosses is in 
 | Tampering | Request widened to bill beyond the reservation | LLM06 | Allow-listed fields, models and content blocks; no images, documents or server tools (decision 0005, "What the runner forwards"). The budget bound rests on those lists (decision 0005, "Limits") |
 | Tampering | A model response carries a hostile payload to the shopper | LLM10 | The portal renders plain text through React, with no raw HTML or markdown rendering (`apps/portal/src/Chat.tsx`). Output check: **open**, #13 |
 | Repudiation | Spend cannot be attributed | LLM06 | Ledger per call, by suite and model; `make llm-spend`. Per-answer telemetry: `PROGRESS.md` row 6 |
-| Information disclosure | Key leaks in a request or response | LLM02 | Fragment check on both, and a hit closes the window and prints `ROTATE THE KEY` (decision 0005, "Key fragments"). Sees text, not encodings: accepted (decision 0005, "Limits"). `readable_forms` now splits on SSE line ends only: landed, #7, `services/llm-replay/tests/test_runner.py::test_a_line_separator_in_a_delta_does_not_drop_it_from_the_joined_text`. `parse_sse_usage` still uses `splitlines()`, which cannot hide a key: **open**, low (`PROGRESS.md`, "Open items") |
+| Information disclosure | Key leaks in a request or response | LLM02 | Fragment check on both, and a hit closes the window and prints `ROTATE THE KEY` (decision 0005, "Key fragments"). Sees text, not encodings: accepted (decision 0005, "Limits"). `readable_forms` now splits on SSE line ends only: landed, #7, `services/llm-replay/tests/test_runner.py::test_a_line_separator_in_a_delta_does_not_drop_it_from_the_joined_text`. `parse_sse_usage` still uses `splitlines()`, which cannot hide a key: **open**, low, #18 (`PROGRESS.md`, "Open items") |
 | Information disclosure | Card data in a prompt | LLM02 | Refused before the model: boundary 1. Refused in tool arguments: `services/assistant/tests/test_tool_loop.py::test_card_data_in_a_tool_argument_is_refused_and_searches_nothing`. Retrieved text is a third route: no PAN scan at ingestion, so card digits in a review reach the model on the assistant path: **open**, Window B P6, NFR-04 (`PROGRESS.md` row 3) |
 | Information disclosure | Internal-only text sent to the provider | LLM02 | At runtime, document bodies have no path: `services/assistant/tests/test_context.py::test_no_canary_reaches_the_model` proves the retrieval filter. Names and topics have crossed, through adversarial eval items, and `_context_leaks` does not stop plain text (`docs/governance/data-flow.md`). **Landed, #7: document text went to Haiku in that row's window**: 11 entries in `data/enrichment/internal.jsonl`, no cassette and no proxy log, so the recordings cannot show it (decision 0010, rule 3). It stays synthetic, and hard rule 7 covers shoppers, not the provider. Whether that is acceptable beyond the lab: **open**, needs the user |
 | Information disclosure | Shopper data retained by the provider | LLM02 | Retention `unconfirmed`: **open**, Window B P6, NFR-07. All data synthetic (hard rule 3). Masking before model calls: **open**, Window B NFR-05 |
@@ -176,11 +178,12 @@ Accepted or open, as recorded. Not re-derived; severity is the source's.
 
 | Residual | Severity | State | Source |
 |---|---|---|---|
-| Promotion from a checkout runs session-editable code unsandboxed | High | Closed in code by 5b; nobody promotes until the left items below are done | Decisions 0006, 0009; 5a evidence, finding 1 |
-| `denyWrite` protects paths, not committed content | High | Closed through `ship` by 5b; for a merge outside `ship`, only once the required checks are added | Decisions 0006, 0009; 5a evidence, finding 2 |
-| CI runs the PR's own gate and integrity code | Not rated | Closed by `Guard`, which runs main's copy. `CI / eval-gate` keeps running the PR's own, on purpose | Decision 0009, clauses 11, 12, 14 |
-| `eval-gate-main` is not a boundary; `Guard` and its scripts are PR-editable; promotion cannot prove scores are real | Not rated | Accepted by the user | Decision 0009, "Residual risk, stated" |
-| Row 5b's left items: `Guard` on GitHub, the first real `ship`, the settings install, `eval-promote CHECK=1` on the clone, the pre-push reinstall, the required checks | Not rated | Open, 5b; no later record in `PROGRESS.md` | `PROGRESS.md` row 5b and its log |
+| Promotion from a checkout runs session-editable code unsandboxed | High | Landed in code, 5b; unproven until the left items below are done, and nobody promotes until then | Decisions 0006, 0009; 5a evidence, finding 1 |
+| `denyWrite` protects paths, not committed content | High | Landed in `ship` and `Guard`, 5b; unproven on GitHub. For a merge outside `ship`, it holds only once the required checks are added | Decisions 0006, 0009; 5a evidence, finding 2 |
+| CI runs the PR's own gate and integrity code | Not rated | Landed in `Guard`, which runs main's copy; unproven on GitHub. `CI / eval-gate` keeps running the PR's own, on purpose | Decision 0009, clauses 11, 12, 14 |
+| `eval-gate-main` is not a boundary; `Guard` and its scripts are PR-editable | Not rated | Accepted by the user | Decision 0009, "Residual risk, stated" |
+| Promotion cannot prove scores are real: forged scores pass with a forged new cassette | Not rated | Open, AUTO-2, with the forged added cassette below | Decision 0009, "Residual risk, stated" |
+| Row 5b's left items: `Guard` on GitHub, the first real `ship`, the settings install, `make runner-check` in each checkout, `eval-promote CHECK=1` on the clone, the pre-push reinstall, the required checks | Not rated | Open, 5b; no later record in `PROGRESS.md` | `PROGRESS.md` row 5b and its log |
 | The F1 and F3 fixes in 5b had no security pass | Not rated | Recorded, by the user's decision | 5b evidence, "F1 and F3, decided by the user" |
 | Small retrieval drops have no check but the tolerance | Not rated | Open, #8 | Decision 0009, "Residual risk, stated" |
 | `services/llm-replay/src/northwind_llm_replay/runner_check.py` M1 to M3, L1 to L6 | Medium, low | Landed, 5b. Proves things only for an honest session | 5b evidence, "Failing first: runner_check.py" |
@@ -215,7 +218,8 @@ changed, so a row takes an item on only when its plan says so.
 |---|---|---|
 | `dataset_sha256` copied but not verified | #10 | Its index-manifest resource is the first reader of that manifest |
 | Embedding model not pinned to a revision | #18 | It freezes model IDs before the final recording |
-| Key-fragment scan reads `cassettes/` only, not a worktree's `.llm-proxy-log` or `evals/` | #18 | Its audit is the scan's full run, and it already owns the scanner fixes |
+| From the clone, the key-fragment scan covers `CASSETTES_DIR` only, not a worktree's `.llm-proxy-log`, `evals/` or `data/enrichment/` | #18 | Its audit is the scan's full run, and it already owns the scanner fixes |
+| `parse_sse_usage` still uses `splitlines()` | #18 | It sits in the proxy that records everything at #18 |
 | RAG-12 second-pass F3: the scanner reads raw text | #18 | `PROGRESS.md` row 4 says it overlaps #18's scanner work |
 | RAG-12 third-pass F7: repeated in-tolerance promotions can lower the bar | #8 | Its row now carries the retrieval drift check |
 | RAG-12 third-pass F8: answerer, judge and retriever IDs are stored, never compared | #13 | Its adapter changes the answerer and re-records all 100 items |
@@ -243,6 +247,7 @@ changed, so a row takes an item on only when its plan says so.
 | Whether internal-only text going to a provider is acceptable beyond a lab | needs the user | A policy call that no PRD requirement covers |
 | PRD §7 has no row for Northwind to the model provider. Boundary 7 fills that here; the PRD is unchanged | needs the user | Only the user changes the PRD |
 | What the device bridge can reach and keep | needs the user | Nothing in the repo records it |
+| Who approves `make eval-gate-stale-ok` | needs the user | The rule prompts the user, and no decision names an approver |
 
 ## Open items
 

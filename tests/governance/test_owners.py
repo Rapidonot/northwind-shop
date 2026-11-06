@@ -2,8 +2,8 @@
 
 The `Owners` table in `threat-model.md` holds what no `PROGRESS.md` row named. An owner is a real
 row, a Window B NFR, AUTO-2, or `needs the user`, each with a reason. These tests catch a made-up
-owner, a reason left blank, and a cell still calling 5b or #7 in flight. They cannot tell whether an
-owner is the right one, and they do not read the row's own text.
+owner, a reason left blank, a line calling 5b or #7 in flight, and an "In flight" section. They
+cannot tell whether an owner is the right one, and they do not read the row's own text.
 """
 
 from __future__ import annotations
@@ -25,6 +25,8 @@ NO_OWNER = re.compile(r"no row owns", re.IGNORECASE)
 BASELINE = re.compile(r"\*\*Baseline:\*\* main at `([0-9a-f]{7,40})`")
 # `#7`, `#7's` and `5b`, but not `#70` or `5bx`.
 LANDED_ROW = re.compile(r"(?<![\w#])(?:#7|5b)(?![\w])")
+
+IN_FLIGHT_HEADING = re.compile(r"^#+ .*in flight", re.IGNORECASE | re.M)
 
 ROW_OWNER = re.compile(r"#(\w+)")
 NFR_OWNER = re.compile(r"Window B P6, (NFR-\d\d)")
@@ -116,6 +118,12 @@ def test_no_doc_cites_a_branch_that_has_merged(name: str) -> None:
 @pytest.mark.parametrize("name", DOCS)
 def test_nothing_that_landed_is_called_in_flight(name: str) -> None:
     assert stale_lines((GOVERNANCE / name).read_text()) == []
+
+
+@pytest.mark.parametrize("name", DOCS)
+def test_no_doc_keeps_an_in_flight_section(name: str) -> None:
+    """A row in such a table need not say so itself, so the line check above cannot see it."""
+    assert IN_FLIGHT_HEADING.findall((GOVERNANCE / name).read_text()) == []
 
 
 def test_the_three_docs_share_one_baseline() -> None:
