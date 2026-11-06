@@ -1,6 +1,7 @@
 # FOUND-3 evidence: scope decisions, stop, reviews and failing-first log
 
-Date: 2026-11-05 · Branch: `req/FOUND-3-backend-scaffold` · Base: `f50f7c8`
+Date: 2026-11-05, refreshed 2026-11-06 · Branch: `req/FOUND-3-backend-scaffold` · Base: `f50f7c8`, then
+`6f920a1` from the merge in `30ef7f1` (see "Refresh after main")
 Row 19, narrowed by the user, so **partial**. A commit can't name its own SHA, so the gate report gives
 the final head and the `make ci` and `make eval-gate` results at it.
 
@@ -53,7 +54,7 @@ none of them and exited 0, so the tree did not change. The chain then resumed at
 | PRD backend replay labels (expected outcome, escalation flag) | Not generated: not asked for. On the left list |
 | Phone numbers on shoppers | Omitted: not asked for |
 | A regeneration target | None: no Makefile targets. `uv run python -m northwind_backend.cli` |
-| Refund cap values | Chosen here, none is given: USD 150.00, CAD 200.00, GBP 120.00, EUR 140.00, set in `DEFAULT_REFUND_CAPS` |
+| Refund cap values | Chosen here, none is given: USD 150.00, CAD 200.00, GBP 120.00, EUR 140.00, set in `DEFAULT_REFUND_CAPS`. **Accepted by the user as placeholders** on 2026-11-06, not as final policy |
 | Per-caller scoped views (security finding 3) | Not built, recorded. A partial-scope test per port was added |
 | Portal confirmation on the port (security finding 4) | Not built, recorded: a decision for the user |
 | Plan said every string argument goes through the card checks, including `reason` | Deviation: `refund` has no `reason` parameter, so there is nothing to check. `region`, `service` and currency skip `card_data_in` and are refused by allow-list or pattern instead, with fixed messages and nothing stored |
@@ -92,7 +93,8 @@ changes**. `advisor-reviewer` read them in the row review as a process read, not
 
 Finding 4 re-rates to **high** as soon as anything calls `authorize` or `capture` without a
 confirmation layer. Finding 3's per-caller views must share intents, store and caps, because the
-one-intent-per-order rule and the refund cap hold only within one instance.
+one-intent-per-order rule and the refund cap hold only within one instance. Both are now written into
+row #21 in `PROGRESS.md`, the first row to call these ports from an agent.
 
 **Row review** (`advisor-reviewer` at `b79caac`, `findings`): no high or critical, no stop condition.
 Three medium and five low, all about what the evidence proves. Handled in a second commit:
@@ -123,18 +125,27 @@ Seen failing before their fix, on real defects:
   `test_a_lost_key_cannot_charge_an_order_twice`, `test_a_dry_run_also_reports_an_order_already_authorized`,
   `test_track_refuses_an_unknown_carrier_prefix_without_raising`
 - 1 test from the re-review: `test_a_refused_second_authorization_does_not_promise_a_void_will_work`
-- 1 test from the row review: `test_a_fakes_dry_run_waits_for_a_real_call_and_then_sees_its_result`, with
-  the dry-run lock reverted (`assert waited`; the other 206 passed)
 
-Not a real defect, though earlier versions of this file listed it as one:
-`test_a_dry_run_waits_for_an_effect_in_progress` failed first, but `exclusive` did not exist yet, so it
-probably failed on the missing method, not on the race. The log holds only the `FAILED` line. Its proof
-is the `dry run holds the lock` mutant below.
+Seen failing only with a fix reverted, so not before its fix:
+
+- `test_a_fakes_dry_run_waits_for_a_real_call_and_then_sees_its_result`: written after the dry-run lock
+  was already in the code. With that line reverted it failed (`assert waited`; the other 206 passed)
+
+Seen failing, but not shown to have caught the defect, though earlier versions of this file listed it
+as doing so:
+
+- `test_a_dry_run_waits_for_an_effect_in_progress`: `exclusive` did not exist yet, so it probably failed
+  on the missing method, not on the race. The log holds only the `FAILED` line, so that can't be settled,
+  and the reported `RuntimeError` has not been reproduced. Its proof is the `dry run holds the lock`
+  mutant below.
 
 All other tests passed first time. That includes the partial-scope, voided-frees-the-order,
 declined-attempt and refund-reset tests. Mutants run with `-x`, so each one proves only the test it
 names, not every test that covers that guard. Many tests are named by no mutant, so they have not been
-seen failing at all.
+seen failing at all. In `test_found3_review_fixes.py` that is four tests:
+`test_a_declined_attempt_does_not_hold_the_order`, `test_a_read_only_fraud_credential_cannot_assess`,
+`test_a_tracking_only_carrier_credential_cannot_ship` and
+`test_the_refund_cap_holds_per_order_across_a_voided_attempt`.
 
 `test_found3_data_safety.py` reads the committed data, so no generator mutant reaches it. It was proved
 by planting one bad value at a time in `data/backend/`, restored by bytes (see below).
@@ -288,6 +299,36 @@ planted token gone: 1 failed: test_the_no_pan_checks_can_fail
 17 tests, 16 seen failing; never failed: ['test_the_host_brand_and_money_checks_can_fail']; data restored: True
 ```
 
+What that log proves, read strictly:
+
+- 15 tests failed on bad data.
+- `test_the_no_pan_checks_can_fail` failed only around its own plant, never because a detector missed
+  something. With `planted token gone` its setup failed (`planted != ...`, line 92). With `PAN in orders`
+  its exact match failed (line 94), because the data then held a second PAN. Those lines were read from a
+  direct call, not from the log.
+- `test_the_host_brand_and_money_checks_can_fail` never failed.
+- It proves tests, not every assertion. In this pass the `visibility` and `status` checks (hard rule 7)
+  never fired: `unknown variant` stops at the lookup, before them.
+
+So a second pass, added on 2026-11-06, fires those asserts one at a time. A public, active product can't
+be planted from `data/backend` alone, and the first assert would hide the other two, so it runs on
+scratch copies of `data/backend` and `data/fixtures`, with the module pointed at them. Each copy passes
+first. The real data is only read.
+
+```
+internal product on an order (P0009): fired line 164: assert product["visibility"] == "public"
+unreleased status on a public product: fired line 165: assert product["status"] == "active"
+internal variant on a public product: fired line 166: assert variant["visibility"] == "public"
+control with find_unsafe_hosts stubbed out: fired line 102: assert find_unsafe_hosts("marlo.alderwick.0001@mailbox.org")
+control with find_real_brands stubbed out: fired line 103: assert find_real_brands("a Patagonia jacket")
+control with find_money_or_stock stubbed out: fired line 104: assert find_money_or_stock("$19.99")
+data restored (never written): True
+```
+
+Each assert is seen firing once, on one plant, by calling the test function directly and not through
+pytest. Other assertions in the file, such as `variant["product_id"] == line["product_id"]`, are still
+not proved this way.
+
 ## Results
 
 At `b79caac`, the first commit, clean tree, make's own exit codes:
@@ -301,7 +342,9 @@ The second commit adds two tests and widens one, with no source change. The gate
 at the final head. On that tree:
 
 - FOUND-3 tagged tests: 207 passed, none skipped or xfailed.
-- Mutants: 76 of 76 distinct mutants killed. Planted data: 16 of 16 data-safety tests seen failing.
+- Mutants: 76 of 76 distinct mutants killed. Planted data: of 17 data-safety tests, 15 failed on bad data,
+  1 control failed only around its own plant, and 1 control was not seen failing on planted data (see the
+  planted-data section).
 - Spend: total $1.150794 before and after, 2,598 settled calls before and after. This row added no call,
   and every suite is unchanged. The $0.113222 above the $1.037572 in the AUTO-1 row is exactly suite
   `rag-enrichment`, another window's.
@@ -313,3 +356,31 @@ at the final head. On that tree:
 
 Control surface changed: root `pyproject.toml` and `uv.lock` (pre-approved),
 `services/backend/pyproject.toml` (approved afterwards, see scope decisions).
+
+## Refresh after main (2026-11-06)
+
+The user merged `origin/main` at `6f920a1` (5b and RAG-02) into this worktree. It stopped on `PROGRESS.md`
+only, in the log. Claude resolved it keeping both sides and committed it as `30ef7f1`, parents `1e8fb8a`
+and `6f920a1`. The base is now that ref, so "`origin/main` may be stale" above no longer describes it.
+
+- **Code:** one docstring in `test_found3_review_fixes.py`. No source or assertion changed, and
+  `services/backend/src` has the hash in the final pass above.
+- **The passes, on the merged tree:** mutants and planted data re-run, because the merge changed
+  `textscan.py`, which the data-safety tests use. Same source hash, 76 of 76 killed, 0 survived, the same
+  planted-data results, source and data restored. This replaces the earlier limit that no log tied these
+  passes to a head. The docstring edit came after them.
+- **`services/backend/pyproject.toml` and Guard:** `member_problems`, `workspace_problems` and
+  `member_config_problems` from `.github/workflows/guard/integrity-main.py` return no problems on this
+  tree, run locally on `python3 -I`, and refuse the file with a second build requirement or another
+  backend. The file itself is unchanged, and still has the same `[build-system]` as the seven other
+  members. This is a local call of those functions, not a Guard run.
+- **Refund caps:** USD 150, CAD 200, GBP 120 and EUR 140 are accepted by the user as placeholders.
+- **The database:** `make ci` and `make eval-gate` both run `ingest`, which would apply migration `0002`
+  to the shared `northwind`. That database was still on `0001`, 2,351 rows, and RAG-02 kept it that way
+  on purpose. So these runs used a scratch database, `northwind_found3_plain`, created for this and
+  dropped afterwards. The first `make ingest` from main will migrate the shared index: that is outside
+  this row.
+- **Not done here:** the `data-flow.md` row, which waits for GOV-1 to merge, and `/req-done`.
+  `security-reviewer` has still not seen the late fixes listed above.
+
+The stopped note gives the final head and the `make ci` and `make eval-gate` results at it.
