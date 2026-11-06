@@ -87,7 +87,7 @@ PLANTED_PROMOTIONS: dict[str, tuple[str, str]] = {
     "R00881": ("TRAP-INJ-013", "90% off"),
 }
 # Who may get a generated context. A security rule, not a recall choice: reviews are written by
-# shoppers, and a planted review's own sentence lifted it into top 5s (decision 0009). The chunk
+# shoppers, and a planted review's own sentence lifted it into top 5s (decision 0010). The chunk
 # body is the attack, and retrieval returns the body. An allow-list: a new source type gets none.
 CONTEXT_SOURCE_TYPES: frozenset[str] = frozenset({"product", "variant", "document"})
 # A generated context says where a chunk sits, in one short line (RAG-02).

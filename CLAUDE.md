@@ -58,7 +58,7 @@ make dev              # gateway on :8000 + portal on :5173 (Vite proxies /api)
 make data             # regenerate data/fixtures (seeded, byte-identical; bump DATA_VERSION if output changes)
 make model            # pre-fetch the embedding model into FASTEMBED_CACHE_PATH (own terminal, from the runner clone; CC-27)
 make ingest           # load data/fixtures into the RAG index (needs `make up`; idempotent, no LLM)
-make ingest-enriched  # load fixtures with cached context into the isolated `northwind_enriched` database (no LLM; refuses `northwind`; decision 0009)
+make ingest-enriched  # load fixtures with cached context into the isolated `northwind_enriched` database (no LLM; refuses `northwind`; decision 0010)
 make fmt              # ruff format + autofix
 make lint             # ruff, ruff format --check, mypy (strict), eslint, tsc
 make test             # unit tests: pytest (excludes integration) + vitest
@@ -70,7 +70,7 @@ make record SUITE=…   # SPENDS through an open runner window: re-record one ca
 make eval-live EVAL_SLICE=<n>  # SPENDS through an open runner window (SUITE=eval-answers): record answers + verdicts into a baseline candidate (digits only; n >= item count is a full run)
 make enrich           # SPENDS through an open runner window (SUITE=rag-enrichment): fill data/enrichment; chunks with an entry make no call
 make eval-rescore     # rebuild the candidate from the recordings after a scoring change (never spends)
-make eval-promote     # DO NOT RUN until row 5b lands (decision 0006): replace the baseline with the candidate (refuses a regression; a reason needs APPROVED_BY)
+make eval-promote     # USER ONLY, `make -C ~/.northwind/runner eval-promote CHECKOUT=$HOME/… APPROVED_BY=…`: replace CHECKOUT's baseline with its candidate (CHECK=1 is a dry run and prints the hash; a regression or relabel needs ACCEPT_REGRESSION and CANDIDATE_SHA; decision 0009)
 make eval-integrity   # refuse edited cassettes and lost overrides, print added known failures, against origin/main
 make eval-gate        # regression gate: live retrieval + replayed answers vs the baseline (RAG-12)
 make eval-snapshot    # save each eval item's retrieved context, the input for answers (no LLM)
@@ -156,8 +156,11 @@ Toolchain notes:
   without asking.
 - Containment on adversarial and unanswerable items is absolute. A failure may only
   go on `evals/fixtures/known_failures.json`, which can only shrink: Claude only ever
-  writes `approved_by: model`, and only the user sets `human`. Nobody promotes until
-  row 5b lands; after that only the user does, from the runner clone (decision 0006).
+  writes `approved_by: model`, and only the user sets `human`. Only the user promotes,
+  from the runner clone (decision 0009).
+- A PR that changes `evals/src` can fail `Guard / eval-gate-main`, which runs main's copy, on purpose.
+  `ship` accepts that one failure only with a `gate-change` label from the user. Say so in the gate
+  report: green then means the PR's own gate passed, not that the gate is intact (decision 0009).
 - After any git command, check the output for `Operation not permitted` or
   `could not lock config file`, as well as `unable to unlink`, `unable to create file` and
   `cannot create directory`, whatever the exit code. A switch that fails on `evals/baselines` or

@@ -11,8 +11,8 @@
 set -euo pipefail
 
 GH_MIN=2.103.3
-WORKFLOW=CI
-REQUIRED_JOBS="python eval-gate e2e portal"
+# workflow/job. Guard's jobs run main's evals/src, CI's run the PR's own (decision 0009).
+REQUIRED_JOBS="CI/python CI/eval-gate CI/e2e CI/portal Guard/baseline-label Guard/eval-integrity-main Guard/eval-gate-main"
 MAIN_REF=refs/runner/ship-main
 HEAD_REF=refs/runner/ship-head
 # --icase-pathspecs: `Services/common/x.py` must count as a sync path on a case-insensitive clone.
@@ -112,14 +112,19 @@ classify() {
 	local path
 	baseline_hit=0
 	ci_hit=0
+	gate_hit=0
 	: >"$work/surface"
 	shopt -s nocasematch
 	while IFS= read -r -d '' path; do
 		case "$path" in
-		evals/baselines | evals/baselines/* | evals/fixtures/known_failures.json) baseline_hit=1 ;;
+		evals/baselines | evals/baselines/* | evals/fixtures/known_failures.json | \
+			evals/fixtures/starter_set.jsonl) baseline_hit=1 ;;
 		esac
 		case "$path" in
 		.github/workflows | .github/workflows/*) ci_hit=1 ;;
+		esac
+		case "$path" in
+		evals/src | evals/src/*) gate_hit=1 ;;
 		esac
 		case "$path" in
 		.github/workflows | .github/workflows/* | .claude | .claude/* | CLAUDE.md | Makefile | \
@@ -159,31 +164,48 @@ check_label_actor() {
 check_labels() {
 	if ((baseline_hit)); then
 		has_label baseline-change ||
-			refuse "changes evals/baselines or known_failures.json without the baseline-change label"
+			refuse "changes evals/baselines, known_failures.json or the item set without the baseline-change label"
 		check_label_actor baseline-change
 	fi
 	if ((ci_hit)); then
 		has_label ci-change || refuse "changes .github/workflows without the ci-change label"
 		check_label_actor ci-change
 	fi
+	if ((gate_accepted)); then
+		has_label gate-change || refuse "the gate-change label went during the wait"
+		check_label_actor gate-change
+	fi
 }
 
 # The exit code of `gh pr checks` says nothing here: --json returns 0 with failing checks, and --watch
 # cannot be combined with it. So --watch only waits, and the buckets decide. A push and a pull_request
-# run can report the same job, so every entry must pass, and each required job must exist in the CI
+# run can report the same job, so every entry must pass, and each required job must exist in its
 # workflow. Any other check that did not pass refuses too, so a new job counts from its first run.
+#
+# The one exception is main's gate failing on a PR that changes the gate, as row #8 must. A real change
+# to evals/src can make main's copy fail on purpose, so a `gate-change` label added by your account
+# accepts that one failure. Only `fail`: `pending` and `cancel` prove nothing. Never integrity. CI holds
+# no waiver, because that file is PR-editable and a re-run keeps its old labels (decision 0009).
+accepts_failure() {
+	[[ "$1" == Guard && "$2" == eval-gate-main && "$3" == fail ]] || return 1
+	((gate_hit)) || return 1
+	has_label gate-change
+}
+
 check_jobs() {
 	local job wf name bucket seen
 	gh pr checks "$pr" --watch --interval 30 2>&1 | cat -v || true
 	gh pr checks "$pr" --json name,bucket,workflow --jq '.[] | [.workflow, .name, .bucket] | @tsv' \
 		>"$work/checks" || refuse "gh pr checks failed"
 	while IFS=$'\t' read -r wf name bucket; do
-		[[ "$bucket" == pass ]] || refuse "check $name is $bucket"
+		if [[ "$bucket" == pass ]]; then continue; fi
+		accepts_failure "$wf" "$name" "$bucket" || refuse "check $name is $bucket"
+		gate_accepted=1
 	done <"$work/checks"
 	for job in $REQUIRED_JOBS; do
 		seen=0
 		while IFS=$'\t' read -r wf name bucket; do
-			if [[ "$wf" == "$WORKFLOW" && "$name" == "$job" ]]; then seen=1; fi
+			if [[ "$wf/$name" == "$job" ]]; then seen=1; fi
 		done <"$work/checks"
 		((seen)) || refuse "job $job is missing"
 	done
@@ -200,6 +222,7 @@ show_list() {
 	fi
 }
 
+gate_accepted=0
 check_gh
 snapshot
 first_head=$head
@@ -222,7 +245,11 @@ check_labels
 # Label-gated paths too: a label says the user accepted a change, not this change.
 echo "ship: full diff of the paths that load with the key, run with your login, or need a label:"
 "${GIT_DIFF[@]}" "$bases" "$HEAD_REF" -- "$@" evals/baselines evals/fixtures/known_failures.json \
-	.github/workflows | cat -v || refuse "git diff failed"
+	.github/workflows evals/src | cat -v || refuse "git diff failed"
+if ((gate_accepted)); then
+	echo "ship: main's gate did not pass on this PR, accepted by gate-change. Green here means only that the"
+	echo "ship: PR's own gate passed, not that the gate is intact: read the evals/src diff above."
+fi
 echo "ship: control surface changed by PR #$pr, read these before answering:"
 show_list "$work/surface"
 

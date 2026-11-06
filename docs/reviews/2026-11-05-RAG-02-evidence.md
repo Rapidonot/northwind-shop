@@ -37,7 +37,7 @@ Three more, found later:
    none touched those files.
 
 Two smaller errors, for completeness: the plan said a duplicate pair of chunks sat under different
-parents, when they share one (decision 0009 gives the real reason for the parent in the key), and a
+parents, when they share one (decision 0010 gives the real reason for the parent in the key), and a
 background `make ci` reported exit 0 from a wrapper `echo` when `make` itself had failed.
 
 ## Failing first
@@ -161,7 +161,7 @@ reviews past the product's own chunks, while a variant line has little text of i
 
 ## The user's decision: reviews get no context
 
-A security rule, not a recall choice (decision 0009). Variants only was rejected because it is the best
+A security rule, not a recall choice (decision 0010). Variants only was rejected because it is the best
 of the single-type configurations picked after seeing the scores. The fallback, if the figure did not
 beat 0.750, was tried and not adopted. It did not trigger.
 

@@ -259,7 +259,7 @@ def test_rejections_are_counted_by_reason(chunks: list[Chunk], tmp_path: Path) -
     assert cache.reason_counts() == {"shape": 1}
 
 
-# -- context is for ranking only (decision 0009) ------------------------------------------------
+# -- context is for ranking only (decision 0010) ------------------------------------------------
 
 
 def test_what_retrieval_returns_has_no_context_field() -> None:
@@ -279,7 +279,7 @@ def test_the_search_selects_chunk_text_and_never_context() -> None:
 
 
 def test_only_the_index_writers_touch_context_or_embed_text() -> None:
-    """A new reader is a new review (decision 0009), so it fails here first."""
+    """A new reader is a new review (decision 0010), so it fails here first."""
     allowed = {"enrichment.py", "models.py", "sources.py", "store.py"}
     pattern = re.compile(r"\.context\b|\bembed_text\b|\bembed_hash\b|['\"]context['\"]")
     roots = [*(REPO / "services").glob("*/src"), REPO / "evals" / "src"]

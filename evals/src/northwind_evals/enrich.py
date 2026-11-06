@@ -1,6 +1,6 @@
 """`make enrich`: spends through one runner window to fill the enrichment cache (RAG-02).
 
-Decision 0009. Calls are plain Messages requests with prompt caching, in `live` mode: the ledger
+Decision 0010. Calls are plain Messages requests with prompt caching, in `live` mode: the ledger
 records each one and the cache in `data/enrichment` is the record of the run, so no cassettes.
 
 The runner settles a 429 at its worst case and the proxy drops `retry-after`, so this paces itself:

@@ -1,4 +1,4 @@
-# 0009: Enrichment uses the runner path, not Batches, and stays out of the shared index
+# 0010: Enrichment uses the runner path, not Batches, and stays out of the shared index
 
 Date: 2026-11-05 · Row: #7, RAG-02 · Status: decided by the user in the row brief
 
@@ -119,5 +119,4 @@ not used for this choice**, which row #32's new items can do. Until then RAG-02 
 ## Not decided here
 
 Switching the shared index to enriched. That changes saved contexts and needs `make eval-snapshot`,
-`make eval-live` and a promote, so it waits for row 5b and belongs at row #8, which does all three
-anyway.
+`make eval-live` and a promote, so it belongs at row #8, which does all three anyway.

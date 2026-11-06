@@ -15,7 +15,7 @@ from northwind_rag.sources import build_chunks
 from northwind_rag.store import IndexVersion, IngestReport, apply_migrations, sync_chunks
 
 # Other windows score live retrieval against the shared database, so generated text goes only here
-# until a row switches it on purpose (decision 0009). The test database keeps the tests off the
+# until a row switches it on purpose (decision 0010). The test database keeps the tests off the
 # real one. An allowlist: `template1` or a scratch plain index must not take an enriched run either.
 ENRICHED_DATABASES = frozenset({"northwind_enriched", "northwind_enriched_test"})
 

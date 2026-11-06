@@ -1,8 +1,8 @@
-"""`python -m northwind_llm_replay.cli spend|scan|serve|runner|runner-check`.
+"""`python -m northwind_llm_replay.cli spend|scan|serve|runner|runner-check|promote`.
 
-Behind make llm-spend, scan-cassettes, llm-proxy, llm-runner and runner-check. Paths come from
-`northwind_common.localenv`: the shared ledger (LLM_LEDGER_PATH), the one key file (LLM_ENV_FILE),
-this worktree's dev proxy port (LLM_PROXY_PORT) and the runner (LLM_RUNNER_PORT).
+Behind make llm-spend, scan-cassettes, llm-proxy, llm-runner, runner-check and eval-promote. Paths
+come from `northwind_common.localenv`: the shared ledger (LLM_LEDGER_PATH), the one key file
+(LLM_ENV_FILE), this worktree's dev proxy port (LLM_PROXY_PORT) and the runner (LLM_RUNNER_PORT).
 """
 
 from __future__ import annotations
@@ -146,6 +146,12 @@ def cmd_runner_check(args: argparse.Namespace) -> int:
     return runner_check.main(python)
 
 
+def cmd_promote(_: argparse.Namespace) -> int:
+    from northwind_llm_replay import promotion
+
+    return promotion.main(localenv.runner_checkout(), os.environ)
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="northwind_llm_replay.cli")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -169,6 +175,8 @@ def main(argv: list[str] | None = None) -> int:
     rc = sub.add_parser("runner-check", help="measure that the runner's code is not writable here")
     rc.add_argument("--python", type=Path, default=None)
     rc.set_defaults(func=cmd_runner_check)
+    pm = sub.add_parser("promote", help="replace the baseline, from the runner clone only")
+    pm.set_defaults(func=cmd_promote)
     args = ap.parse_args(argv)
     if getattr(args, "ledger", "unset") is None:
         args.ledger = localenv.ledger_path()

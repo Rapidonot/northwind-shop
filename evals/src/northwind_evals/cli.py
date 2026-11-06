@@ -1,8 +1,9 @@
-"""`python -m northwind_evals.cli snapshot|run|rescore|promote|gate|integrity|review-list` (RAG-12).
+"""`python -m northwind_evals.cli snapshot|run|rescore|gate|integrity|review-list` (RAG-12).
 
 `run` is the only command that spends, and only with LLM_MODE=record (`make eval-live`), which CI
-refuses. It writes a candidate, never the baseline: `promote` is the deliberate step that replaces
-the baseline, so re-recording cannot hide a regression. `rescore` rebuilds the candidate from the
+refuses. It writes a candidate, never the baseline: promotion is the deliberate step that replaces
+the baseline, so re-recording cannot hide a regression, and it runs from the runner clone, not from
+here (`northwind_llm_replay.promotion`, decision 0009). `rescore` rebuilds the candidate from the
 recordings alone, for scoring changes, and `gate` always replays: neither can spend.
 """
 
@@ -14,10 +15,8 @@ import os
 import sys
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
-from dataclasses import asdict, replace
-from datetime import date
+from dataclasses import asdict
 from pathlib import Path
-from typing import Any
 
 import psycopg
 
@@ -39,11 +38,8 @@ from northwind_evals.gate import (
     GateResult,
     compare,
     coverage_problems,
-    dropped_items,
-    identity_problems,
     load_baseline,
     load_known_failures,
-    malformed_behaviour,
     override_problems,
     save_baseline,
     score_drift,
@@ -250,7 +246,7 @@ def _build_candidate(chosen_size: str, mode: str) -> int:
     print(f"candidate written to {CANDIDATE} ({len(answers)} answers, {len(retrieval)} retrieval)")
     _print_summary(summary["retrieval"])
     _print_summary(summary["answers"])
-    print("the baseline is unchanged: promotion waits for row 5b (decision 0006)")
+    print("the baseline is unchanged: promote with `make -C ~/.northwind/runner eval-promote`")
     return 0
 
 
@@ -276,66 +272,6 @@ def cmd_rescore(_: argparse.Namespace) -> int:
     """Rebuilds the candidate from the recordings after a scoring change. Never spends: a request
     with no recording is a failed item, and no candidate is written."""
     return _build_candidate("all", "replay")
-
-
-def cmd_promote(args: argparse.Namespace) -> int:
-    """Replaces the baseline with the candidate. A regression needs a recorded reason and approver.
-    A containment failure or a dropped item cannot be overridden here at all."""
-    if not CANDIDATE.exists():
-        print("no candidate: run `make eval-rescore` or `make eval-live` first", file=sys.stderr)
-        return 1
-    items = load_items(ITEMS)
-    candidate = load_baseline(CANDIDATE)
-    segments = {item.id: item.segment for item in items}
-    known = load_known_failures(KNOWN_FAILURES)
-    final = coverage_problems(candidate, items) + malformed_behaviour(candidate.answers)
-    overridable: list[str] = []
-    overrides: list[dict[str, Any]] = []
-    bootstrap = (args.bootstrap or "").strip()
-    reason = (args.accept_regression or "").strip()
-    approver = (args.approved_by or "").strip()
-    if (reason or bootstrap) and not approver:
-        final.append("a recorded reason needs --approved-by NAME")
-    if BASELINE.exists():
-        baseline = load_baseline(BASELINE)
-        overrides = list(baseline.overrides)
-        final += [f"would stop gating {i}" for i in dropped_items(baseline, candidate, items)]
-        final += identity_problems(baseline, items)
-        final += override_problems(baseline)
-    elif not bootstrap:
-        final.append("no baseline to compare with: --bootstrap REASON starts a new one")
-        baseline = candidate
-    else:
-        baseline = candidate
-    result = compare(baseline, candidate.retrieval, candidate.answers, [], [], segments, known)
-    _print_rows(result)
-    final += result.containment
-    final += [f"{metric} is missing from the candidate" for metric in result.lost_metrics]
-    overridable += result.problems
-    overridable += [f"{row[0]} regressed" for row in result.rows if not row[3]]
-    for problem in [*final, *overridable]:
-        print(f"  {problem}", file=sys.stderr)
-    if final or (overridable and not reason):
-        print("not promoted", file=sys.stderr)
-        return 1
-    if args.check:
-        print("promotion check passed; nothing was changed")
-        return 0
-    today = date.today().isoformat()
-    if bootstrap:
-        accepted = ["no earlier baseline"]
-        overrides.append(
-            {"on": today, "reason": bootstrap, "approved_by": approver, "accepted": accepted}
-        )
-    if overridable:
-        overrides.append(
-            {"on": today, "reason": reason, "approved_by": approver, "accepted": overridable}
-        )
-    summary = summary_of(candidate.retrieval, candidate.answers, candidate.segments)
-    save_baseline(BASELINE, replace(candidate, overrides=overrides, summary=summary))
-    CANDIDATE.unlink()
-    print(f"promoted to {BASELINE}")
-    return 0
 
 
 def cmd_gate(args: argparse.Namespace) -> int:
@@ -483,12 +419,6 @@ def main(argv: list[str] | None = None) -> int:
         "--baseline", type=Path, help="gate against this file instead of the baseline"
     )
     gate.set_defaults(func=cmd_gate)
-    promote = commands.add_parser("promote")
-    promote.add_argument("--accept-regression", metavar="REASON", help="recorded in the baseline")
-    promote.add_argument("--bootstrap", metavar="REASON", help="start with no baseline; recorded")
-    promote.add_argument("--approved-by", metavar="NAME", help="who accepted it; recorded")
-    promote.add_argument("--check", action="store_true", help="report only; change nothing")
-    promote.set_defaults(func=cmd_promote)
     commands.add_parser("review-list").set_defaults(func=cmd_review_list)
     commands.add_parser("enrichment-report").set_defaults(func=cmd_enrichment_report)
     integrity = commands.add_parser("integrity")

@@ -1,4 +1,4 @@
-"""Only product, variant and document chunks get a context (RAG-02, hard rule 6, decision 0009).
+"""Only product, variant and document chunks get a context (RAG-02, hard rule 6, decision 0010).
 
 A security rule, not a recall choice. Reviews are written by shoppers, and a planted review's own
 sentence lifted it into top 5s it had no place in: R00069 went from rank 33 to 5 on a plain spec

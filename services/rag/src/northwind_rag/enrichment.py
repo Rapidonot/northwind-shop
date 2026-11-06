@@ -1,4 +1,4 @@
-"""Contextual chunk enrichment: the prompt, the checks and the cache (RAG-02, decision 0009).
+"""Contextual chunk enrichment: the prompt, the checks and the cache (RAG-02, decision 0010).
 
 Each product, variant and document chunk gets one generated sentence saying where it sits. The
 sentence is embedded in front of the chunk and stored beside it, never in `text`, so no model reads
