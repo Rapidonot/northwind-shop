@@ -3,7 +3,7 @@
 PRD §8 NFR-09: "Risk-tier every tool: read-only, reversible write, irreversible or monetary.
 Monetary tools always need a deterministic limit and a confirmation or approval". The evidence is
 `docs/governance/tool-register.md`. Columns are found from each table's header, because the
-"In flight" and "Planned" tables carry an extra Row column. Tables with no Tier column (Open items)
+"Landed" and "Planned" tables carry an extra Row column. Tables with no Tier column (Open items)
 are ignored. A limit of "values `unconfirmed`" is honest, so it is allowed: the PRD names those
 limits but gives no value yet.
 """
@@ -161,7 +161,7 @@ def test_the_parser_still_finds_the_register() -> None:
     assert {t for r in rows for t in BACKTICKED.findall(r.cells["Tier"])} == set(TIERS)
     headers = [h for _, h, _ in tables(REGISTER.read_text()) if "Tier" in h]
     assert len(headers) >= 5
-    assert any("Row" in h for h in headers), "the In flight and Planned tables carry a Row column"
+    assert any("Row" in h for h in headers), "the Landed and Planned tables carry a Row column"
 
 
 def test_open_items_are_not_read_as_a_register_table() -> None:
@@ -177,7 +177,16 @@ def test_retrieve_context_is_registered_as_read_only() -> None:
 
 @pytest.mark.parametrize(
     "target",
-    ["record", "eval-live", "llm-runner", "llm-proxy", "eval-promote", "ship", "runner-sync"],
+    [
+        "record",
+        "eval-live",
+        "enrich",
+        "llm-runner",
+        "llm-proxy",
+        "eval-promote",
+        "ship",
+        "runner-sync",
+    ],
 )
 def test_a_spending_or_merging_target_is_irreversible_or_monetary(target: str) -> None:
     assert tier_of(f"make {target}") == {MONETARY}

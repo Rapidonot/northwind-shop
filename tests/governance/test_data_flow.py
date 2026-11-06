@@ -2,8 +2,7 @@
 
 Fails when a directory under `services/` or a spending Makefile target has no row in
 `docs/governance/data-flow.md`. Spending targets are derived from the Makefile, so a new one needs
-no edit here. The check runs one way only: the table may name what is not on main yet, such as `make
-enrich` from row #7.
+no edit here. The check runs one way only: the table may name what is not on main yet.
 """
 
 from __future__ import annotations
@@ -105,7 +104,7 @@ def test_every_spending_target_has_a_row() -> None:
 def test_the_makefile_parser_still_finds_the_known_spending_targets() -> None:
     """Without this floor, a parser that finds nothing would pass the check above."""
     found = spending_targets((REPO / "Makefile").read_text())
-    assert {"record", "eval-live", "llm-runner"} <= found
+    assert {"record", "eval-live", "enrich", "llm-runner"} <= found
 
 
 def test_the_services_scan_still_finds_the_known_services() -> None:

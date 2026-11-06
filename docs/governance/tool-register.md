@@ -4,16 +4,17 @@ Every tool and state-changing command, today and planned, with its risk tier, li
 that is enforced. PRD §8 NFR-09 requires monetary tools to have a deterministic limit and a confirmation
 or approval.
 
-**Baseline:** main at `f50f7c8`, 2026-11-05. **Tiers:** `read-only`, `reversible write`, `irreversible or
+**Baseline:** main at `6f920a1`, 2026-11-06, with 5b and #7 landed. **Tiers:** `read-only`, `reversible write`, `irreversible or
 monetary`. "The user" is the person at their own terminal. A session cannot push, use `gh` or run Docker
 (decision 0004).
 
 **The only tool a product agent holds today is `retrieve_context`.** No product agent can reach a payment,
-refund or order tool on main. Claude Code sessions are different: a session can run `make record` and
-`make eval-live`, `make llm-proxy` too, and any sandboxed command can claim a window the user opened
-(decision 0005, "Limits"). The file tools can reach both Edit rows at a prompt, and a sandboxed `git commit`
-changed the committed baseline in rig run 2 (decision 0006, "Open limits"). So a monetary tier here does not
-mean a session cannot reach the row. Read each row's Enforced column.
+refund or order tool on main. Claude Code sessions are different: a session can run `make record`,
+`make eval-live` and `make enrich`, `make llm-proxy` too, and any sandboxed command can claim a window the
+user opened (decision 0005, "Limits"). The file tools can reach both Edit rows at a prompt, and a sandboxed
+`git commit` changed the committed baseline in rig run 2 (decision 0006, "Open limits"); since 5b, `Guard` and
+`ship` refuse such a PR without its label. So a monetary tier here does not mean a session cannot reach the
+row. Read each row's Enforced column.
 
 ## Agent tools today
 
@@ -27,7 +28,7 @@ Evidence for the in-process server: `PROGRESS.md` row 5. It moves to `mcp-rag` a
 ## Spending commands today
 
 The window is the real gate. The `ask` rules are a courtesy, because other command forms reach the same
-code without one (decision 0005).
+code without one (decision 0005). `make enrich`, which spends too, is under "Landed with 5b and #7".
 
 | Command | Tier | Limit | Approver | Enforced at |
 |---|---|---|---|---|
@@ -40,14 +41,14 @@ code without one (decision 0005).
 
 | Command | Tier | Limit | Approver | Enforced at |
 |---|---|---|---|---|
-| `make eval-promote` | `irreversible or monetary` | **Nobody runs it until row 5b lands.** A regression needs a reason and `APPROVED_BY`; containment failures, dropped items and lost metrics cannot be overridden | The user, after 5b, from the runner clone | Policy until 5b: decision 0006, rule 5, and `docs/reviews/2026-11-04-5a-gate-hardening-evidence.md` second-pass finding 13. `ask` rules and `denyWrite` in `tools/settings.proposed.json` |
-| `make ship` | `irreversible or monetary` | One PR; only `PROGRESS.md` and `COVERAGE.md` may change after the reviewed SHA, and their diff is not shown; all CI checks pass; labels for gated paths, not bound to a head; refused if a window is open when it starts, with no recheck before the merge. `SHA` comes from the session's gate report | The user: `y`, or the PR number when a listed control surface path changed. `.github/**` outside workflows, `pnpm-lock.yaml`, `pnpm-workspace.yaml` and `evals/contexts/` get a plain `y` until AUTO-2 | `tools/ship.sh`, `tools/refused-paths.sh`, `Makefile`; `tests/ship/test_ship.py`. No recorded run on real `gh` (decision 0008, "Limits") |
-| `make runner-sync` | `irreversible or monetary` | Fast-forward to `origin/main` only; refused paths; refused while a window is open. The prompt does not drain type-ahead (AUTO-2) | The user, shown the diff of what loads with the key | `Makefile`, `tools/refused-paths.sh`, decision 0005 |
-| `git push` | `irreversible or monetary` | No session credentials. Pre-push refuses `.github/**`, `GNUmakefile` and `makefile` variants, `.env*`, `.venv*`, ignored paths and non-ASCII paths unless `NW_ALLOW_CONTROL=1` or `--no-verify` is used. The rest of the control surface passes it, `Makefile` included | The user | Keychain denied (decision 0004), `tools/pre-push.proposed.sh`. A local check, not a boundary (decision 0008, "Limits") |
-| Edit `evals/baselines/` | `irreversible or monetary` | Same effect as `make eval-promote`, so the same tier. Bash writes refused; file tools prompt. Committed content is not protected until 5b | The user; `baseline-change` label in `ship` | `tools/settings.proposed.json`, `tools/ship.sh`, decision 0006 "Open limits". CI check: 5b |
-| Edit `evals/fixtures/known_failures.json` | `irreversible or monetary` | "Can only shrink" is policy, not a check: an added entry reading `approved_by: human` waives a containment failure, and `make eval-integrity` only prints it (decision 0006, rule 3). `approved_by` is a claim. Bash writes refused; file tools prompt | The user; `baseline-change` label in `ship` | `evals/tests/test_harness.py::test_an_unapproved_or_incomplete_known_failure_fails` shows only that a model-labelled entry waives nothing. Decisions 0003 and 0006. CI check: 5b |
-| Mark an eval item `reviewed_by: human` | `reversible write` | Claude only ever writes `model`. Policy: labels can change under a `human` stamp (`PROGRESS.md` row 4, third-pass F9) | The user | `CLAUDE.md`, `PROGRESS.md` "Eval review rule" |
-| `make ingest` | `reversible write` | Idempotent; aborts on a planted price or a missing visibility, with nothing written | None: local, rebuilt from fixtures | `services/rag/tests/test_index.py::test_planted_price_aborts_the_run_and_writes_nothing`, `services/rag/tests/test_index.py::test_missing_visibility_aborts_the_run_with_nothing_written` |
+| `make eval-promote` | `irreversible or monetary` | Runner clone only: refused anywhere else, on an unclean clone, off `origin/main` or the real main, or with a window open. A regression or relabel needs a reason, `APPROVED_BY` and `CANDIDATE_SHA` from a `CHECK=1` run. Containment failures, dropped items, lost metrics and a citation score under the floor cannot be accepted. **Row 5b is `partial`, and its log says nobody promotes until its left items are done** | The user, from the runner clone | `Makefile`, `services/llm-replay/src/northwind_llm_replay/promotion.py`, decision 0009; `evals/tests/test_rag12_followup.py::test_eval_promote_runs_no_python_outside_the_clone`, `services/llm-replay/tests/test_promotion.py::test_the_clones_baseline_decides_not_the_checkouts`. `ask` rules and `denyWrite` in `tools/settings.proposed.json` |
+| `make ship` | `irreversible or monetary` | One PR; only `PROGRESS.md` and `COVERAGE.md` may change after the reviewed SHA, and their diff is not shown; every `CI` and `Guard` job passes, except `Guard / eval-gate-main` failing on a PR that changes `evals/src` with a `gate-change` label last added by the user; labels for gated paths, not bound to a head; tracked symlinks refused; refused if a window is open when it starts, with no recheck before the merge. `SHA` comes from the session's gate report | The user: `y`, or the PR number when a listed control surface path changed. `.github/**` outside workflows, `pnpm-lock.yaml`, `pnpm-workspace.yaml` and `evals/contexts/` get a plain `y` until AUTO-2 | `tools/ship.sh`, `tools/refused-paths.sh`, `Makefile`; `tests/ship/test_ship.py::test_main_gate_failing_on_a_gate_change_merges_with_your_label_and_says_so`, `tests/ship/test_ship.py::test_main_gate_failing_without_the_label_is_refused`. No recorded run on real `gh` (decision 0008, "Limits") |
+| `make runner-sync` | `irreversible or monetary` | Fast-forward to `origin/main` only; refused paths and tracked symlinks; refused while a window is open. The prompt does not drain type-ahead (AUTO-2) | The user, shown the diff of what loads with the key | `Makefile`, `tools/refused-paths.sh`, decision 0005 |
+| `git push` | `irreversible or monetary` | No session credentials. Pre-push refuses `.github/**`, `GNUmakefile` and `makefile` variants, `.env*`, `.venv*`, ignored paths and non-ASCII paths, and tracked symlinks once the user reinstalls it, unless `NW_ALLOW_CONTROL=1` or `--no-verify` is used. The rest of the control surface passes it, `Makefile` included | The user | Keychain denied (decision 0004), `tools/pre-push.proposed.sh`. A local check, not a boundary (decision 0008, "Limits") |
+| Edit `evals/baselines/` | `irreversible or monetary` | Same effect as `make eval-promote`, so the same tier. Bash writes refused; file tools prompt. Committed content needs `baseline-change`; a merge outside `ship` is stopped only once the checks are required | The user; `baseline-change` label in `Guard` and `ship` | `tools/settings.proposed.json`, `tools/ship.sh`, `.github/workflows/guard.yml`, decision 0009, clauses 10 and 16; `tests/ship/test_guard.py::test_a_protected_change_without_the_label_fails` |
+| Edit `evals/fixtures/known_failures.json` | `irreversible or monetary` | "Can only shrink" is a check at promotion, word for word (decision 0009, clause 4). On a PR the label is the only check: a labelled, added entry reading `approved_by: human` waives a containment failure, and `make eval-integrity` only prints it (decision 0006, rule 3). `approved_by` is a claim. Bash writes refused; file tools prompt | The user; `baseline-change` label in `Guard` and `ship` | `services/llm-replay/tests/test_promotion.py::test_known_failures_may_not_grow_in_the_checkout`, `tests/ship/test_guard.py::test_a_protected_change_without_the_label_fails`. `evals/tests/test_harness.py::test_an_unapproved_or_incomplete_known_failure_fails` shows only that a model-labelled entry waives nothing. Decisions 0003, 0006, 0009 |
+| Mark an eval item `reviewed_by: human` | `reversible write` | Claude only ever writes `model`. Any change to the item set needs `baseline-change`, and a relabel needs a reason at promotion (decision 0009, clauses 5 and 10). Labels can still change under a `human` stamp without a promotion (`PROGRESS.md` row 4, third-pass F9) | The user | `CLAUDE.md`, `PROGRESS.md` "Eval review rule", `tests/ship/test_guard.py::test_a_protected_change_without_the_label_fails` |
+| `make ingest` | `reversible write` | Idempotent; aborts on a planted price or a missing visibility, with nothing written; stays plain until #8 (decision 0010) | None: local, rebuilt from fixtures | `services/rag/tests/test_index.py::test_planted_price_aborts_the_run_and_writes_nothing`, `services/rag/tests/test_index.py::test_missing_visibility_aborts_the_run_with_nothing_written` |
 | `make data` | `reversible write` | Seeded and byte-identical; changed output needs a `DATA_VERSION` bump | None: reviewed in the PR | `data/tests/test_determinism.py`, `PROGRESS.md` row 1 |
 | `make eval-snapshot`, `make eval-rescore`, `make eval-review-list` | `reversible write` | Local files only, never the baseline; `make eval-rescore` never spends | None: reviewed in the PR | `evals/src/northwind_evals/cli.py`, decision 0003 |
 | `make eval-gate-stale-ok` | `reversible write` | Runs `make ingest`. Never waives a stale adversarial or unanswerable item; CI never runs it. The `ask` rule is a courtesy: other forms of the command match no rule | `unconfirmed`: the rule prompts the user, and no decision names an approver | Decision 0006, rules 1 and 6 |
@@ -60,13 +61,14 @@ code without one (decision 0005).
 | `make up`, `make down`, `make model` | `reversible write` | Run from the runner clone; `make down` keeps the data volume | The user; a session cannot reach Docker | `Makefile`, decisions 0004 and 0005 |
 | `make help`, `make dev`, `make dev-gateway`, `make dev-portal`, `make lint`, `make test`, `make scan-cassettes`, `make llm-spend`, `make eval-integrity`, `make runner-check` | `read-only` | Write nothing of lasting note: temp files, caches, reports. `make test` pins replay | None needed: read-only | `Makefile` |
 
-## In flight
+## Landed with 5b and #7
 
 | Tool | Row | Tier | Limit | Approver | Enforced at |
 |---|---|---|---|---|---|
-| `make enrich` | #7, `req/RAG-02-enrichment`, not on main | `irreversible or monetary` | The open window's limits, `SUITE=rag-enrichment`; chunks already cached make no call | The user, through the window. **No `ask` rule:** the branch does not change `tools/settings.proposed.json`. The window is still the gate | `req/RAG-02-enrichment:Makefile`, the enrichment decision on the branch |
-| `make ingest-enriched`, `make eval-enrichment-report` | #7, not on main | `reversible write` | A separate database, allow-listed by name; no LLM | None: local | `req/RAG-02-enrichment:Makefile`, the enrichment decision on the branch |
-| Promotion entry point in the runner clone; `baseline-change` CI check | 5b, `req/5b-promotion-control` at `b645576`, not on main | `irreversible or monetary` | As `make eval-promote`, plus the label | The user | `PROGRESS.md` row 5b, `req/5b-promotion-control:services/llm-replay/src/northwind_llm_replay/promotion.py`, `req/5b-promotion-control:.github/workflows/guard.yml` |
+| `make enrich` | #7, landed; the row is `partial` | `irreversible or monetary` | The open window's limits; opened with `SUITE=rag-enrichment`, the suite in `evals/src/northwind_evals/enrich.py`; `LLM_MODE=live` pinned on the recipe, and any other mode refused; with no window it exits before any call. Chunks already cached make no call. Stops at 150 rate-limit replies, 5 failures in a row, or a projected $1.50. No slice argument, and no `CI` refusal | The user, through the window. **No `ask` rule:** `tools/settings.proposed.json` names no `enrich` target and allows `make *`, so a session starts it with no prompt. The window is the only gate | `Makefile`, `evals/src/northwind_evals/enrich.py`, decision 0010; `evals/tests/test_enrich.py::test_make_enrich_with_no_window_open_exits_before_any_call_and_leaves_every_file`, `evals/tests/test_enrich.py::test_main_refuses_any_mode_but_live`, `evals/tests/test_enrich.py::test_a_complete_cache_means_the_run_makes_no_call`, `evals/tests/test_enrich.py::test_a_projected_cost_over_the_limit_stops_the_run`, `services/llm-replay/tests/test_makefile_enrich.py::test_enrich_is_live_whatever_make_is_told` |
+| `make ingest-enriched` | #7, landed | `reversible write` | Its own database, allow-listed by name (`northwind_enriched`, `northwind_enriched_test`); refuses the shared one; no LLM | None: local | `Makefile`, decision 0010, rule 6; `services/rag/tests/test_enriched_index.py::test_require_enriched_database_raises_for_the_shared_database` |
+| `make eval-enrichment-report` | #7, landed | `reversible write` | Reads both indexes and changes neither; writes only `docs/reviews/RAG-02-enrichment-report.md`; no LLM | None: reviewed in the PR | `Makefile`, `evals/src/northwind_evals/cli.py`, decision 0010 |
+| Promotion entry point in the runner clone; `baseline-change` CI check | 5b, landed; the row is `partial` | `irreversible or monetary` | As `make eval-promote`, plus the label | The user | `services/llm-replay/src/northwind_llm_replay/promotion.py`, `.github/workflows/guard.yml`, `.github/workflows/guard/baseline-label.sh`, decision 0009, `PROGRESS.md` row 5b |
 
 ## Planned (PRD §7)
 
@@ -81,8 +83,8 @@ means the PRD names a limit but gives no value yet.** Enforcement is the PRD's d
 | `evaluate_return_eligibility` | #19, #27 | `read-only` | Read-only policy check | None needed: read-only | PRD §7 |
 | Cart tools | #16, CHK-01 | `reversible write` | Live stock check; idempotency key (hard rule 9) | The shopper | PRD CHK-01 |
 | `create_order` | #21, CHK-05; confirmation is CHK-02 and limits CHK-03, both Window B | `irreversible or monetary` | Idempotency key required; spend and velocity limits, values `unconfirmed` | The shopper, through a portal control, never free text | PRD CHK-02, CHK-03, CHK-05 |
-| `update_delivery_address` | No row names it; closest is #21, `unconfirmed` | `reversible write` | Idempotency key | `unconfirmed` | PRD §7 |
-| `cancel_order` | No row names it; closest is #21, `unconfirmed` | `irreversible or monetary` | Idempotency key | `unconfirmed` | PRD §7 |
+| `update_delivery_address` | #21, placed in `docs/governance/threat-model.md`; the row does not name it | `reversible write` | Idempotency key | `unconfirmed` | PRD §7 |
+| `cancel_order` | #21, placed in `docs/governance/threat-model.md`; the row does not name it | `irreversible or monetary` | Idempotency key | `unconfirmed` | PRD §7 |
 | Stock reservation | #25, BE-04 | `reversible write` | Must never oversell | None: deterministic | PRD BE-04 |
 | `create_case`, `add_note` | #19, #26 | `reversible write` | Care agent only | Staff act on the case | PRD §7 |
 | `assign_case` | #19, #26 | `reversible write` | Care agent only; never the assistant | Staff | PRD §7 |
@@ -98,13 +100,15 @@ means the PRD names a limit but gives no value yet.** Enforcement is the PRD's d
 
 ## Open items
 
+Owners placed at GOV-1 are explained in `docs/governance/threat-model.md`, "Owners".
+
 | Item | Owner |
 |---|---|
 | The PRD gives no value for the refund cap or the spend, velocity, partner and order ceilings | Rows above, when built |
 | Kill switches by agent, tool and payment route do not exist (NFR-12) | Window B, P6 |
 | No audit log exists yet, so no tool here writes one (NFR-10, BE-08) | #20 |
-| `make -s record` and `make SUITE=x record` miss the `ask` rules. Read from the rule text, not run. The window still holds | FOUND-2 review; no change planned, no row owns this |
-| `make eval-promote` still works if someone runs it; the block is policy until 5b. Its input, `CANDIDATE` in `evals/src/northwind_evals/cli.py`, is a local file a session can write | 5b |
+| `make -s record` and `make SUITE=x record` miss the `ask` rules. Read from the rule text, not run. The window still holds | AUTO-2 |
+| `make eval-promote` refuses outside the clone, but its input, `CANDIDATE` in `evals/src/northwind_evals/cli.py`, is still a local file a session can write. The hash is compared only when something needs a reason, so a clean candidate swapped in after a dry run is written if it passes every rule (`docs/reviews/2026-11-05-5b-evidence.md`, second re-review, F4) | 5b, logged low |
 | No run of `ship` on real `gh` is recorded: `unconfirmed` whether PR #22 merged through it | `PROGRESS.md` row A1, partial for this reason |
 | 12 `ship` and pre-push refusals have no test | AUTO-2, `docs/reviews/2026-11-05-auto-1-evidence.md` |
-| `tools/settings.proposed.json` has no `ask` rule for `make enrich` | #7, control surface, not changed here |
+| `tools/settings.proposed.json` has no `ask` rule for `make enrich`. Control surface, not changed here | Needs the user |
