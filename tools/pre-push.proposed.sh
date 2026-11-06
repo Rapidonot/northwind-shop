@@ -82,6 +82,10 @@ check_range() {
 		esac
 	fi
 
+	# A tracked symlink checks out clean, so nothing else would show it (row 5b).
+	git ls-tree -r -z "$2" >"$work/modes" || refuse "git ls-tree failed"
+	tr '\0' '\n' <"$work/modes" | { grep '^120000 ' || true; } | cut -f2 >>"$work/hits"
+
 	if [[ -s "$work/hits" ]]; then
 		cat -v "$work/hits" >&2
 		refuse "read these changes, then push with NW_ALLOW_CONTROL=1 if they are meant"

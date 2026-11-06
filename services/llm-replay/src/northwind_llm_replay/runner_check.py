@@ -6,19 +6,26 @@ succeeds, so it reports failure there, correctly (CC-27, decision 0005).
 
 It also proves the runner can still price a call. Prices moved to `northwind_common` (RAG-13), and
 `.venv-runner` holds only that package and llm-replay. A broken import stops the runner starting.
+
+Each file is measured in place. Replacing a file through its folder is not measured, and a parent
+check would be a false alarm: the parents of `.git` and `gitdir` are writable by design, because a
+sandboxed commit writes beside them. Decision 0006's rig covers that move for the pointer file.
 """
 
 from __future__ import annotations
 
+import errno
 import json
 import os
 import shutil
+import stat
 import subprocess
 import uuid
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from pathlib import Path
 
 from northwind_common import localenv
+from northwind_llm_replay.scan import printable
 
 PROBE = (
     "import json, sys; print(json.dumps({'paths': [sys.executable, sys.prefix, sys.base_prefix,"
@@ -32,6 +39,38 @@ PRICING_PROBE = (
     "from northwind_llm_replay.pricing import cost_usd; "
     "cost_usd('claude-sonnet-5-5', {'input_tokens': 1}); print(cost_usd.__module__)"
 )
+
+
+MISSING, DENIED, SYMLINK, FILE, DIRECTORY, OTHER = (
+    "missing",
+    "denied",
+    "symlink",
+    "file",
+    "directory",
+    "other",
+)
+# What a refusal looks like. Anything else, a full disk say, proves nothing about the sandbox, so it
+# is raised and becomes an ERROR line, not a clean result.
+REFUSED = (errno.EPERM, errno.EACCES, errno.EROFS)
+REPLACEMENT_LIMIT = (
+    "each file is measured in place: replacing a file through its folder is not measured here"
+)
+
+
+def kind(path: Path) -> str:
+    """What is at `path`, without following a symlink. `stat` would read a dangling link as absent,
+    and a sandbox denial as absent too: neither proves anything."""
+    try:
+        mode = path.lstat().st_mode
+    except (FileNotFoundError, NotADirectoryError):
+        return MISSING
+    except PermissionError:
+        return DENIED
+    if stat.S_ISLNK(mode):
+        return SYMLINK
+    if stat.S_ISREG(mode):
+        return FILE
+    return DIRECTORY if stat.S_ISDIR(mode) else OTHER
 
 
 def load_paths(python: Path) -> list[Path]:
@@ -66,33 +105,128 @@ def pricing_module(python: Path) -> tuple[str | None, list[str]]:
     return done.stdout.strip(), []
 
 
-def dir_is_writable(directory: Path) -> bool:
-    probe = directory / f".runner-check-{uuid.uuid4().hex}"
+def remove_probe(path: Path, remove: Callable[[Path], None]) -> None:
+    """A probe that cannot be removed must not stop the check, and must not go unmentioned."""
     try:
-        probe.touch(exist_ok=False)
+        remove(path)
     except OSError:
-        return False
-    probe.unlink()
-    return True
-
-
-def file_is_writable(path: Path) -> bool:
-    """Open for append and close: nothing changes even when this succeeds."""
-    try:
-        with path.open("a"):
-            return True
-    except OSError:
-        return False
+        print(printable(f"LEFT BEHIND {path}"))
 
 
 def can_create(path: Path) -> bool:
-    """For a file that should not exist yet. Removed again at once when the attempt works."""
+    """For a file that should not exist yet. Removed again at once when the attempt works. Only
+    this call's own file is removed: `O_EXCL` fails on anything already there, even a symlink."""
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
     try:
-        path.touch(exist_ok=False)
+        os.close(os.open(path, flags, 0o600))
+    except OSError as error:
+        if error.errno in (*REFUSED, errno.EEXIST):
+            return False
+        raise
+    remove_probe(path, os.unlink)
+    return True
+
+
+def can_mkdir(path: Path) -> bool:
+    try:
+        path.mkdir()
+    except OSError as error:
+        if error.errno in (*REFUSED, errno.EEXIST):
+            return False
+        raise
+    remove_probe(path, os.rmdir)
+    return True
+
+
+def dir_is_writable(directory: Path) -> bool:
+    return can_create(directory / f".runner-check-{uuid.uuid4().hex}")
+
+
+def file_is_writable(path: Path) -> bool:
+    """Open for append and close: nothing changes even when this succeeds. `O_NONBLOCK` because a
+    FIFO with no reader would hang here, and no `O_CREAT` because this must not make the file."""
+    try:
+        os.close(os.open(path, os.O_WRONLY | os.O_APPEND | os.O_NONBLOCK | os.O_NOFOLLOW))
+    except OSError as error:
+        if error.errno in (*REFUSED, errno.ENOENT, errno.ENXIO, errno.ELOOP):
+            return False
+        raise
+    return True
+
+
+def first_missing(path: Path) -> Path:
+    """The highest missing component of an absent path. Creating a file under an absent folder fails
+    with ENOENT, which is no refusal, so only this component says whether the path could exist. A
+    denied parent stops the walk: it is not known to be missing."""
+    while kind(path.parent) == MISSING and path.parent != path:
+        path = path.parent
+    return path
+
+
+def link_is_dangling(path: Path) -> bool:
+    """`Path.exists` raises on a sandbox denial. A denied target is not a missing one."""
+    try:
+        path.stat()
+    except FileNotFoundError:
+        return True
     except OSError:
         return False
-    path.unlink()
-    return True
+    return False
+
+
+def blocked_by(path: Path) -> list[str]:
+    """What stops an absent path being probed at all. ENOENT through a dangling link and ENOTDIR
+    under a file are no refusals: nothing was measured there, so that is the finding."""
+    parent = first_missing(path).parent
+    found = kind(parent)
+    if found == SYMLINK and link_is_dangling(parent):
+        return [f"SYMLINK {parent}"]
+    return [f"NOT A DIRECTORY {parent}"] if found in (FILE, OTHER) else []
+
+
+def absent_file_is_creatable(path: Path) -> bool:
+    top = first_missing(path)
+    return can_create(path) if top == path else can_mkdir(top)
+
+
+def directory_problems(directory: Path) -> list[str]:
+    """Load paths may be symlinks, as uv's Python folders are, and `load_paths` lists both sides.
+    So a link is followed here, and only a dangling one is reported."""
+    found = kind(directory)
+    if found == MISSING:
+        blocked = blocked_by(directory)
+        if blocked:
+            return blocked
+        return [f"WRITABLE {directory}"] if can_mkdir(first_missing(directory)) else []
+    if found in (FILE, OTHER):
+        return [f"NOT A DIRECTORY {directory}"]
+    if found == SYMLINK and link_is_dangling(directory):
+        return [f"SYMLINK {directory}"]
+    return [f"WRITABLE {directory}"] if dir_is_writable(directory) else []
+
+
+def file_problems(path: Path) -> list[str]:
+    found = kind(path)
+    if found == SYMLINK:
+        return [f"SYMLINK {path}"]
+    if found == FILE:
+        return [f"WRITABLE {path}"] if file_is_writable(path) else []
+    if found == DENIED:  # it may or may not exist, so both ways in are tried
+        return [f"WRITABLE {path}"] if file_is_writable(path) or can_create(path) else []
+    if found == MISSING:
+        blocked = blocked_by(path)
+        if blocked:
+            return blocked
+        return [f"WRITABLE {path}"] if absent_file_is_creatable(path) else []
+    return [f"NOT A FILE {path}"]
+
+
+def measured(step: Callable[[Path], list[str]], path: Path) -> list[str]:
+    """One path that cannot be measured is a line, and must not cost the paths after it."""
+    try:
+        return step(path)
+    except OSError as error:
+        return [f"ERROR {path}: {type(error).__name__}: {error.strerror}"]
 
 
 def git_redirect_files(git_dir: Path, worktrees: Iterable[Path]) -> tuple[list[Path], list[Path]]:
@@ -100,13 +234,30 @@ def git_redirect_files(git_dir: Path, worktrees: Iterable[Path]) -> tuple[list[P
 
     Your terminal's git trusts these, so a write here is code outside (decision 0006). HEAD, index,
     refs and logs are left out on purpose: a sandboxed commit writes them. A main checkout's `.git`
-    is a directory, and a commit needs it, so only a pointer file is ever listed.
+    is a directory, and a commit needs it, so only a pointer file is ever listed. Only a missing
+    `worktrees` folder counts as none: any other failure raises, so `main` reports it.
     """
-    pointers = [tree / ".git" for tree in worktrees if (tree / ".git").is_file()]
-    admin = git_dir / "worktrees"
-    names = sorted(admin.iterdir()) if present(admin) else []
+    pointers = [tree / ".git" for tree in linked(git_dir, worktrees)]
+    pointers = [p for p in pointers if kind(p) in (FILE, DENIED, SYMLINK)]
+    try:
+        names = sorted((git_dir / "worktrees").iterdir())
+    except FileNotFoundError:
+        names = []
     files = [*pointers, *(d / n for d in names for n in ("gitdir", "commondir", "config.worktree"))]
-    return [f for f in files if present(f)], [f for f in files if not present(f)]
+    return [f for f in files if kind(f) != MISSING], [f for f in files if kind(f) == MISSING]
+
+
+def linked(git_dir: Path, worktrees: Iterable[Path]) -> list[Path]:
+    """Every checkout but the main one, the only one whose `.git` is meant to be a directory."""
+    main = git_dir.parent.resolve()
+    return [tree for tree in worktrees if tree.resolve() != main]
+
+
+def pointer_problems(git_dir: Path, worktrees: Iterable[Path]) -> list[str]:
+    """A linked worktree must have a pointer file. `git_redirect_files` lists the ones that can be
+    measured, so a `.git` of any other shape would otherwise drop out of the check unseen."""
+    pointers = [tree / ".git" for tree in linked(git_dir, worktrees)]
+    return [f"NOT A FILE {p}" for p in pointers if kind(p) not in (FILE, DENIED, SYMLINK)]
 
 
 def is_hidden(path: Path) -> bool:
@@ -158,8 +309,8 @@ def checkouts() -> list[Path]:
 
 def check(directories: Iterable[Path], files: Iterable[Path], hidden: Iterable[Path]) -> list[str]:
     """One line per writable or visible path; empty means every attempt was refused."""
-    problems = [f"WRITABLE {d}" for d in directories if present(d) and dir_is_writable(d)]
-    problems += [f"WRITABLE {f}" for f in files if present(f) and file_is_writable(f)]
+    problems = [line for path in directories for line in measured(directory_problems, path)]
+    problems += [line for path in files for line in measured(file_problems, path)]
     for path in hidden:
         try:
             if not is_hidden(path):
@@ -169,35 +320,91 @@ def check(directories: Iterable[Path], files: Iterable[Path], hidden: Iterable[P
     return problems
 
 
-def main(python: Path) -> int:
-    if not os.access(python, os.X_OK):
-        print(f"error: no runner interpreter at {python}: clone and `make runner-sync` first")
-        return 2
-    home = localenv.northwind_home()
-    git_dir = localenv.main_checkout() / ".git"
-    directories = [
-        *load_paths(python),
-        home,
-        home / "runner",
-        home / "uv-cache",
-        git_dir / "hooks",  # your terminal's git runs these, so a write here is code outside
-        Path.home() / ".config" / "uv",
-    ]
-    ledger = localenv.ledger_path()
-    files = [ledger, ledger.with_suffix(".lock"), git_dir / "config", Path.home() / ".gitconfig"]
-    existing, absent = git_redirect_files(git_dir, checkouts())
-    problems = check(directories, [*files, *existing], [localenv.env_file()])
-    problems += [f"WRITABLE {f}" for f in absent if can_create(f)]
-    pricing, pricing_problems = pricing_module(python)
-    problems += pricing_problems
-    for checkout in checkouts():
+def run_stage(name: str, problems: list[str], step: Callable[[], list[str]]) -> None:
+    """One stage failing must not drop what the others found, so it becomes a line of its own."""
+    try:
+        problems += step()
+    except Exception as error:  # noqa: BLE001 - reported, and the exit code stays 1
+        problems.append(f"ERROR {name}: {type(error).__name__}: {error}")
+
+
+def settings_problems(trees: Iterable[Path]) -> list[str]:
+    problems: list[str] = []
+    for checkout in trees:
         problems += excluded_commands(checkout / ".claude" / "settings.json")
         local = checkout / ".claude" / "settings.local.json"
         if present(local):
             problems += excluded_commands(local, must_enable=False)
+    return problems
+
+
+def main(python: Path) -> int:
+    if not os.access(python, os.X_OK):
+        where = printable(str(python))
+        print(f"error: no runner interpreter at {where}: clone and `make runner-sync` first")
+        return 2
+    home = localenv.northwind_home()
+    git_dir = localenv.main_checkout() / ".git"
+    problems: list[str] = []
+    run_stage(
+        "git dir",
+        problems,
+        lambda: [] if kind(git_dir) == DIRECTORY else [f"NOT A DIRECTORY {git_dir}"],
+    )
+    clone_evals = home / "runner" / "evals"
+    directories = [
+        home,
+        home / "runner",
+        clone_evals / "src",  # what the clone's promote loads and trusts (5b)
+        clone_evals / "src" / "northwind_evals",
+        clone_evals / "fixtures",
+        clone_evals / "baselines",
+        home / "uv-cache",
+        git_dir / "hooks",  # your terminal's git runs these, so a write here is code outside
+        Path.home() / ".config" / "uv",
+    ]
+    trees: list[Path] = []
+    pricing: str | None = None
+
+    def add_load_paths() -> list[str]:
+        directories[:0] = load_paths(python)
+        return []
+
+    def add_checkouts() -> list[str]:
+        trees.extend(checkouts())
+        return []
+
+    def redirects() -> list[str]:
+        existing, absent = git_redirect_files(git_dir, trees)
+        return [*pointer_problems(git_dir, trees), *check([], [*existing, *absent], [])]
+
+    def measure() -> list[str]:
+        ledger = localenv.ledger_path()
+        files = [
+            ledger,
+            ledger.with_suffix(".lock"),
+            git_dir / "config",
+            git_dir / "config.worktree",
+            Path.home() / ".gitconfig",
+            Path.home() / ".config" / "git" / "config",
+        ]
+        return check(directories, files, [localenv.env_file()])
+
+    def prices() -> list[str]:
+        nonlocal pricing
+        pricing, pricing_problems = pricing_module(python)
+        return pricing_problems
+
+    run_stage("load paths", problems, add_load_paths)
+    run_stage("checkouts", problems, add_checkouts)
+    run_stage("measure", problems, measure)
+    run_stage("redirect files", problems, redirects)
+    run_stage("pricing", problems, prices)
+    run_stage("settings", problems, lambda: settings_problems(trees))
     for line in problems:
-        print(line)
+        print(printable(line))
     print(f"runner-check: {len(directories)} directories, {len(problems)} problem(s)")
-    print(f"runner prices from: {pricing or 'unavailable'}")
+    print(f"runner prices from: {printable(pricing or 'unavailable')}")
+    print(REPLACEMENT_LIMIT)
     print("this proves the settings of this checkout: run it in each one")
     return 1 if problems else 0

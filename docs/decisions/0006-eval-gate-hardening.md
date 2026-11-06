@@ -20,28 +20,30 @@ overrides named no approver, and nothing stood between Claude and `make eval-pro
    is a person reading the line.
 4. A recorded reason needs an approver: `ACCEPT_REGRESSION` and `BOOTSTRAP` both need `APPROVED_BY`.
    The gate refuses a baseline holding an override with no approver.
-5. **No promotion at all until row 5b lands.** After that, promotion is the user's, from the runner
-   clone through a new entry point, not from a checkout.
+5. **Promotion is the user's, from the runner clone, not from a checkout.** Row 5b built that entry point:
+   see decision 0009. Before it, nobody promoted.
    `sandbox.filesystem.denyWrite` on `evals/baselines` and `evals/fixtures/known_failures.json` stops
    sandboxed Bash writing those two paths in this checkout, and `ask` rules cover the file tools, which
    the sandbox does not reach. Claude Code warns that `Write(path)` rules are never matched and
    `Edit(path)` rules cover both tools, so the `Edit` rules are the ones doing this. The post-install
    check confirmed it: the Write tool prompted. This protects the
    working-tree files, not the committed content the gate reads in CI. See "Open limits".
-6. The `ask` rules on `make eval-promote`, `make eval-gate-stale-ok` and the `uv run` promote command
-   are a courtesy. `Bash(make *)` and `Bash(uv run *)` reach the same code, and some ways of writing a
+6. The `ask` rules on `make eval-promote`, `make eval-gate-stale-ok` and the `uv run` promote commands
+   are a courtesy. Row 5b moved the promote code, so the proposal also names `northwind_llm_replay`. `Bash(make *)` and `Bash(uv run *)` reach the same code, and some ways of writing a
    command miss the rules. The rig results list which. A miss costs a prompt, and the write to those
    two paths is still refused: the rig's write and rename rows held under the real
    sandbox. A form with no `allow` rule stops in default mode only. In auto mode the classifier
    decides, so `denyWrite` is the control there.
-7. The three free-text `eval-promote` variables are pinned, so a hostile value is passed literally.
+7. The free-text `eval-promote` variables are pinned, so a hostile value is passed literally. There were
+   three here; row 5b added `CHECKOUT`, `CHECK` and `CANDIDATE_SHA`.
    This protects against a hostile value, not a hostile command line: whoever controls the whole
    command can use another variable name. See "Found during this row".
 8. `denyWrite` also names what redirects or configures git for a linked worktree, because your
    terminal's git trusts those files: the `.git` pointer file, and `gitdir`, `commondir` and
    `config.worktree` in the common directory's `worktrees/<name>/`. `make runner-check` measures them.
    HEAD, index, refs and logs stay writable, because a sandboxed commit writes them. The entries are
-   absolute: a relative `./.git` would be the main checkout's directory, which its commits need.
+   absolute: a relative `./.git` would be the main checkout's directory, which its commits need. Row 5b
+   adds the main checkout's own `.git/config.worktree`, which the session policy already refused.
 
 ## Consequences
 
@@ -53,22 +55,24 @@ overrides named no approver, and nothing stood between Claude and `make eval-pro
 - `approved_by` is still a claim, not proof, as 0003 says.
 - `EVAL_ALLOW_STALE=1 uv run python -m northwind_evals.cli gate` matches no `ask` rule. Rule 1 limits
   what it can waive.
-- In the sandbox, `make eval-promote` fails at the write with a raw traceback. The candidate survives,
-  because it is deleted only after the save.
+- Superseded by row 5b: `make eval-promote` now refuses outside the clone, and never deletes the
+  candidate.
 - Sandboxed git operations that would change these two paths become the user's. See below.
 
 ## Open limits
 
 From the row 5a security reviews. None of these is closed by this row.
 
-- **Promoting from a checkout runs code the session can edit, unsandboxed (first review, finding 1,
-  high).** This is the shape decision 0005 called F1. `make eval-promote` in a terminal runs this
+- **Closed by row 5b, decision 0009.** Promoting from a checkout runs code the session can edit,
+  unsandboxed (first review, finding 1, high). This is the shape decision 0005 called F1. `make eval-promote` in a terminal runs this
   checkout's Makefile and `evals/src` with no sandbox, so an edit there could reach the key file, the
   runner and the ledger. **Decided by the user: nobody promotes until row 5b lands, and there is no
   interim procedure.** 5b adds a small promote entry point for the runner clone, because `cli.py`
   imports the database and RAG code and the clone has no full `.venv`. 5b must land before row #8, the
   next row that needs a promotion.
-- **`denyWrite` covers paths in one checkout (first review, finding 2, high). Confirmed by rig run 2:**
+- **Closed through `ship` by row 5b, decision 0009, and for a merge outside `ship` only once the required
+  checks are added.** `denyWrite` covers paths in one checkout (first review, finding 2, high).
+  **Confirmed by rig run 2:**
   `git hash-object`, `git update-index --cacheinfo` and `git commit` changed the committed baseline in
   the real sandbox without touching the file. The nested-clone route stays unmeasured: `git clone`
   failed copying its template into `.git/hooks`, so no clone existed to test.

@@ -1,0 +1,97 @@
+name: Guard
+
+# Row 5b, decision 0009. Its own workflow, with no push trigger and no job-level `if`, on purpose: push
+# runs report on the same commit, and `ship` refuses any check that did not pass, `skipping` included. So
+# a job that skips itself on push would refuse every PR. `labeled` and `unlabeled` rerun it when a label
+# changes.
+#
+# Add no waiver here. This file is PR-editable, and a re-run keeps its old labels. `eval-gate-main` going
+# red is a result: `ship` alone decides whether a `gate-change` label from your account accepts it.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+jobs:
+  # Fails a PR that changes the baseline, known_failures.json or the item set without the
+  # baseline-change label.
+  baseline-label:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0  # the merge base with main
+          persist-credentials: false  # this job fetches nothing
+      - name: Check the label
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+        run: bash .github/workflows/guard/baseline-label.sh
+
+  # Never accepted by any label: no legitimate PR edits a cassette or drops an override. Nothing is
+  # installed here, so no PR code or build config runs: integrity needs only the stdlib.
+  eval-integrity-main:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0  # use-main-code.sh refuses a shallow clone
+      - name: Use main's evals/src
+        run: bash .github/workflows/guard/use-main-code.sh
+      - name: Eval integrity from main's code
+        run: python3 -I .github/workflows/guard/integrity-main.py
+
+  # Red means main's gate does not pass this PR. `CI / eval-gate` runs the PR's own copy beside it.
+  eval-gate-main:
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: pgvector/pgvector:pg16
+        env:
+          # Throwaway credentials for an ephemeral CI database; not a secret.
+          POSTGRES_USER: northwind
+          POSTGRES_PASSWORD: northwind-ci
+          POSTGRES_DB: northwind
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U northwind -d northwind"
+          --health-interval 2s --health-timeout 3s --health-retries 30
+    env:
+      DATABASE_URL: postgresql://northwind:northwind-ci@localhost:5432/northwind
+      LLM_MODE: replay
+      FASTEMBED_CACHE_PATH: /home/runner/.cache/fastembed
+      UV_NO_SYNC: "1"  # `uv run` must not rebuild over the restored code
+      PYTHONSAFEPATH: "1"
+      # Ahead of the workspace's .pth entries, so nothing can shadow main's evals/src.
+      PYTHONPATH: ${{ github.workspace }}/evals/src
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0  # use-main-code.sh refuses a shallow clone
+      - uses: astral-sh/setup-uv@v7
+      - run: uv sync --locked
+      - name: Use main's evals/src
+        run: bash .github/workflows/guard/use-main-code.sh
+      - name: Check that main's code is what loads
+        run: uv run python .github/workflows/guard/assert-main-code.py
+      - name: Cache the embedding model
+        uses: actions/cache@v4
+        with:
+          path: /home/runner/.cache/fastembed
+          key: fastembed-bge-small-en-v1.5
+      - name: Install pgvector extension (compose does this via infra/db/init)
+        run: psql "$DATABASE_URL" -f infra/db/init/001-extensions.sql
+      - name: Build the index
+        run: uv run python -m northwind_rag.cli --fixtures data/fixtures
+      # Again: the index build just ran PR code, which could have changed evals/src.
+      - name: Use main's evals/src again
+        run: bash .github/workflows/guard/use-main-code.sh
+      - name: Check again that main's code is what loads
+        run: uv run python .github/workflows/guard/assert-main-code.py
+      - name: Eval gate from main's code
+        env:
+          EVAL_ALLOW_STALE: ""
+        run: uv run python -m northwind_evals.cli gate
