@@ -35,6 +35,7 @@ from northwind_llm_replay.runner import (
     load_runner_key,
     preflight,
     proxy_config,
+    readable_forms,
     refuse_if_port_taken,
 )
 from northwind_llm_replay.scan import scan_text
@@ -434,6 +435,36 @@ def test_a_key_split_across_sse_deltas_is_blocked(rig: Rig) -> None:
     token = rig.claim()
     head, tail = FAKE_KEY[:10], FAKE_KEY[10:20]
     rig.upstream.reply_raw(200, sse_with_deltas(head, tail), "text/event-stream")
+    assert_blocked(rig.send(token, message(stream=True)))
+
+
+def raw_delta(text: str) -> str:
+    """One SSE event with `text` unescaped, as a server may send U+2028 inside a JSON string."""
+    delta = {"type": "content_block_delta", "delta": {"type": "text_delta", "text": text}}
+    return f"data: {json.dumps(delta, ensure_ascii=False)}\n\n"
+
+
+@pytest.mark.parametrize("separator", ["\u2028", "\u2029", "\x85"])
+def test_a_line_separator_in_a_delta_does_not_drop_it_from_the_joined_text(separator: str) -> None:
+    """Row 17a follow-up (SA-02 review): these are legal raw inside a JSON string and do not end an
+    SSE line, but `splitlines()` broke the event there. The half holding the key's first part
+    stopped parsing, and only the raw text was left to find a split key in."""
+    head, tail = FAKE_KEY[:10], FAKE_KEY[10:20]
+    forms = readable_forms(raw_delta(f"x{separator}{head}") + raw_delta(tail))
+    assert any(head + tail in form for form in forms)
+
+
+def test_a_key_split_across_cr_framed_sse_events_is_found() -> None:
+    """A bare CR does end an SSE line, so splitting on `\\n` alone would hide these events."""
+    head, tail = FAKE_KEY[:10], FAKE_KEY[10:20]
+    text = (raw_delta(head) + raw_delta(tail)).replace("\n", "\r")
+    assert any(head + tail in form for form in readable_forms(text))
+
+
+def test_a_key_split_around_a_line_separator_is_blocked(rig: Rig) -> None:
+    token = rig.claim()
+    head, tail = FAKE_KEY[:10], FAKE_KEY[10:20]
+    rig.upstream.reply_raw(200, raw_delta(f"x\u2028{head}") + raw_delta(tail), "text/event-stream")
     assert_blocked(rig.send(token, message(stream=True)))
 
 

@@ -43,6 +43,8 @@ REFUSED_PATHS: list[str] = shared.REFUSED_PATHS
 NOT_REFUSED_PATHS: list[str] = shared.NOT_REFUSED_PATHS
 PR = "7"
 JOBS = ("python", "eval-gate", "e2e", "portal")
+GUARD_JOBS = ("baseline-label", "eval-integrity-main", "eval-gate-main")
+ALL_JOBS = (*JOBS, *GUARD_JOBS)
 ME = "me"
 T1, T2, T3 = "2026-11-05T10:00:00Z", "2026-11-05T11:00:00Z", "2026-11-05T12:00:00Z"
 
@@ -258,6 +260,13 @@ def run(
     )
 
 
+def passing_checks() -> list[dict[str, str]]:
+    return [
+        {"name": j, "bucket": "pass", "workflow": "Guard" if j in GUARD_JOBS else "CI"}
+        for j in ALL_JOBS
+    ]
+
+
 def ev(
     label: str,
     login: str = ME,
@@ -372,7 +381,7 @@ class Rig:
         if self.events_after is not None:
             after_events.write_text(json.dumps(self.events_after))
         (self.scn / "user.json").write_text(json.dumps({"login": self.user_login}))
-        checks = self.checks or [{"name": j, "bucket": "pass", "workflow": "CI"} for j in JOBS]
+        checks = self.checks or passing_checks()
         (self.scn / "checks.json").write_text(json.dumps(checks))
         (self.scn / "final.json").write_text(json.dumps({"state": self.final_state}))
         (self.scn / "watch_rc").write_text(str(self.watch_rc))
@@ -628,6 +637,7 @@ def test_runner_sync_asks_separately(rig: Rig) -> None:
 
 BASELINE_EDIT: dict[str, str | None] = {"evals/baselines/a.json": '{"v": 2}\n'}
 PROTECTED_CHANGES: dict[str, dict[str, str | None]] = {
+    "item set": {"evals/fixtures/starter_set.jsonl": "{}\n"},
     "baseline": BASELINE_EDIT,
     "new baseline": {"evals/baselines/new.json": "{}\n"},
     "known failures": {"evals/fixtures/known_failures.json": '["x"]\n'},
@@ -1029,17 +1039,17 @@ def test_a_failed_merge_with_an_escape_still_refuses(rig: Rig) -> None:
 
 
 def checks(**overrides: str) -> list[dict[str, str]]:
-    return [{"name": j, "bucket": overrides.get(j, "pass"), "workflow": "CI"} for j in JOBS]
+    return [{**c, "bucket": overrides.get(c["name"], "pass")} for c in passing_checks()]
 
 
 @pytest.mark.parametrize("bucket", ["fail", "skipping", "pending", "cancel"])
-@pytest.mark.parametrize("job", JOBS)
+@pytest.mark.parametrize("job", ALL_JOBS)
 def test_a_job_that_did_not_pass_is_refused(rig: Rig, job: str, bucket: str) -> None:
     rig.checks = checks(**{job: bucket})
     assert_refused(rig, rig.ship(), job)
 
 
-@pytest.mark.parametrize("job", JOBS)
+@pytest.mark.parametrize("job", ALL_JOBS)
 def test_a_missing_job_is_refused(rig: Rig, job: str) -> None:
     rig.checks = [c for c in checks() if c["name"] != job]
     assert_refused(rig, rig.ship(), job)
@@ -1050,7 +1060,7 @@ def test_no_required_jobs_at_all_is_refused(rig: Rig) -> None:
     assert_refused(rig, rig.ship())
 
 
-@pytest.mark.parametrize("job", JOBS)
+@pytest.mark.parametrize("job", ALL_JOBS)
 def test_same_job_name_from_another_workflow_does_not_count(rig: Rig, job: str) -> None:
     rig.checks = [{**c, "workflow": "Nightly"} if c["name"] == job else c for c in checks()]
     assert_refused(rig, rig.ship(), job)
@@ -1066,6 +1076,122 @@ def test_two_entries_for_one_job_with_one_failing_is_refused(rig: Rig) -> None:
 def test_any_other_check_that_did_not_pass_is_refused(rig: Rig, workflow: str, bucket: str) -> None:
     rig.checks = [*checks(), {"name": "lint-extra", "bucket": bucket, "workflow": workflow}]
     assert_refused(rig, rig.ship(), "lint-extra")
+
+
+# -- row 5b: Guard, and the one failure a label may accept --------------------------------------
+
+GATE_EDIT = {"evals/src/northwind_evals/cli.py": "changed\n"}
+
+
+def main_gate_failed() -> list[dict[str, str]]:
+    return checks(**{"eval-gate-main": "fail"})
+
+
+@pytest.mark.req("RAG-12")
+def test_required_jobs_are_the_jobs_in_the_workflows() -> None:
+    """A renamed job would otherwise read as missing on every PR, or stop being required."""
+    ship = (REPO / "tools" / "ship.sh").read_text(encoding="utf-8")
+    required = re.search(r'^REQUIRED_JOBS="(.+)"$', ship, re.MULTILINE)
+    assert required is not None
+    want = {f"CI/{j}" for j in JOBS} | {f"Guard/{j}" for j in GUARD_JOBS}
+    assert set(required.group(1).split()) == want
+    for name, jobs in (("ci.yml", JOBS), ("guard.yml", GUARD_JOBS)):
+        workflow = (REPO / ".github" / "workflows" / name).read_text(encoding="utf-8")
+        assert all(re.search(rf"^  {j}:$", workflow, re.MULTILINE) for j in jobs)
+
+
+@pytest.mark.req("RAG-12")
+def test_a_gate_change_where_main_gate_passes_needs_no_label(rig: Rig) -> None:
+    rig.pr(GATE_EDIT)
+    assert_merged(rig, rig.ship())
+
+
+@pytest.mark.req("RAG-12")
+def test_main_gate_failing_on_a_gate_change_merges_with_your_label_and_says_so(rig: Rig) -> None:
+    rig.pr(GATE_EDIT)
+    rig.labels("gate-change")
+    rig.checks = main_gate_failed()
+    done = rig.ship()
+    assert_merged(rig, done)
+    assert "main's gate did not pass on this PR" in done.stdout
+    assert "evals/src/northwind_evals/cli.py" in done.stdout
+
+
+@pytest.mark.req("RAG-12")
+def test_main_gate_failing_without_the_label_is_refused(rig: Rig) -> None:
+    rig.pr(GATE_EDIT)
+    rig.checks = main_gate_failed()
+    assert_refused(rig, rig.ship(), "eval-gate-main")
+
+
+@pytest.mark.req("RAG-12")
+def test_the_label_waives_nothing_when_evals_src_did_not_change(rig: Rig) -> None:
+    rig.pr()
+    rig.labels("gate-change")
+    rig.checks = main_gate_failed()
+    assert_refused(rig, rig.ship(), "eval-gate-main")
+
+
+@pytest.mark.req("RAG-12")
+@pytest.mark.parametrize("bucket", ["pending", "cancel", "skipping"])
+def test_only_a_finished_failure_is_accepted(rig: Rig, bucket: str) -> None:
+    rig.pr(GATE_EDIT)
+    rig.labels("gate-change")
+    rig.checks = checks(**{"eval-gate-main": bucket})
+    assert_refused(rig, rig.ship(), "eval-gate-main")
+
+
+@pytest.mark.req("RAG-12")
+@pytest.mark.parametrize("job", ["eval-integrity-main", "baseline-label", "eval-gate", "python"])
+def test_the_label_accepts_no_other_failure(rig: Rig, job: str) -> None:
+    rig.pr(GATE_EDIT)
+    rig.labels("gate-change")
+    rig.checks = checks(**{"eval-gate-main": "fail", job: "fail"})
+    assert_refused(rig, rig.ship(), job)
+
+
+@pytest.mark.req("RAG-12")
+def test_the_same_name_from_another_workflow_is_not_accepted(rig: Rig) -> None:
+    rig.pr(GATE_EDIT)
+    rig.labels("gate-change")
+    extra = {"name": "eval-gate-main", "bucket": "fail", "workflow": "Nightly"}
+    rig.checks = [*checks(), extra]
+    assert_refused(rig, rig.ship(), "eval-gate-main")
+
+
+@pytest.mark.req("RAG-12")
+def test_a_gate_change_label_added_by_a_bot_is_refused(rig: Rig) -> None:
+    rig.pr(GATE_EDIT)
+    rig.labels("gate-change")
+    rig.events = [[bot("gate-change")]]
+    rig.checks = main_gate_failed()
+    assert_refused(rig, rig.ship(), "gate-change")
+
+
+@pytest.mark.req("RAG-12")
+def test_the_gate_change_label_going_during_the_wait_is_refused(rig: Rig) -> None:
+    rig.pr(GATE_EDIT)
+    rig.labels("gate-change")
+    rig.view_after = {"labels": []}
+    rig.checks = main_gate_failed()
+    assert_refused(rig, rig.ship(), "gate-change")
+
+
+@pytest.mark.req("RAG-12")
+@pytest.mark.parametrize("label", ["gate-change-x", "Gate-Change", "baseline-change"])
+def test_a_lookalike_label_accepts_nothing(rig: Rig, label: str) -> None:
+    rig.pr(GATE_EDIT)
+    rig.labels(label)
+    rig.checks = main_gate_failed()
+    assert_refused(rig, rig.ship(), "eval-gate-main")
+
+
+@pytest.mark.req("RAG-12")
+def test_a_case_variant_of_evals_src_counts_as_a_gate_change(rig: Rig) -> None:
+    rig.pr({"Evals/Src/x.py": "changed\n"})
+    rig.labels("gate-change")
+    rig.checks = main_gate_failed()
+    assert_merged(rig, rig.ship())
 
 
 def test_an_extra_check_that_passed_is_fine(rig: Rig) -> None:
@@ -1490,3 +1616,164 @@ def test_script_is_in_runner_sync_paths(sync_paths: list[str], script: str) -> N
 def test_script_shebang_is_bin_bash(script: str) -> None:
     first = (REPO / "tools" / script).read_text().splitlines()[0]
     assert first == "#!/bin/bash"
+
+
+# -- row 5b: gaps, trying to make `ship` accept more than the one failure ----------------------
+
+
+@pytest.mark.req("RAG-12")
+@pytest.mark.parametrize("name", EVENT_NAMES_REFUSED)
+def test_gate_change_added_by_anyone_but_the_user_accepts_nothing(rig: Rig, name: str) -> None:
+    rig.pr(GATE_EDIT)
+    rig.labels("gate-change")
+    rig.events = refusing_events("gate-change")[name]
+    rig.checks = main_gate_failed()
+    assert_refused(rig, rig.ship(), "gate-change")
+
+
+@pytest.mark.req("RAG-12")
+@pytest.mark.parametrize("name", EVENT_NAMES_PASSING)
+def test_gate_change_last_added_by_the_user_accepts_the_one_failure(rig: Rig, name: str) -> None:
+    rig.pr(GATE_EDIT)
+    rig.labels("gate-change")
+    rig.events = passing_events("gate-change")[name]
+    rig.checks = main_gate_failed()
+    assert_merged(rig, rig.ship())
+
+
+@pytest.mark.req("RAG-12")
+@pytest.mark.parametrize("flag", ["user_fail", "events_fail"])
+def test_a_failing_actor_lookup_accepts_nothing_for_gate_change(rig: Rig, flag: str) -> None:
+    rig.pr(GATE_EDIT)
+    rig.labels("gate-change")
+    rig.flags.add(flag)
+    rig.checks = main_gate_failed()
+    assert_refused(rig, rig.ship())
+
+
+@pytest.mark.req("RAG-12")
+@pytest.mark.parametrize(
+    "path",
+    [
+        "evals/srcx/a.py",
+        "evals/src-notes.md",
+        "evals/tests/test_x.py",
+        "docs/evals/src/a.py",
+        "services/evals/src/a.py",
+        "evals/fixtures/other.jsonl",
+        "evals/SRC.md",
+    ],
+)
+def test_only_a_change_under_evals_src_counts_as_a_gate_change(rig: Rig, path: str) -> None:
+    rig.pr({path: "changed\n"})
+    rig.labels("gate-change")
+    rig.checks = main_gate_failed()
+    assert_refused(rig, rig.ship(), "eval-gate-main")
+
+
+@pytest.mark.req("RAG-12")
+@pytest.mark.parametrize(
+    "change",
+    [
+        pytest.param({"evals/src/northwind_evals/gate.py": None}, id="deleted"),
+        pytest.param({"evals/src/a b.py": "x\n"}, id="space in name"),
+    ],
+)
+def test_a_gate_change_of_any_shape_counts_with_the_label(
+    rig: Rig, change: dict[str, str | None]
+) -> None:
+    rig.pr({"evals/src/northwind_evals/gate.py": "x\n"})
+    rig.git("update-ref", "refs/heads/main", rig.head)
+    rig.base = rig.git("rev-parse", "main")
+    rig.git("fetch", "-q", "origin", cwd=rig.clone)
+    rig.pr(change, parent="main")
+    rig.labels("gate-change")
+    rig.checks = main_gate_failed()
+    assert_merged(rig, rig.ship())
+
+
+@pytest.mark.req("RAG-12")
+def test_a_rename_out_of_evals_src_counts_as_a_gate_change(rig: Rig) -> None:
+    rig.pr({"evals/src/a.py": "x\n"})
+    rig.git("update-ref", "refs/heads/main", rig.head)
+    rig.base = rig.git("rev-parse", "main")
+    rig.git("fetch", "-q", "origin", cwd=rig.clone)
+    rig.pr(renames={"evals/src/a.py": "docs/a.py"}, parent="main")
+    rig.labels("gate-change")
+    rig.checks = main_gate_failed()
+    assert_merged(rig, rig.ship())
+
+
+@pytest.mark.req("RAG-12")
+def test_a_missing_main_gate_is_not_a_failure_the_label_accepts(rig: Rig) -> None:
+    rig.pr(GATE_EDIT)
+    rig.labels("gate-change")
+    rig.checks = [c for c in checks() if c["name"] != "eval-gate-main"]
+    assert_refused(rig, rig.ship(), "eval-gate-main")
+
+
+@pytest.mark.req("RAG-12")
+def test_a_rerun_still_pending_beside_the_failure_is_refused(rig: Rig) -> None:
+    rig.pr(GATE_EDIT)
+    rig.labels("gate-change")
+    rerun = {"name": "eval-gate-main", "bucket": "pending", "workflow": "Guard"}
+    rig.checks = [*main_gate_failed(), rerun]
+    assert_refused(rig, rig.ship(), "eval-gate-main")
+
+
+@pytest.mark.req("RAG-12")
+def test_two_failed_runs_of_the_main_gate_are_still_the_one_failure(rig: Rig) -> None:
+    rig.pr(GATE_EDIT)
+    rig.labels("gate-change")
+    again = {"name": "eval-gate-main", "bucket": "fail", "workflow": "Guard"}
+    rig.checks = [*main_gate_failed(), again]
+    assert_merged(rig, rig.ship())
+
+
+@pytest.mark.req("RAG-12")
+def test_the_gate_change_label_does_not_stand_in_for_baseline_change(rig: Rig) -> None:
+    rig.pr({**GATE_EDIT, **BASELINE_EDIT})
+    rig.labels("gate-change")
+    rig.checks = main_gate_failed()
+    assert_refused(rig, rig.ship(), "baseline-change")
+
+
+@pytest.mark.req("RAG-12")
+def test_the_gate_change_label_does_not_stand_in_for_ci_change(rig: Rig) -> None:
+    rig.pr({**GATE_EDIT, **WORKFLOW_CHANGES["new workflow"]})
+    rig.labels("gate-change")
+    rig.checks = main_gate_failed()
+    assert_refused(rig, rig.ship(), "ci-change")
+
+
+@pytest.mark.req("RAG-12")
+@pytest.mark.parametrize("label", ["gate-change ", " gate-change", "gate‐change", "gate-change\n"])
+def test_a_label_with_stray_characters_accepts_nothing(rig: Rig, label: str) -> None:
+    rig.pr(GATE_EDIT)
+    rig.labels(label)
+    rig.checks = main_gate_failed()
+    assert_refused(rig, rig.ship())
+
+
+@pytest.mark.req("RAG-12")
+@pytest.mark.parametrize("job", ["eval-integrity-main", "baseline-label"])
+@pytest.mark.parametrize("bucket", ["skipping", "pending", "cancel", "fail"])
+def test_the_guard_jobs_the_label_cannot_touch_refuse_on_any_state(
+    rig: Rig, job: str, bucket: str
+) -> None:
+    rig.pr(GATE_EDIT)
+    rig.labels("gate-change")
+    rig.checks = checks(**{job: bucket})
+    assert_refused(rig, rig.ship(), job)
+
+
+@pytest.mark.req("RAG-12")
+def test_the_gate_change_message_names_the_label_the_user_added_and_every_changed_path(
+    rig: Rig,
+) -> None:
+    rig.pr({**GATE_EDIT, "evals/src/northwind_evals/other.py": "x\n"})
+    rig.labels("gate-change")
+    rig.checks = main_gate_failed()
+    done = rig.ship()
+    assert_merged(rig, done)
+    assert "evals/src/northwind_evals/other.py" in done.stdout

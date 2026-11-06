@@ -5,9 +5,12 @@ cassette tree, and every Makefile call goes through a shim that prints its argum
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import re
+import shutil
+import socket
 import subprocess
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -38,6 +41,13 @@ from northwind_llm_replay.scan import load_canaries
 from northwind_llm_replay.scripted import ScriptedLLM
 from northwind_rag.retrieval import RetrievedChunk, retriever_id
 from northwind_rag.testing import FakeEmbedder
+
+_spec = importlib.util.spec_from_file_location(
+    "promote_rig", Path(__file__).with_name("promote_rig.py")
+)
+assert _spec is not None and _spec.loader is not None
+promote_rig = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(promote_rig)
 
 pytestmark = pytest.mark.req("RAG-12")
 
@@ -120,6 +130,9 @@ class Rig:
         mp.setattr(cli, "FastEmbedEmbedder", lambda: FakeEmbedder("x"))
         mp.setattr(cli, "_live", lambda conn, embedder, items: self.live)
         cli.KNOWN_FAILURES.write_text("[]", encoding="utf-8")
+
+    def promote(self, *args: str) -> int:
+        return int(promote_rig.run(self.tmp, *args))
 
     def write_items(self, items: list[EvalItem]) -> None:
         lines = [
@@ -321,7 +334,7 @@ def test_containment_cannot_be_promoted_even_with_a_known_failure_not_approved(
     rig.setup(item(**ADVERSARIAL))
     rig.write_known(entry(approved_by="model"))
     rig.write_candidate({"EV-1": dict(CONTAIN_BAD)}, {})
-    assert cli.main(["promote", "--accept-regression", "agreed", "--approved-by", "the user"]) == 1
+    assert rig.promote("--accept-regression", "agreed", "--approved-by", "the user") == 1
     assert load_baseline(cli.BASELINE).answers["EV-1"]["behaviour_ok"] == 1.0
     assert cli.CANDIDATE.exists()
 
@@ -330,19 +343,14 @@ def test_containment_cannot_be_promoted_when_a_known_failure_now_passes(rig: Rig
     rig.setup(item(**ADVERSARIAL))
     rig.write_known(entry())
     rig.write_candidate({"EV-1": dict(CONTAIN_GOOD)}, {})
-    assert cli.main(["promote", "--accept-regression", "agreed", "--approved-by", "the user"]) == 1
+    assert rig.promote("--accept-regression", "agreed", "--approved-by", "the user") == 1
 
 
 def test_check_with_a_reason_changes_nothing_and_records_no_override(rig: Rig) -> None:
     rig.setup()
     rig.write_candidate({"EV-1": {**GOOD, "relevance": 0.0}})
     before = (cli.BASELINE.read_bytes(), cli.CANDIDATE.read_bytes())
-    assert (
-        cli.main(
-            ["promote", "--check", "--accept-regression", "agreed", "--approved-by", "the user"]
-        )
-        == 0
-    )
+    assert rig.promote("--check", "--accept-regression", "agreed", "--approved-by", "the user") == 0
     assert (cli.BASELINE.read_bytes(), cli.CANDIDATE.read_bytes()) == before
     assert load_baseline(cli.BASELINE).overrides == []
 
@@ -351,7 +359,7 @@ def test_check_on_a_regression_without_a_reason_fails_and_changes_nothing(rig: R
     rig.setup()
     rig.write_candidate({"EV-1": {**GOOD, "relevance": 0.0}})
     before = (cli.BASELINE.read_bytes(), cli.CANDIDATE.read_bytes())
-    assert cli.main(["promote", "--check"]) == 1
+    assert rig.promote("--check") == 1
     assert (cli.BASELINE.read_bytes(), cli.CANDIDATE.read_bytes()) == before
 
 
@@ -359,27 +367,21 @@ def test_check_on_a_regression_without_a_reason_fails_and_changes_nothing(rig: R
 def test_a_blank_reason_is_no_reason(rig: Rig, reason: str) -> None:
     rig.setup()
     rig.write_candidate({"EV-1": {**GOOD, "relevance": 0.0}})
-    assert cli.main(["promote", "--accept-regression", reason, "--approved-by", "the user"]) == 1
+    assert rig.promote("--accept-regression", reason, "--approved-by", "the user") == 1
     assert load_baseline(cli.BASELINE).overrides == []
 
 
-def test_a_reason_is_stored_trimmed_with_the_date_and_what_it_accepted(rig: Rig) -> None:
+def test_a_reason_is_stored_literally_with_the_date_and_what_it_accepted(rig: Rig) -> None:
     rig.setup()
     rig.write_candidate({"EV-1": {**GOOD, "relevance": 0.0}})
     assert (
-        cli.main(
-            [
-                "promote",
-                "--accept-regression",
-                "  judge was recalibrated  ",
-                "--approved-by",
-                "the user",
-            ]
+        rig.promote(
+            "--accept-regression", "  judge was recalibrated  ", "--approved-by", "the user"
         )
         == 0
     )
     [override] = load_baseline(cli.BASELINE).overrides
-    assert override["reason"] == "judge was recalibrated"
+    assert override["reason"] == "  judge was recalibrated  "  # row 5b: taken literally
     assert re.fullmatch(r"\d{4}-\d{2}-\d{2}", override["on"])
     assert override["accepted"] == ["relevance regressed"]
 
@@ -388,11 +390,9 @@ def test_every_reason_survives_a_chain_of_promotions(rig: Rig) -> None:
     rig.setup()
     for reason, relevance in (("first", 0.5), ("second", 0.0)):
         rig.write_candidate({"EV-1": {**GOOD, "relevance": relevance}})
-        assert (
-            cli.main(["promote", "--accept-regression", reason, "--approved-by", "the user"]) == 0
-        )
+        assert rig.promote("--accept-regression", reason, "--approved-by", "the user") == 0
     rig.write_candidate({"EV-1": {**GOOD, "relevance": 0.0}})
-    assert cli.main(["promote"]) == 0
+    assert rig.promote() == 0
     assert [o["reason"] for o in load_baseline(cli.BASELINE).overrides] == ["first", "second"]
 
 
@@ -401,7 +401,7 @@ def test_a_dropped_item_cannot_be_overridden_and_leaves_both_files_alone(rig: Ri
     rig.write_baseline({"EV-1": dict(GOOD), "EV-2": dict(GOOD)})
     rig.write_candidate({"EV-1": dict(GOOD)})
     before = (cli.BASELINE.read_bytes(), cli.CANDIDATE.read_bytes())
-    assert cli.main(["promote", "--accept-regression", "because", "--approved-by", "the user"]) == 1
+    assert rig.promote("--accept-regression", "because", "--approved-by", "the user") == 1
     assert (cli.BASELINE.read_bytes(), cli.CANDIDATE.read_bytes()) == before
 
 
@@ -411,14 +411,14 @@ def test_a_candidate_that_loses_an_adversarial_item_is_refused_with_no_baseline_
     rig.setup(item(**ADVERSARIAL), item("EV-2", **ADVERSARIAL))
     cli.BASELINE.unlink()
     rig.write_candidate({"EV-1": dict(GOOD)})
-    assert cli.main(["promote", "--accept-regression", "because", "--approved-by", "the user"]) == 1
+    assert rig.promote("--accept-regression", "because", "--approved-by", "the user") == 1
     assert not cli.BASELINE.exists()
 
 
 def test_a_missing_gated_metric_cannot_be_promoted_even_with_a_reason(rig: Rig) -> None:
     rig.setup()
     rig.write_candidate({"EV-1": {k: v for k, v in GOOD.items() if k != "citation_ok"}})
-    assert cli.main(["promote", "--accept-regression", "because", "--approved-by", "the user"]) == 1
+    assert rig.promote("--accept-regression", "because", "--approved-by", "the user") == 1
     assert "citation_ok" in load_baseline(cli.BASELINE).answers["EV-1"]
     assert cli.CANDIDATE.exists()
 
@@ -753,26 +753,104 @@ def test_eval_rescore_recipe_has_no_spending_mode() -> None:
     assert not re.search(r"LLM_MODE=(record|live)", body.group(1))
 
 
-def test_eval_promote_passes_a_reason_with_spaces_as_one_argument(tmp_path: Path) -> None:
+PROMOTE_ENV_SHIM = """#!/bin/sh
+for a in "$@"; do printf 'ARG[%s]\\n' "$a"; done
+printf 'LLM_MODE=[%s]\\n' "$LLM_MODE"
+printf 'ENV ACCEPT_REGRESSION=[%s]\\n' "$ACCEPT_REGRESSION"
+printf 'ENV APPROVED_BY=[%s]\\n' "$APPROVED_BY"
+printf 'ENV BOOTSTRAP=[%s]\\n' "$BOOTSTRAP"
+printf 'ENV CHECKOUT=[%s]\\n' "$CHECKOUT"
+printf 'ENV CHECK=[%s]\\n' "$CHECK"
+printf 'ENV CANDIDATE_SHA=[%s]\\n' "$CANDIDATE_SHA"
+"""
+PROMOTE_ARGV = ["-I", "-m", "northwind_llm_replay.cli", "promote"]
+PROMOTE_VARIABLES = ("APPROVED_BY", "ACCEPT_REGRESSION", "BOOTSTRAP")
+
+
+def git(cwd: Path, *args: str) -> None:
+    subprocess.run(  # noqa: S603
+        ["git", "-c", "user.name=t", "-c", "user.email=t@t", *args],  # noqa: S607
+        cwd=cwd,
+        check=True,
+        capture_output=True,
+    )
+
+
+def git_out(cwd: Path, *args: str) -> str:
+    done = subprocess.run(  # noqa: S603
+        ["git", "-c", "user.name=t", "-c", "user.email=t@t", *args],  # noqa: S607
+        cwd=cwd,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return done.stdout.strip()
+
+
+def clone_rig(tmp_path: Path) -> Path:
+    """A clean repo at origin/main, shaped like the runner clone, with a shim for its Python."""
+    (tmp_path / "Makefile").write_text(MAKEFILE)
+    python = tmp_path / ".venv-runner" / "bin" / "python"
+    python.parent.mkdir(parents=True)
+    python.write_text(PROMOTE_ENV_SHIM)
+    python.chmod(0o755)
+    (tmp_path / ".gitignore").write_text(".venv-runner\n")
+    git(tmp_path, "init", "-q")
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-qm", "x")
+    git(tmp_path, "update-ref", "refs/remotes/origin/main", "HEAD")
+    remote = tmp_path / ".venv-runner" / "origin.git"
+    git(tmp_path, "init", "-q", "--bare", str(remote))
+    git(tmp_path, "remote", "add", "origin", str(remote))
+    git(tmp_path, "push", "-q", "origin", "HEAD:refs/heads/main")
+    return tmp_path
+
+
+def promote_make(
+    clone: Path, *args: str, env: dict[str, str] | None = None
+) -> tuple[int, list[str]]:
+    done = subprocess.run(  # noqa: S603
+        ["make", "-s", "eval-promote", f"RUNNER_DIR={clone}", *args],  # noqa: S607
+        cwd=clone,
+        capture_output=True,
+        text=True,
+        check=False,
+        env={
+            "PATH": "/usr/bin:/bin:/usr/local/bin",
+            "HOME": str(clone),
+            "LLM_RUNNER_PORT": "1",
+            **(env or {}),
+        },
+    )
+    return done.returncode, (done.stdout + done.stderr).splitlines()
+
+
+def seen(lines: list[str], variable: str) -> str:
+    [value] = [
+        ln[len(f"ENV {variable}=[") : -1] for ln in lines if ln.startswith(f"ENV {variable}=[")
+    ]
+    return value
+
+
+def argv(lines: list[str]) -> list[str]:
+    return [ln[4:-1] for ln in lines if ln.startswith("ARG[")]
+
+
+def test_eval_promote_passes_a_reason_with_spaces_as_one_value(tmp_path: Path) -> None:
     reason = "judge v3 was recalibrated; see review #7"
-    code, lines = make(tmp_path, "eval-promote", f"ACCEPT_REGRESSION={reason}")
+    code, lines = promote_make(clone_rig(tmp_path), f"ACCEPT_REGRESSION={reason}")
     assert code == 0
-    [(_, args)] = calls(lines)
-    assert args[-3:] == ["promote", "--accept-regression", reason]
+    assert seen(lines, "ACCEPT_REGRESSION") == reason
+    assert argv(lines) == PROMOTE_ARGV
 
 
 def test_eval_promote_passes_a_reason_from_the_shell_environment(tmp_path: Path) -> None:
-    code, lines = make(tmp_path, "eval-promote", env={"ACCEPT_REGRESSION": "two  spaces here"})
+    clone = clone_rig(tmp_path)
+    code, lines = promote_make(clone, env={"ACCEPT_REGRESSION": "two  spaces here"})
     assert code == 0
-    [(_, args)] = calls(lines)
-    assert args[-2:] == ["--accept-regression", "two  spaces here"]
+    assert seen(lines, "ACCEPT_REGRESSION") == "two  spaces here"
 
 
-PROMOTE_FLAGS = {
-    "APPROVED_BY": "--approved-by",
-    "ACCEPT_REGRESSION": "--accept-regression",
-    "BOOTSTRAP": "--bootstrap",
-}
 HOSTILE_VALUES = [
     "$(touch pwned)",
     "$(shell touch pwned)",
@@ -786,20 +864,22 @@ HOSTILE_VALUES = [
 
 
 @pytest.mark.parametrize("route", ["command line", "environment"])
-@pytest.mark.parametrize("value", HOSTILE_VALUES)
-@pytest.mark.parametrize("variable", PROMOTE_FLAGS)
+@pytest.mark.parametrize("value", [*HOSTILE_VALUES, "--check", "-h"])
+@pytest.mark.parametrize("variable", [*PROMOTE_VARIABLES, "CHECKOUT", "CHECK", "CANDIDATE_SHA"])
 def test_eval_promote_passes_a_value_literally_and_runs_nothing(
     tmp_path: Path, variable: str, value: str, route: str
 ) -> None:
-    """Make expands `$(...)` before the shell sees it, so shell quoting alone is not enough."""
+    """Make expands `$(...)` before the shell sees it, so shell quoting alone is not enough. Through
+    the environment, not argv, so a value that looks like a flag stays a value."""
+    clone = clone_rig(tmp_path)
     if route == "command line":
-        code, lines = make(tmp_path, "eval-promote", f"{variable}={value}")
+        code, lines = promote_make(clone, f"{variable}={value}")
     else:
-        code, lines = make(tmp_path, "eval-promote", env={variable: value})
-    assert not (tmp_path / "pwned").exists()
+        code, lines = promote_make(clone, env={variable: value})
+    assert not (clone / "pwned").exists()
     assert code == 0
-    [(_, args)] = calls(lines)
-    assert args[-2:] == [PROMOTE_FLAGS[variable], value]
+    assert seen(lines, variable) == value
+    assert argv(lines) == PROMOTE_ARGV
 
 
 def test_the_pins_come_before_the_first_shell_call() -> None:
@@ -815,32 +895,36 @@ def test_the_pins_come_before_the_first_shell_call() -> None:
     first_include = next(n for n, line in enumerate(code) if line.startswith("-include"))
     found = [(n, re.match(r"override (\w+) := \$\(value ", line)) for n, line in enumerate(code)]
     pins = {match.group(1): n for n, match in found if match}
-    assert set(pins) == {*PROMOTE_FLAGS, "PR", "SHA"}  # PR and SHA: `ship` (AUTO-1)
+    assert set(pins) == {
+        *PROMOTE_VARIABLES,
+        "CHECKOUT",
+        "CHECK",
+        "CANDIDATE_SHA",
+        "PR",
+        "SHA",
+    }  # PR, SHA: `ship`
     assert max(pins.values()) < min(first_shell, first_include)
 
 
-def test_eval_promote_passes_an_approver_with_spaces_as_one_argument(tmp_path: Path) -> None:
-    code, lines = make(tmp_path, "eval-promote", "APPROVED_BY=Sam  Lee, on call")
+def test_eval_promote_passes_an_approver_with_spaces_as_one_value(tmp_path: Path) -> None:
+    code, lines = promote_make(clone_rig(tmp_path), "APPROVED_BY=Sam  Lee, on call")
     assert code == 0
-    [(_, args)] = calls(lines)
-    assert args[-2:] == ["--approved-by", "Sam  Lee, on call"]
+    assert seen(lines, "APPROVED_BY") == "Sam  Lee, on call"
 
 
 @pytest.mark.parametrize("args", [[], ["ACCEPT_REGRESSION="]], ids=["unset", "empty"])
-def test_eval_promote_without_a_reason_passes_no_flag(tmp_path: Path, args: list[str]) -> None:
-    code, lines = make(tmp_path, "eval-promote", *args)
+def test_eval_promote_without_a_reason_passes_none(tmp_path: Path, args: list[str]) -> None:
+    code, lines = promote_make(clone_rig(tmp_path), *args)
     assert code == 0
-    [(_, argv)] = calls(lines)
-    assert argv[-1] == "promote"
-    assert "--accept-regression" not in argv
+    assert seen(lines, "ACCEPT_REGRESSION") == ""
+    assert argv(lines) == PROMOTE_ARGV
 
 
 def test_eval_promote_never_sets_a_spending_mode_and_runs_no_other_step(tmp_path: Path) -> None:
-    code, lines = make(tmp_path, "eval-promote", "ACCEPT_REGRESSION=x")
+    code, lines = promote_make(clone_rig(tmp_path), "ACCEPT_REGRESSION=x")
     assert code == 0
-    runs = calls(lines)
-    assert len(runs) == 1  # no ingest, no gate, no live run
-    assert runs[0][0] == ""  # the recipe sets no LLM_MODE at all
+    assert argv(lines) == PROMOTE_ARGV  # no ingest, no gate, no live run
+    assert "LLM_MODE=[]" in lines  # the recipe sets no LLM_MODE at all
     body = re.search(r"^eval-promote:.*\n((?:\t.*\n|#.*\n)*)", MAKEFILE, re.MULTILINE)
     assert body
     assert "LLM_MODE" not in body.group(1)
@@ -849,8 +933,80 @@ def test_eval_promote_never_sets_a_spending_mode_and_runs_no_other_step(tmp_path
 def test_eval_promote_inherits_no_spending_mode_it_could_start(tmp_path: Path) -> None:
     """If the caller's shell already says record, promote still only runs the promote command,
     which has no client and cannot spend."""
-    code, lines = make(tmp_path, "eval-promote", env={"LLM_MODE": "record"})
+    code, lines = promote_make(clone_rig(tmp_path), env={"LLM_MODE": "record"})
     assert code == 0
-    [(_, args)] = calls(lines)
-    assert "promote" in args
-    assert not any(a in args for a in ("rescore", "gate", "--slice"))
+    assert argv(lines) == PROMOTE_ARGV
+
+
+def test_eval_promote_runs_no_python_outside_the_clone(tmp_path: Path) -> None:
+    """From a worktree, the Makefile and every line of code are ones the sandbox can edit."""
+    tree = tmp_path / "tree"
+    tree.mkdir()
+    code, lines = promote_make(clone_rig(tree), f"RUNNER_DIR={tmp_path}")
+    assert code == 2
+    assert any("only in the clone" in line for line in lines)
+    assert argv(lines) == []
+
+
+def test_eval_promote_refuses_a_clone_that_is_not_clean(tmp_path: Path) -> None:
+    clone = clone_rig(tmp_path)
+    (clone / "Makefile").write_text(MAKEFILE + "\n# edited\n")
+    code, lines = promote_make(clone)
+    assert code == 2
+    assert any("not clean" in line for line in lines)
+    assert argv(lines) == []
+
+
+def test_eval_promote_refuses_a_clone_off_origin_main(tmp_path: Path) -> None:
+    clone = clone_rig(tmp_path)
+    git(clone, "commit", "-q", "--allow-empty", "-m", "ahead")
+    code, lines = promote_make(clone)
+    assert code == 2
+    assert any("not at origin/main" in line for line in lines)
+    assert argv(lines) == []
+
+
+@pytest.mark.parametrize("broken", ["no repo", "no origin/main"])
+def test_eval_promote_fails_closed_when_git_cannot_answer(tmp_path: Path, broken: str) -> None:
+    """Two failed `rev-parse` calls print the same nothing, which must not read as equal."""
+    clone = clone_rig(tmp_path)
+    if broken == "no repo":
+        shutil.rmtree(clone / ".git")
+    else:
+        git(clone, "update-ref", "-d", "refs/remotes/origin/main")
+    code, lines = promote_make(clone)
+    assert code == 2
+    assert argv(lines) == []
+
+
+def test_eval_promote_refuses_a_clone_behind_the_real_main(tmp_path: Path) -> None:
+    """`origin/main` moves only at runner-sync, so a stale clone reads an old baseline."""
+    clone = clone_rig(tmp_path)
+    remote = clone / ".venv-runner" / "origin.git"
+    main = "refs/heads/main"
+    tree = git_out(remote, "commit-tree", f"{main}^{{tree}}", "-p", main, "-m", "moved on")
+    git(remote, "update-ref", "refs/heads/main", tree)
+    code, lines = promote_make(clone)
+    assert code == 2
+    assert any("not at origin/main" in line for line in lines)
+    assert argv(lines) == []
+
+
+def test_eval_promote_refuses_when_the_real_main_cannot_be_read(tmp_path: Path) -> None:
+    clone = clone_rig(tmp_path)
+    git(clone, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
+    code, lines = promote_make(clone)
+    assert code == 2
+    assert argv(lines) == []
+
+
+def test_eval_promote_refuses_while_a_spending_window_is_open(tmp_path: Path) -> None:
+    clone = clone_rig(tmp_path)
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        listener.listen()
+        port = str(listener.getsockname()[1])
+        code, lines = promote_make(clone, env={"LLM_RUNNER_PORT": port})
+    assert code == 2
+    assert any("spending window" in line for line in lines)
+    assert argv(lines) == []

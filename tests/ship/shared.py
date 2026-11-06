@@ -74,6 +74,7 @@ def make_commit(
     renames: Mapping[str, str] | None = None,
     bulk: int = 0,
     message: str = "change",
+    links: Mapping[str, str] | None = None,
 ) -> str:
     """A commit on `parent` plus `changes` (None deletes a path), made with plumbing only.
 
@@ -96,6 +97,9 @@ def make_commit(
             continue
         blob = git(repo, sh_env, "hash-object", "-w", "--stdin", stdin=content)
         lines.append(f"100644 {blob}\t{path}\0")
+    for path, target in (links or {}).items():
+        blob = git(repo, sh_env, "hash-object", "-w", "--stdin", stdin=target)
+        lines.append(f"120000 {blob}\t{path}\0")
     for old, new in (renames or {}).items():
         blob = git(repo, sh_env, "rev-parse", f"{parent}:{old}")
         lines.append(f"0 {NULL_SHA}\t{old}\0")

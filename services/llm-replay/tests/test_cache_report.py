@@ -233,20 +233,22 @@ def test_a_failed_import_with_only_blank_stderr_lines_still_fails(tmp_path: Path
     assert len(problems) == 1 and problems[0].startswith("PRICING")
 
 
-def isolate_main(monkeypatch: pytest.MonkeyPatch) -> None:
+def isolate_main(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Only the pricing probe decides the exit code, and nothing here touches the real repo, so
     neither the sandbox nor a terminal can fail these tests."""
     monkeypatch.setattr(runner_check, "load_paths", lambda _python: [])
     monkeypatch.setattr(runner_check, "check", lambda *_args: [])
     monkeypatch.setattr(runner_check, "checkouts", lambda: [])
     monkeypatch.setattr(runner_check, "git_redirect_files", lambda *_args: ([], []))
-    monkeypatch.setattr(localenv, "main_checkout", lambda: Path("/nonexistent"))
+    # A real `.git` folder: row 5b reports a `git_dir` that is not a directory (finding L2).
+    (tmp_path / "main" / ".git").mkdir(parents=True)
+    monkeypatch.setattr(localenv, "main_checkout", lambda: tmp_path / "main")
 
 
 def test_main_exits_1_and_names_pricing_when_the_import_fails(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    isolate_main(monkeypatch)
+    isolate_main(monkeypatch, tmp_path)
     python = fake_python(tmp_path, "exit 1")  # empty stderr: nothing may hide the failure
     assert runner_check.main(python) == 1
     out = capsys.readouterr().out
@@ -255,9 +257,9 @@ def test_main_exits_1_and_names_pricing_when_the_import_fails(
 
 
 def test_main_exits_0_with_a_real_interpreter_when_nothing_else_is_wrong(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    isolate_main(monkeypatch)
+    isolate_main(monkeypatch, tmp_path)
     assert runner_check.main(Path(sys.executable)) == 0
     out = capsys.readouterr().out
     assert "PRICING" not in out and "0 problem(s)" in out

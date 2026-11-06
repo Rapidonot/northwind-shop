@@ -66,7 +66,8 @@ budget can bound:
 **A new need widens these lists in a reviewed merge.** The assistant's tools will be the first test:
 client tools pass, but a new beta header, `tool_choice` or a new setting is refused until added.
 
-Batches are refused too: the ledger cannot price them yet, so RAG-02 (#7) has a prerequisite. The
+Batches are refused too: the ledger cannot price them, and RAG-02 (#7) does not use them (decision
+0010). The
 upstream is a constant in code that neither the CLI nor the environment can set. The runner binds
 127.0.0.1 and refuses to start on a taken port.
 
@@ -152,7 +153,9 @@ so a spending run under an xdist worker is a usage error rather than a stream of
   call, so it is impractical. Not measured.
 - **The cassette-write key-fragment check is gone**, because the sandbox has no key. Regex scanning
   stays at write time, and the runner checks every response. The file-level fragment scan from the
-  clone covers `CASSETTES_DIR` only, not a worktree's `.llm-proxy-log/` or `evals/`.
+  clone covers `CASSETTES_DIR` only, not a worktree's `.llm-proxy-log/`, `evals/` or
+  `data/enrichment/`. Its other roots are the clone's own copies. To check a worktree's enrichment
+  cache before merge, point `CASSETTES_DIR` at it, in addition to the normal scan.
 - **Buffering hides first-token latency.** The caller sees the first token when the response ends.
   So the runner logs time to first upstream byte per request, in its terminal line and the ledger's
   settle entry. #17 measures local overhead in replay with a streaming scripted model, and the
@@ -184,7 +187,7 @@ so a spending run under an xdist worker is a usage error rather than a stream of
   superuser, so `COPY … TO PROGRAM` may run code in the container, with open network and no key.
   PROGRESS row #9a replaces it with a non-superuser app role.
 - F4 (`allowLocalBinding` is not loopback-only) and F6 for worktrees (shared caches) still stand.
-- Runner support for Batches charging is a prerequisite of #7.
+- Runner support for Batches charging was a prerequisite of #7, until decision 0010 dropped Batches.
 
 ## Evidence
 
