@@ -66,7 +66,8 @@ budget can bound:
 **A new need widens these lists in a reviewed merge.** The assistant's tools will be the first test:
 client tools pass, but a new beta header, `tool_choice` or a new setting is refused until added.
 
-Batches are refused too: the ledger cannot price them yet, so RAG-02 (#7) has a prerequisite. The
+Batches are refused too: the ledger cannot price them, and RAG-02 (#7) does not use them (decision
+0010). The
 upstream is a constant in code that neither the CLI nor the environment can set. The runner binds
 127.0.0.1 and refuses to start on a taken port.
 
@@ -186,7 +187,7 @@ so a spending run under an xdist worker is a usage error rather than a stream of
   superuser, so `COPY … TO PROGRAM` may run code in the container, with open network and no key.
   PROGRESS row #9a replaces it with a non-superuser app role.
 - F4 (`allowLocalBinding` is not loopback-only) and F6 for worktrees (shared caches) still stand.
-- Runner support for Batches charging is a prerequisite of #7.
+- Runner support for Batches charging was a prerequisite of #7, until decision 0010 dropped Batches.
 
 ## Evidence
 
