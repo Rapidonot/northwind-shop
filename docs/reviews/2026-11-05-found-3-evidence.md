@@ -393,8 +393,12 @@ and `6f920a1`. The base is now that ref, so "`origin/main` may be stale" above n
   to the shared `northwind`. That database was still on `0001`, 2,351 rows, and RAG-02 kept it that way
   on purpose. So these runs used a new scratch database, `northwind_found3_plain`, loaded by `make ingest`.
   The user did not ask for this. The shared database's migrations, rows, index versions and schemas were
-  identical before and after. The first `make ingest` from main will migrate the shared index: that is
-  outside this row.
+  identical before and after the run at `a953b20`.
+- **The shared database moved anyway, not through this row.** Migration `0002` was applied to `northwind`
+  at 18:18:41 local time on 2026-11-06. At that moment this session was running mutants on
+  `services/backend`, which uses no database, and its next `make ci` started after 18:28:37. Rows (2,351),
+  the last row write and the index versions did not change. At 18:48, with this session's jobs finished,
+  another client was creating `rag01_test_` schemas in `northwind`. Who that was is not known here.
 - **At `a953b20`, clean tree, make's own exit codes, on that scratch database:** `make ci` 0 (3453 passed,
   22 xfailed, 34 portal, 96 integration, `eval-integrity` passed against `origin/main`); `make eval-gate` 0,
   equal to the baseline on all seven metrics, 100/100 replayed, stale 0. Spend $1.150794 before and after.
