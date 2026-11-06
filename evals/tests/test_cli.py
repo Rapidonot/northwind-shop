@@ -7,6 +7,7 @@ called without LLM_MODE=record, and every client is either scripted or replay-on
 
 from __future__ import annotations
 
+import importlib.util
 import json
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -27,6 +28,13 @@ from northwind_llm_replay.proxy import ProxyState
 from northwind_llm_replay.scripted import ScriptedLLM
 from northwind_rag.retrieval import RetrievedChunk, retriever_id
 from northwind_rag.testing import FakeEmbedder
+
+_spec = importlib.util.spec_from_file_location(
+    "promote_rig", Path(__file__).with_name("promote_rig.py")
+)
+assert _spec is not None and _spec.loader is not None
+promote_rig = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(promote_rig)
 
 pytestmark = pytest.mark.req("RAG-12")
 
@@ -100,6 +108,9 @@ class Rig:
         mp.setattr(cli, "KNOWN_FAILURES", tmp / "known_failures.json")
         cli.KNOWN_FAILURES.write_text("[]", encoding="utf-8")
         mp.setattr(cli, "_live", lambda conn, embedder, items: self.live)
+
+    def promote(self, *args: str) -> int:
+        return int(promote_rig.run(self.tmp, *args))
 
     def write_items(self, items: list[EvalItem]) -> None:
         lines = [
@@ -458,31 +469,26 @@ def write_candidate(answers: dict[str, Any], retrieval: dict[str, Any] | None = 
     save_baseline(cli.CANDIDATE, complete_baseline(scores, answers))
 
 
-def test_promote_replaces_the_baseline_and_consumes_the_candidate(rig: Rig) -> None:
+def test_promote_replaces_the_baseline_and_leaves_the_candidate(rig: Rig) -> None:
     rig.setup_one_item()
     write_candidate({"EV-1": {**GOOD, "relevance": 0.99}})
-    assert cli.main(["promote"]) == 0
+    assert rig.promote() == 0
     assert load_baseline(cli.BASELINE).answers["EV-1"]["relevance"] == 0.99
-    assert not cli.CANDIDATE.exists()
+    assert cli.CANDIDATE.exists()  # row 5b: promote writes only the baseline
 
 
 def test_promote_refuses_a_regression_and_keeps_the_baseline(rig: Rig) -> None:
     rig.setup_one_item()
     write_candidate({"EV-1": {**GOOD, "relevance": 0.0}})
-    assert cli.main(["promote"]) == 1
+    assert rig.promote() == 1
     assert load_baseline(cli.BASELINE).answers["EV-1"]["relevance"] == 1.0
 
 
 def test_an_accepted_regression_needs_a_reason_and_is_recorded(rig: Rig) -> None:
     rig.setup_one_item()
     write_candidate({"EV-1": {**GOOD, "relevance": 0.0}})
-    assert cli.main(["promote", "--accept-regression", "  ", "--approved-by", "the user"]) == 1
-    assert (
-        cli.main(
-            ["promote", "--accept-regression", "agreed in review", "--approved-by", "the user"]
-        )
-        == 0
-    )
+    assert rig.promote("--accept-regression", "  ", "--approved-by", "the user") == 1
+    assert rig.promote("--accept-regression", "agreed in review", "--approved-by", "the user") == 0
     baseline = load_baseline(cli.BASELINE)
     assert baseline.answers["EV-1"]["relevance"] == 0.0
     [override] = baseline.overrides
@@ -493,9 +499,9 @@ def test_an_accepted_regression_needs_a_reason_and_is_recorded(rig: Rig) -> None
 def test_overrides_survive_later_promotions(rig: Rig) -> None:
     rig.setup_one_item()
     write_candidate({"EV-1": {**GOOD, "relevance": 0.0}})
-    assert cli.main(["promote", "--accept-regression", "first", "--approved-by", "the user"]) == 0
+    assert rig.promote("--accept-regression", "first", "--approved-by", "the user") == 0
     write_candidate({"EV-1": {**GOOD, "relevance": 0.0}})
-    assert cli.main(["promote"]) == 0
+    assert rig.promote() == 0
     assert [o["reason"] for o in load_baseline(cli.BASELINE).overrides] == ["first"]
 
 
@@ -503,14 +509,14 @@ def test_a_containment_failure_cannot_be_promoted_even_with_a_reason(rig: Rig) -
     rig.setup_one_item()
     rig.write_items([item(segment="adversarial", expected_behaviour="contain")])
     write_candidate({"EV-1": {**GOOD, "behaviour_ok": 0.0}})
-    assert cli.main(["promote", "--accept-regression", "please", "--approved-by", "the user"]) == 1
+    assert rig.promote("--accept-regression", "please", "--approved-by", "the user") == 1
     assert load_baseline(cli.BASELINE).answers["EV-1"]["behaviour_ok"] == 1.0
 
 
 def test_promote_check_changes_nothing(rig: Rig) -> None:
     rig.setup_one_item()
     write_candidate({"EV-1": {**GOOD, "relevance": 0.99}})
-    assert cli.main(["promote", "--check"]) == 0
+    assert rig.promote("--check") == 0
     assert load_baseline(cli.BASELINE).answers["EV-1"]["relevance"] == 1.0
     assert cli.CANDIDATE.exists()
 
@@ -552,13 +558,13 @@ def test_promote_never_drops_a_gated_item_even_when_accepting_regressions(rig: R
     rig.write_items([item(), item("EV-2")])
     rig.write_baseline({"EV-1": {"recall@5": 1.0, "mrr": 1.0}}, {"EV-1": GOOD, "EV-2": GOOD})
     write_candidate({"EV-1": GOOD})
-    assert cli.main(["promote", "--accept-regression", "because", "--approved-by", "the user"]) == 1
+    assert rig.promote("--accept-regression", "because", "--approved-by", "the user") == 1
     assert "EV-2" in load_baseline(cli.BASELINE).answers
 
 
 def test_promote_needs_a_candidate(rig: Rig) -> None:
     rig.setup_one_item()
-    assert cli.main(["promote"]) == 1
+    assert rig.promote() == 1
 
 
 @pytest.mark.parametrize("size", ["0", "-1", "ten", ""])
@@ -662,7 +668,7 @@ def test_a_candidate_may_bring_in_a_new_metric(rig: Rig) -> None:
     old = {k: v for k, v in GOOD.items() if k != "citation_ok"}
     rig.write_baseline({"EV-1": {"recall@5": 1.0, "mrr": 1.0}}, {"EV-1": old})
     write_candidate({"EV-1": dict(GOOD)})
-    assert cli.main(["promote"]) == 0
+    assert rig.promote() == 0
     assert load_baseline(cli.BASELINE).answers["EV-1"]["citation_ok"] == 1.0
     assert load_baseline(cli.BASELINE).overrides == []
 
@@ -670,7 +676,7 @@ def test_a_candidate_may_bring_in_a_new_metric(rig: Rig) -> None:
 def test_a_candidate_may_not_lose_a_gated_metric(rig: Rig) -> None:
     rig.setup_one_item()
     write_candidate({"EV-1": {k: v for k, v in GOOD.items() if k != "citation_ok"}})
-    assert cli.main(["promote"]) == 1
+    assert rig.promote() == 1
 
 
 # --- routes that would weaken the gate silently (decision 0003) ---------------------------------
@@ -687,10 +693,7 @@ def test_relabelling_a_zero_tolerance_item_cannot_be_promoted(rig: Rig) -> None:
     zero_tolerance_rig(rig)
     rig.write_items([item(segment="specification")])
     write_candidate({"EV-1": dict(GOOD)})
-    assert (
-        cli.main(["promote", "--accept-regression", "tidying labels", "--approved-by", "the user"])
-        == 1
-    )
+    assert rig.promote("--accept-regression", "tidying labels", "--approved-by", "the user") == 1
     assert load_baseline(cli.BASELINE).segments["EV-1"] == "adversarial"
 
 
@@ -698,10 +701,7 @@ def test_deleting_a_zero_tolerance_item_cannot_be_promoted(rig: Rig) -> None:
     zero_tolerance_rig(rig)
     rig.write_items([item("EV-2")])
     write_candidate({"EV-2": dict(GOOD)}, {"EV-2": {"recall@5": 1.0, "mrr": 1.0}})
-    assert (
-        cli.main(["promote", "--accept-regression", "tidying items", "--approved-by", "the user"])
-        == 1
-    )
+    assert rig.promote("--accept-regression", "tidying items", "--approved-by", "the user") == 1
     assert "EV-1" in load_baseline(cli.BASELINE).answers
 
 
@@ -709,11 +709,11 @@ def test_promoting_with_no_baseline_needs_a_recorded_reason(rig: Rig) -> None:
     rig.setup_one_item()
     write_candidate({"EV-1": dict(GOOD)})
     cli.BASELINE.unlink()
-    assert cli.main(["promote"]) == 1
+    assert rig.promote() == 1
     assert not cli.BASELINE.exists()
-    assert cli.main(["promote", "--accept-regression", "no", "--approved-by", "the user"]) == 1
-    assert cli.main(["promote", "--bootstrap", "  ", "--approved-by", "the user"]) == 1
-    assert cli.main(["promote", "--bootstrap", "first baseline", "--approved-by", "the user"]) == 0
+    assert rig.promote("--accept-regression", "no", "--approved-by", "the user") == 1
+    assert rig.promote("--bootstrap", "  ", "--approved-by", "the user") == 1
+    assert rig.promote("--bootstrap", "first baseline", "--approved-by", "the user") == 0
     assert load_baseline(cli.BASELINE).overrides[0]["reason"] == "first baseline"
 
 
@@ -762,7 +762,7 @@ def test_a_doctored_behaviour_score_cannot_be_promoted(rig: Rig, value: float | 
     if value is None:
         del scores["behaviour_ok"]
     write_candidate({"EV-1": scores})
-    assert cli.main(["promote", "--accept-regression", "because", "--approved-by", "the user"]) == 1
+    assert rig.promote("--accept-regression", "because", "--approved-by", "the user") == 1
 
 
 def test_promote_recomputes_the_summary(rig: Rig) -> None:
@@ -770,7 +770,7 @@ def test_promote_recomputes_the_summary(rig: Rig) -> None:
     write_candidate({"EV-1": dict(GOOD)})
     doctored = replace(load_baseline(cli.CANDIDATE), summary={"answers": {"overall": {"n": 99}}})
     save_baseline(cli.CANDIDATE, doctored)
-    assert cli.main(["promote"]) == 0
+    assert rig.promote() == 0
     assert load_baseline(cli.BASELINE).summary["answers"]["overall"]["n"] == 1
 
 
@@ -904,25 +904,25 @@ def test_an_override_without_an_approver_is_refused_and_writes_nothing(
     if flag == "--bootstrap":
         cli.BASELINE.unlink()
     before = cli.BASELINE.read_bytes() if cli.BASELINE.exists() else None
-    argv = ["promote", flag, "agreed in review"]
+    argv = [flag, "agreed in review"]
     if approver is not None:
         argv += ["--approved-by", approver]
     if check:
         argv.append("--check")
-    assert cli.main(argv) == 1
+    assert rig.promote(*argv) == 1
     assert cli.CANDIDATE.exists()
     after = cli.BASELINE.read_bytes() if cli.BASELINE.exists() else None
     assert after == before
 
 
 @pytest.mark.parametrize("flag", ["--accept-regression", "--bootstrap"])
-def test_a_promoted_override_stores_the_trimmed_approver(rig: Rig, flag: str) -> None:
+def test_a_promoted_override_stores_the_approver_literally(rig: Rig, flag: str) -> None:
     regressed_candidate(rig)
     if flag == "--bootstrap":
         cli.BASELINE.unlink()
-    assert cli.main(["promote", flag, "agreed", "--approved-by", "  Dana Test  "]) == 0
+    assert rig.promote(flag, "agreed", "--approved-by", "  Dana Test  ") == 0
     [override] = load_baseline(cli.BASELINE).overrides
-    assert override["approved_by"] == "Dana Test"
+    assert override["approved_by"] == "  Dana Test  "  # row 5b: taken literally
     assert override["reason"] == "agreed"
 
 
@@ -961,7 +961,7 @@ def test_promote_refuses_when_the_baseline_holds_an_unapproved_override(rig: Rig
     with_override({**NO_APPROVER, "approved_by": bad})
     write_candidate({"EV-1": dict(GOOD)})
     before = cli.BASELINE.read_bytes()
-    assert cli.main(["promote"]) == 1
+    assert rig.promote() == 1
     assert cli.BASELINE.read_bytes() == before
     assert cli.CANDIDATE.exists()
 
@@ -970,11 +970,11 @@ def test_promote_refuses_when_the_baseline_override_has_no_approved_by_key(rig: 
     rig.setup_one_item()
     with_override(dict(NO_APPROVER))
     write_candidate({"EV-1": dict(GOOD)})
-    assert cli.main(["promote"]) == 1
+    assert rig.promote() == 1
 
 
 def test_promote_still_works_over_an_override_that_names_its_approver(rig: Rig) -> None:
     rig.setup_one_item()
     with_override(dict(GOOD_OVERRIDE))
     write_candidate({"EV-1": dict(GOOD)})
-    assert cli.main(["promote"]) == 0
+    assert rig.promote() == 0

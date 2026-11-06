@@ -40,6 +40,7 @@ SANDBOX = {
             "~/Projects/northwind-shop/.git/worktrees/*/gitdir",
             "~/Projects/northwind-shop/.git/worktrees/*/commondir",
             "~/Projects/northwind-shop/.git/worktrees/*/config.worktree",
+            "~/Projects/northwind-shop/.git/config.worktree",
         ],
         "denyRead": [
             "./.env*",  # this checkout
@@ -132,6 +133,7 @@ PERMISSIONS = {
         "Bash(uv run *eval-promote*)",
         "Bash(uv run *eval-gate-stale-ok*)",
         "Bash(uv run *northwind_evals*promote*)",
+        "Bash(uv run *northwind_llm_replay*promote*)",
         # The sandbox covers Bash only, so the file tools need their own rules for these.
         "Edit(./evals/baselines/**)",
         "Write(./evals/baselines/**)",
@@ -180,8 +182,9 @@ def test_proposal_has_no_other_top_level_settings() -> None:
 @pytest.mark.req("RAG-12")
 @pytest.mark.req("RAG-12")
 def test_only_what_redirects_git_is_denied_so_a_commit_still_works() -> None:
-    """Row 5a: your terminal's git trusts these four. Everything else in `.git` stays writable, and
-    a relative `./.git` would be the main checkout's directory, which would stop its commits."""
+    """Rows 5a and 5b: your terminal's git trusts these five. Everything else in `.git` stays
+    writable, and a relative `./.git` would be the main checkout's directory, which would stop its
+    commits."""
     deny_write = load("settings.proposed.json")["sandbox"]["filesystem"]["denyWrite"]
     git_entries = [path for path in deny_write if ".git" in path and ".gitignore" not in path]
     assert git_entries == [
@@ -189,6 +192,7 @@ def test_only_what_redirects_git_is_denied_so_a_commit_still_works() -> None:
         "~/Projects/northwind-shop/.git/worktrees/*/gitdir",
         "~/Projects/northwind-shop/.git/worktrees/*/commondir",
         "~/Projects/northwind-shop/.git/worktrees/*/config.worktree",
+        "~/Projects/northwind-shop/.git/config.worktree",
     ]
 
 

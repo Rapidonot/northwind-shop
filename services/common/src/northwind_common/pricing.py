@@ -1,8 +1,8 @@
 """Price a Messages API call from its `usage` (FOUND-2 spend guard, NFR-16).
 
 Source: https://platform.claude.com/docs/en/about-claude/pricing, read 2026-11-04.
-Prices are USD per million tokens. Batch rates are not here yet: the proxy refuses the
-Batches endpoint until RAG-02 needs it, so there is nothing to price.
+Prices are USD per million tokens. Batch rates are not here: the proxy refuses the Batches
+endpoint and RAG-02 does not use it (decision 0010), so there is nothing to price.
 
 Claude Haiku 5.5 has two tiers. A request whose prompt (input + cache reads + cache writes)
 is over 100,000 tokens pays the higher rates for every token type, including output.

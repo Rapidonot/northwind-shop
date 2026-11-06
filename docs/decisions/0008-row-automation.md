@@ -53,9 +53,9 @@ The review found that the design assumed too much around `ship`. The user's deci
   of `Makefile`, `git merge` overwrites an ignored file, and on this filesystem a path spelled with U+017F
   lands in `services/` unseen by any ASCII match. A name list will keep missing things; the durable fix is
   showing the full diff of everything outside an allow-list, logged as AUTO-2.
-- **Control surface (finding 3).** Widened to what CI executes. CI still runs the PR's own gate code, so a
-  green `eval-gate` does not prove the gate is intact. Running the gate from main's copy is open under
-  row 5b. `tests/**` stays off the surface by the user's choice.
+- **Control surface (finding 3).** Widened to what CI executes. CI ran the PR's own gate code, so a green
+  `eval-gate` did not prove the gate was intact. Row 5b added `Guard / eval-gate-main`, which runs main's
+  copy (decision 0009). `tests/**` stays off the surface by the user's choice.
 - **Spending window (finding 13).** `ship` and `runner-sync` refuse while the runner port answers.
 
 ## What the advisor review changed
@@ -80,12 +80,14 @@ Two of them settle something here:
   `--refmap=` keeps it there: `preflight()` in `runner.py` refuses a clone off `origin/main`.
 - **Job outcomes come from `gh pr checks --json`.** Read from the `gh` source on 2026-11-05: `--json`
   returns before the failed and pending exit logic, and `--watch` cannot be combined with it. So
-  `--watch` only waits. `python`, `eval-gate`, `e2e` and `portal` must exist in workflow `CI`, and every
-  check reported, in any workflow, must have bucket `pass`.
+  `--watch` only waits. `python`, `eval-gate`, `e2e` and `portal` must exist in workflow `CI`, and
+  `baseline-label`, `eval-integrity-main` and `eval-gate-main` in workflow `Guard`. Every check reported,
+  in any workflow, must have bucket `pass`, with the one exception in decision 0009: `gate-change`.
 - **`.github/workflows/**` needs the `ci-change` label.** `ci.yml` runs on `pull_request`, so a PR is
   tested by its own workflow and green CI proves nothing about that change.
 - **`evals/baselines` and `known_failures.json` need `baseline-change`**, the label row 5b also checks
-  in CI. Both labels must have been added by the user's account, as above.
+  in CI. Both labels, and `gate-change` from decision 0009, must have been added by the user's account, as
+  above.
 - **Minimum `gh` is 2.103.3**, the oldest version whose help was read. It may be stricter than necessary:
   the release that added `gh pr checks --json` was not established. The script also probes for the flags.
 

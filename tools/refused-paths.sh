@@ -71,6 +71,15 @@ if [[ -s "$work/parsed" ]]; then
 	esac
 fi
 
+# Row 5b: a tracked symlink checks out clean, so `git status` cannot see that what the clone trusts now
+# points somewhere the session can write. The whole tree, not the diff: a link must never be there.
+git ls-tree -r -z "$head" >"$work/modes" || refuse "git ls-tree failed"
+tr '\0' '\n' <"$work/modes" | { grep '^120000 ' || true; } | cut -f2 >"$work/links"
+if [[ -s "$work/links" ]]; then
+	cat -v "$work/links" >&2
+	refuse "these paths are symlinks, which must not reach the clone"
+fi
+
 # On a case-insensitive filesystem two such paths are one file, and the second overwrites the first.
 git ls-tree -r --name-only -z "$head" >"$work/tree" || refuse "git ls-tree failed"
 tr '\0' '\n' <"$work/tree" | LC_ALL=C tr '[:upper:]' '[:lower:]' | LC_ALL=C sort | uniq -d >"$work/folded"

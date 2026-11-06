@@ -54,8 +54,15 @@ class Hook:
     def git(self, cwd: Path, *args: str) -> str:
         return str(shared.git(cwd, self.sh_env, *args))
 
-    def commit(self, changes: dict[str, str | None], parent: str | None = None) -> str:
-        sha = str(shared.make_commit(self.origin, self.sh_env, parent or self.base, changes))
+    def commit(
+        self,
+        changes: dict[str, str | None],
+        parent: str | None = None,
+        links: dict[str, str] | None = None,
+    ) -> str:
+        sha = str(
+            shared.make_commit(self.origin, self.sh_env, parent or self.base, changes, links=links)
+        )
         ref = f"refs/tmp/{sha}"
         self.git(self.origin, "update-ref", ref, sha)
         self.git(self.clone, "fetch", "-q", "origin", f"{ref}:{ref}")
@@ -179,6 +186,17 @@ def passed(done: subprocess.CompletedProcess[str]) -> None:
 @pytest.mark.parametrize("path", [*REFUSED_PATHS, *EXTRA_REFUSED])
 def test_refuses_the_path_and_names_it(hook: Hook, mode: str, path: str) -> None:
     done = attempt(hook, mode, hook.commit({path: "x\n"}))
+    refused(hook, done)
+    assert path in done.stdout + done.stderr
+
+
+@pytest.mark.req("RAG-12")
+def test_refuses_a_tracked_symlink_and_names_it(hook: Hook, mode: str) -> None:
+    """Row 5b, in step with tools/refused-paths.sh: a link checks out clean, so name it here."""
+    path = shared.NOT_REFUSED_PATHS[0]  # passes as a plain file, so only the mode can refuse it
+    passed(attempt(hook, mode, hook.commit({path: "x\n"})))
+    hook.remote_branch(None)
+    done = attempt(hook, mode, hook.commit({}, links={path: "/elsewhere"}))
     refused(hook, done)
     assert path in done.stdout + done.stderr
 

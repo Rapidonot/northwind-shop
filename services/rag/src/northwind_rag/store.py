@@ -125,13 +125,15 @@ def _row(chunk: Chunk, embedder_id: str, index_version: str) -> dict[str, object
         "text_hash": chunk.text_hash,
         "embedder_id": embedder_id,
         "index_version": index_version,
+        "context": chunk.context,
+        "embed_hash": chunk.embed_hash if chunk.context else None,
     }
 
 
 _COLUMNS = (
     "chunk_id, source_type, source_id, seq, parent_id, doc_type, text, category, brand, size, "
     "colour, material, price_band, region, updated, visibility, content_hash, text_hash, "
-    "embedder_id, index_version"
+    "embedder_id, index_version, context, embed_hash"
 )
 _PLACEHOLDERS = ", ".join(f"%({name.strip()})s" for name in _COLUMNS.split(","))
 _INSERT = (
@@ -189,8 +191,9 @@ def sync_chunks(
 ) -> IngestReport:
     """Makes the index equal `chunks` in one transaction: all of the change, or none of it.
 
-    A chunk is embedded only if it is new, its text changed, or its stored embedder id differs;
-    a metadata-only change keeps its vector.
+    A chunk is embedded only if it is new, what it embeds changed, or its stored embedder id
+    differs; a metadata-only change keeps its vector. What it embeds is its text, or its context
+    and text (RAG-02); a plain row has no `embed_hash`, so its text hash stands in.
 
     A row's `index_version` is the version that last wrote it, so unchanged rows keep an older
     one. Find the live version in `rag_index_manifest.is_current`; never filter rows by it.
@@ -209,7 +212,8 @@ def sync_chunks(
                 f"embedder {embedder.id} has {embedder.dim} dims, column {column_dim}"
             )
         rows = conn.execute(
-            "SELECT chunk_id, content_hash, text_hash, embedder_id FROM rag_chunks"
+            "SELECT chunk_id, content_hash, COALESCE(embed_hash, text_hash), embedder_id "
+            "FROM rag_chunks"
         ).fetchall()
         existing: dict[str, tuple[str, str, str]] = {r[0]: (r[1], r[2], r[3]) for r in rows}
 
@@ -224,10 +228,10 @@ def sync_chunks(
             c
             for c in to_write
             if c.chunk_id not in existing
-            or existing[c.chunk_id][1] != c.text_hash
+            or existing[c.chunk_id][1] != c.embed_hash
             or existing[c.chunk_id][2] != embedder.id
         ]
-        vectors = embedder.embed([c.text for c in to_embed]) if to_embed else []
+        vectors = embedder.embed([c.embed_text for c in to_embed]) if to_embed else []
         if len(vectors) != len(to_embed) or any(len(v) != column_dim for v in vectors):
             raise IngestError(f"embedder {embedder.id} returned vectors of the wrong shape")
         literals = {c.chunk_id: vector_literal(v) for c, v in zip(to_embed, vectors, strict=True)}
