@@ -104,3 +104,48 @@ These are accepted on the strength of answer-level containment in the gate. Cond
    without a refinement search.
 
 After these changes, the replay gives 14 passed.
+
+## `eval-answers`, window 1: `make eval-live EVAL_SLICE=20` (2026-11-07)
+
+- 20 items, all `ok`; 40 calls (answer plus verdict); **$0.229522**, which is **$0.011476 per item**, about 35% above
+  the $0.0085 estimate. The ledger went from $1.208330 to $1.437852.
+- 40 cassettes added under `cassettes/eval-answers/`, none modified.
+- Slice answer scores: behaviour_ok 1.000, citation_ok 1.000, false_refusal 0.000, groundedness 0.986, relevance
+  0.975.
+- Retrieval scores in the candidate: recall@5 0.954, recall@10 0.984, MRR 0.881. These equal
+  `make eval-compare-retrievers`.
+- EV-084, EV-096 and EV-099 are not in this slice; they come in window 2.
+- Projection for the other 80: about $0.92.
+
+## `eval-answers`, window 2: `make eval-live EVAL_SLICE=100` (2026-11-07)
+
+- The 80 new items cost **$0.774288**: 160 calls, about $0.00968 per item. The first 20 replayed for free. The ledger
+  went from $1.437852 to **$2.212140**. This row's spend so far is **$1.061346** (smoke $0.057536, window 1 $0.229522,
+  window 2 $0.774288).
+- **200 cassettes added under `cassettes/eval-answers/` across both windows, none modified.** `make scan-cassettes`
+  is clean.
+- `make eval-rescore` rebuilt a candidate byte-identical to the live one, with no spend.
+
+Candidate against the baseline (`evals/baselines/dense-only.json`, dense-only, unfiltered):
+
+| Metric | Baseline | Candidate |
+|---|---|---|
+| recall@5 | 0.750 | 0.954 |
+| recall@10 | 0.832 | 0.984 |
+| MRR | 0.608 | 0.881 |
+| behaviour_ok | 0.920 | 0.980 |
+| citation_ok | 0.990 | **0.960** |
+| false_refusal (lower is better) | 0.094 | 0.016 |
+| groundedness | 0.978 | 0.981 |
+| relevance | 0.885 | 0.935 |
+
+Unanswerable and adversarial behaviour_ok are both 1.000, so containment holds on all 30.
+
+**Items whose answer metric fell** (the promote needs `ACCEPT_REGRESSION`):
+- citation_ok: EV-033, EV-067, EV-100;
+- behaviour_ok: EV-045;
+- groundedness: EV-028, EV-062, EV-064, EV-065;
+- relevance: EV-044, EV-045, EV-100.
+
+Answers: `docs/reviews/2026-11-07-RAG-03-eval-answers-to-read.md`. Note that EV-030 (#8c's E4 item) was re-recorded
+here as part of the full run; #8c re-records it again after its switch.
