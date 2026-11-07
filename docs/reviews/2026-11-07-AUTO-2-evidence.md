@@ -50,3 +50,54 @@ tests/hooks test_notify_hook, test_req_skills, test_stop_conditions, test_gate_r
 ```
 
 One of the 78 was a mistake in the test, not a finding: the token `cat` matches "notification". It now looks for ` cat`.
+
+## Mutations
+
+Run on a throwaway clone of `c317703`, 44 mutants across the `Makefile` filter, the marker, `integrity.py`, `tools/changed_tests.py`,
+`tools/finish.sh`, the `finish` target, `tools/ship.sh` and the hooks. The first run killed 39 and 5 survived. Three of the 5 were real gaps,
+now killed by new tests, so 42 of 44 are killed and 2 are equivalent.
+
+| Mutant | Result |
+|---|---|
+| Filter: `&&` to `;` after `merge-base` | Survived, equivalent: `git diff ""` fails anyway, so the tests run |
+| `integrity.py`: the tracked mode check | Survived, a real gap: only the disk walk was tested. `test_a_tracked_symlink_gone_from_disk_is_still_refused` added, killed |
+| `finish.sh`: `commit -a` for the path list | Survived, equivalent: the dirty check has already refused anything else |
+| `finish.sh`: origin head check removed | Survived, a real gap. `test_origin_ending_up_with_another_head_is_refused` added, killed |
+| `finish.sh`: single merge base check removed | Survived, a real gap. `test_more_than_one_merge_base_is_refused` added, killed |
+
+## Security review, at `e9ae0c4`
+
+One critical, one high, two medium, seven low.
+
+**Finding 1, confirmed by running it, before the fix.** In a throwaway repo, a gitlink over a folder with a hand-written gitdir:
+
+```
+--- plain status (what finish.sh ran)
+MARKER WRITTEN: planted code ran
+--- with --ignore-submodules=all
+no marker
+--- with diff.ignoreSubmodules=all in a global config
+no marker
+```
+
+And from the sandbox, in this checkout: writing a nested `.git` file succeeded (exit 0), and the probe was removed. So the session can do
+every step. The test suite before the fix:
+
+```
+33 failed, 246 passed
+(including test_a_planted_gitlink_runs_nothing_and_is_refused[staged] and [committed])
+```
+
+| # | Severity | Finding | Done |
+|---|---|---|---|
+| 1 | Critical | `git status` runs a planted nested config | Fixed in `finish`; refused in `refused-paths.sh` and pre-push. **Open** for a `git status` outside `finish`: the user's global setting closes it |
+| 2 | High | `CHECKOUT` could be any directory | Fixed: only the checkouts `denyWrite` protects |
+| 3 | Medium | The routine rule excludes only hard rules 1 and 9 | Paths named. Left as the user approved it, for the user to decide |
+| 4 | Medium | The rule goes live before its checker is installed | Fixed: stop 1 applies to every row until the proposal is installed |
+| 5 | Low | Replace refs; symbolic `HEAD` pushed | Fixed |
+| 6 | Low | The `uv run make` rule was anchored | Fixed: `Bash(uv run *make*enrich*)` |
+| 7 | Low | `SHIP_FILTER` trusts a writable ref | Limit stated in decision 0011; `make test` prints when it skips |
+| 8 | Low | Bare `osascript` resolves through PATH | Fixed: `/usr/bin/osascript` |
+| 9 | Low | The `cassettes/eval-answers/` exclusion is a list of one | Logged |
+| 10 | Low | `--labels` did not validate its arguments | Fixed |
+| 11 | Low | `.git/config` and `.git/hooks` have no explicit `denyWrite` entry | Logged |

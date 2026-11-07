@@ -9,7 +9,12 @@
 #
 # `baseline-change` and `gate-change` stay the user's own act, and it never sets NW_ALLOW_CONTROL: each is
 # a separate decision to accept something (decision 0011). The branch name, the paths and the body are text
-# the sandbox wrote: paths are shown through `cat -v`, and none of it reaches a shell.
+# the sandbox wrote: paths are shown through `cat -v`, and none of it is run.
+#
+# Git in a checkout is not data: it reads that location's `.git`, config and index, and this runs outside the
+# sandbox. So the checkout must be one whose `.git` the sandbox cannot write, a gitlink is refused before
+# anything reads the working tree (measured: `git status` runs a nested folder's `core.fsmonitor`), and
+# replace refs and grafts are off, because the sandbox can write those.
 set -euo pipefail
 
 MAIN_REF=refs/runner/ship-main
@@ -29,7 +34,8 @@ say() {
 checkout=${CHECKOUT:-}
 reviewed=${SHA:-}
 body=${BODY:-}
-[[ "$checkout" =~ ^/[A-Za-z0-9._/-]+$ && "$checkout" != *..* ]] || refuse "CHECKOUT must be an absolute path"
+[[ "$checkout" =~ ^/[A-Za-z0-9._/-]+$ && "$checkout" != *..* && "$checkout" != */ ]] ||
+	refuse "CHECKOUT must be an absolute path"
 [[ "$reviewed" =~ ^[0-9a-f]{40}$ ]] || refuse "SHA must be the 40-character reviewed commit"
 [[ "$body" =~ ^docs/reviews/[A-Za-z0-9._-]+\.md$ && "$body" != *..* ]] || refuse "BODY must be a file in docs/reviews"
 [[ -d "$checkout" ]] || refuse "no such checkout"
@@ -37,9 +43,38 @@ body=${BODY:-}
 work=$(mktemp -d "${TMPDIR:-/tmp}/finish.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 
+# Exactly what `denyWrite` protects: ~/Projects/northwind-shop, or a linked worktree beside it whose `.git`
+# file points into that checkout's own worktrees folder. Physical paths, so a symlink cannot stand in.
+projects=$(cd -P "$HOME/Projects" 2>/dev/null && pwd -P) || refuse "not a checkout: no ~/Projects"
+real=$(cd -P "$checkout" && pwd -P) || refuse "no such checkout"
+main_checkout=$projects/northwind-shop
+case "$real" in
+"$main_checkout")
+	[[ -d "$real/.git" && ! -L "$real/.git" ]] || refuse "not a checkout: $real"
+	;;
+"$main_checkout"-*)
+	[[ "${real#"$main_checkout"-}" =~ ^[A-Za-z0-9._-]+$ ]] || refuse "not a checkout: $real"
+	[[ -f "$real/.git" && ! -L "$real/.git" ]] || refuse "not a checkout: $real"
+	pointer=$(cat "$real/.git")
+	worktrees="gitdir: $main_checkout/.git/worktrees/"
+	[[ "$pointer" == "$worktrees"* && "${pointer#"$worktrees"}" =~ ^[A-Za-z0-9._-]+$ ]] ||
+		refuse "not a checkout: its .git points elsewhere"
+	;;
+*) refuse "not a checkout: $real" ;;
+esac
+checkout=$real
+
 in_checkout() {
-	git -C "$checkout" "$@"
+	GIT_NO_REPLACE_OBJECTS=1 GIT_GRAFT_FILE=/dev/null git -c core.fsmonitor=false -C "$checkout" "$@"
 }
+
+# Before anything reads the working tree: a gitlink makes git run a child in that folder, with its config.
+in_checkout ls-files -s -z >"$work/index" || refuse "git ls-files failed"
+tr '\0' '\n' <"$work/index" | { grep '^160000 ' || true; } | cut -f2 >"$work/gitlinks"
+if [[ -s "$work/gitlinks" ]]; then
+	cat -v "$work/gitlinks" >&2
+	refuse "the index holds a gitlink: do not run git status in this checkout until it is gone"
+fi
 
 branch=$(in_checkout symbolic-ref -q --short HEAD) || refuse "the checkout is not on a branch"
 [[ "$branch" =~ $BRANCH_RE ]] || refuse "not a row branch: $branch"
@@ -49,7 +84,8 @@ title="$id: ${slug//-/ }"
 [[ -n "$slug" ]] || title=$id
 
 # Only what `/req-done` writes may be uncommitted.
-in_checkout status --porcelain -z --untracked-files=all >"$work/status" || refuse "git status failed"
+in_checkout status --porcelain -z --untracked-files=all --ignore-submodules=all >"$work/status" ||
+	refuse "git status failed"
 docs_changed=0
 while IFS= read -r -d '' entry; do
 	code=${entry:0:2}
@@ -64,14 +100,18 @@ while IFS= read -r -d '' entry; do
 done <"$work/status"
 
 # What the reviewers read must be what ships, apart from those two files: the rule `ship` applies.
-in_checkout merge-base --is-ancestor "$reviewed" HEAD || refuse "the reviewed commit is not on this branch"
-in_checkout "${GIT_NAMES[@]}" "$reviewed" HEAD >"$work/later" || refuse "git diff failed"
-while IFS= read -r -d '' path; do
-	case "$path" in
-	PROGRESS.md | COVERAGE.md) ;;
-	*) refuse "changed since the reviewed commit: ${path//$'\n'/\\n}" ;;
-	esac
-done <"$work/later"
+check_reviewed() {
+	local path
+	in_checkout merge-base --is-ancestor "$reviewed" HEAD || refuse "the reviewed commit is not on this branch"
+	in_checkout "${GIT_NAMES[@]}" "$reviewed" HEAD >"$work/later" || refuse "git diff failed"
+	while IFS= read -r -d '' path; do
+		case "$path" in
+		PROGRESS.md | COVERAGE.md) ;;
+		*) refuse "changed since the reviewed commit: ${path//$'\n'/\\n}" ;;
+		esac
+	done <"$work/later"
+}
+check_reviewed
 
 # From the reviewed commit, so what is posted is what the reviewers read.
 in_checkout show "$reviewed:$body" >"$work/body" 2>/dev/null || refuse "no $body at the reviewed commit"
@@ -80,10 +120,12 @@ in_checkout show "$reviewed:$body" >"$work/body" 2>/dev/null || refuse "no $body
 if ((docs_changed)); then
 	in_checkout commit -q -m "$id: req-done" -- PROGRESS.md COVERAGE.md || refuse "git commit failed"
 	say "committed PROGRESS.md and COVERAGE.md"
+	check_reviewed
 fi
+head=$(in_checkout rev-parse HEAD) || refuse "git rev-parse failed"
 
-# The pre-push hook runs here. Never forced.
-in_checkout push origin "HEAD:refs/heads/$branch" 2>&1 | cat -v ||
+# The pre-push hook runs here. Never forced, and the commit that was checked, not whatever HEAD is now.
+in_checkout push origin "$head:refs/heads/$branch" 2>&1 | cat -v ||
 	refuse "the push failed: read the output above. If the hook refused paths you mean to push, rerun with NW_ALLOW_CONTROL=1 in front"
 
 gh pr list --head "$branch" --base main --state open --json number --jq '.[].number' >"$work/prs" ||
@@ -106,7 +148,7 @@ fi
 # The branch, not refs/pull: GitHub can move that ref a moment after the push.
 git fetch --quiet --no-tags --refmap= origin "+refs/heads/main:$MAIN_REF" "+refs/heads/$branch:$HEAD_REF" ||
 	refuse "git fetch failed"
-[[ "$(git rev-parse "$HEAD_REF")" == "$(in_checkout rev-parse HEAD)" ]] || refuse "origin does not have the checkout's head"
+[[ "$(git rev-parse "$HEAD_REF")" == "$head" ]] || refuse "origin does not have the checkout's head"
 bases=$(git merge-base --all "$MAIN_REF" "$HEAD_REF") || refuse "no merge base with main"
 [[ "$bases" =~ ^[0-9a-f]{40}$ ]] || refuse "no single merge base with main"
 

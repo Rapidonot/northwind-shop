@@ -11,7 +11,6 @@ macOS shows it. That is the user's check after install.
 from __future__ import annotations
 
 import json
-import os
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -25,6 +24,8 @@ HOSTILE = '"; do shell script "touch /tmp/owned"; "'
 EVENTS = ("Stop", "StopFailure", "Notification")
 PROMPTS = {"permission_prompt", "idle_prompt", "elicitation_dialog"}
 SOUND = "sound name"
+# Absolute: a bare name resolves through PATH, and a hook runs outside the sandbox.
+OSASCRIPT = "/usr/bin/osascript"
 
 
 def settings() -> dict[str, Any]:
@@ -62,9 +63,10 @@ def fire(tmp_path: Path, event: str, rc: int = 0) -> tuple[subprocess.CompletedP
         "title": HOSTILE,
         "notification_type": "permission_prompt",
     }
+    assert command(event).startswith(f"{OSASCRIPT} -e ")
     done = subprocess.run(  # noqa: S603
-        ["/bin/sh", "-c", command(event)],
-        env={"PATH": f"{bin_dir}{os.pathsep}/usr/bin:/bin"},
+        ["/bin/sh", "-c", command(event).replace(OSASCRIPT, str(fake), 1)],
+        env={"PATH": "/usr/bin:/bin"},
         input=json.dumps(payload),
         capture_output=True,
         text=True,

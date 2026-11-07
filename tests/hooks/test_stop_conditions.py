@@ -239,6 +239,20 @@ def test_the_cassette_rule_is_stated_as_a_rule_not_a_proof() -> None:
 
 
 @pytest.mark.req("AUTO-2")
+def test_stop_one_holds_until_the_advisor_can_check_a_routine_row() -> None:
+    assert (
+        "until the `advisor-reviewer` proposal is installed, stop 1 applies to every row"
+        in routine()
+    )
+
+
+@pytest.mark.req("AUTO-2")
+def test_the_routine_rule_names_its_hard_rule_paths() -> None:
+    for path in ("`services/backend/**`", "cards.py", "chat.py"):
+        assert path in routine()
+
+
+@pytest.mark.req("AUTO-2")
 def test_an_unplanned_cassette_miss_is_a_scope_question() -> None:
     assert "an unplanned cassette miss is a scope question (stop 7)" in routine()
     assert "never an automatic re-record" in routine()

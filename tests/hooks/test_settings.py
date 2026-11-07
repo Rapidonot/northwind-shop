@@ -38,7 +38,7 @@ SPEND_ASK = ("Bash(make record*)", "Bash(make eval-live*)", "Bash(make llm-proxy
 # these fold into SPEND_ASK in the settings install commit (AUTO-2, item 5).
 PROPOSED_ASK = (
     "Bash(make *enrich*)",
-    "Bash(uv run make *enrich*)",
+    "Bash(uv run *make*enrich*)",
     "Bash(uv run *northwind_evals*enrich*)",
 )
 

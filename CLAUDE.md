@@ -217,7 +217,9 @@ These add to the ask-first rules above; they do not replace them. Changing a hum
 and raising a budget cap still need asking.
 
 **Routine rows.** A row is routine when the user names its scope in the start prompt and says it is routine,
-and the plan changes no hard-rule 1 or 9 path and no control surface path, with one exception: files added
+and the plan changes no hard-rule 1 or 9 path (`services/backend/**`,
+`services/common/src/northwind_common/cards.py`, `services/gateway/src/northwind_gateway/chat.py`, and any
+later payment code) and no control surface path, with one exception: files added
 under `cassettes/<suite>/` by `make record SUITE=<suite>`, in a window the user opened for that suite. The
 plan names the suite, the model input that changed and the expected spend. Stop 2 still stops for the window.
 A modified, deleted or hand-written cassette, any file added under `cassettes/eval-answers/`, `make eval-live`
@@ -227,7 +229,8 @@ an automatic re-record.
 
 On a routine row the session saves the plan to `docs/reviews/` and sends it to `advisor-reviewer` with the
 start prompt, in place of stop 1. `pass`: carry on. `findings`, medium or low only: triage, then carry on.
-`findings` with a high or critical, or `unconfirmed`: stop.
+`findings` with a high or critical, or `unconfirmed`: stop. Until the `advisor-reviewer` proposal is
+installed, stop 1 applies to every row: the installed copy cannot check that a row is routine.
 
 Triage on a routine row is fixed: critical or high is stop 10. Unsafe at any severity, meaning it breaks a
 hard rule or a protected path: fix it, and stop 6 if the fix changes the design. Medium: fix it if it is

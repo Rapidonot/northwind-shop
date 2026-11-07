@@ -131,6 +131,7 @@ SHIP_FILTER := base=$$(git merge-base origin/main HEAD 2>/dev/null) && git diff 
 # LLM_MODE is pinned on the recipe line, so neither the shell, the key file nor
 # `make test LLM_MODE=…` can turn these targets into spending ones (decision 0001).
 test: ## Unit tests (Python + portal), always in replay; ship tests only when what they cover changed
+	@if [[ -n "$$($(SHIP_FILTER))" ]]; then echo "make test: ship tests skipped, nothing they cover differs from origin/main; GitHub CI runs them"; fi
 	LLM_MODE=replay PYTEST_ADDOPTS="$$PYTEST_ADDOPTS $$($(SHIP_FILTER))" uv run pytest
 	$(PNPM) -r test
 
@@ -209,8 +210,8 @@ ship: ## Check a PR, wait for CI, ask, merge, then runner-sync (PR=<n> SHA=<revi
 
 # Your own terminal, from the clean clone, as `make -C ~/.northwind/runner finish CHECKOUT=$HOME/… SHA=<reviewed>
 # BODY=docs/reviews/<file>`: after `/req-done`, commits what it wrote, pushes, opens the PR from the body file,
-# adds `ci-change` if the diff needs it, then runs `ship`, which still asks. CHECKOUT is read as data. Safe to
-# rerun. `baseline-change`, `gate-change` and NW_ALLOW_CONTROL stay yours to give (AUTO-2, decision 0011).
+# adds `ci-change` if the diff needs it, then runs `ship`, which still asks. Git trusts a checkout's `.git`, so
+# CHECKOUT must be one that `denyWrite` protects: tools/finish.sh checks. Safe to rerun. `baseline-change`, `gate-change` and NW_ALLOW_CONTROL stay yours to give (AUTO-2, decision 0011).
 finish: ## Commit /req-done's files, push, open the PR, then ship (CHECKOUT=/abs/path SHA=<reviewed> BODY=<file>; runner clone only)
 	@[[ "$(CURDIR)" == "$(realpath $(RUNNER_DIR))" ]] || (echo "only in the clone: make -C $(RUNNER_DIR) finish CHECKOUT=/abs/path SHA=<reviewed> BODY=docs/reviews/<file>" && exit 2)
 	@! $(RUNNER_BUSY) || (echo "a spending window is open: close it first" && exit 2)

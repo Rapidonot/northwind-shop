@@ -201,6 +201,7 @@ Accepted or open, as recorded. Not re-derived; severity is the source's.
 | 5a findings 15, 16, 17 | Low | 15 closed, 2026-11-07. 16 and 17 open; each has its own line in "Owners" | 5a evidence |
 | Split secrets in the scanner | Medium | Open, #18 | FOUND-2 review, finding 6; `PROGRESS.md` row 18 |
 | RAG-12 third-pass F7, F8, F9, F11, F12, and second-pass F3, F9 to F13, F15 | Not rated here | Second-pass F9 to F13, F15 closed as unrecoverable, 2026-11-07. The rest open; each has its line in "Owners" | `PROGRESS.md` row 4 |
+| `git status` outside the sandbox runs a nested folder's config through a gitlink, which a session can plant: measured 2026-11-07 | High | `make finish` refuses it, and `tools/refused-paths.sh` and the pre-push hook refuse a committed one. **Open** for a `git status` from the user's terminal or an editor: the user's global `diff.ignoreSubmodules = all` closes it (measured) | Decision 0011; AUTO-2 evidence |
 | Installed settings can lose their sandbox block with no test failing | Not rated | Open, AUTO-2 | CC-27 evidence, "Limits" |
 | `ship` on real `gh` | Not rated | Done: the first real `ship`, stated by the user, 2026-11-07. Row A1 stays partial for its other items | Decision 0008, `PROGRESS.md` row A1 |
 | 12 untested refusals; control surface gaps; re-review F5, F6, F7 | Medium, low | Open, AUTO-2 | `PROGRESS.md` row A2; AUTO-1 evidence |

@@ -123,6 +123,15 @@ def test_a_directory_symlink_under_cassettes_is_refused(repo: Path) -> None:
 
 
 @pytest.mark.req("AUTO-2")
+def test_a_tracked_symlink_gone_from_disk_is_still_refused(repo: Path) -> None:
+    added = CASSETTE.with_name("new.json")
+    link(added, "../../elsewhere.json")
+    commit("add a link")
+    added.unlink()
+    assert integrity_problems("main", BASELINE) == [f"{added}: a cassette may not be a symlink"]
+
+
+@pytest.mark.req("AUTO-2")
 def test_a_symlink_outside_cassettes_is_not_this_checks_business(repo: Path) -> None:
     link(Path("docs/link"), "../../elsewhere.json")
     commit("a link elsewhere")

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import shutil
 import socket
 import subprocess
 import sys
@@ -92,7 +93,8 @@ class Row:
 
 
 def make_row(rig: Rig, changes: dict[str, str] | None = None) -> Row:
-    checkout = rig.root / "checkout"
+    checkout = rig.root / "Projects" / "northwind-shop"  # under the rig's $HOME
+    checkout.parent.mkdir(exist_ok=True)
     done = ship_rig.run(
         rig.root, "git", "clone", "-q", str(rig.origin), str(checkout), sh_env=rig.sh_env
     )
@@ -328,6 +330,157 @@ def test_it_refuses_outside_the_clone(row: Row, tmp_path: Path) -> None:
     assert_stopped_before_any_change(row, row.finish(runner_dir=elsewhere), "only in the clone")
 
 
+# -- security finding 1: nothing in the checkout may run --------------------------------------
+
+
+def plant_gitlink(row: Row, marker: Path, commit: bool = False) -> None:
+    """A gitlink over a folder whose own config names a program: `git status` runs it."""
+    planted = row.rig.root / "planted.sh"
+    planted.write_text(f'#!/bin/sh\ntouch "{marker}"\n')
+    planted.chmod(0o755)
+    row.write("sub/.git", "gitdir: ../gd\n")
+    row.write("gd/HEAD", "ref: refs/heads/m\n")
+    row.write("gd/refs/.keep", "")
+    row.write("gd/objects/.keep", "")
+    row.write(
+        "gd/config",
+        f"[core]\n\trepositoryformatversion = 0\n\tbare = false\n\tfsmonitor = {planted}\n",
+    )
+    head = row.git("rev-parse", "HEAD")
+    row.git("update-index", "--add", "--cacheinfo", f"160000,{head},sub")
+    if commit:
+        row.git("commit", "-q", "-m", "a gitlink")
+        row.reviewed = row.git("rev-parse", "HEAD")
+
+
+@pytest.mark.parametrize("commit", [False, True], ids=["staged", "committed"])
+def test_a_planted_gitlink_runs_nothing_and_is_refused(row: Row, commit: bool) -> None:
+    marker = row.rig.root / "MARKER"
+    plant_gitlink(row, marker, commit)
+    done = row.finish()
+    assert done.returncode != 0
+    assert "gitlink" in done.stdout
+    assert not marker.exists(), "planted code ran outside the sandbox"
+    assert row.creates() == []
+
+
+def test_the_status_call_ignores_submodules_and_the_fsmonitor() -> None:
+    script = (ship_rig.REPO / "tools" / "finish.sh").read_text()
+    assert "--ignore-submodules=all" in script
+    assert "core.fsmonitor=false" in script
+    assert script.index("gitlink") < script.index("status --porcelain")
+
+
+# -- security finding 2: only a checkout the sandbox protects ---------------------------------
+
+
+def worktree(row: Row, name: str = "northwind-shop-b") -> Path:
+    path = row.rig.root / "Projects" / name
+    row.git("checkout", "--", "PROGRESS.md", "COVERAGE.md")
+    row.git("switch", "-q", "--detach")
+    row.git("worktree", "add", "-q", str(path), BRANCH)
+    return path
+
+
+def test_a_linked_worktree_can_finish(row: Row) -> None:
+    path = worktree(row)
+    row.checkout = path
+    row.write("PROGRESS.md", "written by /req-done\n")
+    done = row.finish()
+    assert done.returncode == 0, done.stdout
+    assert len(row.rig.merge_calls()) == 1
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "northwind-shop-b/apps",
+        "northwind-shop/sub",
+        "other",
+        "northwind-shopx",
+        "northwind-shop-b/",
+    ],
+)
+def test_only_a_top_level_checkout_is_accepted(row: Row, name: str) -> None:
+    worktree(row)
+    target = row.rig.root / "Projects" / name
+    target.mkdir(parents=True, exist_ok=True)
+    plain = str(target) if not name.endswith("/") else f"{target}/"
+    done = row.finish(checkout=plain)
+    assert done.returncode != 0
+    assert "not a checkout" in done.stdout or name.endswith("/")
+    assert row.creates() == []
+
+
+def test_a_checkout_outside_projects_is_refused(row: Row) -> None:
+    elsewhere = row.rig.root / "scratch"
+    shutil.move(str(row.checkout), str(elsewhere))
+    row.checkout = elsewhere
+    done = row.finish()
+    assert done.returncode != 0
+    assert "not a checkout" in done.stdout
+    assert row.creates() == []
+
+
+def test_a_symlink_into_the_projects_folder_is_refused(row: Row) -> None:
+    elsewhere = row.rig.root / "scratch"
+    shutil.move(str(row.checkout), str(elsewhere))
+    link = row.rig.root / "Projects" / "northwind-shop-c"
+    link.symlink_to(elsewhere)
+    done = row.finish(checkout=str(link))
+    assert done.returncode != 0
+    assert "not a checkout" in done.stdout
+    assert row.creates() == []
+
+
+def test_a_git_file_pointing_elsewhere_is_refused(row: Row) -> None:
+    marker = row.rig.root / "MARKER"
+    path = worktree(row)
+    planted = row.rig.root / "planted.sh"
+    planted.write_text(f'#!/bin/sh\ntouch "{marker}"\n')
+    planted.chmod(0o755)
+    other = row.rig.root / "other-gitdir"
+    other.mkdir()
+    (other / "HEAD").write_text("ref: refs/heads/m\n")
+    (other / "objects").mkdir()
+    (other / "refs").mkdir()
+    (other / "config").write_text(f"[core]\n\tfsmonitor = {planted}\n")
+    (path / ".git").write_text(f"gitdir: {other}\n")
+    row.checkout = path
+    done = row.finish()
+    assert done.returncode != 0
+    assert "not a checkout" in done.stdout
+    assert not marker.exists()
+
+
+def test_a_git_directory_in_a_linked_checkout_path_is_refused(row: Row) -> None:
+    path = row.rig.root / "Projects" / "northwind-shop-c"
+    shutil.move(str(row.checkout), str(path))
+    row.checkout = path
+    done = row.finish()
+    assert done.returncode != 0
+    assert "not a checkout" in done.stdout
+
+
+# -- security finding 5: what is checked is what is pushed ------------------------------------
+
+
+def test_a_replace_ref_does_not_hide_a_change_from_the_check(row: Row) -> None:
+    row.git("checkout", "--", "PROGRESS.md", "COVERAGE.md")
+    row.write("docs/x.md", "unreviewed\n")
+    bad = row.commit_all("unreviewed")
+    row.git("replace", bad, row.reviewed)
+    done = row.finish()
+    assert done.returncode != 0
+    assert "changed since the reviewed commit" in done.stdout
+    assert not row.on_origin()
+
+
+def test_the_push_names_the_commit_not_head() -> None:
+    script = (ship_rig.REPO / "tools" / "finish.sh").read_text()
+    assert 'push origin "$head:refs/heads/$branch"' in script
+
+
 # -- the push ---------------------------------------------------------------------------------
 
 
@@ -373,6 +526,38 @@ def test_a_diverged_branch_is_not_forced(row: Row) -> None:
     assert "the push failed" in done.stdout
     assert row.rig.git("rev-parse", f"refs/heads/{BRANCH}") == other
     assert row.creates() == []
+
+
+def test_origin_ending_up_with_another_head_is_refused(row: Row) -> None:
+    """A push that reports success must not be taken on trust: labels follow what origin holds."""
+    other = row.rig.commit(changes={"docs/other.md": "x\n"})
+    hook_file = row.rig.origin / "hooks" / "post-receive"
+    hook_file.write_text(f"#!/bin/sh\ngit update-ref refs/heads/{BRANCH} {other}\n")
+    hook_file.chmod(0o755)
+    done = row.finish()
+    assert done.returncode != 0
+    assert "origin does not have the checkout's head" in done.stdout
+    assert row.rig.merge_calls() == []
+
+
+def test_more_than_one_merge_base_is_refused(row: Row) -> None:
+    rig = row.rig
+    tree = rig.git("rev-parse", "main^{tree}")
+    left = rig.git("commit-tree", tree, "-p", "main", "-m", "left")
+    right = rig.git("commit-tree", tree, "-p", "main", "-m", "right")
+    new_main = rig.git("commit-tree", tree, "-p", left, "-p", right, "-m", "one way")
+    other_way = rig.git("commit-tree", tree, "-p", right, "-p", left, "-m", "the other way")
+    rig.git("update-ref", "refs/heads/main", new_main)
+    row.git("fetch", "-q", "origin", other_way)
+    row.git("reset", "-q", "--hard", other_way)
+    row.reviewed = other_way
+    row.write(BODY, BODY_TEXT)
+    row.reviewed = row.commit_all("the row, again")
+    done = row.finish()
+    assert done.returncode != 0
+    assert "no single merge base" in done.stdout
+    assert "cannot read which labels" not in done.stdout
+    assert row.rig.merge_calls() == []
 
 
 def test_the_script_holds_no_force_and_no_override() -> None:
@@ -520,6 +705,22 @@ def test_the_labels_mode_escapes_a_newline_in_a_path(rig: Rig) -> None:
     rig.pr({".github/workflows/a\nb.yml": "x\n"})
     out = labels(rig, *fetched(rig)).stdout
     assert out == "ci-change\t.github/workflows/a\\nb.yml\n"
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        ("--output=/tmp/x", "refs/runner/ship-head"),
+        ("a" * 40, "--output=/tmp/x"),
+        ("nope", "refs/runner/ship-head"),
+    ],
+)
+def test_the_labels_mode_takes_only_a_commit_and_the_ship_ref(
+    rig: Rig, args: tuple[str, str]
+) -> None:
+    done = labels(rig, *args)
+    assert done.returncode != 0
+    assert "usage" in done.stderr
 
 
 @pytest.mark.parametrize("args", [(), ("a",), ("a", "b", "c")])

@@ -28,7 +28,8 @@ refuse() {
 # Local git only: it returns below, before the first gh call.
 labels_only=0
 if [[ "${1:-}" == --labels ]]; then
-	[[ $# -eq 3 ]] || refuse "usage: ship.sh --labels <base> <head>"
+	[[ $# -eq 3 && "$2" =~ ^[0-9a-f]{40}$ && ("$3" =~ ^[0-9a-f]{40}$ || "$3" == "$HEAD_REF") ]] ||
+		refuse "usage: ship.sh --labels <base-sha> <head-sha or $HEAD_REF>"
 	labels_only=1
 	bases=$2
 	labels_head=$3

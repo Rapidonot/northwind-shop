@@ -167,3 +167,29 @@ def test_no_merge_base_runs_the_tests(repo: Path) -> None:
 def test_outside_a_repo_the_tests_run(tmp_path: Path) -> None:
     write(tmp_path, "Makefile", (REPO / "Makefile").read_text() + PROBE)
     assert probe(tmp_path) == "[]"
+
+
+def run_make_test(repo: Path) -> str:
+    bin_dir = repo / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "uv").write_text("#!/bin/sh\nexit 0\n")
+    (bin_dir / "uv").chmod(0o755)
+    env = {"PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}", "HOME": str(repo)}
+    done = subprocess.run(  # noqa: S603
+        ["make", "-s", "test", "PNPM=true"],  # noqa: S607
+        cwd=repo,
+        env=env,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return done.stdout
+
+
+def test_make_test_says_when_it_skips_the_ship_tests(repo: Path) -> None:
+    assert "ship tests skipped" in run_make_test(repo)
+
+
+def test_make_test_says_nothing_when_they_run(repo: Path) -> None:
+    write(repo, "tools/x.sh", "two\n")
+    assert "ship tests skipped" not in run_make_test(repo)

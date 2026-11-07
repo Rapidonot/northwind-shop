@@ -137,7 +137,7 @@ PERMISSIONS = {
         # Wide for the same reason. `make ingest-enriched` and `make eval-enrichment-report` prompt
         # too: neither spends, and a false prompt is the safe direction (AUTO-2, item 5).
         "Bash(make *enrich*)",
-        "Bash(uv run make *enrich*)",
+        "Bash(uv run *make*enrich*)",
         "Bash(uv run *northwind_evals*enrich*)",
         # The sandbox covers Bash only, so the file tools need their own rules for these.
         "Edit(./evals/baselines/**)",

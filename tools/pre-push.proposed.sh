@@ -82,9 +82,10 @@ check_range() {
 		esac
 	fi
 
-	# A tracked symlink checks out clean, so nothing else would show it (row 5b).
+	# A tracked symlink checks out clean, so nothing else would show it (row 5b). A gitlink makes
+	# `git status` run a child git in that folder, with that folder's config (AUTO-2, measured).
 	git ls-tree -r -z "$2" >"$work/modes" || refuse "git ls-tree failed"
-	tr '\0' '\n' <"$work/modes" | { grep '^120000 ' || true; } | cut -f2 >>"$work/hits"
+	tr '\0' '\n' <"$work/modes" | { grep -E '^(120000|160000) ' || true; } | cut -f2 >>"$work/hits"
 
 	if [[ -s "$work/hits" ]]; then
 		cat -v "$work/hits" >&2

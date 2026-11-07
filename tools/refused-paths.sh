@@ -80,6 +80,13 @@ if [[ -s "$work/links" ]]; then
 	refuse "these paths are symlinks, which must not reach the clone"
 fi
 
+# AUTO-2: a gitlink makes `git status` run a child git in that folder, with that folder's config (measured).
+tr '\0' '\n' <"$work/modes" | { grep '^160000 ' || true; } | cut -f2 >"$work/gitlinks"
+if [[ -s "$work/gitlinks" ]]; then
+	cat -v "$work/gitlinks" >&2
+	refuse "these paths are gitlinks, which must not reach the clone"
+fi
+
 # On a case-insensitive filesystem two such paths are one file, and the second overwrites the first.
 git ls-tree -r --name-only -z "$head" >"$work/tree" || refuse "git ls-tree failed"
 tr '\0' '\n' <"$work/tree" | LC_ALL=C tr '[:upper:]' '[:lower:]' | LC_ALL=C sort | uniq -d >"$work/folded"

@@ -23,6 +23,7 @@ sys.modules.setdefault("ship_shared", shared)
 _spec.loader.exec_module(shared)
 
 SCRIPT = shared.REPO / "tools" / "refused-paths.sh"
+GITLINK = "160000"
 
 
 @dataclass
@@ -152,3 +153,30 @@ def test_a_file_changed_into_a_symlink_is_refused(repo: Repo) -> None:
     repo.git("add", "tracked.txt")
     repo.git("commit", "-qm", "now a link")
     assert repo.run().returncode != 0
+
+
+@pytest.mark.req("AUTO-2")
+def test_a_gitlink_anywhere_in_the_tree_is_refused(tmp_path: Path) -> None:
+    """A gitlink makes `git status` run a child git in that folder, with that folder's config."""
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    sh_env = shared.tool_env(tmp_path, bin_dir)
+    work = tmp_path / "repo"
+    work.mkdir()
+    shared.git(work, sh_env, "init", "-q", "-b", "main")
+    (work / "a.txt").write_text("a\n")
+    shared.git(work, sh_env, "add", "-A")
+    shared.git(work, sh_env, "commit", "-q", "-m", "base")
+    head = shared.git(work, sh_env, "rev-parse", "HEAD")
+    shared.git(work, sh_env, "update-index", "--add", "--cacheinfo", f"{GITLINK},{head},sub")
+    shared.git(work, sh_env, "commit", "-q", "-m", "gitlink")
+    done = subprocess.run(  # noqa: S603
+        ["/bin/bash", str(SCRIPT), head, "HEAD"],
+        cwd=work,
+        env=dict(sh_env),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert done.returncode != 0
+    assert "gitlink" in done.stderr
