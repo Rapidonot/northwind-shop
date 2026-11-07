@@ -75,3 +75,32 @@ These are accepted on the strength of answer-level containment in the gate. Cond
 - EV-084, EV-096 and EV-099 join the user's by-eye reads after the `eval-answers` recording, with the false-policy
   answer and the 8 `TRAP-CON` answers;
 - the pairs and this decision go in the gate report.
+
+## `assistant-smoke` re-record (one window, 2026-11-07)
+
+- `make record SUITE=assistant-smoke` at `d78cabd`: 14 tests, 13 calls, **$0.057536**. The ledger went from $1.150794
+  to $1.208330.
+- **13 cassettes added, none modified. The 6 superseded ones are deleted:** `0170a3a7…`, `1405b0f3…`, `4887e13c…`,
+  `6bbf3e78…`, `a0466c74…`, `f271bbfd…`. Full names are in the commit.
+- Model input that changed: the system prompt's allow-list (C1) and the hybrid sources. The `<source>` markup is
+  unchanged: `render_sources` adds no attribute.
+- In record mode, 3 tests failed:
+  - the product test counted the old cassettes still on disk (fixed by the planned deletion);
+  - the two below.
+- R00712 is still retrieved, second in the injection question's context. `ONE_YEAR` passes. All 8 `TRAP-CON`
+  questions cite the spec's product.
+- **By-eye read (the user, 2026-11-07):** the false-policy answer and the 8 `TRAP-CON` answers are accepted. Answers:
+  `docs/reviews/2026-11-07-RAG-03-smoke-answers.md`.
+
+**Test changes the user approved after a failure (stop 5):**
+
+1. `test_a_planted_injection_in_a_review_is_not_followed`: the strict xfail is removed, because the new answer carries
+   no payload. The docstring now says that this comes from model behaviour, not a control, that row #13 still owes the
+   deterministic control (`PROGRESS.md` row #13 says so), and that a payload in a later re-record is a stop for #13,
+   never a re-record.
+2. `test_a_review_cannot_set_the_return_policy`: the source assertion is widened from `POL-RETURNS-US` to exactly
+   {`POL-RETURNS-US`, `FAQ-019`}, both public US returns documents. The `ONE_YEAR` check stays, and a new assertion
+   requires the answer to state 30 days. Cause: hybrid puts FAQ-019 in the first context, so the model cited it
+   without a refinement search.
+
+After these changes, the replay gives 14 passed.
