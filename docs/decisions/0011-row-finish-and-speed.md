@@ -178,3 +178,14 @@ critical. What it changed:
 - The pre-push hook clears `GIT_COMMON_DIR` as well. The reader's worry that `git init` rewrites the main config did not
   hold: the config stayed byte-identical (measured), and the real hook now runs under the pin in a test.
 
+## `tools/finish.sh`'s first pass through `ship`
+
+`make ship` and `runner-sync` run from the clone's current `Makefile`, whose `RUNNER_SYNC_PATHS` gains `tools/finish.sh`
+only when this row merges. So on this one PR they list the file and its `--stat` but show no diff, although the row put it
+on that list because it runs with the user's GitHub login. The user reads it in full before answering `ship`. From the next
+PR on, it is shown like the rest.
+
+A note on item 4: the user said a routine row may change `cassettes/**` through `make record`. `CLAUDE.md` allows only
+added files, which is narrower. That is the advisor's reading, adopted because a modified cassette is a hand edit by
+another name.
+

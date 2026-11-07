@@ -141,6 +141,8 @@ FOUND-2 spike gate (proxy path), parallel-worktree layout for LLM state (decisio
 
 ## Open items
 
+- Low, from AUTO-2 row review: the 651.64 s `make ci` figure for a row that does not touch `tools/` is from `4ed279d`, not the reviewed head, which has about 150 more tests.
+- Low, from AUTO-2 row review: `test_notify_hook.py`'s `cat` token was narrowed to ` cat` after a failure, so `|cat` no longer trips it. The test on fixed text stands.
 - Low, from AUTO-2 second re-review: once the proposal is installed, `git switch` and `merge` fail where a path newly in `denyWrite` differs (`.claude/agents`, `.claude/skills`, `.claude/commands`, `.claude/rules`, `.claude/output-styles`, `.claude/workflows`, `.mcp.json`), as with `evals/baselines`. The stop strings catch it.
 - Low, from #7: `parse_sse_usage` at `services/llm-replay/src/northwind_llm_replay/proxy.py:219` still uses `splitlines()`, the bug `readable_forms` had. It cannot hide a key: the leak check reads the raw text. It is not only lost usage, though: the review traced model text with raw separators around `data: 1` to a non-dict, an `AttributeError` and a 500 with no settlement, which fails closed (not run; needs the upstream to send them raw). Fix with an `isinstance` guard alongside the split.
 - Low, from #7: the scan's findings count can locate a fragment hit (`cli.py`, pre-existing), and `.lock` files are skipped under every scan root (pre-existing).

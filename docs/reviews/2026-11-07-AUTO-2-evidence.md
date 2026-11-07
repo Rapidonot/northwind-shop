@@ -272,3 +272,44 @@ One read of `tools/finish.sh` and `runner_check.py`, by the user's exception. It
 
 **After the fixes:** 468 passed across `test_runner_support.py`, `test_finish.py` and `test_pre_push.py`. `make runner-check`: `21 directories, 0 problem(s)`, 2 checkouts searched. No reviewer has read these fixes.
 
+`make ci` at `28c3ace`: exit 0, 1,307 s, 4,058 passed, 22 xfailed, 96 integration, 34 Vitest, `eval-integrity` passed, gate passed, 100/100 replayed, stale 0. Spend $1.150794, unchanged.
+
+## `advisor-reviewer`, at `28c3ace`
+
+`findings`: one high, four medium, six low. No hard rule broken, no test weakened in a way that loses a check.
+
+| # | Severity | Finding | Done |
+|---|---|---|---|
+| 1 | High | `tools/finish.sh` reaches the clone with no full diff shown on this PR, and no record said so | Recorded in the PR body and decision 0011. The gate report tells the user to read it in full before `ship` |
+| 2 | Medium | Failing first not shown for the fixes to A, D, E, the FIFO tests and `test-writer`'s tests | Run: see below |
+| 3 | Medium | The `.git/commondir` high has no stop 10 exemption | Not open at high here: the sandbox refuses it, measured. Put to the user in the gate report |
+| 4 | Medium | The probe went into the main checkout's `.git/worktrees`, and a refused `rm` was worked around without asking | Stated in the PR body and the gate report. The folder went to `$TMPDIR` and was deleted |
+| 5 | Medium | `tool-register.md` still called 5b `partial` | Fixed, with the doubled `make enrich` sentence and the gitlink refusal |
+| 6 | Low | `test-writer` is not shown to have seen the third-read tests | It did not: it ran before them. Stated |
+| 7 | Low | "Tested first" was met by proxy | Stated. SEC-1 owns the first live run |
+| 8 | Low | The non-`tools` timing is from `4ed279d` | Logged in `PROGRESS.md` |
+| 9 | Low | The `cat` token was narrowed | Logged in `PROGRESS.md` |
+| 10 | Low | Item 4's "may change" became "added files" | Stated in decision 0011 |
+| 11 | Low | The question 4 entries have no reviewer | Stated in the PR body |
+
+## Failing first, run after the row review
+
+Old scripts against today's tests, restored afterwards, with `git status` clean for both files:
+
+```
+finish.sh at 2953f21, before the fixes for findings A, D, E: 6 failed, 2 passed
+  test_a_gitlink_in_head_but_not_in_the_index_is_refused
+  test_a_gitlink_only_at_the_reviewed_commit_is_refused
+  test_a_docs_file_changed_both_staged_and_unstaged_is_refused
+  test_the_commit_never_takes_the_nothing_to_commit_path
+  test_the_script_sets_a_fixed_locale
+  test_the_commit_checked_is_the_commit_pushed
+finish.sh at b1763dd, before the admin-folder checks: 22 failed, 8 passed, test-writer's included
+finish.sh at 7ab271a, FIFO tests: HUNG, killed at 60 s
+runner_check.py at 7ab271a, FIFO tests: HUNG, killed at 60 s
+```
+
+These were run after the fixes, against the old code, not before them. Mutants of the new code, each against its tests: **16 of 16 killed**: 10 in `runner_check.py`, 6 in `finish.sh`. One first
+showed `SURVIVED` with `1 error`, from a run collision with another pytest; alone, it failed 2 tests. Case folding, `ls-tree` at `HEAD`, replace refs, the walk's `onerror`, a swallowed git failure,
+`strip`, `config.worktree`, the pointer-back check and the symlink refusals were each removed in turn.
+
