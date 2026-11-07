@@ -7,7 +7,6 @@ docs/reviews/2026-11-04-cc-27-sandbox-evidence.md.
 """
 
 import json
-import re
 from pathlib import Path
 from typing import Any
 
@@ -51,13 +50,9 @@ SANDBOX = {
             "~/Projects/northwind-shop/.git/worktrees/*/commondir",
             "~/Projects/northwind-shop/.git/worktrees/*/config.worktree",
             "~/Projects/northwind-shop/.git/config.worktree",
-            # Refused today by a list the runtime builds, not by anything here (measured, AUTO-2).
-            "~/Projects/northwind-shop/.git/commondir",
-            # A nested `.git` is what `git status` outside the sandbox runs a child in (AUTO-2). The
-            # `*/` keeps a checkout's own `.git` out, which a commit needs. Narrows, does not close:
-            # moving in a folder that already holds one is not refused (measured, decision 0011).
-            "~/Projects/northwind-shop/*/**/.git",
-            "~/Projects/northwind-shop-*/*/**/.git",
+            # No nested `.git` globs and no main `.git/commondir`: installed in AUTO-2, they refused
+            # git's writes to this worktree's admin folder, and the user removed them (decision
+            # 0011, "The hotfix after the install"). SEC-1 re-proposes them only after measuring.
         ],
         "denyRead": [
             "./.env*",  # this checkout
@@ -132,11 +127,7 @@ PERMISSIONS = {
         "Edit(./.claude/output-styles/**)",
         "Edit(./.claude/workflows/**)",
         "Edit(./.mcp.json)",
-        # The file tools never meet the sandbox, so route B needs its own rules (second re-review).
-        "Edit(./**/.git)",
-        "Edit(./**/.git/**)",
-        "Edit(~/Projects/northwind-shop/.git/worktrees/**)",
-        "Edit(~/Projects/northwind-shop/.git/commondir)",
+        # No `Edit` rules on `.git`: removed with the sandbox entries above (decision 0011).
         # The sandbox covers Bash only, so the file tools need their own rules for these.
         "Read(~/.northwind/secrets)",
         "Read(~/.northwind/secrets/**)",
@@ -179,9 +170,6 @@ PERMISSIONS = {
         "Write(./evals/fixtures/known_failures.json)",
     ],
 }
-
-
-NESTED_GIT_GLOBS = ["~/Projects/northwind-shop/*/**/.git", "~/Projects/northwind-shop-*/*/**/.git"]
 
 
 def load(name: str) -> dict[str, Any]:
@@ -234,62 +222,40 @@ def test_only_what_redirects_git_is_denied_so_a_commit_still_works() -> None:
         "~/Projects/northwind-shop/.git/worktrees/*/commondir",
         "~/Projects/northwind-shop/.git/worktrees/*/config.worktree",
         "~/Projects/northwind-shop/.git/config.worktree",
-        "~/Projects/northwind-shop/.git/commondir",
-        "~/Projects/northwind-shop/*/**/.git",
-        "~/Projects/northwind-shop-*/*/**/.git",
     ]
 
 
-def write_rule(glob: str) -> re.Pattern[str]:
-    """What Claude Code 2.1.318 turns a `denyWrite` glob into: read from the installed binary, and
-    measured against an installed rule (AUTO-2 evidence). A model: the real rule is not run here."""
-    body = re.escape(glob).replace(r"\*\*/", "(.*/)?").replace(r"\*", "[^/]*")
-    return re.compile(f"^{body}(/.*)?$", re.IGNORECASE)
-
-
-NESTED_RULES = [write_rule(path) for path in NESTED_GIT_GLOBS]
-
-
-def denied(path: str) -> bool:
-    return any(rule.match(path) for rule in NESTED_RULES)
+REMOVED_BY_THE_HOTFIX = [
+    "~/Projects/northwind-shop/.git/commondir",
+    "~/Projects/northwind-shop/*/**/.git",
+    "~/Projects/northwind-shop-*/*/**/.git",
+    "Edit(./**/.git)",
+    "Edit(./**/.git/**)",
+    "Edit(~/Projects/northwind-shop/.git/worktrees/**)",
+    "Edit(~/Projects/northwind-shop/.git/commondir)",
+]
 
 
 @pytest.mark.req("AUTO-2")
-def test_the_nested_git_rules_are_in_the_proposal() -> None:
-    deny_write = load("settings.proposed.json")["sandbox"]["filesystem"]["denyWrite"]
-    assert [path for path in deny_write if "/**/" in path] == NESTED_GIT_GLOBS
+@pytest.mark.parametrize("rule", REMOVED_BY_THE_HOTFIX)
+def test_the_rules_that_blocked_git_are_not_proposed_again(rule: str) -> None:
+    """Installed with AUTO-2, these refused git's writes to this worktree's admin folder, so the
+    user removed them (decision 0011, "The hotfix after the install"). A glob model in this file
+    passed while the installed rules blocked git, so a model is not evidence: SEC-1 brings them
+    back only with a live measurement of git in both checkouts."""
+    settings = load("settings.proposed.json")
+    assert rule not in settings["sandbox"]["filesystem"]["denyWrite"]
+    assert rule not in settings["permissions"]["deny"]
 
 
 @pytest.mark.req("AUTO-2")
-@pytest.mark.parametrize("checkout", ["~/Projects/northwind-shop", "~/Projects/northwind-shop-b"])
-@pytest.mark.parametrize(
-    "path",
-    ["sub/.git", "sub/.GIT", "a/b/c/.git", "sub/.git/config", "node_modules/x/.git/HEAD"],
-)
-def test_a_nested_git_is_denied_in_both_checkouts(checkout: str, path: str) -> None:
-    assert denied(f"{checkout}/{path}")
-
-
-@pytest.mark.req("AUTO-2")
-@pytest.mark.parametrize(
-    "path",
-    [
-        # A commit in either checkout writes here, so a rule that matched would stop it.
-        "~/Projects/northwind-shop/.git",
-        "~/Projects/northwind-shop/.git/index",
-        "~/Projects/northwind-shop/.git/worktrees/northwind-shop-b/index",
-        "~/Projects/northwind-shop/.git/objects/ab/cd",
-        "~/Projects/northwind-shop/.gitignore",
-        "~/Projects/northwind-shop/.github/workflows/ci.yml",
-        "~/Projects/northwind-shop-b/.gitignore",
-        "~/Projects/northwind-shop-b/sub/.gitignore",
-        "~/Projects/northwind-shop-b/sub/.github/x",
-        "~/Projects/northwind-shop-b/sub/x.git",
-        "~/Projects/other/sub/.git",
-    ],
-)
-def test_the_nested_git_rules_leave_a_commit_alone(path: str) -> None:
-    assert not denied(path)
+def test_no_proposed_rule_reaches_into_git_beyond_the_five() -> None:
+    """Nothing with a glob under `.git`, and no file-tool rule on `.git` at all."""
+    settings = load("settings.proposed.json")
+    deny_write = settings["sandbox"]["filesystem"]["denyWrite"]
+    assert not [path for path in deny_write if "**" in path and ".git" in path]
+    rules = settings["permissions"]["deny"] + settings["permissions"]["ask"]
+    assert not [rule for rule in rules if ".git" in rule and ".gitignore" not in rule]
 
 
 @pytest.mark.req("AUTO-2")

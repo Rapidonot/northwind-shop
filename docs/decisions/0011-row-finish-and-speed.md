@@ -160,7 +160,7 @@ Fixed after it, with no further read:
 ## Moved to SEC-1, by the user's decision
 
 On 2026-11-07 the user moved route B and the admin-folder replacement out of AUTO-2, into a new row, SEC-1, which lands
-before #8. Both criticals are pre-existing, not caused or worsened by AUTO-2, and `make finish` refuses both. SEC-1 also
+before #8 (later moved after RECORD-ALL; see "SEC-1 after RECORD-ALL"). Both criticals are pre-existing, not caused or worsened by AUTO-2, and `make finish` refuses both. SEC-1 also
 takes the `.git/commondir` high, the trusted read-only check from the runner clone, the rig that settles the rating, the
 VS Code git panel question and the `make runner-check` medium. Stop 10 does not apply to the two moved criticals. It
 still applies to anything else high or critical.
@@ -189,4 +189,45 @@ question is the last point before it reaches the clone. From the next PR on, it 
 A note on item 4: the user said a routine row may change `cassettes/**` through `make record`. `CLAUDE.md` allows only
 added files, which is narrower. That is the advisor's reading, adopted because a modified cassette is a hand edit by
 another name.
+
+## The hotfix after the install
+
+On 2026-11-07, after the user installed this row's settings proposal (PR #29, `61c3ac6`), git's writes to this
+worktree's admin folder, `~/Projects/northwind-shop/.git/worktrees/northwind-shop-b/`, were refused, so git could not
+work in `northwind-shop-b`. The user fixed it from their terminal, in three commits on `req/RAG-03-hybrid` (`d286c27`,
+`3821e4d`, `c0238d8`), by removing from the installed project settings:
+
+- the nested `.git` globs `~/Projects/northwind-shop/*/**/.git` and `~/Projects/northwind-shop-*/*/**/.git` from
+  `sandbox.filesystem.denyWrite`;
+- the main `~/Projects/northwind-shop/.git/commondir` entry from the same list, which the user judged likely to block the
+  whole main `.git`;
+- the four file-tool rules `Edit(./**/.git)`, `Edit(./**/.git/**)`, `Edit(~/Projects/northwind-shop/.git/worktrees/**)`
+  and `Edit(~/Projects/northwind-shop/.git/commondir)`.
+
+That restores the five git entries that worked before the install (5a and 5b). **The cause, as far as it is known:** the
+rules were proposed without a live run of git under them. "Route B, after the user's answers" says so: `sandbox-exec`
+cannot nest in a session, and the session cannot install settings. `tests/hooks/test_sandbox_settings.py` checked a
+model of how the runtime turns a glob into a Seatbelt regex, and that model said the admin folder stayed writable. It
+passed, and the installed rules blocked git. Which entry, or which translation, did it is not measured: they were removed
+all at once. So a glob model is not evidence that git still works.
+
+**What changed, in RAG-03's first commit (the user authorised this control-surface change in that row):**
+`tools/settings.proposed.json` now matches the installed file, so the next install does not bring the rules back, and
+`tests/hooks/test_sandbox_settings.py` pins their absence. Its new tests fail on the old proposal (11 failed) and pass
+on the new one. The glob model and its nested-`.git` tests are gone.
+
+**What is lost:** route B's narrowing (it never closed the route) and the file tools' rules on `.git`. The main
+`.git/commondir` create was refused by a list the runtime builds before the install (measured then, not since). `make
+runner-check` still reports any gitlink, `.gitmodules` or nested `.git`, and `make finish` still refuses both criticals.
+
+## SEC-1 after RECORD-ALL
+
+The user's decision, 2026-11-07. **Order principle:** everything that calls the model or changes what it sees lands
+before RECORD-ALL (#18). SEC-1, #9a, payments, A2A and hardening go after it. So SEC-1 moves, in full, to after #18, and
+#9a with it: it changes no model input, and #8 needs only 5b.
+
+Until SEC-1 lands, route B, the admin-folder replacement and the main `.git/commondir` high are **accepted for the lab**.
+The interim control: the user's advisor checks on disk before any terminal git, `make finish` or `make ship`. When SEC-1
+brings back any rule from "The hotfix after the install", it comes with a live measurement of commit, switch and fetch in
+both checkouts under the installed rule, not a model.
 
