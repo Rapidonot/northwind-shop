@@ -16,6 +16,7 @@
 # anything reads the working tree (measured: `git status` runs a nested folder's `core.fsmonitor`), and
 # replace refs and grafts are off, because the sandbox can write those.
 set -euo pipefail
+export LC_ALL=C
 
 MAIN_REF=refs/runner/ship-main
 HEAD_REF=refs/runner/ship-head
@@ -68,13 +69,22 @@ in_checkout() {
 	GIT_NO_REPLACE_OBJECTS=1 GIT_GRAFT_FILE=/dev/null git -c core.fsmonitor=false -C "$checkout" "$@"
 }
 
-# Before anything reads the working tree: a gitlink makes git run a child in that folder, with its config.
-in_checkout ls-files -s -z >"$work/index" || refuse "git ls-files failed"
-tr '\0' '\n' <"$work/index" | { grep '^160000 ' || true; } | cut -f2 >"$work/gitlinks"
+# Before anything reads the working tree: a gitlink makes git run a child in that folder, with its config,
+# and a `.gitmodules` entry can undo `diff.ignoreSubmodules`, even from the index alone (both measured). So
+# neither may be in the index, at HEAD or at the reviewed commit. No tracked path here needs either.
+in_checkout ls-files -s -z >"$work/entries" || refuse "git ls-files failed"
+in_checkout ls-tree -r -z HEAD >>"$work/entries" || refuse "git ls-tree failed"
+in_checkout ls-tree -r -z "$reviewed" >>"$work/entries" || refuse "cannot read the reviewed commit"
+tr '\0' '\n' <"$work/entries" >"$work/lines"
+{ grep '^160000 ' "$work/lines" || true; } | cut -f2 >"$work/gitlinks"
 if [[ -s "$work/gitlinks" ]]; then
 	cat -v "$work/gitlinks" >&2
-	refuse "the index holds a gitlink: do not run git status in this checkout until it is gone"
+	refuse "a gitlink is tracked: do not run git status in this checkout until it is gone"
 fi
+if cut -f2 "$work/lines" | grep -qE '(^|/)\.gitmodules$'; then
+	refuse "a .gitmodules file is tracked: do not run git status in this checkout until it is gone"
+fi
+[[ ! -e "$checkout/.gitmodules" ]] || refuse "a .gitmodules file is in the checkout"
 
 branch=$(in_checkout symbolic-ref -q --short HEAD) || refuse "the checkout is not on a branch"
 [[ "$branch" =~ $BRANCH_RE ]] || refuse "not a row branch: $branch"
@@ -92,7 +102,7 @@ while IFS= read -r -d '' entry; do
 	path=${entry:3}
 	case "$path" in
 	PROGRESS.md | COVERAGE.md)
-		[[ "$code" == " M" || "$code" == "M " || "$code" == "MM" ]] || refuse "unexpected state of $path"
+		[[ "$code" == " M" || "$code" == "M " ]] || refuse "unexpected state of $path"
 		docs_changed=1
 		;;
 	*) refuse "not committed: ${path//$'\n'/\\n}" ;;
@@ -100,10 +110,12 @@ while IFS= read -r -d '' entry; do
 done <"$work/status"
 
 # What the reviewers read must be what ships, apart from those two files: the rule `ship` applies.
+# Resolved once: what is checked is what is pushed.
 check_reviewed() {
 	local path
-	in_checkout merge-base --is-ancestor "$reviewed" HEAD || refuse "the reviewed commit is not on this branch"
-	in_checkout "${GIT_NAMES[@]}" "$reviewed" HEAD >"$work/later" || refuse "git diff failed"
+	head=$(in_checkout rev-parse HEAD) || refuse "git rev-parse failed"
+	in_checkout merge-base --is-ancestor "$reviewed" "$head" || refuse "the reviewed commit is not on this branch"
+	in_checkout "${GIT_NAMES[@]}" "$reviewed" "$head" >"$work/later" || refuse "git diff failed"
 	while IFS= read -r -d '' path; do
 		case "$path" in
 		PROGRESS.md | COVERAGE.md) ;;
@@ -118,11 +130,11 @@ in_checkout show "$reviewed:$body" >"$work/body" 2>/dev/null || refuse "no $body
 [[ -s "$work/body" ]] || refuse "$body is empty"
 
 if ((docs_changed)); then
-	in_checkout commit -q -m "$id: req-done" -- PROGRESS.md COVERAGE.md || refuse "git commit failed"
+	# --allow-empty: with nothing to commit, `git commit` runs a status of its own that descends into gitlinks.
+	in_checkout commit -q --allow-empty -m "$id: req-done" -- PROGRESS.md COVERAGE.md || refuse "git commit failed"
 	say "committed PROGRESS.md and COVERAGE.md"
 	check_reviewed
 fi
-head=$(in_checkout rev-parse HEAD) || refuse "git rev-parse failed"
 
 # The pre-push hook runs here. Never forced, and the commit that was checked, not whatever HEAD is now.
 in_checkout push origin "$head:refs/heads/$branch" 2>&1 | cat -v ||

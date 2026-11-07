@@ -75,10 +75,17 @@ evidence.
   with that folder's config, so a planted `core.fsmonitor` runs outside the sandbox. The session can do all of it: the
   sandbox lets it write a nested `.git` file (measured 2026-11-07) and the index. `finish` now refuses a gitlink before
   anything reads the working tree, and runs `status --ignore-submodules=all` with `core.fsmonitor=false`.
-  `tools/refused-paths.sh` and the pre-push hook refuse a committed gitlink.
+  `tools/refused-paths.sh` and the pre-push hook refuse a committed gitlink, the hook once the user reinstalls it.
 - **The same route is open for any `git status` outside the sandbox**, which includes the user's own terminal and may
-  include an editor's git panel. `git config --global diff.ignoreSubmodules all` closes it (measured). That setting
-  is the user's to make: the session cannot write it.
+  include an editor's git panel. The re-review rates this critical, and it needs the user's decision. A global
+  `diff.ignoreSubmodules = all` narrows it but does not close it: a planted `.gitmodules` with `ignore = none` undoes
+  that setting, even from the index alone (measured 2026-11-07). Only `--ignore-submodules` on the command line held.
+  With no nested `.git` no child runs (measured), so refusing that write would close the route at its source.
+- **Re-review finding A.** The index check alone was not enough: a gitlink at `HEAD` but not in the index passed it, and
+  `git commit` with nothing to commit runs a status of its own, which descended into it (measured; the fsmonitor did
+  not fire, because `core.fsmonitor=false` reached the child). `finish` now also checks `HEAD` and the reviewed commit,
+  refuses a tracked `.gitmodules`, refuses a docs file changed both staged and unstaged, and commits with
+  `--allow-empty`. This fix came after the one scoped re-review, so no reviewer has read it.
 - **High.** `CHECKOUT` could be any directory, and git trusts that directory. `finish` now takes only
   `~/Projects/northwind-shop`, or a linked worktree beside it whose `.git` file points into its worktrees folder.
 - **Routine rows exclude only hard rules 1 and 9, as the plan the user approved says.** Rules 6, 7 and 8 are not

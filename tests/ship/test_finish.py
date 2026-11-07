@@ -364,6 +364,63 @@ def test_a_planted_gitlink_runs_nothing_and_is_refused(row: Row, commit: bool) -
     assert row.creates() == []
 
 
+def test_a_gitlink_in_head_but_not_in_the_index_is_refused(row: Row) -> None:
+    """Re-review finding A: the index alone is not enough, and `git commit` would descend."""
+    marker = row.rig.root / "MARKER"
+    plant_gitlink(row, marker, commit=True)
+    row.git("update-index", "--force-remove", "sub")
+    done = row.finish()
+    assert done.returncode != 0
+    assert "gitlink" in done.stdout
+    assert not marker.exists()
+    assert row.creates() == []
+
+
+def test_a_gitlink_only_at_the_reviewed_commit_is_refused(row: Row) -> None:
+    plant_gitlink(row, row.rig.root / "MARKER", commit=True)
+    row.git("rm", "-q", "--cached", "sub")
+    row.git("commit", "-q", "-m", "gone again")
+    done = row.finish()
+    assert done.returncode != 0
+    assert "gitlink" in done.stdout
+    assert row.creates() == []
+
+
+@pytest.mark.parametrize("staged", [False, True], ids=["file", "index-only"])
+def test_a_planted_gitmodules_is_refused(row: Row, staged: bool) -> None:
+    """Measured: `ignore = none` in it beats `diff.ignoreSubmodules`, even from the index alone."""
+    row.write(".gitmodules", '[submodule "sub"]\n\tpath = sub\n\turl = ./x\n\tignore = none\n')
+    if staged:
+        row.git("add", ".gitmodules")
+        (row.checkout / ".gitmodules").unlink()
+    done = row.finish()
+    assert done.returncode != 0
+    assert "gitmodules" in done.stdout or "not committed" in done.stdout
+    assert row.creates() == []
+
+
+def test_a_docs_file_changed_both_staged_and_unstaged_is_refused(row: Row) -> None:
+    """`/req-done` leaves plain edits. This state is how the nothing-to-commit path is reached."""
+    row.git("add", "PROGRESS.md")
+    row.write("PROGRESS.md", "progress\n")
+    assert_stopped_before_any_change(row, row.finish(), "unexpected state of PROGRESS.md")
+
+
+def test_the_commit_never_takes_the_nothing_to_commit_path() -> None:
+    script = (ship_rig.REPO / "tools" / "finish.sh").read_text()
+    assert "commit -q --allow-empty" in script
+
+
+def test_the_script_sets_a_fixed_locale() -> None:
+    script = (ship_rig.REPO / "tools" / "finish.sh").read_text()
+    assert "export LC_ALL=C" in script
+
+
+def test_the_commit_checked_is_the_commit_pushed() -> None:
+    script = (ship_rig.REPO / "tools" / "finish.sh").read_text()
+    assert 'merge-base --is-ancestor "$reviewed" "$head"' in script
+
+
 def test_the_status_call_ignores_submodules_and_the_fsmonitor() -> None:
     script = (ship_rig.REPO / "tools" / "finish.sh").read_text()
     assert "--ignore-submodules=all" in script

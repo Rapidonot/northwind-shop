@@ -77,7 +77,7 @@ MARKER WRITTEN: planted code ran
 --- with --ignore-submodules=all
 no marker
 --- with diff.ignoreSubmodules=all in a global config
-no marker
+no marker (but see below: with no .gitmodules in the repo)
 ```
 
 And from the sandbox, in this checkout: writing a nested `.git` file succeeded (exit 0), and the probe was removed. So the session can do
@@ -90,7 +90,7 @@ every step. The test suite before the fix:
 
 | # | Severity | Finding | Done |
 |---|---|---|---|
-| 1 | Critical | `git status` runs a planted nested config | Fixed in `finish`; refused in `refused-paths.sh` and pre-push. **Open** for a `git status` outside `finish`: the user's global setting closes it |
+| 1 | Critical | `git status` runs a planted nested config | Fixed in `finish`; refused in `refused-paths.sh` and pre-push. **Open** for a `git status` outside `finish`: see the re-review |
 | 2 | High | `CHECKOUT` could be any directory | Fixed: only the checkouts `denyWrite` protects |
 | 3 | Medium | The routine rule excludes only hard rules 1 and 9 | Paths named. Left as the user approved it, for the user to decide |
 | 4 | Medium | The rule goes live before its checker is installed | Fixed: stop 1 applies to every row until the proposal is installed |
@@ -101,3 +101,34 @@ every step. The test suite before the fix:
 | 9 | Low | The `cassettes/eval-answers/` exclusion is a list of one | Logged |
 | 10 | Low | `--labels` did not validate its arguments | Fixed |
 | 11 | Low | `.git/config` and `.git/hooks` have no explicit `denyWrite` entry | Logged |
+
+## Security re-review, at `2953f21`
+
+Two critical left, so stop 10. Fixes for findings 2, 4, 6, 8 and 10 held; 5 held with a small gap.
+
+**Correction.** The first version of this file, the threat model and decision 0011 said a global `diff.ignoreSubmodules = all` closes the
+route. That was wrong. It was measured with no `.gitmodules` in the repo.
+
+Measured in throwaway repos, with a planted fsmonitor, clean filter and `post-index-change` hook:
+
+```
+A: gitlink at HEAD, not in the index
+   ls-files gitlinks: 0, and status with the flag shows nothing: the index check passed it
+   git commit on the nothing-to-commit path: printed "modified: sub (untracked content)", so it descended
+   no marker ran, because core.fsmonitor=false reached the child; this plant did not show code running
+   git commit --allow-empty: no descent
+B: plain status with the global setting
+   no .gitmodules:                 no marker
+   .gitmodules, ignore = none:     RAN: MONRAN
+   the same, in the index only:    RAN: MONRAN
+   status --ignore-submodules=all, all three: no marker
+C: the same plant with no sub/.git: no marker
+```
+
+| # | Severity | Finding | Done |
+|---|---|---|---|
+| A | Critical | A gitlink at `HEAD` passes the index check, and `git commit` descends | Fixed after the re-review: `HEAD` and the reviewed commit checked, tracked `.gitmodules` refused, `MM` refused, `--allow-empty`. **No reviewer has read this fix** |
+| B | Critical | The general `git status` exposure | **Open, needs the user** |
+| C | Low | The pre-push gitlink refusal needs the hook reinstalled | On the install list |
+| D | Low | The commit checked could differ from the commit pushed | Fixed: resolved once |
+| E | Low | `tr` could abort on a non-UTF-8 path | Fixed: `LC_ALL=C` |
