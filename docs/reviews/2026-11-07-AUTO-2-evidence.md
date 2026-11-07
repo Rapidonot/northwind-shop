@@ -23,3 +23,13 @@ evals/tests/test_integrity.py: 5 symlink tests failed
 tests/hooks/test_settings.py, test_sandbox_settings.py: 6 failed (the proposal has no enrich rule)
 tests/ship/test_ship.py -k "docs_diff or data/enrichment": 4 failed
 ```
+
+### Items 7a and 7c, before the code
+
+```
+tests/hooks/test_changed_tests.py: collection error, tools/changed_tests.py does not exist
+tests/hooks/test_ship_marker.py: 6 failed, 18 passed
+```
+
+The 18 passed because a Makefile with no filter prints nothing, which is what the run-the-tests cases expect, or because they pin what
+must not change. They get their failing run from the mutations below.

@@ -56,6 +56,7 @@ markers = [
     "req(id): the PRD requirement ID (e.g. RAG-03) whose acceptance criterion this test proves",
     "integration: needs the local stack (make up); run with `make test-integration`",
     "e2e: needs the real index and a recording; run with `make e2e`",
+    "ship: slow ship and pre-push rigs; `make test` skips them only when nothing they cover changed, and GitHub CI always runs them",
 ]
 
 [dependency-groups]

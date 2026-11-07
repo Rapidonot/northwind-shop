@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pytest
 
-pytestmark = pytest.mark.req("AUTO-1")
+pytestmark = [pytest.mark.req("AUTO-1"), pytest.mark.ship]
 
 _spec = importlib.util.spec_from_file_location("ship_shared", Path(__file__).with_name("shared.py"))
 assert _spec is not None and _spec.loader is not None

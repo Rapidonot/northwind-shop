@@ -59,7 +59,7 @@ code without one (decision 0005). `make enrich`, which spends too, is under "Lan
 | `tools/rig-5a-ask-rules.sh` | `irreversible or monetary` | Run in the user's terminal, and a session can edit it. The advisor reads it from disk and the user checks the hash just before running | The user | `docs/reviews/2026-11-04-5a-gate-hardening-evidence.md`, second-pass finding 2 |
 | `services/llm-replay/spike/run_spike.py` | `irreversible or monetary` | Not wired to any target. In the sandbox it can neither read the key nor reach the host | The user | Decision 0005, "Limits" |
 | `make up`, `make down`, `make model` | `reversible write` | Run from the runner clone; `make down` keeps the data volume | The user; a session cannot reach Docker | `Makefile`, decisions 0004 and 0005 |
-| `make help`, `make dev`, `make dev-gateway`, `make dev-portal`, `make lint`, `make test`, `make scan-cassettes`, `make llm-spend`, `make eval-integrity`, `make runner-check` | `read-only` | Write nothing of lasting note: temp files, caches, reports. `make test` pins replay | None needed: read-only | `Makefile` |
+| `make help`, `make dev`, `make dev-gateway`, `make dev-portal`, `make lint`, `make test`, `make check`, `make scan-cassettes`, `make llm-spend`, `make eval-integrity`, `make runner-check` | `read-only` | Write nothing of lasting note: temp files, caches, reports. `make test` pins replay | None needed: read-only | `Makefile` |
 
 ## Landed with 5b and #7
 
