@@ -17,11 +17,15 @@ from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import asdict
 from pathlib import Path
+from typing import cast
 
 import psycopg
 
 from northwind_common.llm import ASSISTANT_MODEL, anthropic_client
 from northwind_evals.answerers import Answerer, SingleShotAnswerer
+from northwind_evals.compare import compare as compare_arms
+from northwind_evals.compare import drift_lines, mean_scores
+from northwind_evals.compare import render as render_comparison
 from northwind_evals.contexts import (
     ANSWER_CONTEXT_K,
     ContextChunk,
@@ -64,7 +68,14 @@ from northwind_rag.cli import DEFAULT_DATABASE_URL, enriched_database_url
 from northwind_rag.embedding import Embedder, FastEmbedEmbedder
 from northwind_rag.enrichment import EnrichmentCache
 from northwind_rag.ingest import require_enriched_database
-from northwind_rag.retrieval import RetrievedChunk, dense_search, retriever_id
+from northwind_rag.retrieval import (
+    RetrievedChunk,
+    ShopperRegion,
+    dense_search,
+    keyword_search,
+    retrieve_context,
+    retriever_id,
+)
 from northwind_rag.sources import build_chunks
 
 ITEMS = Path("evals/fixtures/starter_set.jsonl")
@@ -76,6 +87,7 @@ KNOWN_FAILURES = Path("evals/fixtures/known_failures.json")
 LAST_RUN = Path(".llm-proxy-log/eval-last-run.json")
 REVIEW_LIST = Path("docs/reviews/RAG-12-eval-review.md")
 ENRICHMENT_REPORT = Path("docs/reviews/RAG-02-enrichment-report.md")
+RETRIEVAL_REPORT = Path("docs/reviews/RAG-03-retrieval-report.md")
 SUITE = "eval-answers"
 ALLOW_STALE_ENV = "EVAL_ALLOW_STALE"
 
@@ -95,12 +107,43 @@ def _index_version(conn: psycopg.Connection) -> str:
     return str(row[0])
 
 
+def _region(item: EvalItem) -> ShopperRegion:
+    """`load_items` already refused any region outside REGIONS, which equals SHOPPER_REGIONS."""
+    return cast(ShopperRegion, item.region)
+
+
 def _live(
     conn: psycopg.Connection, embedder: Embedder, items: Sequence[EvalItem]
 ) -> dict[str, list[RetrievedChunk]]:
+    """What a shopper in the item's region gets: the agents' path, hybrid (RAG-03, row #8)."""
     return {
-        item.id: dense_search(conn, embedder, item.query, audience="shopper", k=RETRIEVAL_K)
+        item.id: retrieve_context(
+            conn, embedder, item.query, region=_region(item), audience="shopper", k=RETRIEVAL_K
+        )
         for item in items
+    }
+
+
+def _arms(
+    conn: psycopg.Connection, embedder: Embedder, items: Sequence[EvalItem]
+) -> dict[str, dict[str, list[str]]]:
+    """Each arm's ranked source IDs per item, all on the shopper's region-filtered path."""
+    dense = {
+        item.id: dense_search(
+            conn, embedder, item.query, audience="shopper", k=RETRIEVAL_K, region=_region(item)
+        )
+        for item in items
+    }
+    keyword = {
+        item.id: keyword_search(
+            conn, item.query, audience="shopper", k=RETRIEVAL_K, region=_region(item)
+        )
+        for item in items
+    }
+    hybrid = _live(conn, embedder, items)
+    return {
+        arm: {item_id: [chunk.source_id for chunk in chunks] for item_id, chunks in found.items()}
+        for arm, found in (("dense", dense), ("keyword", keyword), ("hybrid", hybrid))
     }
 
 
@@ -284,6 +327,11 @@ def cmd_gate(args: argparse.Namespace) -> int:
         _index_version(conn)
         live = _live(conn, embedder, items)
 
+    ranked = {item_id: [chunk.source_id for chunk in chunks] for item_id, chunks in live.items()}
+    chunk_ids = {item_id: [chunk.chunk_id for chunk in chunks] for item_id, chunks in live.items()}
+    for line in drift_lines(mean_scores(items, ranked), chunk_ids):
+        print(f"  {line}")
+
     recorded = [item for item in items if item.id in baseline.answers]
     stale = _stale_ids(recorded, contexts, live, retriever_id(embedder))
     fresh = [item for item in recorded if item.id not in stale]
@@ -316,6 +364,20 @@ def cmd_gate(args: argparse.Namespace) -> int:
     verdict = "passed" if passed else "FAILED"
     print(f"eval-gate {verdict}" + (f" with {len(result.stale)} stale" if result.stale else ""))
     return 0 if passed else 1
+
+
+def cmd_compare_retrievers(_: argparse.Namespace) -> int:
+    """RAG-03's criterion: hybrid strictly above dense-only and keyword-only on recall@5. No LLM."""
+    items = load_items(ITEMS)
+    embedder = FastEmbedEmbedder()
+    with _connect() as conn:
+        _index_version(conn)
+        arms = _arms(conn, embedder, items)
+    comparison = compare_arms(items, arms, _trap_reviews())
+    text = render_comparison(comparison, retriever_id(embedder))
+    RETRIEVAL_REPORT.write_text(text, encoding="utf-8")
+    print(text)
+    return 0 if comparison.hybrid_wins else 1
 
 
 def cmd_review_list(_: argparse.Namespace) -> int:
@@ -367,6 +429,12 @@ def cmd_integrity(args: argparse.Namespace) -> int:
         print(f"  {problem}", file=sys.stderr)
     print(f"eval-integrity {'FAILED' if problems else 'passed'} against {args.base}")
     return 1 if problems else 0
+
+
+def _trap_reviews() -> dict[str, str]:
+    """Each planted injection review's ID and its trap. Evals may read the answer key."""
+    key = json.loads((FIXTURES / "_answer_key.json").read_text(encoding="utf-8"))
+    return {entry["review_id"]: entry["trap_id"] for entry in key["injection_reviews"]}
 
 
 def _trap_chunks() -> dict[str, str]:
@@ -421,6 +489,7 @@ def main(argv: list[str] | None = None) -> int:
     gate.set_defaults(func=cmd_gate)
     commands.add_parser("review-list").set_defaults(func=cmd_review_list)
     commands.add_parser("enrichment-report").set_defaults(func=cmd_enrichment_report)
+    commands.add_parser("compare-retrievers").set_defaults(func=cmd_compare_retrievers)
     integrity = commands.add_parser("integrity")
     integrity.add_argument("--base", default="origin/main")
     integrity.set_defaults(func=cmd_integrity)

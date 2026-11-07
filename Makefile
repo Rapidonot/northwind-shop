@@ -61,7 +61,7 @@ endif
 .PHONY: help setup up down dev dev-gateway dev-portal data model ingest ingest-enriched enrich fmt lint test check \
 	test-integration ci scan-cassettes llm-spend llm-proxy llm-runner runner-sync runner-check \
 	ship finish review-diff record eval-live eval-rescore eval-gate eval-integrity eval-gate-stale-ok eval-promote \
-	eval-snapshot eval-review-list eval-enrichment-report e2e e2e-scripted
+	eval-snapshot eval-review-list eval-enrichment-report eval-compare-retrievers e2e e2e-scripted
 
 # A stable cache, not fastembed's temp-dir default: Claude's sandbox has a different temp dir and
 # cannot reach the model's download hosts, so `make -C ~/.northwind/runner model` fills this (CC-27).
@@ -290,6 +290,9 @@ eval-snapshot: ## Save each eval item's retrieved context, the input for answers
 
 eval-enrichment-report: ## Compare the enriched index with the plain one; changes neither (RAG-02)
 	uv run python -m northwind_evals.cli enrichment-report
+
+eval-compare-retrievers: ingest ## Dense vs keyword vs hybrid recall on the shopper path; exits 1 unless hybrid wins (RAG-03; no LLM)
+	uv run python -m northwind_evals.cli compare-retrievers
 
 eval-review-list: ## Write the list of eval items waiting for human review (RAG-12)
 	uv run python -m northwind_evals.cli review-list

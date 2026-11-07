@@ -68,8 +68,10 @@ class Recording:
         if self.empty:
             return []
         if caller == UK:
-            return [RetrievedChunk("c1", "policy", "POL-UK", "policy", "UK-ONLY returns text.")]
-        return [RetrievedChunk("c2", "policy", "POL-LEAK", "policy", "LEAKED other-audience text.")]
+            return [RetrievedChunk("c1", "document", "POL-UK", "policy", "UK-ONLY returns text.")]
+        return [
+            RetrievedChunk("c2", "document", "POL-LEAK", "policy", "LEAKED other-audience text.")
+        ]
 
 
 def run(

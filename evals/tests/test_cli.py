@@ -978,3 +978,21 @@ def test_promote_still_works_over_an_override_that_names_its_approver(rig: Rig) 
     with_override(dict(GOOD_OVERRIDE))
     write_candidate({"EV-1": dict(GOOD)})
     assert rig.promote() == 0
+
+
+@pytest.mark.req("RAG-03")
+def test_gate_prints_exact_retrieval_metrics_and_the_top_k_hash(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The drift check (row #8): CI's log and the local run must show the same lines."""
+    from northwind_evals.compare import fingerprint
+
+    rig.setup_one_item()
+    with ScriptedLLM() as llm:
+        llm.reply("Answer [P1].").reply(VERDICT)
+        scripted_clients(monkeypatch, llm)
+        assert cli.main(["gate"]) == 0
+    out = capsys.readouterr().out
+    expected = fingerprint({k: [c.chunk_id for c in v] for k, v in rig.live.items()})
+    assert f"  retrieval top-k sha256 {expected}\n" in out
+    assert "  retrieval recall@5 1.000000\n" in out

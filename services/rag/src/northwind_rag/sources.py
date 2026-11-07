@@ -90,6 +90,12 @@ PLANTED_PROMOTIONS: dict[str, tuple[str, str]] = {
 # shoppers, and a planted review's own sentence lifted it into top 5s (decision 0010). The chunk
 # body is the attack, and retrieval returns the body. An allow-list: a new source type gets none.
 CONTEXT_SOURCE_TYPES: frozenset[str] = frozenset({"product", "variant", "document"})
+# Whose text the assistant may answer facts, care steps and policy from (RAG-03, hard rule 6). An
+# allow-list: reviews are shoppers' words, shown as one person's experience. Every `SourceType`
+# is in exactly one of these, so a new type is refused until someone classifies it. Kept apart from
+# CONTEXT_SOURCE_TYPES, which answers a different question; a test holds that one inside this one.
+TRUSTED_SOURCE_TYPES: frozenset[str] = frozenset({"product", "variant", "document"})
+UNTRUSTED_SOURCE_TYPES: frozenset[str] = frozenset({"review"})
 # A generated context says where a chunk sits, in one short line (RAG-02).
 MAX_CONTEXT_CHARS = 240
 _MARKUP = frozenset("<>{}[]`@")

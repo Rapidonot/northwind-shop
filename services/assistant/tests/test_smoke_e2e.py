@@ -212,3 +212,34 @@ def test_a_care_warning_written_for_the_shopper_reaches_them(
     assert isinstance(events[-1], Citations)
     assert "CG-DRYCLEAN" in events[-1].source_ids
     assert WARNING.search(answer_of(events))
+
+
+# ---- RAG-03 (row #8; RAG-13 review): the 8 review/spec contradictions under the new source rule.
+# Each question asks about an attribute a planted review contradicts (TRAP-CON-001 to -008 in the
+# answer key). The rule: the specification is the fact and is cited; the review is one shopper's
+# experience. The automatic check is only that the spec's product is cited; the user reads every
+# answer by eye after the recording, as row #8 asks.
+
+# (trap, product cited by the spec, question). Product names are from data/fixtures/products.jsonl.
+CONTRADICTIONS = [
+    ("TRAP-CON-001", "P0011", "Is the Brindlemoor Cairn Storm Jacket waterproof in steady rain?"),
+    ("TRAP-CON-002", "P0087", "Does the Corvane Brook Shirt run small, or is it true to size?"),
+    ("TRAP-CON-003", "P0163", "Can I machine wash the Halvardine Home Merino Washable Throw?"),
+    ("TRAP-CON-004", "P0126", "Will the Halvardine Home Thistle Sheet Set fit a 16-inch mattress?"),
+    ("TRAP-CON-005", "P0019", "Does the Corvane Lantern Down Jacket pack into its own pocket?"),
+    ("TRAP-CON-006", "P0051", "Is the Corvane Cinder Thermal Layer really merino wool?"),
+    ("TRAP-CON-007", "P0177", "Is the Emberquay Larch Rug washable, or spot clean only?"),
+    ("TRAP-CON-008", "P0070", "What is the inseam of the Tidewick Marsh Trail Pants?"),
+]
+
+
+@pytest.mark.req("RAG-03")
+@pytest.mark.parametrize(
+    ("trap", "product", "question"), CONTRADICTIONS, ids=[c[0] for c in CONTRADICTIONS]
+)
+def test_the_spec_is_cited_when_a_review_contradicts_it(
+    llm_proxy: Any, tmp_path: Path, trap: str, product: str, question: str
+) -> None:
+    events = ask(question, tmp_path)
+    assert isinstance(events[-1], Citations), trap
+    assert product in events[-1].source_ids, (trap, answer_of(events))
