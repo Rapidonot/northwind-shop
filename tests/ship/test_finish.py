@@ -360,7 +360,7 @@ def test_a_planted_gitlink_runs_nothing_and_is_refused(row: Row, commit: bool) -
     plant_gitlink(row, marker, commit)
     done = row.finish()
     assert done.returncode != 0
-    assert "gitlink" in done.stdout
+    assert "a gitlink is tracked" in done.stdout
     assert not marker.exists(), "planted code ran outside the sandbox"
     assert row.creates() == []
 
@@ -372,7 +372,7 @@ def test_a_gitlink_in_head_but_not_in_the_index_is_refused(row: Row) -> None:
     row.git("update-index", "--force-remove", "sub")
     done = row.finish()
     assert done.returncode != 0
-    assert "gitlink" in done.stdout
+    assert "a gitlink is tracked" in done.stdout
     assert not marker.exists()
     assert row.creates() == []
 
@@ -383,7 +383,7 @@ def test_a_gitlink_only_at_the_reviewed_commit_is_refused(row: Row) -> None:
     row.git("commit", "-q", "-m", "gone again")
     done = row.finish()
     assert done.returncode != 0
-    assert "gitlink" in done.stdout
+    assert "a gitlink is tracked" in done.stdout
     assert row.creates() == []
 
 
@@ -396,7 +396,7 @@ def test_a_planted_gitmodules_is_refused(row: Row, staged: bool) -> None:
         (row.checkout / ".gitmodules").unlink()
     done = row.finish()
     assert done.returncode != 0
-    assert "gitmodules" in done.stdout or "not committed" in done.stdout
+    assert ".gitmodules file is" in done.stdout
     assert row.creates() == []
 
 
@@ -459,6 +459,9 @@ def worktree(row: Row, name: str = "northwind-shop-b") -> Path:
     return path
 
 
+FIFO_REFUSAL = {"commondir": "commondir is redirected", "gitdir": "gitdir points elsewhere"}
+
+
 def admin_folder(row: Row, name: str = "northwind-shop-b") -> Path:
     return row.rig.root / "Projects" / "northwind-shop" / ".git" / "worktrees" / name
 
@@ -490,7 +493,7 @@ def test_a_redirected_commondir_is_refused_before_any_hook_runs(row: Row) -> Non
     row.write("PROGRESS.md", "written by /req-done\n")
     done = row.finish()
     assert done.returncode != 0
-    assert "commondir" in done.stdout + done.stderr
+    assert "commondir is redirected" in done.stdout + done.stderr
     assert not marker.exists(), "planted code ran outside the sandbox"
     assert row.creates() == []
 
@@ -502,7 +505,7 @@ def test_a_gitdir_pointing_elsewhere_is_refused(row: Row) -> None:
     row.write("PROGRESS.md", "written by /req-done\n")
     done = row.finish()
     assert done.returncode != 0
-    assert "gitdir" in done.stdout + done.stderr
+    assert "gitdir points elsewhere" in done.stdout + done.stderr
     assert row.creates() == []
 
 
@@ -513,7 +516,7 @@ def test_a_config_worktree_in_the_admin_folder_is_refused(row: Row) -> None:
     row.write("PROGRESS.md", "written by /req-done\n")
     done = row.finish()
     assert done.returncode != 0
-    assert "config.worktree" in done.stdout + done.stderr
+    assert "config.worktree is present" in done.stdout + done.stderr
     assert row.creates() == []
 
 
@@ -537,7 +540,7 @@ def test_the_main_checkout_may_not_hold_a_redirect(row: Row, name: str) -> None:
     (row.checkout / ".git" / name).write_text("/somewhere/else\n")
     done = row.finish()
     assert done.returncode != 0
-    assert name in done.stdout + done.stderr
+    assert f"{name} is present" in done.stdout + done.stderr
     assert row.creates() == []
 
 
@@ -934,13 +937,13 @@ def refused_in_linked(row: Row, word: str) -> None:
 def test_a_commondir_that_is_not_exactly_two_levels_up_is_refused(row: Row, text: str) -> None:
     linked_row(row)
     (admin_folder(row) / "commondir").write_text(text)
-    refused_in_linked(row, "commondir")
+    refused_in_linked(row, "commondir is redirected")
 
 
 def test_a_missing_commondir_is_refused(row: Row) -> None:
     linked_row(row)
     (admin_folder(row) / "commondir").unlink()
-    refused_in_linked(row, "commondir")
+    refused_in_linked(row, "commondir is redirected")
 
 
 def test_a_commondir_symlink_to_a_file_that_reads_right_is_refused(row: Row) -> None:
@@ -950,7 +953,7 @@ def test_a_commondir_symlink_to_a_file_that_reads_right_is_refused(row: Row) -> 
     file = admin_folder(row) / "commondir"
     file.unlink()
     file.symlink_to(target)
-    refused_in_linked(row, "commondir")
+    refused_in_linked(row, "commondir is redirected")
 
 
 def test_a_dangling_commondir_symlink_is_refused(row: Row) -> None:
@@ -958,7 +961,7 @@ def test_a_dangling_commondir_symlink_is_refused(row: Row) -> None:
     file = admin_folder(row) / "commondir"
     file.unlink()
     file.symlink_to(row.rig.root / "nowhere")
-    refused_in_linked(row, "commondir")
+    refused_in_linked(row, "commondir is redirected")
 
 
 def test_a_gitdir_symlink_to_a_file_that_reads_right_is_refused(row: Row) -> None:
@@ -968,54 +971,54 @@ def test_a_gitdir_symlink_to_a_file_that_reads_right_is_refused(row: Row) -> Non
     file = admin_folder(row) / "gitdir"
     file.unlink()
     file.symlink_to(target)
-    refused_in_linked(row, "gitdir")
+    refused_in_linked(row, "gitdir points elsewhere")
 
 
 def test_a_missing_gitdir_is_refused(row: Row) -> None:
     linked_row(row)
     (admin_folder(row) / "gitdir").unlink()
-    refused_in_linked(row, "gitdir")
+    refused_in_linked(row, "gitdir points elsewhere")
 
 
 def test_a_gitdir_naming_another_checkout_is_refused(row: Row) -> None:
     linked_row(row)
     other = row.rig.root / "Projects" / "northwind-shop-x"
     (admin_folder(row) / "gitdir").write_text(f"{other}/.git\n")
-    refused_in_linked(row, "gitdir")
+    refused_in_linked(row, "gitdir points elsewhere")
 
 
 def test_a_gitdir_naming_the_main_checkout_is_refused(row: Row) -> None:
     main = row.checkout
     linked_row(row)
     (admin_folder(row) / "gitdir").write_text(f"{main.resolve()}/.git\n")
-    refused_in_linked(row, "gitdir")
+    refused_in_linked(row, "gitdir points elsewhere")
 
 
 def test_a_dangling_config_worktree_symlink_in_the_admin_folder_is_refused(row: Row) -> None:
     linked_row(row)
     (admin_folder(row) / "config.worktree").symlink_to(row.rig.root / "nowhere")
-    refused_in_linked(row, "config.worktree")
+    refused_in_linked(row, "config.worktree is present")
 
 
 def test_a_config_worktree_in_the_main_git_is_refused_for_a_linked_checkout(row: Row) -> None:
     main = row.checkout
     linked_row(row)
     (main / ".git" / "config.worktree").write_text("[core]\n")
-    refused_in_linked(row, "config.worktree")
+    refused_in_linked(row, "config.worktree is present")
 
 
 def test_a_commondir_in_the_main_git_is_refused_for_a_linked_checkout(row: Row) -> None:
     main = row.checkout
     linked_row(row)
     (main / ".git" / "commondir").write_text("/somewhere/else\n")
-    refused_in_linked(row, "commondir")
+    refused_in_linked(row, "commondir is present")
 
 
 def test_a_dangling_commondir_symlink_in_the_main_git_is_refused(row: Row) -> None:
     (row.checkout / ".git" / "commondir").symlink_to(row.rig.root / "nowhere")
     done = row.finish()
     assert done.returncode != 0
-    assert "commondir" in done.stdout + done.stderr
+    assert "commondir is present" in done.stdout + done.stderr
     assert row.creates() == []
 
 
@@ -1030,7 +1033,7 @@ def test_a_planted_config_worktree_in_the_admin_folder_runs_nothing(row: Row) ->
     row.git("config", "extensions.worktreeConfig", "true")
     linked_row(row)
     (admin_folder(row) / "config.worktree").write_text(f"[core]\n\thooksPath = {hooks}\n")
-    refused_in_linked(row, "config.worktree")
+    refused_in_linked(row, "config.worktree is present")
     assert not marker.exists(), "planted code ran outside the sandbox"
 
 
@@ -1054,7 +1057,7 @@ def test_a_tracked_gitmodules_is_refused_wherever_it_is_seen(
         (row.checkout / where).unlink()
     done = row.finish()
     assert done.returncode != 0
-    assert "gitmodules" in done.stdout + done.stderr or "not committed" in done.stdout
+    assert ".gitmodules file is" in done.stdout + done.stderr
     assert row.creates() == []
     assert not row.on_origin()
 
@@ -1065,7 +1068,7 @@ def test_a_tracked_gitmodules_in_a_linked_checkout_is_refused(row: Row) -> None:
     row.git("commit", "-q", "-m", "modules")
     row.reviewed = row.git("rev-parse", "HEAD")
     linked_row(row)
-    refused_in_linked(row, "gitmodules")
+    refused_in_linked(row, ".gitmodules file is")
 
 
 def test_a_gitlink_in_a_linked_checkout_runs_nothing_and_is_refused(row: Row) -> None:
@@ -1076,7 +1079,7 @@ def test_a_gitlink_in_a_linked_checkout_runs_nothing_and_is_refused(row: Row) ->
     row.write("PROGRESS.md", "written by /req-done\n")
     done = row.finish()
     assert done.returncode != 0
-    assert "gitlink" in done.stdout
+    assert "a gitlink is tracked" in done.stdout
     assert not marker.exists()
     assert row.creates() == []
 
@@ -1131,7 +1134,7 @@ def test_a_fifo_in_the_admin_folder_is_refused_not_read(row: Row, name: str) -> 
     row.write("PROGRESS.md", "written by /req-done\n")
     done = row.finish()
     assert done.returncode != 0
-    assert name in done.stdout + done.stderr
+    assert FIFO_REFUSAL[name] in done.stdout + done.stderr
     assert row.creates() == []
 
 

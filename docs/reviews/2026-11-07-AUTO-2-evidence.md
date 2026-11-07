@@ -309,29 +309,36 @@ finish.sh at 7ab271a, FIFO tests: HUNG, killed at 60 s
 runner_check.py at 7ab271a, FIFO tests: HUNG, killed at 60 s
 ```
 
-These were run after the fixes, against the old code, not before them. That first mutant run killed 15 of 16. One showed `SURVIVED` with `1 error in 0.15s`: the mutant was valid, and that minute
-`pytest tests/governance` was running alongside it, in the same checkout, while the script mutated the real files. That governance run was not used as evidence: it was repeated after the files were
-restored, and `make ci` ran after that. The mutant, rerun alone, gave `2 failed, 204 deselected`. All 16 `runner_check.py` mutants below were then run with nothing else running.
+These were run after the fixes, against the old code, not before them. This first run also had 10 `runner_check.py` and 6 `finish.sh` mutants, and they killed 15 of 16. The other showed
+`SURVIVED` with `1 error in 0.15s`. **An earlier version of this file blamed a run collision. That was wrong.** The mutant itself was broken: its search text left four spaces behind, so the module
+did not import, and the script counted only `FAILED` lines. A corrected mutant, run alone, failed 2 tests. Separately, `pytest tests/governance` did run during this script, while it was mutating the
+real files; that run was not used as evidence, and was repeated after they were restored.
 
 ## `advisor-reviewer`, scoped re-read, at `2ffc68b`
 
 `findings`. One high remains: `.git/commondir`, for the user, because "not open at high" was this session's own re-rating. The `tools/finish.sh` finding fell to medium, and the records had `ship`'s output
 wrong: `ship` has no `--stat`. Corrected, read from the clone at `7d45a40`. Findings 5 to 11 closed.
 
-**Failing first, by name, with nothing else running. Log: `/tmp/claude-502/failfirst2.log`, not committed.**
+**Failing first, by name, with nothing else running.** Second run, log `/tmp/claude-502/failfirst2.log`, not committed:
 
 ```
 finish.sh at 2953f21: 6 failed, 2 passed
-  passed on old code: test_a_planted_gitmodules_is_refused[file], [index-only]
 finish.sh at b1763dd: 22 failed, 8 passed
-  passed on old code: test_a_commondir_that_is_not_exactly_two_levels_up_is_refused[dot], [twice], [trailing-space], [empty]
-                      test_a_missing_commondir_is_refused, test_a_dangling_commondir_symlink_is_refused
-                      test_a_missing_gitdir_is_refused, test_a_dangling_commondir_symlink_in_the_main_git_is_refused
 test_runner_support.py against runner_check.py at b1763dd: 38 failed, 168 passed
-runner_check.py mutants, every test in the file: 16 of 16 killed
+runner_check.py mutants, every test in the file: 16 of 16 killed, the corrected symlink mutant among them
 ```
 
-The 10 that pass on old code do so for another reason: the `.gitmodules` file is caught by the status check, and a broken `commondir` or `gitdir` makes git itself fail, so `finish` still stops.
+The 10 that passed on old code were never seen failing, so the advisor looked at why. Its reading was right, and **an earlier version of this file gave a reason that no run had captured.** These tests
+checked only that a word such as `commondir` appeared in the output, and the rig's temp folder is named after the test, so any git error printing a path satisfied them. They now assert the exact
+refusal. Third run, nothing else running, log `/tmp/claude-502/failfirst3.log`, not committed:
+
+```
+finish.sh at 2953f21: 8 failed
+finish.sh at b1763dd: 30 failed
+finish.sh mutants: 6 of 6 killed
+runner_check.py, replace refs on: killed
+no mutant invalid: one that does not import is now counted INVALID, not as a survivor
+```
 
 **`test-writer`'s 20 runner tests:** 15 were seen failing: 12 under a mutant, and 8 on `b1763dd`, where `admin_problems` does not exist yet, so that failure alone proves little; 5 are in both. These 5 were never seen failing:
 `test_a_dangling_git_symlink_is_named_without_an_error`, `test_a_failing_git_is_an_error_line_not_a_clean_result`, `test_a_gitlink_in_a_subfolder_is_named_by_its_path`,

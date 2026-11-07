@@ -152,8 +152,8 @@ Fixed after it, with no further read:
 - **`make runner-check` reads the admin folders.** It reads `commondir`, `gitdir` and `config.worktree`, and walks
   `.git/worktrees` itself, because `git worktree list` skips one with no `gitdir`.
 - **A main checkout's `.git/commondir`.** Git honours one (measured), which the reviewer rated high, unconfirmed. The
-  sandbox already refuses creating it (measured with `runner-check`'s own probe), through a list the runtime builds. The
-  proposal now names it and `runner-check` measures it, so that is not left to the runtime.
+  sandbox already refuses a plain create (measured with `runner-check`'s own probe), through a list the runtime builds. That
+  is one route. The proposal now names it, for when it is installed, and `runner-check` measures it.
 - **The file tools.** `Edit` deny rules for a nested `.git`, `.git/worktrees` and `.git/commondir`: they never meet the
   sandbox. Not run.
 
@@ -181,7 +181,7 @@ critical. What it changed:
 ## `tools/finish.sh`'s first pass through `ship`
 
 `make ship` and `runner-sync` run from the clone's current `Makefile`, whose `RUNNER_SYNC_PATHS` gains `tools/finish.sh`
-and `classify` only when this row merges. So on this one PR `ship` names the file under "files changed" only, with no diff
+only when this row merges, and `classify` adds that list to the control surface. So on this one PR `ship` names the file under "files changed" only, with no diff
 and not under the control surface heading, and `runner-sync` shows it in a `--stat` only, although the row put it on that
 list because it runs with the user's GitHub login. The user reads it in full before answering `ship`, and the `runner-sync`
 question is the last point before it reaches the clone. From the next PR on, it is shown like the rest.
