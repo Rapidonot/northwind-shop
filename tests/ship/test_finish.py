@@ -399,6 +399,25 @@ def test_a_planted_gitmodules_is_refused(row: Row, staged: bool) -> None:
     assert row.creates() == []
 
 
+def test_a_tracked_gitmodules_is_refused_at_real_repo_size(row: Row) -> None:
+    """Second re-review, measured: `| grep -q` under `pipefail` missed it 5 times in 5. The match
+    closes the pipe, `cut` dies of SIGPIPE, the pipeline returns 141, and `if` reads no match."""
+    blob = row.git("rev-parse", "HEAD:docs/x.md")
+    lines = [f"100644 {blob}\t.gitmodules"]
+    lines += [f"100644 {blob}\tzz/some/long/path/name/file-{n}.txt" for n in range(20000)]
+    subprocess.run(  # noqa: S603 - fixed arguments, throwaway repo
+        ["git", "-C", str(row.checkout), "update-index", "--index-info"],  # noqa: S607
+        input="\n".join(lines) + "\n",
+        text=True,
+        check=True,
+        env=row.rig.sh_env,
+    )
+    done = row.finish()
+    assert done.returncode != 0
+    assert "a .gitmodules file is tracked" in done.stdout + done.stderr
+    assert row.creates() == []
+
+
 def test_a_docs_file_changed_both_staged_and_unstaged_is_refused(row: Row) -> None:
     """`/req-done` leaves plain edits. This state is how the nothing-to-commit path is reached."""
     row.git("add", "PROGRESS.md")
@@ -425,7 +444,7 @@ def test_the_status_call_ignores_submodules_and_the_fsmonitor() -> None:
     script = (ship_rig.REPO / "tools" / "finish.sh").read_text()
     assert "--ignore-submodules=all" in script
     assert "core.fsmonitor=false" in script
-    assert script.index("gitlink") < script.index("status --porcelain")
+    assert script.index("a gitlink is tracked") < script.index("status --porcelain")
 
 
 # -- security finding 2: only a checkout the sandbox protects ---------------------------------
@@ -437,6 +456,96 @@ def worktree(row: Row, name: str = "northwind-shop-b") -> Path:
     row.git("switch", "-q", "--detach")
     row.git("worktree", "add", "-q", str(path), BRANCH)
     return path
+
+
+def admin_folder(row: Row, name: str = "northwind-shop-b") -> Path:
+    return row.rig.root / "Projects" / "northwind-shop" / ".git" / "worktrees" / name
+
+
+def planted_common(row: Row, marker: Path) -> Path:
+    """A common directory whose config points at planted hooks: what a redirect would load."""
+    common = row.checkout / ".git"
+    fake = row.rig.root / "fake-common"
+    (fake / "hooks").mkdir(parents=True)
+    shutil.copytree(common / "objects", fake / "objects")
+    shutil.copytree(common / "refs", fake / "refs")
+    (fake / "config").write_text(
+        f"[core]\n\trepositoryformatversion = 0\n\thooksPath = {fake / 'hooks'}\n"
+    )
+    for name in ("pre-commit", "post-commit", "pre-push"):
+        hook = fake / "hooks" / name
+        hook.write_text(f'#!/bin/sh\n: > "{marker}"\n')
+        hook.chmod(0o755)
+    return fake
+
+
+def test_a_redirected_commondir_is_refused_before_any_hook_runs(row: Row) -> None:
+    """Second re-review, measured: a planted hook ran through `finish`'s own flags."""
+    marker = row.rig.root / "MARKER"
+    fake = planted_common(row, marker)
+    path = worktree(row)
+    (admin_folder(row) / "commondir").write_text(f"{fake}\n")
+    row.checkout = path
+    row.write("PROGRESS.md", "written by /req-done\n")
+    done = row.finish()
+    assert done.returncode != 0
+    assert "commondir" in done.stdout + done.stderr
+    assert not marker.exists(), "planted code ran outside the sandbox"
+    assert row.creates() == []
+
+
+def test_a_gitdir_pointing_elsewhere_is_refused(row: Row) -> None:
+    path = worktree(row)
+    (admin_folder(row) / "gitdir").write_text("/somewhere/else/.git\n")
+    row.checkout = path
+    row.write("PROGRESS.md", "written by /req-done\n")
+    done = row.finish()
+    assert done.returncode != 0
+    assert "gitdir" in done.stdout + done.stderr
+    assert row.creates() == []
+
+
+def test_a_config_worktree_in_the_admin_folder_is_refused(row: Row) -> None:
+    path = worktree(row)
+    (admin_folder(row) / "config.worktree").write_text("[core]\n")
+    row.checkout = path
+    row.write("PROGRESS.md", "written by /req-done\n")
+    done = row.finish()
+    assert done.returncode != 0
+    assert "config.worktree" in done.stdout + done.stderr
+    assert row.creates() == []
+
+
+def test_an_admin_folder_that_is_a_symlink_is_refused(row: Row) -> None:
+    path = worktree(row)
+    admin = admin_folder(row)
+    moved = row.rig.root / "moved-admin"
+    admin.rename(moved)
+    admin.symlink_to(moved)
+    row.checkout = path
+    row.write("PROGRESS.md", "written by /req-done\n")
+    done = row.finish()
+    assert done.returncode != 0
+    assert "not a checkout" in done.stdout + done.stderr
+    assert row.creates() == []
+
+
+@pytest.mark.parametrize("name", ["commondir", "config.worktree"])
+def test_the_main_checkout_may_not_hold_a_redirect(row: Row, name: str) -> None:
+    """Measured: git honours a `commondir` file in a main checkout's `.git` too."""
+    (row.checkout / ".git" / name).write_text("/somewhere/else\n")
+    done = row.finish()
+    assert done.returncode != 0
+    assert name in done.stdout + done.stderr
+    assert row.creates() == []
+
+
+def test_git_is_told_its_directories_so_a_swap_after_the_check_changes_nothing() -> None:
+    """Measured: with the three variables set, a redirected `commondir` file ran nothing."""
+    script = (ship_rig.REPO / "tools" / "finish.sh").read_text()
+    for name in ("GIT_DIR", "GIT_COMMON_DIR", "GIT_WORK_TREE"):
+        assert f"{name}=" in script
+    assert script.index("GIT_COMMON_DIR=") < script.index("in_checkout ls-files")
 
 
 def test_a_linked_worktree_can_finish(row: Row) -> None:

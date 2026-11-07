@@ -1629,3 +1629,75 @@ def test_main_says_how_many_checkouts_it_searched(
     _, _, python = wired(tmp_path, monkeypatch)
     runner_check.main(python)
     assert runner_check.CHILD_GIT_SUMMARY.format(2) in capsys.readouterr().out
+
+
+# --- AUTO-2, second re-review: a worktree's admin folder, read and not only probed -----------
+
+
+@pytest.mark.req("AUTO-2")
+def test_a_real_linked_worktree_has_no_admin_problems(tmp_path: Path) -> None:
+    main, tree = linked_worktree(tmp_path)
+    assert runner_check.admin_problems(main / ".git", [main, tree]) == []
+
+
+@pytest.mark.req("AUTO-2")
+def test_a_redirected_commondir_is_reported(tmp_path: Path) -> None:
+    main, tree = linked_worktree(tmp_path)
+    file = main / ".git" / "worktrees" / "tree" / "commondir"
+    file.write_text("/somewhere/else\n")
+    assert f"REDIRECTED {file}" in runner_check.admin_problems(main / ".git", [main, tree])
+
+
+@pytest.mark.req("AUTO-2")
+def test_a_gitdir_for_no_checkout_is_reported(tmp_path: Path) -> None:
+    main, tree = linked_worktree(tmp_path)
+    file = main / ".git" / "worktrees" / "tree" / "gitdir"
+    file.write_text("/somewhere/else/.git\n")
+    assert f"REDIRECTED {file}" in runner_check.admin_problems(main / ".git", [main, tree])
+
+
+@pytest.mark.req("AUTO-2")
+def test_a_config_worktree_is_reported(tmp_path: Path) -> None:
+    main, tree = linked_worktree(tmp_path)
+    file = main / ".git" / "worktrees" / "tree" / "config.worktree"
+    file.write_text("[core]\n")
+    assert f"REDIRECTED {file}" in runner_check.admin_problems(main / ".git", [main, tree])
+
+
+@pytest.mark.req("AUTO-2")
+def test_an_admin_folder_git_does_not_list_is_reported(tmp_path: Path) -> None:
+    """Second re-review: `git worktree list` skips one with no `gitdir`."""
+    main, tree = linked_worktree(tmp_path)
+    (main / ".git" / "worktrees" / "tree" / "gitdir").unlink()
+    lines = runner_check.admin_problems(main / ".git", [main])
+    assert any(line.startswith("MISSING ") and "gitdir" in line for line in lines), lines
+
+
+@pytest.mark.req("AUTO-2")
+def test_a_symlinked_admin_folder_is_reported(tmp_path: Path) -> None:
+    main, tree = linked_worktree(tmp_path)
+    admin = main / ".git" / "worktrees" / "tree"
+    moved = tmp_path / "moved"
+    admin.rename(moved)
+    admin.symlink_to(moved)
+    assert f"SYMLINK {admin}" in runner_check.admin_problems(main / ".git", [main, tree])
+
+
+@pytest.mark.req("AUTO-2")
+def test_a_main_checkout_with_no_worktrees_folder_is_fine(tmp_path: Path) -> None:
+    repo, _ = plain_repo(tmp_path / "repo")
+    assert runner_check.admin_problems(repo / ".git", [repo]) == []
+
+
+@pytest.mark.req("AUTO-2")
+def test_main_reads_the_admin_folder_and_measures_commondir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    main, _, python = wired(tmp_path, monkeypatch)
+    file = main / ".git" / "worktrees" / "tree" / "commondir"
+    file.write_text("/somewhere/else\n")
+    assert runner_check.main(python) == 1
+    lines = capsys.readouterr().out.splitlines()
+    assert f"REDIRECTED {file}" in lines
+    assert f"WRITABLE {main / '.git' / 'commondir'}" in lines
+    assert not (main / ".git" / "commondir").exists()

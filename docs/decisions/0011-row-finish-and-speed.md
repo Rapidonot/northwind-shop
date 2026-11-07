@@ -86,7 +86,7 @@ evidence.
   `git commit` with nothing to commit runs a status of its own, which descended into it (measured; the fsmonitor did
   not fire, because `core.fsmonitor=false` reached the child). `finish` now also checks `HEAD` and the reviewed commit,
   refuses a tracked `.gitmodules`, refuses a docs file changed both staged and unstaged, and commits with
-  `--allow-empty`. This fix came after the one scoped re-review, so no reviewer has read it.
+  `--allow-empty`. This fix came after the one scoped re-review. The second re-review read it, and it holds.
 - **High.** `CHECKOUT` could be any directory, and git trusts that directory. `finish` now takes only
   `~/Projects/northwind-shop`, or a linked worktree beside it whose `.git` file points into its worktrees folder.
 - **Routine rows exclude hard rules 1, 6, 7, 8 and 9 by path.** The plan the user approved named only 1 and 9. The
@@ -119,8 +119,10 @@ fix to finding A and these changes.
   `.gitmodules` on disk in any case, ignored folders included, in every checkout. It uses no command that reads the
   working tree, and ignores replace refs.
 - **Reviewers and skills.** The sandbox covers Bash and the file tools follow permission rules, so the proposal has both
-  `denyWrite` entries and `Edit` and `Write` deny rules. Once installed, changes to these folders are proposals the user
-  installs. In this row the session edited `.claude/agents/test-writer.md` directly, which the installed settings
+  `denyWrite` entries and `Edit` deny rules. The `Write` twins follow the file's shape and do nothing: 5a found `Write(...)`
+  is never matched. Once installed, changes to these folders are proposals the user installs. This covers the agents and
+  skills only: `.claude/commands`, `.claude/rules`, `.claude/output-styles`, `.claude/workflows`, `.mcp.json` and `CLAUDE.md`
+  also steer a session, and stay writable by one route or another. In this row the session edited `.claude/agents/test-writer.md` directly, which the installed settings
   allowed. The user recorded that as found, and allowed it this once.
 
 ## A new route: replacing a worktree's admin folder
@@ -129,7 +131,29 @@ Found by the same probe, and not in the user's answers. The rules on `worktrees/
 `config.worktree` protect those names, not the folder holding them. The sandbox allowed a folder holding `gitdir` to be
 moved into and back out of `.git/worktrees` (measured with a probe folder, never a real worktree). In a throwaway repo,
 moving a linked worktree's admin folder out, rewriting `commondir` to a planted common directory and moving it back made
-a plain `git status` in that worktree run the planted config's `core.fsmonitor` (measured). No gitlink is involved, so
-nothing in `finish.sh`, `refused-paths.sh`, pre-push or `make runner-check` looks at it, and `finish` would run that
-common directory's hooks. Decision 0006 did not cover this.
+a plain `git status` in that worktree run the planted config's `core.fsmonitor` (measured). No gitlink is involved.
+Decision 0006 did not cover this. Each half is measured; the whole chain has never run on a real admin folder, and the
+runtime may already refuse moving a folder that existed when its profile was built (read from the binary, not measured).
+
+## The second re-review, at `b1763dd`
+
+One read, by the user's exception. Critical, provisionally, for the admin folder: code outside the sandbox can read the
+key file, and `finish` was exposed. Route B stays critical. So stop 10 applies to the row. Finding A's fix holds.
+
+Fixed after it, with no further read:
+
+- **`finish` no longer trusts the admin folder.** Measured first: a planted hook ran through its flags. Before its first
+  git call it requires `commondir` to read `../..` and `gitdir` to name this checkout, refuses a symlink for either or for
+  the folder, and refuses a `config.worktree` or a main `commondir`. It then sets `GIT_DIR`, `GIT_COMMON_DIR` and
+  `GIT_WORK_TREE`, and with those set a redirected `commondir` ran nothing (measured), so a swap after the check does
+  not help. This protects `finish` only. **A plain `git status` from a terminal stays exposed.**
+- **The `.gitmodules` refusal.** `| grep -q` under `pipefail` missed the file 5 times in 5 at size (measured), and now goes
+  through a file.
+- **`make runner-check` reads the admin folders.** It reads `commondir`, `gitdir` and `config.worktree`, and walks
+  `.git/worktrees` itself, because `git worktree list` skips one with no `gitdir`.
+- **A main checkout's `.git/commondir`.** Git honours one (measured), which the reviewer rated high, unconfirmed. The
+  sandbox already refuses creating it (measured with `runner-check`'s own probe), through a list the runtime builds. The
+  proposal now names it and `runner-check` measures it, so that is not left to the runtime.
+- **The file tools.** `Edit` deny rules for a nested `.git`, `.git/worktrees` and `.git/commondir`: they never meet the
+  sandbox. Not run.
 

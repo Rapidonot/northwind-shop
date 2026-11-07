@@ -140,6 +140,9 @@ FOUND-2 spike gate (proxy path), parallel-worktree layout for LLM state (decisio
 
 ## Open items
 
+- Medium, from AUTO-2 second re-review, owner the user: `make runner-check` runs the checkout's own code, sandboxed, at a time a session can pick, so it is no trustworthy clean result. A read-only mode from the runner clone would fix it.
+- Medium, from AUTO-2 second re-review, owner the user: `.claude/commands`, `.claude/rules`, `.claude/output-styles`, `.claude/workflows` and `.mcp.json` also steer a session and are not fully denied.
+- Low, from AUTO-2 second re-review: once the proposal is installed, `git switch` and `merge` fail where `.claude/agents` or `.claude/skills` differ, as with `evals/baselines`. The stop strings catch it.
 - Low, from #7: `parse_sse_usage` at `services/llm-replay/src/northwind_llm_replay/proxy.py:219` still uses `splitlines()`, the bug `readable_forms` had. It cannot hide a key: the leak check reads the raw text. It is not only lost usage, though: the review traced model text with raw separators around `data: 1` to a non-dict, an `AttributeError` and a 500 with no settlement, which fails closed (not run; needs the upstream to send them raw). Fix with an `isinstance` guard alongside the split.
 - Low, from #7: the scan's findings count can locate a fragment hit (`cli.py`, pre-existing), and `.lock` files are skipped under every scan root (pre-existing).
 - Low, from #7 re-review: a bare canary in a hand-edited public cache line passes ingest, because ingest may not read the answer key and `internal_shingles` needs five words. The committed-cache scan catches it unless it is JSON-escaped. A real run cannot produce it. Fix: a fixed `NWCANARY-` pattern in `find_generated_violations`.

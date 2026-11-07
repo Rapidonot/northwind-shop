@@ -45,6 +45,8 @@ SANDBOX = {
             "~/Projects/northwind-shop/.git/worktrees/*/commondir",
             "~/Projects/northwind-shop/.git/worktrees/*/config.worktree",
             "~/Projects/northwind-shop/.git/config.worktree",
+            # Refused today by a list the runtime builds, not by anything here (measured, AUTO-2).
+            "~/Projects/northwind-shop/.git/commondir",
             # A nested `.git` is what `git status` outside the sandbox runs a child in (AUTO-2). The
             # `*/` keeps a checkout's own `.git` out, which a commit needs. Narrows, does not close:
             # moving in a folder that already holds one is not refused (measured, decision 0011).
@@ -118,6 +120,11 @@ PERMISSIONS = {
         "Write(./.claude/agents/**)",
         "Edit(./.claude/skills/**)",
         "Write(./.claude/skills/**)",
+        # The file tools never meet the sandbox, so route B needs its own rules (second re-review).
+        "Edit(./**/.git)",
+        "Edit(./**/.git/**)",
+        "Edit(~/Projects/northwind-shop/.git/worktrees/**)",
+        "Edit(~/Projects/northwind-shop/.git/commondir)",
         # The sandbox covers Bash only, so the file tools need their own rules for these.
         "Read(~/.northwind/secrets)",
         "Read(~/.northwind/secrets/**)",
@@ -215,6 +222,7 @@ def test_only_what_redirects_git_is_denied_so_a_commit_still_works() -> None:
         "~/Projects/northwind-shop/.git/worktrees/*/commondir",
         "~/Projects/northwind-shop/.git/worktrees/*/config.worktree",
         "~/Projects/northwind-shop/.git/config.worktree",
+        "~/Projects/northwind-shop/.git/commondir",
         "~/Projects/northwind-shop/*/**/.git",
         "~/Projects/northwind-shop-*/*/**/.git",
     ]
@@ -222,7 +230,7 @@ def test_only_what_redirects_git_is_denied_so_a_commit_still_works() -> None:
 
 def write_rule(glob: str) -> re.Pattern[str]:
     """What Claude Code 2.1.318 turns a `denyWrite` glob into: read from the installed binary, and
-    measured against an installed rule (AUTO-2 evidence). Case folds, because the volume does."""
+    measured against an installed rule (AUTO-2 evidence). A model: the real rule is not run here."""
     body = re.escape(glob).replace(r"\*\*/", "(.*/)?").replace(r"\*", "[^/]*")
     return re.compile(f"^{body}(/.*)?$", re.IGNORECASE)
 

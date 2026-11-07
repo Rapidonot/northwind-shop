@@ -52,6 +52,7 @@ main_checkout=$projects/northwind-shop
 case "$real" in
 "$main_checkout")
 	[[ -d "$real/.git" && ! -L "$real/.git" ]] || refuse "not a checkout: $real"
+	git_dir=$real/.git
 	;;
 "$main_checkout"-*)
 	[[ "${real#"$main_checkout"-}" =~ ^[A-Za-z0-9._-]+$ ]] || refuse "not a checkout: $real"
@@ -60,13 +61,28 @@ case "$real" in
 	worktrees="gitdir: $main_checkout/.git/worktrees/"
 	[[ "$pointer" == "$worktrees"* && "${pointer#"$worktrees"}" =~ ^[A-Za-z0-9._-]+$ ]] ||
 		refuse "not a checkout: its .git points elsewhere"
+	[[ -d "$main_checkout/.git" && ! -L "$main_checkout/.git" ]] || refuse "not a checkout: no main .git"
+	git_dir=$main_checkout/.git/worktrees/${pointer#"$worktrees"}
+	[[ -d "$git_dir" && ! -L "$git_dir" ]] || refuse "not a checkout: its admin folder is not a folder"
+	# A session can replace this folder whole, past the rules on the files in it (measured, decision 0011).
+	[[ ! -L "$git_dir/commondir" && "$(cat "$git_dir/commondir" 2>/dev/null)" == "../.." ]] ||
+		refuse "commondir is redirected: do not run git in this checkout until it is put right"
+	[[ ! -L "$git_dir/gitdir" && "$(cat "$git_dir/gitdir" 2>/dev/null)" == "$real/.git" ]] ||
+		refuse "gitdir points elsewhere: do not run git in this checkout until it is put right"
 	;;
 *) refuse "not a checkout: $real" ;;
 esac
 checkout=$real
+common_dir=$main_checkout/.git
+for redirect in "$common_dir/commondir" "$common_dir/config.worktree" "$git_dir/config.worktree"; do
+	[[ ! -e "$redirect" && ! -L "$redirect" ]] ||
+		refuse "${redirect##*/} is present: do not run git in this checkout until it is gone"
+done
 
+# Told, not discovered: a `commondir` file swapped after the check above changes nothing (measured).
 in_checkout() {
-	GIT_NO_REPLACE_OBJECTS=1 GIT_GRAFT_FILE=/dev/null git -c core.fsmonitor=false -C "$checkout" "$@"
+	GIT_DIR="$git_dir" GIT_COMMON_DIR="$common_dir" GIT_WORK_TREE="$checkout" \
+		GIT_NO_REPLACE_OBJECTS=1 GIT_GRAFT_FILE=/dev/null git -c core.fsmonitor=false -C "$checkout" "$@"
 }
 
 # Before anything reads the working tree: a gitlink makes git run a child in that folder, with its config,
@@ -81,7 +97,9 @@ if [[ -s "$work/gitlinks" ]]; then
 	cat -v "$work/gitlinks" >&2
 	refuse "a gitlink is tracked: do not run git status in this checkout until it is gone"
 fi
-if cut -f2 "$work/lines" | grep -qE '(^|/)\.gitmodules$'; then
+# Through a file: `| grep -q` closes the pipe on a match, and under pipefail that reads as no match (measured).
+cut -f2 "$work/lines" | { grep -E '(^|/)\.gitmodules$' || true; } >"$work/modules"
+if [[ -s "$work/modules" ]]; then
 	refuse "a .gitmodules file is tracked: do not run git status in this checkout until it is gone"
 fi
 [[ ! -e "$checkout/.gitmodules" ]] || refuse "a .gitmodules file is in the checkout"

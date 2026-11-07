@@ -17,6 +17,10 @@
       "Write(./.claude/agents/**)",
       "Edit(./.claude/skills/**)",
       "Write(./.claude/skills/**)",
+      "Edit(./**/.git)",
+      "Edit(./**/.git/**)",
+      "Edit(~/Projects/northwind-shop/.git/worktrees/**)",
+      "Edit(~/Projects/northwind-shop/.git/commondir)",
       "Read(~/.northwind/secrets)",
       "Read(~/.northwind/secrets/**)",
       "Edit(~/.northwind/secrets/**)",
@@ -98,6 +102,7 @@
         "~/Projects/northwind-shop/.git/worktrees/*/commondir",
         "~/Projects/northwind-shop/.git/worktrees/*/config.worktree",
         "~/Projects/northwind-shop/.git/config.worktree",
+        "~/Projects/northwind-shop/.git/commondir",
         "~/Projects/northwind-shop/*/**/.git",
         "~/Projects/northwind-shop-*/*/**/.git"
       ],

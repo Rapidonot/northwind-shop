@@ -127,7 +127,7 @@ C: the same plant with no sub/.git: no marker
 
 | # | Severity | Finding | Done |
 |---|---|---|---|
-| A | Critical | A gitlink at `HEAD` passes the index check, and `git commit` descends | Fixed after the re-review: `HEAD` and the reviewed commit checked, tracked `.gitmodules` refused, `MM` refused, `--allow-empty`. **No reviewer has read this fix** |
+| A | Critical | A gitlink at `HEAD` passes the index check, and `git commit` descends | Fixed after the re-review: `HEAD` and the reviewed commit checked, tracked `.gitmodules` refused, `MM` refused, `--allow-empty`. The second re-review read it, and it holds |
 | B | Critical | The general `git status` exposure | **Open, needs the user** |
 | C | Low | The pre-push gitlink refusal needs the hook reinstalled | On the install list |
 | D | Low | The commit checked could differ from the commit pushed | Fixed: resolved once |
@@ -197,4 +197,47 @@ Never tried on a real worktree. The real one reads `commondir=../..`, and `gitdi
 After the change, with one more test for replace refs: 263 passed. `test-writer` was not rerun for these tests: they were written first, from the user's
 answers. `make runner-check` in this checkout: `21 directories, 0 problem(s)`, `searched 2 checkout(s) for a gitlink, a .gitmodules or a nested .git`. The walk
 read 47,170 entries here and 31,929 in the main checkout, `node_modules` included, in under a second.
+
+## Second security re-review, at `b1763dd`
+
+One read, by the user's exception to the one re-review rule. It ran nothing: every conclusion is from reading. **Stop 10 applies:** two critical are open.
+
+| # | Severity | Finding | Done |
+|---|---|---|---|
+| 1 | Critical, provisional | Replacing a worktree's admin folder; `finish` exposed | `finish` fixed and pinned, `runner-check` reads the folders. **Open for a terminal `git status`, needs the user** |
+| 2 | Critical, carried | Route B | **Open, needs the user.** Narrowed only once installed |
+| 3 | High, unconfirmed | `.git/commondir` in the main checkout | Measured: the sandbox refuses it today. Named in the proposal, measured by `runner-check`, refused by `finish` |
+| 4 | Medium | `make runner-check` runs code the session can edit, at a time it picks, so the user never gets a trustworthy clean result | **Open:** a read-only mode from the runner clone is a design change |
+| 5 | Medium | `runner-check` can exit clean with a checkout unread | Fixed: it walks `.git/worktrees` itself |
+| 6 | Medium | The `.gitmodules` refusal fails at size | Fixed, measured first |
+| 7 | Medium | The file tools bypass the rule | `Edit` deny rules added. Not run |
+| 8 | Medium | Reviewers and skills only partly closed | **Open:** the user named those two folders. Claim narrowed in the records |
+| 9 | Low | Record wording | Fixed |
+| 10 | Low | `Write` rules are dead | Wording fixed, rules left as the file's shape |
+| 11 | Low | Tests prove less than they appear to | `test_finish.py` order assertion fixed. The Python model of the rule stays a model: stated in its docstring |
+| 12 | Low | `git switch` or `merge` fails where `.claude/agents` or `.claude/skills` differ, once installed | Logged. The stop strings catch it |
+
+Holds, by that read: the fix to finding A; the glob, by reading; `runner-check`'s name matching and failure handling.
+
+**Measured after it, in throwaway repos:**
+
+```
+=== 1. redirected commondir
+RAN      plain status
+no run   status with finish's flags (fsmonitor off)
+RAN      commit with finish's flags (hook from the planted config)
+=== 2. does GIT_COMMON_DIR beat the file?
+no run   status with the three variables set
+no run   commit with the three variables set
+=== 2b. a main checkout with a commondir file
+RAN      main checkout, plain status
+=== 2c. the grep -q pipeline, 728,908 bytes
+MISSED (pipeline status 141 0), 5 times in 5
+```
+
+**Real main checkout, `runner-check`'s own probe:** `.git/commondir` missing before, `file_problems` returned `[]`, so the create was refused, and missing after.
+
+**Failing first:** 18 failed, 10 passed in the selected tests. After the fixes: 301 passed across `test_sandbox_settings.py`, `test_runner_support.py` and `test_finish.py`, a
+real linked-worktree `finish` included. `make runner-check`: `21 directories, 0 problem(s)`, with the real admin folder now read. These fixes came after the last read, so no reviewer has
+read them.
 

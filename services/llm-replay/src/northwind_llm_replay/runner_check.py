@@ -372,6 +372,43 @@ def walked_problems(tree: Path) -> list[str]:
     return problems
 
 
+def admin_folder_problems(folder: Path, gitdirs: set[Path]) -> list[str]:
+    """Its contents, not only whether they can be written: the folder can be replaced whole, past
+    the rules on these names, and a redirected `commondir` runs a planted config (decision 0011)."""
+    found = kind(folder)
+    if found == SYMLINK:
+        return [f"SYMLINK {folder}"]
+    if found != DIRECTORY:
+        return [f"NOT A DIRECTORY {folder}"]
+    problems: list[str] = []
+    for name in ("commondir", "gitdir"):
+        if kind(folder / name) == MISSING:
+            problems.append(f"MISSING {folder / name}")
+    if kind(folder / "commondir") != MISSING:
+        if (folder / "commondir").read_text().strip() != "../..":
+            problems.append(f"REDIRECTED {folder / 'commondir'}")
+    if kind(folder / "gitdir") != MISSING:
+        if Path((folder / "gitdir").read_text().strip()).resolve() not in gitdirs:
+            problems.append(f"REDIRECTED {folder / 'gitdir'}")
+    if kind(folder / "config.worktree") != MISSING:
+        problems.append(f"REDIRECTED {folder / 'config.worktree'}")
+    return problems
+
+
+def admin_problems(git_dir: Path, trees: Iterable[Path]) -> list[str]:
+    """Read from the folder itself: `git worktree list` skips one with no `gitdir`."""
+    gitdirs = {(tree / GIT_FOLDER).resolve() for tree in trees}
+    try:
+        folders = sorted((git_dir / "worktrees").iterdir())
+    except FileNotFoundError:
+        return []
+    return [
+        line
+        for folder in folders
+        for line in measured(lambda path: admin_folder_problems(path, gitdirs), folder)
+    ]
+
+
 def child_git_problems(tree: Path) -> list[str]:
     return [*measured(tracked_problems, tree), *measured(walked_problems, tree)]
 
@@ -454,6 +491,7 @@ def main(python: Path) -> int:
             ledger.with_suffix(".lock"),
             git_dir / "config",
             git_dir / "config.worktree",
+            git_dir / "commondir",  # git honours one in a main checkout too (measured)
             Path.home() / ".gitconfig",
             Path.home() / ".config" / "git" / "config",
         ]
@@ -471,6 +509,7 @@ def main(python: Path) -> int:
     run_stage("pricing", problems, prices)
     run_stage("settings", problems, lambda: settings_problems(trees))
     run_stage("child git", problems, lambda: [p for t in trees for p in child_git_problems(t)])
+    run_stage("admin folders", problems, lambda: admin_problems(git_dir, trees))
     for line in problems:
         print(printable(line))
     print(f"runner-check: {len(directories)} directories, {len(problems)} problem(s)")
