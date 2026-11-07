@@ -181,9 +181,10 @@ critical. What it changed:
 ## `tools/finish.sh`'s first pass through `ship`
 
 `make ship` and `runner-sync` run from the clone's current `Makefile`, whose `RUNNER_SYNC_PATHS` gains `tools/finish.sh`
-only when this row merges. So on this one PR they list the file and its `--stat` but show no diff, although the row put it
-on that list because it runs with the user's GitHub login. The user reads it in full before answering `ship`. From the next
-PR on, it is shown like the rest.
+and `classify` only when this row merges. So on this one PR `ship` names the file under "files changed" only, with no diff
+and not under the control surface heading, and `runner-sync` shows it in a `--stat` only, although the row put it on that
+list because it runs with the user's GitHub login. The user reads it in full before answering `ship`, and the `runner-sync`
+question is the last point before it reaches the clone. From the next PR on, it is shown like the rest.
 
 A note on item 4: the user said a routine row may change `cassettes/**` through `make record`. `CLAUDE.md` allows only
 added files, which is narrower. That is the advisor's reading, adopted because a modified cassette is a hand edit by

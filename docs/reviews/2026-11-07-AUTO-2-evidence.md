@@ -206,7 +206,7 @@ One read, by the user's exception to the one re-review rule. It ran nothing: eve
 |---|---|---|---|
 | 1 | Critical, provisional | Replacing a worktree's admin folder; `finish` exposed | `finish` fixed and pinned, `runner-check` reads the folders. **Moved to SEC-1 by the user's decision:** pre-existing, not caused or worsened by this row |
 | 2 | Critical, carried | Route B | **Moved to SEC-1 by the user's decision:** pre-existing, not caused or worsened by this row. Narrowed only once installed |
-| 3 | High, unconfirmed | `.git/commondir` in the main checkout | Measured: the sandbox refuses it today. Named in the proposal, measured by `runner-check`, refused by `finish`. Moved to SEC-1 |
+| 3 | High, unconfirmed | `.git/commondir` in the main checkout | Measured: the sandbox refuses a plain create today, which is one route. Named in the proposal, measured by `runner-check`, refused by `finish`. Moved to SEC-1 |
 | 4 | Medium | `make runner-check` runs code the session can edit, at a time it picks, so the user never gets a trustworthy clean result | **Moved to SEC-1:** a read-only mode from the runner clone |
 | 5 | Medium | `runner-check` can exit clean with a checkout unread | Fixed: it walks `.git/worktrees` itself |
 | 6 | Medium | The `.gitmodules` refusal fails at size | Fixed, measured first |
@@ -282,7 +282,7 @@ One read of `tools/finish.sh` and `runner_check.py`, by the user's exception. It
 |---|---|---|---|
 | 1 | High | `tools/finish.sh` reaches the clone with no full diff shown on this PR, and no record said so | Recorded in the PR body and decision 0011. The gate report tells the user to read it in full before `ship` |
 | 2 | Medium | Failing first not shown for the fixes to A, D, E, the FIFO tests and `test-writer`'s tests | Run: see below |
-| 3 | Medium | The `.git/commondir` high has no stop 10 exemption | Not open at high here: the sandbox refuses it, measured. Put to the user in the gate report |
+| 3 | Medium | The `.git/commondir` high has no stop 10 exemption | Moved to SEC-1 by the user's decision. The sandbox refuses a plain create, measured: one route, and the rating stands. No user statement exempts it from stop 10, so it is put to the user |
 | 4 | Medium | The probe went into the main checkout's `.git/worktrees`, and a refused `rm` was worked around without asking | Stated in the PR body and the gate report. The folder went to `$TMPDIR` and was deleted |
 | 5 | Medium | `tool-register.md` still called 5b `partial` | Fixed, with the doubled `make enrich` sentence and the gitlink refusal |
 | 6 | Low | `test-writer` is not shown to have seen the third-read tests | It did not: it ran before them. Stated |
@@ -309,7 +309,32 @@ finish.sh at 7ab271a, FIFO tests: HUNG, killed at 60 s
 runner_check.py at 7ab271a, FIFO tests: HUNG, killed at 60 s
 ```
 
-These were run after the fixes, against the old code, not before them. Mutants of the new code, each against its tests: **16 of 16 killed**: 10 in `runner_check.py`, 6 in `finish.sh`. One first
-showed `SURVIVED` with `1 error`, from a run collision with another pytest; alone, it failed 2 tests. Case folding, `ls-tree` at `HEAD`, replace refs, the walk's `onerror`, a swallowed git failure,
-`strip`, `config.worktree`, the pointer-back check and the symlink refusals were each removed in turn.
+These were run after the fixes, against the old code, not before them. That first mutant run killed 15 of 16. One showed `SURVIVED` with `1 error in 0.15s`: the mutant was valid, and that minute
+`pytest tests/governance` was running alongside it, in the same checkout, while the script mutated the real files. That governance run was not used as evidence: it was repeated after the files were
+restored, and `make ci` ran after that. The mutant, rerun alone, gave `2 failed, 204 deselected`. All 16 `runner_check.py` mutants below were then run with nothing else running.
+
+## `advisor-reviewer`, scoped re-read, at `2ffc68b`
+
+`findings`. One high remains: `.git/commondir`, for the user, because "not open at high" was this session's own re-rating. The `tools/finish.sh` finding fell to medium, and the records had `ship`'s output
+wrong: `ship` has no `--stat`. Corrected, read from the clone at `7d45a40`. Findings 5 to 11 closed.
+
+**Failing first, by name, with nothing else running. Log: `/tmp/claude-502/failfirst2.log`, not committed.**
+
+```
+finish.sh at 2953f21: 6 failed, 2 passed
+  passed on old code: test_a_planted_gitmodules_is_refused[file], [index-only]
+finish.sh at b1763dd: 22 failed, 8 passed
+  passed on old code: test_a_commondir_that_is_not_exactly_two_levels_up_is_refused[dot], [twice], [trailing-space], [empty]
+                      test_a_missing_commondir_is_refused, test_a_dangling_commondir_symlink_is_refused
+                      test_a_missing_gitdir_is_refused, test_a_dangling_commondir_symlink_in_the_main_git_is_refused
+test_runner_support.py against runner_check.py at b1763dd: 38 failed, 168 passed
+runner_check.py mutants, every test in the file: 16 of 16 killed
+```
+
+The 10 that pass on old code do so for another reason: the `.gitmodules` file is caught by the status check, and a broken `commondir` or `gitdir` makes git itself fail, so `finish` still stops.
+
+**`test-writer`'s 20 runner tests:** 15 were seen failing: 12 under a mutant, and 8 on `b1763dd`, where `admin_problems` does not exist yet, so that failure alone proves little; 5 are in both. These 5 were never seen failing:
+`test_a_dangling_git_symlink_is_named_without_an_error`, `test_a_failing_git_is_an_error_line_not_a_clean_result`, `test_a_gitlink_in_a_subfolder_is_named_by_its_path`,
+`test_every_problem_is_reported_not_only_the_first`, `test_main_reports_an_unreadable_worktrees_folder_and_fails`. Its `test_finish.py` tests outside the selected names, such as the normal main and linked
+finishes, were not run against old code: they pin behaviour that already worked.
 
