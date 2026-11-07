@@ -82,7 +82,7 @@ make scan-cassettes   # secret/PAN scan of cassettes, data/enrichment, ledger an
 make llm-proxy        # dev LLM proxy on this worktree's port (LLM_MODE, default replay)
 make llm-runner SUITE=… RUN_BUDGET=<usd>  # USER ONLY, own terminal, `make -C ~/.northwind/runner`: open one spending window
 make runner-sync      # USER ONLY, in the runner clone: show what changed, ask, fast-forward to origin/main
-make runner-check     # from the sandbox, in each checkout: measure that nothing the runner loads is writable
+make runner-check     # from the sandbox, in each checkout: measure that nothing the runner loads is writable; report any gitlink, .gitmodules or nested .git
 make ship PR=<n> SHA=<reviewed>  # USER ONLY, `make -C ~/.northwind/runner`: check a PR, wait for CI, ask, merge, runner-sync
 make finish CHECKOUT=$HOME/… SHA=<reviewed> BODY=docs/reviews/<file>  # USER ONLY, `make -C ~/.northwind/runner`: after /req-done, commit its files, push, open the PR, add ci-change if needed, then ship (decision 0011)
 make review-diff      # write the committed diff for advisor-reviewer, base and head SHA first
@@ -219,7 +219,9 @@ and raising a budget cap still need asking.
 **Routine rows.** A row is routine when the user names its scope in the start prompt and says it is routine,
 and the plan changes no hard-rule 1 or 9 path (`services/backend/**`,
 `services/common/src/northwind_common/cards.py`, `services/gateway/src/northwind_gateway/chat.py`, and any
-later payment code) and no control surface path, with one exception: files added
+later payment code), no hard-rule 6, 7 or 8 path (`services/assistant/**`, `services/rag/**`,
+`services/common/src/northwind_common/llm.py`, and any later agent, MCP or tool-scoping code) and no control
+surface path, with one exception: files added
 under `cassettes/<suite>/` by `make record SUITE=<suite>`, in a window the user opened for that suite. The
 plan names the suite, the model input that changed and the expected spend. Stop 2 still stops for the window.
 A modified, deleted or hand-written cassette, any file added under `cassettes/eval-answers/`, `make eval-live`

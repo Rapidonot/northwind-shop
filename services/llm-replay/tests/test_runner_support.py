@@ -1437,3 +1437,195 @@ def test_every_target_the_clone_runs_uses_an_isolated_python(tmp_path: Path, tar
         assert "uv run" not in line, line
         if re.search(r"\bpython3?\b", line) and "/bin/python" in line:
             assert re.search(r"/bin/python -I\b", line), line
+
+
+# --- AUTO-2: what would make `git status` outside the sandbox run a child ---------------------
+
+
+def plain_repo(path: Path) -> tuple[Path, str]:
+    path.mkdir()
+
+    def git(*arguments: str) -> str:
+        return subprocess.run(  # noqa: S603 - fixed arguments, throwaway repo
+            ["git", "-C", str(path), *arguments],  # noqa: S607
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+
+    git("init", "-q", "-b", "main")
+    git("config", "user.email", "t@x.invalid")
+    git("config", "user.name", "t")
+    (path / "README.md").write_text("x\n")
+    git("add", "-A")
+    git("commit", "-q", "-m", "base")
+    return path, git("rev-parse", "HEAD")
+
+
+def run_git(repo: Path, *arguments: str) -> None:
+    subprocess.run(  # noqa: S603 - fixed arguments, throwaway repo
+        ["git", "-C", str(repo), *arguments],  # noqa: S607
+        capture_output=True,
+        check=True,
+    )
+
+
+@pytest.mark.req("AUTO-2")
+def test_a_clean_checkout_has_no_git_problems(tmp_path: Path) -> None:
+    repo, _ = plain_repo(tmp_path / "repo")
+    assert runner_check.child_git_problems(repo) == []
+
+
+@pytest.mark.req("AUTO-2")
+def test_a_linked_worktrees_pointer_file_is_not_a_problem(tmp_path: Path) -> None:
+    main, tree = linked_worktree(tmp_path)
+    assert runner_check.child_git_problems(main) == []
+    assert runner_check.child_git_problems(tree) == []
+
+
+@pytest.mark.req("AUTO-2")
+def test_a_gitlink_in_the_index_is_reported(tmp_path: Path) -> None:
+    repo, base = plain_repo(tmp_path / "repo")
+    run_git(repo, "update-index", "--add", "--cacheinfo", f"160000,{base},sub")
+    assert f"GITLINK {repo}: sub" in runner_check.child_git_problems(repo)
+
+
+@pytest.mark.req("AUTO-2")
+def test_a_gitlink_only_at_head_is_reported(tmp_path: Path) -> None:
+    """Re-review finding A: the index alone is not enough."""
+    repo, base = plain_repo(tmp_path / "repo")
+    run_git(repo, "update-index", "--add", "--cacheinfo", f"160000,{base},sub")
+    run_git(repo, "commit", "-q", "-m", "gitlink")
+    run_git(repo, "update-index", "--force-remove", "sub")
+    assert f"GITLINK {repo}: sub" in runner_check.child_git_problems(repo)
+
+
+@pytest.mark.req("AUTO-2")
+def test_a_tracked_gitmodules_is_reported_even_with_no_file_on_disk(tmp_path: Path) -> None:
+    repo, _ = plain_repo(tmp_path / "repo")
+    (repo / ".gitmodules").write_text("[submodule]\n")
+    run_git(repo, "add", ".gitmodules")
+    (repo / ".gitmodules").unlink()
+    assert f"GITMODULES {repo}: .gitmodules" in runner_check.child_git_problems(repo)
+
+
+@pytest.mark.req("AUTO-2")
+@pytest.mark.parametrize("name", [".gitmodules", "sub/.gitmodules", "sub/.GitModules"])
+def test_an_untracked_gitmodules_is_reported(tmp_path: Path, name: str) -> None:
+    repo, _ = plain_repo(tmp_path / "repo")
+    (repo / "sub").mkdir()
+    (repo / name).write_text("[submodule]\n")
+    assert f"GITMODULES {repo / name}" in runner_check.child_git_problems(repo)
+
+
+@pytest.mark.req("AUTO-2")
+@pytest.mark.parametrize("name", [".git", ".GIT", ".Git"])
+def test_a_nested_git_file_is_reported_in_any_case(tmp_path: Path, name: str) -> None:
+    """Measured: on this volume git finds `sub/.GIT`, and the child runs."""
+    repo, _ = plain_repo(tmp_path / "repo")
+    (repo / "a" / "sub").mkdir(parents=True)
+    (repo / "a" / "sub" / name).write_text("gitdir: ../gd\n")
+    assert f"NESTED GIT {repo / 'a' / 'sub' / name}" in runner_check.child_git_problems(repo)
+
+
+@pytest.mark.req("AUTO-2")
+def test_a_nested_git_folder_is_reported(tmp_path: Path) -> None:
+    repo, _ = plain_repo(tmp_path / "repo")
+    (repo / "sub" / ".git").mkdir(parents=True)
+    assert f"NESTED GIT {repo / 'sub' / '.git'}" in runner_check.child_git_problems(repo)
+
+
+@pytest.mark.req("AUTO-2")
+def test_a_nested_git_symlink_is_reported_and_not_followed(tmp_path: Path) -> None:
+    repo, _ = plain_repo(tmp_path / "repo")
+    (repo / "sub").mkdir()
+    (repo / "sub" / ".git").symlink_to(tmp_path / "nowhere")
+    assert f"NESTED GIT {repo / 'sub' / '.git'}" in runner_check.child_git_problems(repo)
+
+
+@pytest.mark.req("AUTO-2")
+def test_a_nested_git_inside_an_ignored_folder_is_reported(tmp_path: Path) -> None:
+    """`.git` under `node_modules` still makes a child run if a gitlink points there."""
+    repo, _ = plain_repo(tmp_path / "repo")
+    (repo / ".gitignore").write_text("node_modules\n")
+    (repo / "node_modules" / "x").mkdir(parents=True)
+    (repo / "node_modules" / "x" / ".git").write_text("gitdir: y\n")
+    found = f"NESTED GIT {repo / 'node_modules' / 'x' / '.git'}"
+    assert found in runner_check.child_git_problems(repo)
+
+
+@pytest.mark.req("AUTO-2")
+@pytest.mark.parametrize("name", [".gitignore", ".github", ".gitattributes", "x.git", ".gitkeep"])
+def test_a_lookalike_name_is_not_a_problem(tmp_path: Path, name: str) -> None:
+    repo, _ = plain_repo(tmp_path / "repo")
+    (repo / "sub").mkdir()
+    (repo / "sub" / name).write_text("x\n")
+    assert runner_check.child_git_problems(repo) == []
+
+
+@pytest.mark.req("AUTO-2")
+def test_a_folder_that_cannot_be_read_is_an_error_not_a_clean_result(tmp_path: Path) -> None:
+    repo, _ = plain_repo(tmp_path / "repo")
+    locked = repo / "locked"
+    locked.mkdir()
+    locked.chmod(0)
+    try:
+        lines = runner_check.child_git_problems(repo)
+    finally:
+        locked.chmod(0o700)
+    assert any(line.startswith(f"ERROR {locked}") for line in lines)
+
+
+@pytest.mark.req("AUTO-2")
+def test_a_checkout_git_cannot_read_is_an_error_not_a_clean_result(tmp_path: Path) -> None:
+    lines = runner_check.child_git_problems(tmp_path)
+    assert any(line.startswith(f"ERROR {tmp_path}") for line in lines)
+
+
+@pytest.mark.req("AUTO-2")
+def test_the_git_commands_never_read_the_working_tree() -> None:
+    """Sandboxed here, but it must stay safe from a terminal: no status, and no fsmonitor."""
+    source = (REPO / "services/llm-replay/src/northwind_llm_replay/runner_check.py").read_text()
+    assert "core.fsmonitor=false" in source
+    assert '"status"' not in source
+
+
+@pytest.mark.req("AUTO-2")
+def test_a_replace_ref_cannot_hide_a_gitlink_at_head(tmp_path: Path) -> None:
+    repo, base = plain_repo(tmp_path / "repo")
+    clean = subprocess.run(  # noqa: S603 - fixed arguments, throwaway repo
+        ["git", "-C", str(repo), "rev-parse", "HEAD^{tree}"],  # noqa: S607
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    run_git(repo, "update-index", "--add", "--cacheinfo", f"160000,{base},sub")
+    run_git(repo, "commit", "-q", "-m", "gitlink")
+    run_git(repo, "update-index", "--force-remove", "sub")
+    run_git(repo, "replace", "HEAD^{tree}", clean)
+    assert f"GITLINK {repo}: sub" in runner_check.child_git_problems(repo)
+
+
+@pytest.mark.req("AUTO-2")
+def test_main_reports_every_checkout_and_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The wiring: a unit test stays green if `main()` stops calling it."""
+    main, tree, python = wired(tmp_path, monkeypatch)
+    (main / "a").mkdir()
+    (main / "a" / ".git").write_text("gitdir: x\n")
+    (tree / "b").mkdir()
+    (tree / "b" / ".GIT").write_text("gitdir: x\n")
+    assert runner_check.main(python) == 1
+    lines = capsys.readouterr().out.splitlines()
+    assert f"NESTED GIT {main / 'a' / '.git'}" in lines
+    assert f"NESTED GIT {tree / 'b' / '.GIT'}" in lines
+
+
+@pytest.mark.req("AUTO-2")
+def test_main_says_how_many_checkouts_it_searched(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _, _, python = wired(tmp_path, monkeypatch)
+    runner_check.main(python)
+    assert runner_check.CHILD_GIT_SUMMARY.format(2) in capsys.readouterr().out

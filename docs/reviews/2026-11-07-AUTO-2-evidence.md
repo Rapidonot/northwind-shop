@@ -138,3 +138,63 @@ C: the same plant with no sub/.git: no marker
 At `4a2465b`: failed at `make test`, 1 failed, 3,902 passed, 22 xfailed, 1,143.56 s to that point. Integration and the gate did not run.
 `evals/tests/test_rag12_followup.py::test_the_pins_come_before_the_first_shell_call` pins the exact set of free-text Makefile variables, and `BODY` was
 new. The set gains `BODY`, so the new pin is covered too. This is a test change after a failure that the plan's D5 list missed; it adds to the pin and removes nothing.
+
+Timing, at `4ed279d`, `make ci` exit 0 both times:
+
+| Run | Time | Tests |
+|---|---|---|
+| Before, at `7d45a40` | 1,141.71 s | 3,614 passed, 22 xfailed, 96 integration |
+| After, this row, which touches `tools/` | 1,236.97 s | 3,903 passed, 22 xfailed, 96 integration |
+| After, a row that does not (throwaway clone, `origin/main` = head, setup outside the timer) | 651.64 s | 3,298 passed, 707 deselected, 22 xfailed, 96 integration |
+
+## Route B, after the user's answers
+
+**Glob, read from Claude Code 2.1.318.** `**/` becomes `(.*/)?`, `*` becomes `[^/]*`, and a deny becomes `(deny file-write* (regex ...))`, with
+`file-write-unlink` and `file-write-create` denied on the literal folders above the glob's fixed prefix only. The docs do not state glob support, new-name
+behaviour or precedence. The proposed rule itself was not run: `sandbox-exec` inside a session gives `sandbox_apply: Operation not permitted`.
+
+**The installed rule of the same class, `~/Projects/northwind-shop/.git/worktrees/*/gitdir`, against a throwaway folder:**
+
+```
+DENIED   new file, exact name
+DENIED   new file, other case (GITDIR)
+DENIED   rename a file onto the name
+DENIED   symlink at the name
+DENIED   hard link at the name
+ALLOWED  rename in a folder already holding the name
+```
+
+The volume is case-insensitive. **The probe left a mess, now cleaned up.** `rm` of the moved-in `gitdir` was refused, so `zzprobe-66998-moved` stayed in the
+main checkout's `.git/worktrees` and `git worktree list` showed it as prunable. After checking it held only that file, with the text `probe`, it was moved
+back out, which reversed the same rename, and `git worktree list` showed the two real checkouts again.
+
+**Which plants make `git status` run the child, in throwaway repos:**
+
+```
+RAN      control: sub/.git file
+RAN      sub/.GIT file, other case
+no run   sub is a symlink to a folder outside holding .git
+no run   a parent is a symlink, link/sub
+RAN      sub/.git is a symlink to a file outside
+```
+
+**A new route, in a throwaway repo:** a linked worktree's admin folder moved out, `commondir` rewritten to a planted common directory, moved back:
+
+```
+status exit 0
+RAN: the redirected config's fsmonitor ran
+```
+
+Never tried on a real worktree. The real one reads `commondir=../..`, and `gitdir` points at this checkout.
+
+**Failing first**, before the change, with the tests in `tests/hooks/test_sandbox_settings.py`, `tests/hooks/test_stop_conditions.py` and
+`services/llm-replay/tests/test_runner_support.py`:
+
+```
+34 failed, 228 passed
+```
+
+After the change, with one more test for replace refs: 263 passed. `test-writer` was not rerun for these tests: they were written first, from the user's
+answers. `make runner-check` in this checkout: `21 directories, 0 problem(s)`, `searched 2 checkout(s) for a gitlink, a .gitmodules or a nested .git`. The walk
+read 47,170 entries here and 31,929 in the main checkout, `node_modules` included, in under a second.
+

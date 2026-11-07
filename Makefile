@@ -225,7 +225,7 @@ review-diff: ## Write the committed diff against origin/main for review, SHAs fi
 	@base=$$(git merge-base origin/main HEAD) && head=$$(git rev-parse HEAD) && { echo "base $$base"; echo "head $$head"; git --no-pager diff --text --no-ext-diff --no-textconv --no-renames "$$base" "$$head"; } > "$(REVIEW_DIFF)" && echo "$(REVIEW_DIFF)"
 
 # Must run sandboxed: from a terminal every write succeeds, and it reports exactly that.
-runner-check: ## From the sandbox: measure that nothing the runner loads is writable here (CC-27)
+runner-check: ## From the sandbox: nothing the runner loads is writable here; no gitlink or nested .git (CC-27, AUTO-2)
 	uv run python -m northwind_llm_replay.cli runner-check
 
 # SPENDS API CREDIT, through the window you opened with `llm-runner`; with none open it stops at once.

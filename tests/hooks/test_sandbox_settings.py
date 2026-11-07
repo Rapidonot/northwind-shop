@@ -7,6 +7,7 @@ docs/reviews/2026-11-04-cc-27-sandbox-evidence.md.
 """
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +28,9 @@ SANDBOX = {
         "denyWrite": [
             "./.claude/settings*",
             "./.claude/hooks",
+            # A session must not edit its own reviewers or skills (AUTO-2).
+            "./.claude/agents",
+            "./.claude/skills",
             "./.env*",
             "~/.northwind",  # the runner, its caches, the ledger and its lock are all budget state
             "~/.northwind/secrets",  # stated on its own, so narrowing the line above cannot lose it
@@ -41,6 +45,11 @@ SANDBOX = {
             "~/Projects/northwind-shop/.git/worktrees/*/commondir",
             "~/Projects/northwind-shop/.git/worktrees/*/config.worktree",
             "~/Projects/northwind-shop/.git/config.worktree",
+            # A nested `.git` is what `git status` outside the sandbox runs a child in (AUTO-2). The
+            # `*/` keeps a checkout's own `.git` out, which a commit needs. Narrows, does not close:
+            # moving in a folder that already holds one is not refused (measured, decision 0011).
+            "~/Projects/northwind-shop/*/**/.git",
+            "~/Projects/northwind-shop-*/*/**/.git",
         ],
         "denyRead": [
             "./.env*",  # this checkout
@@ -104,6 +113,11 @@ PERMISSIONS = {
         "Write(./.claude/settings*)",
         "Edit(./.claude/hooks/**)",
         "Write(./.claude/hooks/**)",
+        # The same for a session's own reviewers and skills (AUTO-2).
+        "Edit(./.claude/agents/**)",
+        "Write(./.claude/agents/**)",
+        "Edit(./.claude/skills/**)",
+        "Write(./.claude/skills/**)",
         # The sandbox covers Bash only, so the file tools need their own rules for these.
         "Read(~/.northwind/secrets)",
         "Read(~/.northwind/secrets/**)",
@@ -146,6 +160,9 @@ PERMISSIONS = {
         "Write(./evals/fixtures/known_failures.json)",
     ],
 }
+
+
+NESTED_GIT_GLOBS = ["~/Projects/northwind-shop/*/**/.git", "~/Projects/northwind-shop-*/*/**/.git"]
 
 
 def load(name: str) -> dict[str, Any]:
@@ -198,7 +215,72 @@ def test_only_what_redirects_git_is_denied_so_a_commit_still_works() -> None:
         "~/Projects/northwind-shop/.git/worktrees/*/commondir",
         "~/Projects/northwind-shop/.git/worktrees/*/config.worktree",
         "~/Projects/northwind-shop/.git/config.worktree",
+        "~/Projects/northwind-shop/*/**/.git",
+        "~/Projects/northwind-shop-*/*/**/.git",
     ]
+
+
+def write_rule(glob: str) -> re.Pattern[str]:
+    """What Claude Code 2.1.318 turns a `denyWrite` glob into: read from the installed binary, and
+    measured against an installed rule (AUTO-2 evidence). Case folds, because the volume does."""
+    body = re.escape(glob).replace(r"\*\*/", "(.*/)?").replace(r"\*", "[^/]*")
+    return re.compile(f"^{body}(/.*)?$", re.IGNORECASE)
+
+
+NESTED_RULES = [write_rule(path) for path in NESTED_GIT_GLOBS]
+
+
+def denied(path: str) -> bool:
+    return any(rule.match(path) for rule in NESTED_RULES)
+
+
+@pytest.mark.req("AUTO-2")
+def test_the_nested_git_rules_are_in_the_proposal() -> None:
+    deny_write = load("settings.proposed.json")["sandbox"]["filesystem"]["denyWrite"]
+    assert [path for path in deny_write if "/**/" in path] == NESTED_GIT_GLOBS
+
+
+@pytest.mark.req("AUTO-2")
+@pytest.mark.parametrize("checkout", ["~/Projects/northwind-shop", "~/Projects/northwind-shop-b"])
+@pytest.mark.parametrize(
+    "path",
+    ["sub/.git", "sub/.GIT", "a/b/c/.git", "sub/.git/config", "node_modules/x/.git/HEAD"],
+)
+def test_a_nested_git_is_denied_in_both_checkouts(checkout: str, path: str) -> None:
+    assert denied(f"{checkout}/{path}")
+
+
+@pytest.mark.req("AUTO-2")
+@pytest.mark.parametrize(
+    "path",
+    [
+        # A commit in either checkout writes here, so a rule that matched would stop it.
+        "~/Projects/northwind-shop/.git",
+        "~/Projects/northwind-shop/.git/index",
+        "~/Projects/northwind-shop/.git/worktrees/northwind-shop-b/index",
+        "~/Projects/northwind-shop/.git/objects/ab/cd",
+        "~/Projects/northwind-shop/.gitignore",
+        "~/Projects/northwind-shop/.github/workflows/ci.yml",
+        "~/Projects/northwind-shop-b/.gitignore",
+        "~/Projects/northwind-shop-b/sub/.gitignore",
+        "~/Projects/northwind-shop-b/sub/.github/x",
+        "~/Projects/northwind-shop-b/sub/x.git",
+        "~/Projects/other/sub/.git",
+    ],
+)
+def test_the_nested_git_rules_leave_a_commit_alone(path: str) -> None:
+    assert not denied(path)
+
+
+@pytest.mark.req("AUTO-2")
+def test_a_session_cannot_edit_its_own_reviewers_or_skills() -> None:
+    """The sandbox covers Bash, and the file tools follow permission rules, so it takes both."""
+    settings = load("settings.proposed.json")
+    deny_write = settings["sandbox"]["filesystem"]["denyWrite"]
+    for folder in ("agents", "skills"):
+        assert f"./.claude/{folder}" in deny_write
+        assert f"Edit(./.claude/{folder}/**)" in settings["permissions"]["deny"]
+        assert f"Write(./.claude/{folder}/**)" in settings["permissions"]["deny"]
 
 
 @pytest.mark.req("RAG-12")

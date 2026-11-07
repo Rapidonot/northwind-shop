@@ -206,6 +206,7 @@ def test_stop_one_is_kept_with_only_the_routine_exception() -> None:
     [
         "the user names its scope in the start prompt and says it is routine",
         "no hard-rule 1 or 9 path",
+        "no hard-rule 6, 7 or 8 path",
         "no control surface path",
         "files added under `cassettes/<suite>/` by `make record suite=<suite>`",
         "a window the user opened for that suite",
@@ -250,6 +251,20 @@ def test_stop_one_holds_until_the_advisor_can_check_a_routine_row() -> None:
 def test_the_routine_rule_names_its_hard_rule_paths() -> None:
     for path in ("`services/backend/**`", "cards.py", "chat.py"):
         assert path in routine()
+
+
+@pytest.mark.req("AUTO-2")
+@pytest.mark.parametrize(
+    "path",
+    [
+        "`services/assistant/**`",  # rules 6, 8: the prompt, the tools, the caller
+        "`services/rag/**`",  # rule 7: visibility and region, from ingest to retrieval
+        "`services/common/src/northwind_common/llm.py`",  # rule 8: what a client may be given
+        "any later agent, mcp or tool-scoping code",
+    ],
+)
+def test_the_routine_rule_names_the_paths_of_hard_rules_six_seven_and_eight(path: str) -> None:
+    assert path in routine()
 
 
 @pytest.mark.req("AUTO-2")

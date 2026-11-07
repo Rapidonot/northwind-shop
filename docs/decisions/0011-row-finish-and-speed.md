@@ -80,7 +80,8 @@ evidence.
   include an editor's git panel. The re-review rates this critical, and it needs the user's decision. A global
   `diff.ignoreSubmodules = all` narrows it but does not close it: a planted `.gitmodules` with `ignore = none` undoes
   that setting, even from the index alone (measured 2026-11-07). Only `--ignore-submodules` on the command line held.
-  With no nested `.git` no child runs (measured), so refusing that write would close the route at its source.
+  With no nested `.git` no child runs (measured). Refusing that write narrows the route but does not close it: see
+  "Route B, after the user's answers".
 - **Re-review finding A.** The index check alone was not enough: a gitlink at `HEAD` but not in the index passed it, and
   `git commit` with nothing to commit runs a status of its own, which descended into it (measured; the fsmonitor did
   not fire, because `core.fsmonitor=false` reached the child). `finish` now also checks `HEAD` and the reviewed commit,
@@ -88,11 +89,47 @@ evidence.
   `--allow-empty`. This fix came after the one scoped re-review, so no reviewer has read it.
 - **High.** `CHECKOUT` could be any directory, and git trusts that directory. `finish` now takes only
   `~/Projects/northwind-shop`, or a linked worktree beside it whose `.git` file points into its worktrees folder.
-- **Routine rows exclude only hard rules 1 and 9, as the plan the user approved says.** Rules 6, 7 and 8 are not
-  excluded, so a routine row can change agent tool scoping or the shopper access filter with no person reading the
-  plan. The review rated this medium. It is left as approved, with the paths now named, for the user to decide.
+- **Routine rows exclude hard rules 1, 6, 7, 8 and 9 by path.** The plan the user approved named only 1 and 9. The
+  review rated that medium, and the user decided on 2026-11-07 to exclude 6, 7 and 8 too. That takes
+  `services/assistant/**`, `services/rag/**`, `northwind_common/llm.py` and any later agent, MCP or tool-scoping code
+  out of routine rows.
 - **Stop 1 applies to every row until the `advisor-reviewer` proposal is installed**, because the installed copy
   cannot check that a row is routine.
 - **`SHIP_FILTER` reads the local `origin/main`, which the session can write.** That weakens local evidence only:
   GitHub's `CI / python` still runs the ship tests, and `ship` requires that job. `make test` prints a line when it
   skips them.
+
+## Route B, after the user's answers
+
+The user decided on 2026-11-07: test a `denyWrite` glob for a nested `.git`, and add it to the settings proposal; deny
+`./.claude/agents` and `./.claude/skills` in the same proposal; make `make runner-check` report any gitlink, `.gitmodules`
+or nested `.git`; and allow one second `security-reviewer` read, an exception to the one re-review rule, covering the
+fix to finding A and these changes.
+
+- **The rule.** `~/Projects/northwind-shop/*/**/.git` and `~/Projects/northwind-shop-*/*/**/.git`. The `*/` keeps a
+  checkout's own `.git` out, because a commit needs it. Not measured live: `sandbox-exec` cannot nest in a session, and
+  the session cannot install settings. What is known: Claude Code 2.1.318 turns a glob into a Seatbelt `regex` deny
+  (read from the installed binary), and the installed rule of the same class, `worktrees/*/gitdir`, refused a new
+  file, the same name in another case, a rename onto the name, a symlink and a hard link (measured). The docs are
+  silent on all of this, and the runtime's README says Linux skips such globs, so this is macOS only.
+- **It narrows the route; it does not close it.** The same probe moved in a folder already holding the name, and the
+  sandbox allowed it. So a folder built in `$TMPDIR`, where `.git` must stay writable for the test rigs, can be moved
+  into a checkout. `make runner-check` reports that case; nothing refuses it.
+- **Detection.** `make runner-check` reports a gitlink or `.gitmodules` in the index or at `HEAD`, and a nested `.git` or
+  `.gitmodules` on disk in any case, ignored folders included, in every checkout. It uses no command that reads the
+  working tree, and ignores replace refs.
+- **Reviewers and skills.** The sandbox covers Bash and the file tools follow permission rules, so the proposal has both
+  `denyWrite` entries and `Edit` and `Write` deny rules. Once installed, changes to these folders are proposals the user
+  installs. In this row the session edited `.claude/agents/test-writer.md` directly, which the installed settings
+  allowed. The user recorded that as found, and allowed it this once.
+
+## A new route: replacing a worktree's admin folder
+
+Found by the same probe, and not in the user's answers. The rules on `worktrees/*/gitdir`, `commondir` and
+`config.worktree` protect those names, not the folder holding them. The sandbox allowed a folder holding `gitdir` to be
+moved into and back out of `.git/worktrees` (measured with a probe folder, never a real worktree). In a throwaway repo,
+moving a linked worktree's admin folder out, rewriting `commondir` to a planted common directory and moving it back made
+a plain `git status` in that worktree run the planted config's `core.fsmonitor` (measured). No gitlink is involved, so
+nothing in `finish.sh`, `refused-paths.sh`, pre-push or `make runner-check` looks at it, and `finish` would run that
+common directory's hooks. Decision 0006 did not cover this.
+

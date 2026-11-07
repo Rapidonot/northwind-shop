@@ -13,6 +13,10 @@
       "Write(./.claude/settings*)",
       "Edit(./.claude/hooks/**)",
       "Write(./.claude/hooks/**)",
+      "Edit(./.claude/agents/**)",
+      "Write(./.claude/agents/**)",
+      "Edit(./.claude/skills/**)",
+      "Write(./.claude/skills/**)",
       "Read(~/.northwind/secrets)",
       "Read(~/.northwind/secrets/**)",
       "Edit(~/.northwind/secrets/**)",
@@ -82,6 +86,8 @@
       "denyWrite": [
         "./.claude/settings*",
         "./.claude/hooks",
+        "./.claude/agents",
+        "./.claude/skills",
         "./.env*",
         "~/.northwind",
         "~/.northwind/secrets",
@@ -91,7 +97,9 @@
         "~/Projects/northwind-shop/.git/worktrees/*/gitdir",
         "~/Projects/northwind-shop/.git/worktrees/*/commondir",
         "~/Projects/northwind-shop/.git/worktrees/*/config.worktree",
-        "~/Projects/northwind-shop/.git/config.worktree"
+        "~/Projects/northwind-shop/.git/config.worktree",
+        "~/Projects/northwind-shop/*/**/.git",
+        "~/Projects/northwind-shop-*/*/**/.git"
       ],
       "denyRead": ["./.env*", "~/Projects/northwind-shop/.env*", "~/Library/Keychains", "~/.northwind/secrets", "~/.northwind/ledger.lock"],
       "allowWrite": ["~/.cache/uv", "~/Library/pnpm/store", "/private/tmp/pnpm-store-operation-locks-502"]
