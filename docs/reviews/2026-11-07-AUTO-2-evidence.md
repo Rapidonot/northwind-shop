@@ -132,3 +132,9 @@ C: the same plant with no sub/.git: no marker
 | C | Low | The pre-push gitlink refusal needs the hook reinstalled | On the install list |
 | D | Low | The commit checked could differ from the commit pushed | Fixed: resolved once |
 | E | Low | `tr` could abort on a non-UTF-8 path | Fixed: `LC_ALL=C` |
+
+## `make ci`, runs at the head
+
+At `4a2465b`: failed at `make test`, 1 failed, 3,902 passed, 22 xfailed, 1,143.56 s to that point. Integration and the gate did not run.
+`evals/tests/test_rag12_followup.py::test_the_pins_come_before_the_first_shell_call` pins the exact set of free-text Makefile variables, and `BODY` was
+new. The set gains `BODY`, so the new pin is covered too. This is a test change after a failure that the plan's D5 list missed; it adds to the pin and removes nothing.
