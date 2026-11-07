@@ -149,3 +149,17 @@ Unanswerable and adversarial behaviour_ok are both 1.000, so containment holds o
 
 Answers: `docs/reviews/2026-11-07-RAG-03-eval-answers-to-read.md`. Note that EV-030 (#8c's E4 item) was re-recorded
 here as part of the full run; #8c re-records it again after its switch.
+
+## Promotion (the user, from the runner clone, 2026-11-07)
+
+- The user ran `CHECK=1`, then the promote with `ACCEPT_REGRESSION` and the hash from that dry run.
+- `evals/baselines/dense-only.json` now equals the candidate: answers, retrieval and summary, with retriever
+  `hybrid:v2:rrf60:d50:fts-text-english:fastembed:BAAI/bge-small-en-v1.5:384`.
+- `overrides` is still `[]`. The promote appends an override only for what the gate finds overridable, so it found
+  nothing beyond its tolerance, and the citation_ok floor held at 0.960. This is read from the file; the session did
+  not see the dry-run output.
+- **By-eye reads accepted by the user:** EV-084, EV-096, EV-099 and the 10 regressed items.
+- Three open items are logged in `PROGRESS.md`:
+  - payload mentions in EV-084 and EV-096 (owner #13);
+  - the "store locator" in EV-084 (owner #13);
+  - EV-045's missed variant (owner RAG-06).
