@@ -52,6 +52,16 @@ def test_fusion_is_exact_so_near_ties_cannot_flip() -> None:
     assert first == rrf_fuse([["y", "x"], ["x", "y"]]) == ["x", "y"]
 
 
+def test_k_60_gives_an_exact_tie_that_breaks_on_the_id() -> None:
+    """At k = 60, rank 1 once (1/61) equals rank 62 twice (2/122) exactly, so the ID decides;
+    any other k, or a float sum, would put one ahead (mutant review, row #8)."""
+    first = ["a", *(f"x{i:02d}" for i in range(60)), "b"]
+    second = [*(f"y{i:02d}" for i in range(61)), "b"]
+    assert first.index("b") == second.index("b") == 61
+    assert rrf_fuse([first, second])[:2] == ["a", "b"]
+    assert rrf_fuse([first, second], rrf_k=61)[0] == "b"
+
+
 def test_empty_lists_fuse_to_nothing() -> None:
     assert rrf_fuse([[], []]) == []
 

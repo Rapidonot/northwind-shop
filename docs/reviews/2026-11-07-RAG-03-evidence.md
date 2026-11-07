@@ -175,3 +175,49 @@ here as part of the full run; #8c re-records it again after its switch.
   `services/assistant/tests/contradictions.json`, each exactly once, 13 in all. `test_smoke_e2e.py` reads the same
   file. The question text is unchanged, so no cassette went stale, and a replay gives 14 passed.
 - This is an update for questions the row added, not a loosening, and the gate report lists it.
+
+## Mutants (row review, findings 1 and 2)
+
+`advisor-reviewer` (row review at `5973a90`) found:
+- **high:** the hard-rule-7 tests for the new search paths, and the tests for the security-review fixes, were never
+  seen failing;
+- **medium:** three of the five fail-first targets failed only at import.
+
+Each mutant changes one line of code, runs the tests meant to catch it, and is restored. **No test was edited.**
+Script and log: the scratchpad's `mutants.py` and `mutants-rag03.log`, copied below.
+
+| Mutant | Result |
+|---|---|
+| `_KEYWORD` without `{_FILTER}` | killed |
+| hybrid keyword CTE without `{_FILTER}` | killed |
+| hybrid dense CTE without `{_FILTER}` | killed |
+| `_FILTER` without the visibility clause | killed |
+| `_FILTER` without the region clause | killed |
+| `_regions` lets a shopper pass None | killed |
+| depth fixed at 50 whatever `k` | survived the first run, which left out `test_retrieve_context*.py`; killed with them |
+| RRF without the ID tie-break | killed |
+| RRF rank off by one (k effectively 61) | **survived**; killed by a new test, `test_k_60_gives_an_exact_tie_that_breaks_on_the_id` |
+| NUL check removed | killed |
+| unclassified type not caught in `search_sources` | killed |
+| `render_sources` refuses nothing | killed |
+| `review` added to `TRUSTED_SOURCE_TYPES` | killed |
+| prompt allow-list text hard-coded | killed |
+| a tie counts as a hybrid win | killed |
+| trap count beyond the top 5 | killed |
+| fingerprint depends on key order | killed |
+| `_live` ignores the item's region | killed |
+| `compare-retrievers` always exits 0 | killed |
+| e2e: a contradiction expects the wrong product (replay) | killed |
+| e2e: the 30-day check wants 31 (replay) | killed |
+
+**21 of 21 killed**, one of them by the test added for it. The two smoke tests the user approved changing, and the 8
+contradiction tests, can fail on the recorded answers (the last two rows).
+
+## Not confirmed by the session
+
+- **The promote's dry-run output.** The session did not see it. `overrides` stays `[]`, so no reason is recorded in
+  the baseline for the accepted per-item drops.
+- **The key-fragment scan of the 213 new cassettes.** It is a terminal step for the user:
+  `make -C ~/.northwind/runner scan-cassettes CASSETTES_DIR=$HOME/Projects/northwind-shop-b/cassettes`. The
+  sandbox's scan is regex only.
+- **The Linux drift comparison and `gh pr checks`.** Both come after `make finish`.
