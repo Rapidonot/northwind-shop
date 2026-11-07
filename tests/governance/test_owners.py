@@ -1,9 +1,11 @@
 """NFR-07: every gap in docs/governance has an owner, and landed work reads as landed (GOV-1).
 
 The `Owners` table in `threat-model.md` holds what no `PROGRESS.md` row named. An owner is a real
-row, a Window B NFR, AUTO-2, or `needs the user`, each with a reason. These tests catch a made-up
-owner, a reason left blank, a line calling 5b or #7 in flight, and an "In flight" section. They
-cannot tell whether an owner is the right one, and they do not read the row's own text.
+row, a Window B NFR, AUTO-2, `needs the user`, or `decided`, each with a reason. A `decided` row is
+one the user settled: its Why starts with the date and says what was decided. These tests catch a
+made-up owner, a reason left blank, a `decided` row with no decision, a line calling 5b or #7 in
+flight, and an "In flight" section. They cannot tell whether an owner is the right one, and they do
+not read the row's own text.
 """
 
 from __future__ import annotations
@@ -31,6 +33,9 @@ IN_FLIGHT_HEADING = re.compile(r"^#+ .*in flight", re.IGNORECASE | re.M)
 ROW_OWNER = re.compile(r"#(\w+)")
 NFR_OWNER = re.compile(r"Window B P6, (NFR-\d\d)")
 NEEDS_THE_USER = "needs the user"
+DECIDED = "decided"
+# The date, a colon, then the decision itself.
+DECISION = re.compile(r"\d{4}-\d{2}-\d{2}: \S")
 AUTO_2 = "AUTO-2"
 
 
@@ -54,7 +59,7 @@ def known_nfrs(prd: str) -> set[str]:
 
 
 def owner_problem(owner: str, rows: set[str], nfrs: set[str]) -> str | None:
-    if owner in (NEEDS_THE_USER, AUTO_2):
+    if owner in (NEEDS_THE_USER, AUTO_2, DECIDED):
         return None
     row = ROW_OWNER.fullmatch(owner)
     if row:
@@ -62,7 +67,12 @@ def owner_problem(owner: str, rows: set[str], nfrs: set[str]) -> str | None:
     nfr = NFR_OWNER.fullmatch(owner)
     if nfr:
         return None if nfr.group(1) in nfrs else f"{owner}: no such NFR in the PRD"
-    return f"{owner!r}: not a row, a Window B NFR, AUTO-2 or {NEEDS_THE_USER!r}"
+    return f"{owner!r}: not a row, a Window B NFR, AUTO-2, {NEEDS_THE_USER!r} or {DECIDED!r}"
+
+
+def undated_decisions(rows: list[tuple[str, str, str]]) -> list[str]:
+    """`decided` rows whose Why does not give the date and the decision."""
+    return [item for item, owner, why in rows if owner == DECIDED and not DECISION.match(why)]
 
 
 def stale_lines(doc: str) -> list[str]:
@@ -95,6 +105,23 @@ def test_every_item_says_why(rows: list[tuple[str, str, str]]) -> None:
     assert [item for item, _, why in rows if not why] == []
 
 
+@pytest.mark.req("AUTO-2")
+def test_every_decided_row_states_its_decision(rows: list[tuple[str, str, str]]) -> None:
+    assert undated_decisions(rows) == []
+
+
+@pytest.mark.req("AUTO-2")
+@pytest.mark.parametrize("why", ["", "accepted", "2026-11-07", "2026-11-07:", "on 2026-11-07: ok"])
+def test_a_decided_row_without_a_dated_decision_is_caught(why: str) -> None:
+    assert undated_decisions([("x", DECIDED, why)]) == ["x"]
+
+
+@pytest.mark.req("AUTO-2")
+def test_a_dated_decision_passes_and_other_owners_are_not_read() -> None:
+    assert undated_decisions([("x", DECIDED, "2026-11-07: accepted for the lab")]) == []
+    assert undated_decisions([("x", NEEDS_THE_USER, "no date needed")]) == []
+
+
 def test_no_item_is_listed_twice(rows: list[tuple[str, str, str]]) -> None:
     items = [item for item, _, _ in rows]
     assert len(items) == len(set(items))
@@ -104,7 +131,7 @@ def test_the_table_uses_every_kind_of_owner(rows: list[tuple[str, str, str]]) ->
     """Without this floor, a parser that finds nothing would pass the checks above."""
     owners = {owner for _, owner, _ in rows}
     assert len(rows) >= 25
-    assert {NEEDS_THE_USER, AUTO_2} <= owners
+    assert {DECIDED, AUTO_2} <= owners
     assert any(ROW_OWNER.fullmatch(owner) for owner in owners)
     assert any(NFR_OWNER.fullmatch(owner) for owner in owners)
 
@@ -139,7 +166,9 @@ ROWS = {"10", "9a", "A2"}
 NFRS = {"NFR-04"}
 
 
-@pytest.mark.parametrize("owner", ["#10", "#9a", "AUTO-2", "needs the user", "Window B P6, NFR-04"])
+@pytest.mark.parametrize(
+    "owner", ["#10", "#9a", "AUTO-2", "needs the user", "decided", "Window B P6, NFR-04"]
+)
 def test_a_real_owner_passes(owner: str) -> None:
     assert owner_problem(owner, ROWS, NFRS) is None
 
@@ -154,6 +183,7 @@ def test_a_real_owner_passes(owner: str) -> None:
         ("#10 or #11", "not a row"),
         ("AUTO-3", "not a row"),
         ("Needs the user", "not a row"),
+        ("Decided", "not a row"),
     ],
 )
 def test_a_made_up_owner_is_caught(owner: str, expected: str) -> None:
