@@ -78,6 +78,57 @@ def test_a_new_cassette_and_a_deleted_one_are_both_allowed(repo: Path) -> None:
     assert integrity_problems("main", BASELINE) == []
 
 
+def link(path: Path, target: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.symlink_to(target)
+
+
+@pytest.mark.req("AUTO-2")
+def test_a_cassette_turned_into_a_symlink_is_refused(repo: Path) -> None:
+    CASSETTE.unlink()
+    link(CASSETTE, "../../elsewhere.json")
+    commit("type change")
+    problems = integrity_problems("main", BASELINE)
+    assert f"{CASSETTE}: an existing cassette was modified" in problems
+    assert f"{CASSETTE}: a cassette may not be a symlink" in problems
+
+
+@pytest.mark.req("AUTO-2")
+def test_an_uncommitted_type_change_is_refused(repo: Path) -> None:
+    CASSETTE.unlink()
+    link(CASSETTE, "../../elsewhere.json")
+    assert f"{CASSETTE}: a cassette may not be a symlink" in integrity_problems("main", BASELINE)
+
+
+@pytest.mark.req("AUTO-2")
+def test_a_cassette_added_as_a_symlink_is_refused(repo: Path) -> None:
+    added = CASSETTE.with_name("new.json")
+    link(added, "../../elsewhere.json")
+    commit("add a link")
+    assert integrity_problems("main", BASELINE) == [f"{added}: a cassette may not be a symlink"]
+
+
+@pytest.mark.req("AUTO-2")
+def test_an_untracked_symlink_under_cassettes_is_refused(repo: Path) -> None:
+    added = CASSETTE.with_name("new.json")
+    link(added, "../../elsewhere.json")
+    assert integrity_problems("main", BASELINE) == [f"{added}: a cassette may not be a symlink"]
+
+
+@pytest.mark.req("AUTO-2")
+def test_a_directory_symlink_under_cassettes_is_refused(repo: Path) -> None:
+    folder = Path("cassettes/linked")
+    link(folder, "..")
+    assert integrity_problems("main", BASELINE) == [f"{folder}: a cassette may not be a symlink"]
+
+
+@pytest.mark.req("AUTO-2")
+def test_a_symlink_outside_cassettes_is_not_this_checks_business(repo: Path) -> None:
+    link(Path("docs/link"), "../../elsewhere.json")
+    commit("a link elsewhere")
+    assert integrity_problems("main", BASELINE) == []
+
+
 def test_adding_an_override_is_allowed(repo: Path) -> None:
     write(BASELINE, json.dumps({"overrides": [OVERRIDE, {**OVERRIDE, "reason": "later"}]}))
     assert integrity_problems("main", BASELINE) == []

@@ -130,7 +130,7 @@ classify() {
 		.github/workflows | .github/workflows/* | .claude | .claude/* | CLAUDE.md | Makefile | \
 			tools/*.proposed* | tools/ship.sh | tools/refused-paths.sh | \
 			evals/baselines | evals/baselines/* | evals/src | evals/src/* | evals/fixtures | evals/fixtures/* | \
-			cassettes | cassettes/* | conftest.py | */conftest.py | .gitignore | */.gitignore | \
+			cassettes | cassettes/* | data/enrichment | data/enrichment/* | conftest.py | */conftest.py | .gitignore | */.gitignore | \
 			pyproject.toml | package.json | */package.json)
 			printf '%s\0' "$path" >>"$work/surface"
 			;;
@@ -246,6 +246,9 @@ check_labels
 echo "ship: full diff of the paths that load with the key, run with your login, or need a label:"
 "${GIT_DIFF[@]}" "$bases" "$HEAD_REF" -- "$@" evals/baselines evals/fixtures/known_failures.json \
 	.github/workflows evals/src | cat -v || refuse "git diff failed"
+# The only files allowed to move after the review, and PROGRESS.md is imported into CLAUDE.md.
+echo "ship: PROGRESS.md and COVERAGE.md since the reviewed commit:"
+"${GIT_DIFF[@]}" "$reviewed" "$HEAD_REF" -- PROGRESS.md COVERAGE.md | cat -v || refuse "git diff failed"
 if ((gate_accepted)); then
 	echo "ship: main's gate did not pass on this PR, accepted by gate-change. Green here means only that the"
 	echo "ship: PR's own gate passed, not that the gate is intact: read the evals/src diff above."

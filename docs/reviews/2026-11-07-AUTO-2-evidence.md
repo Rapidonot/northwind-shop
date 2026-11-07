@@ -15,3 +15,11 @@ FAILED tests/governance/test_owners.py::test_the_table_uses_every_kind_of_owner
 ```
 
 After the test change, 170 passed.
+
+### Items 5 and 6, before the code
+
+```
+evals/tests/test_integrity.py: 5 symlink tests failed
+tests/hooks/test_settings.py, test_sandbox_settings.py: 6 failed (the proposal has no enrich rule)
+tests/ship/test_ship.py -k "docs_diff or data/enrichment": 4 failed
+```

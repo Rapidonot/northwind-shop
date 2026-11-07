@@ -203,7 +203,7 @@ Accepted or open, as recorded. Not re-derived; severity is the source's.
 | RAG-12 third-pass F7, F8, F9, F11, F12, and second-pass F3, F9 to F13, F15 | Not rated here | Second-pass F9 to F13, F15 closed as unrecoverable, 2026-11-07. The rest open; each has its line in "Owners" | `PROGRESS.md` row 4 |
 | Installed settings can lose their sandbox block with no test failing | Not rated | Open, AUTO-2 | CC-27 evidence, "Limits" |
 | `ship` on real `gh` | Not rated | Done: the first real `ship`, stated by the user, 2026-11-07. Row A1 stays partial for its other items | Decision 0008, `PROGRESS.md` row A1 |
-| 12 untested refusals; `ship` shows no `PROGRESS.md` diff, though that file is imported into `CLAUDE.md`; control surface gaps; re-review F5, F6, F7 | Medium, low | Open, AUTO-2 | `PROGRESS.md` row A2; AUTO-1 evidence |
+| 12 untested refusals; control surface gaps; re-review F5, F6, F7 | Medium, low | Open, AUTO-2 | `PROGRESS.md` row A2; AUTO-1 evidence |
 | The F1 and F2 re-review fixes had no second `security-reviewer` pass; the user's advisor accepted them | Medium | Accepted by the user | Decision 0008; AUTO-1 evidence |
 | Card detection is a net, not the control | From a high, first-pass 3; the rest low, second-pass 4 | Accepted by the user; hosted fields are the control | SA-02 review |
 | Hook is a speed bump: 22 strict xfails | Medium | Accepted; the sandbox is the control | FOUND-2 review, 15b, R1 to R4 |
@@ -245,7 +245,7 @@ user decided them, and the Why gives the date and the decision (decision 0011).
 | 5a finding 15: `deny` on `evals/baselines/**` | decided | 2026-11-07: closed, covered by 5b's `denyWrite`, the ask rules and `baseline-label` |
 | `allowLocalBinding` not loopback-only (F4) | decided | 2026-11-07: accepted for the lab; revisit before non-lab use |
 | Shared caches (F6) | decided | 2026-11-07: accepted for the lab |
-| `make enrich` has no `ask` rule | decided | 2026-11-07: to be fixed in AUTO-2, item 5 |
+| `make enrich` has no `ask` rule | decided | 2026-11-07: fixed in AUTO-2, in the settings proposal; live once the user installs it |
 | Whether internal-only text going to a provider is acceptable beyond a lab | decided | 2026-11-07: not acceptable outside a lab without reviewing the provider's data terms |
 | PRD §7 has no row for Northwind to the model provider. Boundary 7 fills that here; the PRD is unchanged | decided | 2026-11-07: the PRD stays unchanged, and Boundary 7 is the record |
 | What the device bridge can reach and keep | decided | 2026-11-07: the advisor reads only connected folders, never `~/.northwind`, and writes only when asked. A stated policy, not measured; it does not say what the bridge keeps |

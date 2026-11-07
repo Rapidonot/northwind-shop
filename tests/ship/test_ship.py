@@ -902,6 +902,7 @@ SURFACE: dict[str, str] = {
     "evals/src/northwind_evals/cli.py": "x = 1\n",
     "evals/fixtures/x.json": "{}\n",
     "cassettes/a/b.json": "{}\n",
+    "data/enrichment/public.jsonl": "{}\n",
     "conftest.py": "x = 1\n",
     "services/x/conftest.py": "x = 1\n",
     ".gitignore": BASE_FILES[".gitignore"] + "unused-pattern-dir/\n",
@@ -935,6 +936,40 @@ def test_control_surface_does_not_list(rig: Rig, path: str) -> None:
     block = surface_block(rig.ship(answers=["n"]).stdout)
     assert path not in block
     assert "services/common/x.py" in block
+
+
+@pytest.mark.req("AUTO-2")
+def test_the_docs_diff_since_the_reviewed_commit_is_shown_above_the_question(rig: Rig) -> None:
+    # PROGRESS.md is imported into CLAUDE.md, and only these two files may move after the review.
+    reviewed = rig.pr()
+    rig.pr(
+        {"PROGRESS.md": "SENTINEL_PROGRESS\n", "COVERAGE.md": "SENTINEL_COVERAGE\n"},
+        parent=reviewed,
+    )
+    done = rig.ship(answers=["n"], sha=reviewed)
+    out = done.stdout + done.stderr
+    prompt = out.index("Merge PR #") if "Merge PR #" in out else out.index("Type the PR number")
+    assert out.index("since the reviewed commit") < out.index("SENTINEL_PROGRESS") < prompt
+    assert out.index("SENTINEL_COVERAGE") < prompt
+
+
+@pytest.mark.req("AUTO-2")
+def test_the_docs_diff_is_escaped(rig: Rig) -> None:
+    reviewed = rig.pr()
+    rig.pr({"PROGRESS.md": "red \x1b[31m text\n"}, parent=reviewed)
+    out = rig.ship(answers=["n"], sha=reviewed)
+    assert "\x1b" not in out.stdout + out.stderr
+    assert "^[" in out.stdout + out.stderr
+
+
+@pytest.mark.req("AUTO-2")
+def test_the_docs_diff_covers_only_what_moved_after_the_reviewed_commit(rig: Rig) -> None:
+    reviewed = rig.pr({"PROGRESS.md": "SENTINEL_BEFORE_REVIEW\n"})
+    rig.pr({"COVERAGE.md": "SENTINEL_AFTER_REVIEW\n"}, parent=reviewed)
+    done = rig.ship(answers=["n"], sha=reviewed)
+    block = (done.stdout + done.stderr).split("since the reviewed commit", 1)[1]
+    assert "SENTINEL_AFTER_REVIEW" in block
+    assert "SENTINEL_BEFORE_REVIEW" not in block
 
 
 def test_control_surface_says_none_when_nothing_matches(rig: Rig) -> None:

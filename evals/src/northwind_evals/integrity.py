@@ -2,7 +2,8 @@
 
 A cassette holds the answer the gate scores, and its name only covers the request, so an edited
 verdict would replay as if recorded. The same request never needs a new recording, so a modified
-cassette is always refused. Deleting one is fine: the next replay misses, which the gate reports.
+cassette is always refused, and so is a symlink under `cassettes/`, added or not, because it would
+replay whatever it points at. Deleting one is fine: the next replay misses, which the gate reports.
 `overrides` is the record of approvals, so it can only grow. `known_failures.json` waives a
 containment failure, so every entry this branch adds is printed for a person to read: its
 `approved_by` is a claim, and only a reviewer can tell whether the user made it.
@@ -13,6 +14,7 @@ Anything missing here fails closed: an unknown base branch is an error, not a pa
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -37,11 +39,27 @@ def merge_base(base: str) -> str:
 
 
 def modified_cassettes(commit: str) -> list[str]:
-    """Cassettes that exist at `commit` and differ now, committed or not."""
-    done = _git("diff", "--name-only", "--no-renames", "--diff-filter=M", commit, "--", CASSETTES)
+    """Cassettes at `commit` that differ now, committed or not. T: a file became a link."""
+    done = _git("diff", "--name-only", "--no-renames", "--diff-filter=MT", commit, "--", CASSETTES)
     if done.returncode != 0:
         raise RuntimeError(f"git diff failed: {done.stderr.strip()}")
     return done.stdout.split()
+
+
+def linked_cassettes() -> list[str]:
+    """Symlinks under `cassettes/`: at HEAD, in the index, or only on disk."""
+    found: set[str] = set()
+    for args in (("ls-tree", "-r", "HEAD", "--", CASSETTES), ("ls-files", "-s", "--", CASSETTES)):
+        done = _git(*args)
+        if done.returncode != 0:
+            raise RuntimeError(f"git {args[0]} failed: {done.stderr.strip()}")
+        for line in done.stdout.splitlines():
+            meta, _, path = line.partition("\t")
+            if meta.startswith("120000 "):
+                found.add(path)
+    for folder, dirs, files in os.walk(CASSETTES):
+        found.update(p for name in dirs + files if os.path.islink(p := os.path.join(folder, name)))
+    return sorted(found)
 
 
 def lost_overrides(commit: str, baseline: Path) -> list[str]:
@@ -82,4 +100,5 @@ def added_known_failures(commit: str, path: Path) -> list[Any]:
 def integrity_problems(base: str, baseline: Path) -> list[str]:
     commit = merge_base(base)
     problems = [f"{path}: an existing cassette was modified" for path in modified_cassettes(commit)]
+    problems += [f"{path}: a cassette may not be a symlink" for path in linked_cassettes()]
     return problems + lost_overrides(commit, baseline)

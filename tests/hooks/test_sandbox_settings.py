@@ -134,6 +134,11 @@ PERMISSIONS = {
         "Bash(uv run *eval-gate-stale-ok*)",
         "Bash(uv run *northwind_evals*promote*)",
         "Bash(uv run *northwind_llm_replay*promote*)",
+        # Wide for the same reason. `make ingest-enriched` and `make eval-enrichment-report` prompt
+        # too: neither spends, and a false prompt is the safe direction (AUTO-2, item 5).
+        "Bash(make *enrich*)",
+        "Bash(uv run make *enrich*)",
+        "Bash(uv run *northwind_evals*enrich*)",
         # The sandbox covers Bash only, so the file tools need their own rules for these.
         "Edit(./evals/baselines/**)",
         "Write(./evals/baselines/**)",
@@ -216,3 +221,12 @@ def test_the_gate_inputs_are_denied_to_bash_and_asked_for_in_the_edit_tools() ->
     for tool in ("Edit", "Write"):
         assert f"{tool}(./evals/baselines/**)" in ask
         assert f"{tool}(./evals/fixtures/known_failures.json)" in ask
+
+
+@pytest.mark.req("AUTO-2")
+def test_the_enrich_rules_are_the_wide_forms() -> None:
+    ask = load("settings.proposed.json")["permissions"]["ask"]
+    assert "Bash(make *enrich*)" in ask
+    # Rig run 2 showed these miss `make "x"` and `make .DEFAULT_GOAL=x`.
+    assert "Bash(make enrich*)" not in ask
+    assert "Bash(make * enrich*)" not in ask
