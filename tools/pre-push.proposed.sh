@@ -33,7 +33,7 @@ git cat-file -e "$main_sha^{commit}" 2>/dev/null || refuse "run git fetch origin
 git show "$main_sha:.gitignore" >"$work/main.gitignore" || refuse "cannot read main's .gitignore"
 mkdir "$work/ignore"
 (
-	unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
+	unset GIT_DIR GIT_COMMON_DIR GIT_WORK_TREE GIT_INDEX_FILE
 	git init -q --template= "$work/ignore"
 ) || refuse "cannot set up the ignore check"
 cp "$work/main.gitignore" "$work/ignore/.gitignore"
@@ -71,7 +71,7 @@ check_range() {
 
 	if [[ -s "$work/paths" ]]; then
 		(
-			unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
+			unset GIT_DIR GIT_COMMON_DIR GIT_WORK_TREE GIT_INDEX_FILE
 			cd "$work/ignore" || exit 128
 			git check-ignore --no-index -z --stdin <"$work/paths" >"$work/ignored"
 		) || rc=$?

@@ -204,14 +204,14 @@ One read, by the user's exception to the one re-review rule. It ran nothing: eve
 
 | # | Severity | Finding | Done |
 |---|---|---|---|
-| 1 | Critical, provisional | Replacing a worktree's admin folder; `finish` exposed | `finish` fixed and pinned, `runner-check` reads the folders. **Open for a terminal `git status`, needs the user** |
-| 2 | Critical, carried | Route B | **Open, needs the user.** Narrowed only once installed |
-| 3 | High, unconfirmed | `.git/commondir` in the main checkout | Measured: the sandbox refuses it today. Named in the proposal, measured by `runner-check`, refused by `finish` |
-| 4 | Medium | `make runner-check` runs code the session can edit, at a time it picks, so the user never gets a trustworthy clean result | **Open:** a read-only mode from the runner clone is a design change |
+| 1 | Critical, provisional | Replacing a worktree's admin folder; `finish` exposed | `finish` fixed and pinned, `runner-check` reads the folders. **Moved to SEC-1 by the user's decision:** pre-existing, not caused or worsened by this row |
+| 2 | Critical, carried | Route B | **Moved to SEC-1 by the user's decision:** pre-existing, not caused or worsened by this row. Narrowed only once installed |
+| 3 | High, unconfirmed | `.git/commondir` in the main checkout | Measured: the sandbox refuses it today. Named in the proposal, measured by `runner-check`, refused by `finish`. Moved to SEC-1 |
+| 4 | Medium | `make runner-check` runs code the session can edit, at a time it picks, so the user never gets a trustworthy clean result | **Moved to SEC-1:** a read-only mode from the runner clone |
 | 5 | Medium | `runner-check` can exit clean with a checkout unread | Fixed: it walks `.git/worktrees` itself |
 | 6 | Medium | The `.gitmodules` refusal fails at size | Fixed, measured first |
 | 7 | Medium | The file tools bypass the rule | `Edit` deny rules added. Not run |
-| 8 | Medium | Reviewers and skills only partly closed | **Open:** the user named those two folders. Claim narrowed in the records |
+| 8 | Medium | Reviewers and skills only partly closed | Fixed by the user's answer: `.claude/commands`, `.claude/rules`, `.claude/output-styles`, `.claude/workflows` and `.mcp.json` added, with `denyWrite` and `Edit` rules. Not run |
 | 9 | Low | Record wording | Fixed |
 | 10 | Low | `Write` rules are dead | Wording fixed, rules left as the file's shape |
 | 11 | Low | Tests prove less than they appear to | `test_finish.py` order assertion fixed. The Python model of the rule stays a model: stated in its docstring |
@@ -240,4 +240,35 @@ MISSED (pipeline status 141 0), 5 times in 5
 **Failing first:** 18 failed, 10 passed in the selected tests. After the fixes: 301 passed across `test_sandbox_settings.py`, `test_runner_support.py` and `test_finish.py`, a
 real linked-worktree `finish` included. `make runner-check`: `21 directories, 0 problem(s)`, with the real admin folder now read. These fixes came after the last read, so no reviewer has
 read them.
+
+`make ci` at `7ab271a`: exit 0, 1,343 s, 3,972 passed, 22 xfailed, 96 integration, 34 Vitest, `eval-integrity` passed, gate passed, 100/100 replayed, stale 0.
+
+## The user's second answers
+
+Route B, the admin folder, the `.git/commondir` high and the `make runner-check` medium moved to SEC-1 by the user's decision: pre-existing, not caused or worsened by this row. The user added
+`.claude/commands`, `.claude/rules`, `.claude/output-styles`, `.claude/workflows` and `.mcp.json` to the proposal. Failing first: 7 failed, 31 passed. `test-writer` added 25 test functions, all passing.
+
+## Third security read, at `7ab271a`
+
+One read of `tools/finish.sh` and `runner_check.py`, by the user's exception. It ran nothing. **No critical or high.** Its answers: the admin-folder checks and the pin are sound, nothing escapes
+`in_checkout`, the values reach only git's children, and the `.gitmodules` refusal is correct.
+
+| # | Severity | Finding | Done |
+|---|---|---|---|
+| 1 | Medium, plausible | `GIT_COMMON_DIR` reaches the real pre-push hook, whose `git init` might rewrite the main config | Measured: `main config unchanged`. A test now runs the real hook under the pin. The hook clears the variable too, so it needs reinstalling |
+| 2 | Medium, plausible | `.strip()` passes a `commondir` of ` ../..`, which git reads as another path | Fixed: line ends only |
+| 3 | Medium, plausible | The `gitdir` check is circular: `git worktree list` is built from the same files | Fixed: sibling folders by name, and the denied pointer must point back |
+| 4 | Low, plausible | `runner-check` finds main through the `commondir` it audits | Moved to SEC-1, with the trusted check |
+| 5 | Low | A FIFO hangs the check; non-text raises | Fixed in both files |
+| 6 | Low | `.git/worktrees` itself is never typed | Fixed |
+| 7 | Low, unconfirmed | The main checkout's last path part is not physical | Fixed: `! -L`. A main `.git` replaced whole stays undetectable by `finish`; the writes it needs are not established |
+| 8 | Low | `\|\| true` swallows grep's exit 2 | Fixed: `\|\| [[ $? -eq 1 ]]` |
+| 9 | Low | Nothing tests the pin's claim | Fixed: a hook swaps `commondir` mid-run |
+
+**Failing first:** 19 failed, 8 passed, with the two FIFO tests left out because they would hang. The 8 included the swap test and the real hook, which passed before any change.
+
+**Mutation of the pin.** With the three variables removed, the first version of the swap test still passed: `finish` stopped elsewhere, so `no marker` proved nothing. It now also requires a pinned
+`finish` to complete. The mutant then fails, `the push failed`, and the restored script passes.
+
+**After the fixes:** 468 passed across `test_runner_support.py`, `test_finish.py` and `test_pre_push.py`. `make runner-check`: `21 directories, 0 problem(s)`, 2 checkouts searched. No reviewer has read these fixes.
 

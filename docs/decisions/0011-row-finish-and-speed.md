@@ -120,9 +120,9 @@ fix to finding A and these changes.
   working tree, and ignores replace refs.
 - **Reviewers and skills.** The sandbox covers Bash and the file tools follow permission rules, so the proposal has both
   `denyWrite` entries and `Edit` deny rules. The `Write` twins follow the file's shape and do nothing: 5a found `Write(...)`
-  is never matched. Once installed, changes to these folders are proposals the user installs. This covers the agents and
-  skills only: `.claude/commands`, `.claude/rules`, `.claude/output-styles`, `.claude/workflows`, `.mcp.json` and `CLAUDE.md`
-  also steer a session, and stay writable by one route or another. In this row the session edited `.claude/agents/test-writer.md` directly, which the installed settings
+  is never matched. Once installed, changes to these folders are proposals the user installs. The user also added
+  `.claude/commands`, `.claude/rules`, `.claude/output-styles`, `.claude/workflows` and `.mcp.json`, with `denyWrite` and
+  `Edit` deny rules. `CLAUDE.md` stays writable by design, and a root-only deny does not cover a nested `.claude`. In this row the session edited `.claude/agents/test-writer.md` directly, which the installed settings
   allowed. The user recorded that as found, and allowed it this once.
 
 ## A new route: replacing a worktree's admin folder
@@ -156,4 +156,25 @@ Fixed after it, with no further read:
   proposal now names it and `runner-check` measures it, so that is not left to the runtime.
 - **The file tools.** `Edit` deny rules for a nested `.git`, `.git/worktrees` and `.git/commondir`: they never meet the
   sandbox. Not run.
+
+## Moved to SEC-1, by the user's decision
+
+On 2026-11-07 the user moved route B and the admin-folder replacement out of AUTO-2, into a new row, SEC-1, which lands
+before #8. Both criticals are pre-existing, not caused or worsened by AUTO-2, and `make finish` refuses both. SEC-1 also
+takes the `.git/commondir` high, the trusted read-only check from the runner clone, the rig that settles the rating, the
+VS Code git panel question and the `make runner-check` medium. Stop 10 does not apply to the two moved criticals. It
+still applies to anything else high or critical.
+
+## The third read, at `7ab271a`
+
+One read of `tools/finish.sh`, `runner_check.py` and the fixes after the second read, by the user's exception. No high or
+critical. What it changed:
+
+- `make runner-check` no longer takes the expected checkouts from `git worktree list`, because git builds that from the
+  same `gitdir` files. It looks for `<main>-*` beside the main checkout, and requires each `gitdir` to name a linked
+  checkout whose denied `.git` pointer points back. It compares values as git reads them, trimming line ends only.
+- Neither `finish` nor `runner-check` reads an admin file that is not a plain file: a FIFO would block for ever.
+- `finish` refuses a symlinked main checkout, and a `grep` failure is no longer read as no match.
+- The pre-push hook clears `GIT_COMMON_DIR` as well. The reader's worry that `git init` rewrites the main config did not
+  hold: the config stayed byte-identical (measured), and the real hook now runs under the pin in a test.
 

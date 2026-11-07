@@ -7,6 +7,7 @@ import errno
 import json
 import os
 import re
+import shutil
 import subprocess
 import threading
 from pathlib import Path
@@ -1701,3 +1702,366 @@ def test_main_reads_the_admin_folder_and_measures_commondir(
     assert f"REDIRECTED {file}" in lines
     assert f"WRITABLE {main / '.git' / 'commondir'}" in lines
     assert not (main / ".git" / "commondir").exists()
+
+
+# --- AUTO-2, extra cases: what the first set of tests misses ---------------------------------
+
+
+@pytest.mark.req("AUTO-2")
+def test_a_gitlink_in_a_subfolder_is_named_by_its_path(tmp_path: Path) -> None:
+    repo, base = plain_repo(tmp_path / "repo")
+    run_git(repo, "update-index", "--add", "--cacheinfo", f"160000,{base},deep/er/sub")
+    assert f"GITLINK {repo}: deep/er/sub" in runner_check.child_git_problems(repo)
+
+
+@pytest.mark.req("AUTO-2")
+@pytest.mark.parametrize("name", [".GITMODULES", "sub/.GitModules"])
+def test_a_tracked_gitmodules_is_reported_in_any_case(tmp_path: Path, name: str) -> None:
+    repo, _ = plain_repo(tmp_path / "repo")
+    (repo / "sub").mkdir()
+    (repo / name).write_text("[submodule]\n")
+    run_git(repo, "add", name)
+    (repo / name).unlink()
+    assert f"GITMODULES {repo}: {name}" in runner_check.child_git_problems(repo)
+
+
+@pytest.mark.req("AUTO-2")
+def test_a_gitmodules_only_at_head_is_reported(tmp_path: Path) -> None:
+    repo, _ = plain_repo(tmp_path / "repo")
+    (repo / ".gitmodules").write_text("[submodule]\n")
+    run_git(repo, "add", ".gitmodules")
+    run_git(repo, "commit", "-q", "-m", "modules")
+    run_git(repo, "rm", "-q", "--cached", ".gitmodules")
+    (repo / ".gitmodules").unlink()
+    assert f"GITMODULES {repo}: .gitmodules" in runner_check.child_git_problems(repo)
+
+
+@pytest.mark.req("AUTO-2")
+def test_every_problem_is_reported_not_only_the_first(tmp_path: Path) -> None:
+    repo, base = plain_repo(tmp_path / "repo")
+    run_git(repo, "update-index", "--add", "--cacheinfo", f"160000,{base},sub")
+    (repo / "a").mkdir()
+    (repo / "a" / ".git").write_text("gitdir: x\n")
+    (repo / "b").mkdir()
+    (repo / "b" / ".gitmodules").write_text("[submodule]\n")
+    lines = runner_check.child_git_problems(repo)
+    assert f"GITLINK {repo}: sub" in lines
+    assert f"NESTED GIT {repo / 'a' / '.git'}" in lines
+    assert f"GITMODULES {repo / 'b' / '.gitmodules'}" in lines
+
+
+@pytest.mark.req("AUTO-2")
+def test_a_symlinked_folder_is_not_followed_into_another_tree(tmp_path: Path) -> None:
+    repo, _ = plain_repo(tmp_path / "repo")
+    outside = tmp_path / "outside"
+    (outside / "x").mkdir(parents=True)
+    (outside / "x" / ".git").write_text("gitdir: y\n")
+    (repo / "link").symlink_to(outside, target_is_directory=True)
+    assert runner_check.child_git_problems(repo) == []
+
+
+@pytest.mark.req("AUTO-2")
+def test_a_symlink_named_git_to_a_folder_is_named_and_not_entered(tmp_path: Path) -> None:
+    repo, _ = plain_repo(tmp_path / "repo")
+    outside = tmp_path / "outside"
+    (outside / ".git").mkdir(parents=True)
+    (repo / "sub").mkdir()
+    (repo / "sub" / ".GIT").symlink_to(outside, target_is_directory=True)
+    lines = runner_check.child_git_problems(repo)
+    assert f"NESTED GIT {repo / 'sub' / '.GIT'}" in lines
+    assert not any(str(outside) in line for line in lines)
+
+
+@pytest.mark.req("AUTO-2")
+def test_a_dangling_git_symlink_is_named_without_an_error(tmp_path: Path) -> None:
+    repo, _ = plain_repo(tmp_path / "repo")
+    (repo / "sub").mkdir()
+    (repo / "sub" / ".git").symlink_to(tmp_path / "gone")
+    lines = runner_check.child_git_problems(repo)
+    assert lines == [f"NESTED GIT {repo / 'sub' / '.git'}"]
+
+
+@pytest.mark.req("AUTO-2")
+def test_what_lies_inside_a_nested_git_folder_is_not_listed_again(tmp_path: Path) -> None:
+    repo, _ = plain_repo(tmp_path / "repo")
+    (repo / "sub" / ".git" / "deeper" / ".git").mkdir(parents=True)
+    (repo / "sub" / ".git" / ".gitmodules").write_text("x\n")
+    assert runner_check.child_git_problems(repo) == [f"NESTED GIT {repo / 'sub' / '.git'}"]
+
+
+@pytest.mark.req("AUTO-2")
+def test_a_failing_git_is_an_error_line_not_a_clean_result(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo, _ = plain_repo(tmp_path / "repo")
+    monkeypatch.setenv("PATH", str(tmp_path / "no-git-here"))
+    lines = runner_check.child_git_problems(repo)
+    assert lines, "git could not run and the result was clean"
+    assert any(line.startswith("ERROR ") for line in lines)
+
+
+@pytest.mark.req("AUTO-2")
+def test_a_git_that_times_out_is_an_error_line(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo, _ = plain_repo(tmp_path / "repo")
+
+    def hang(*args: object, **kwargs: object) -> object:
+        raise subprocess.TimeoutExpired("git", 30)
+
+    monkeypatch.setattr(subprocess, "run", hang)
+    lines = runner_check.child_git_problems(repo)
+    assert any(line.startswith(f"ERROR {repo}") for line in lines), lines
+
+
+@pytest.mark.req("AUTO-2")
+def test_an_unreadable_folder_does_not_hide_a_problem_beside_it(tmp_path: Path) -> None:
+    repo, _ = plain_repo(tmp_path / "repo")
+    (repo / "ok").mkdir()
+    (repo / "ok" / ".git").write_text("gitdir: x\n")
+    locked = repo / "locked"
+    locked.mkdir()
+    locked.chmod(0)
+    try:
+        lines = runner_check.child_git_problems(repo)
+    finally:
+        locked.chmod(0o700)
+    assert f"NESTED GIT {repo / 'ok' / '.git'}" in lines
+    assert any(line.startswith(f"ERROR {locked}") for line in lines)
+
+
+def admin(main: Path) -> Path:
+    return main / ".git" / "worktrees" / "tree"
+
+
+@pytest.mark.req("AUTO-2")
+@pytest.mark.parametrize("text", ["../../\n", "../..\nextra\n", "..\n", "", "/abs/path\n"])
+def test_a_commondir_that_is_not_exactly_two_levels_up_is_reported(
+    tmp_path: Path, text: str
+) -> None:
+    main, tree = linked_worktree(tmp_path)
+    file = admin(main) / "commondir"
+    file.write_text(text)
+    assert f"REDIRECTED {file}" in runner_check.admin_problems(main / ".git", [main, tree])
+
+
+@pytest.mark.req("AUTO-2")
+def test_a_missing_commondir_is_reported(tmp_path: Path) -> None:
+    main, tree = linked_worktree(tmp_path)
+    (admin(main) / "commondir").unlink()
+    lines = runner_check.admin_problems(main / ".git", [main, tree])
+    assert f"MISSING {admin(main) / 'commondir'}" in lines
+
+
+@pytest.mark.req("AUTO-2")
+def test_a_gitdir_naming_a_checkout_that_is_not_listed_is_reported(tmp_path: Path) -> None:
+    main, tree = linked_worktree(tmp_path)
+    file = admin(main) / "gitdir"
+    assert f"REDIRECTED {file}" in runner_check.admin_problems(main / ".git", [main])
+
+
+@pytest.mark.req("AUTO-2")
+def test_a_non_folder_entry_under_worktrees_is_reported(tmp_path: Path) -> None:
+    main, tree = linked_worktree(tmp_path)
+    stray = main / ".git" / "worktrees" / "stray"
+    stray.write_text("not a folder\n")
+    lines = runner_check.admin_problems(main / ".git", [main, tree])
+    assert f"NOT A DIRECTORY {stray}" in lines
+    assert lines == [f"NOT A DIRECTORY {stray}"]
+
+
+@pytest.mark.req("AUTO-2")
+def test_a_dangling_symlink_under_worktrees_is_reported(tmp_path: Path) -> None:
+    main, tree = linked_worktree(tmp_path)
+    stray = main / ".git" / "worktrees" / "stray"
+    stray.symlink_to(tmp_path / "gone")
+    assert f"SYMLINK {stray}" in runner_check.admin_problems(main / ".git", [main, tree])
+
+
+@pytest.mark.req("AUTO-2")
+def test_an_empty_admin_folder_reports_both_missing_files(tmp_path: Path) -> None:
+    main, tree = linked_worktree(tmp_path)
+    empty = main / ".git" / "worktrees" / "empty"
+    empty.mkdir()
+    lines = runner_check.admin_problems(main / ".git", [main, tree])
+    assert f"MISSING {empty / 'commondir'}" in lines
+    assert f"MISSING {empty / 'gitdir'}" in lines
+
+
+@pytest.mark.req("AUTO-2")
+def test_one_bad_admin_folder_does_not_hide_another(tmp_path: Path) -> None:
+    main, tree = linked_worktree(tmp_path)
+    second = main / ".git" / "worktrees" / "second"
+    second.mkdir()
+    (second / "commondir").write_text("/else\n")
+    (second / "gitdir").write_text(f"{tmp_path / 'elsewhere' / '.git'}\n")
+    (second / "config.worktree").write_text("[core]\n")
+    lines = runner_check.admin_problems(main / ".git", [main, tree])
+    assert f"REDIRECTED {second / 'commondir'}" in lines
+    assert f"REDIRECTED {second / 'gitdir'}" in lines
+    assert f"REDIRECTED {second / 'config.worktree'}" in lines
+    assert not any(str(admin(main)) in line for line in lines)
+
+
+@pytest.mark.req("AUTO-2")
+def test_an_unreadable_admin_file_is_an_error_not_a_clean_result(tmp_path: Path) -> None:
+    main, tree = linked_worktree(tmp_path)
+    file = admin(main) / "commondir"
+    file.chmod(0)
+    try:
+        lines = runner_check.admin_problems(main / ".git", [main, tree])
+    finally:
+        file.chmod(0o644)
+    folder = admin(main)
+    assert any(line.startswith(f"ERROR {folder}") for line in lines), lines
+    assert f"REDIRECTED {file}" not in lines
+
+
+@pytest.mark.req("AUTO-2")
+def test_main_reports_an_unreadable_worktrees_folder_and_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Called directly, `admin_problems` raises here; `main` must turn that into a line."""
+    main, _, python = wired(tmp_path, monkeypatch)
+    folder = main / ".git" / "worktrees"
+    folder.chmod(0)
+    try:
+        code = runner_check.main(python)
+    finally:
+        folder.chmod(0o755)
+    assert code == 1
+    assert any(line.startswith("ERROR ") for line in capsys.readouterr().out.splitlines())
+
+
+# --- AUTO-2, third read ----------------------------------------------------------------------
+
+
+def sibling_worktree(tmp_path: Path, name: str = "main-b") -> tuple[Path, Path, Path]:
+    """Named as the real ones are, beside the main checkout. Returns main, tree, admin folder."""
+    main, _ = linked_worktree(tmp_path)
+    tree = tmp_path / name
+    run_git(main, "worktree", "add", "-q", "--detach", str(tree))
+    return main, tree, main / ".git" / "worktrees" / name
+
+
+@pytest.mark.req("AUTO-2")
+@pytest.mark.parametrize("value", [" ../..", "../.. ", "\t../..", " ../..\n"])
+def test_a_commondir_git_reads_differently_is_reported(tmp_path: Path, value: str) -> None:
+    """Git trims line ends only, so ` ../..` is another path, which `strip()` read as clean."""
+    main, tree = linked_worktree(tmp_path)
+    file = main / ".git" / "worktrees" / "tree" / "commondir"
+    file.write_text(value)
+    assert f"REDIRECTED {file}" in runner_check.admin_problems(main / ".git", [main, tree])
+
+
+@pytest.mark.req("AUTO-2")
+def test_the_expected_checkouts_do_not_come_from_git_worktree_list(tmp_path: Path) -> None:
+    """Git builds that list from the same `gitdir` files, so the check was circular."""
+    main, tree, _ = sibling_worktree(tmp_path)
+    assert runner_check.sibling_checkouts(main / ".git") == [main, tree]
+
+
+@pytest.mark.req("AUTO-2")
+def test_a_real_sibling_worktree_is_clean(tmp_path: Path) -> None:
+    main, _, _ = sibling_worktree(tmp_path)
+    siblings = runner_check.sibling_checkouts(main / ".git")
+    lines = runner_check.admin_problems(main / ".git", siblings)
+    assert [line for line in lines if "main-b" in line] == []
+
+
+@pytest.mark.req("AUTO-2")
+def test_a_gitdir_at_a_lookalike_outside_the_siblings_is_reported(tmp_path: Path) -> None:
+    main, _, admin = sibling_worktree(tmp_path)
+    lookalike = tmp_path / "else"
+    lookalike.mkdir()
+    (lookalike / ".git").write_text(f"gitdir: {admin}\n")
+    (admin / "gitdir").write_text(f"{lookalike / '.git'}\n")
+    siblings = runner_check.sibling_checkouts(main / ".git")
+    assert f"REDIRECTED {admin / 'gitdir'}" in runner_check.admin_problems(main / ".git", siblings)
+
+
+@pytest.mark.req("AUTO-2")
+def test_a_gitdir_naming_another_worktree_is_reported(tmp_path: Path) -> None:
+    main, tree, admin = sibling_worktree(tmp_path)
+    other = tmp_path / "main-c"
+    run_git(main, "worktree", "add", "-q", "--detach", str(other))
+    (admin / "gitdir").write_text(f"{other / '.git'}\n")
+    assert f"REDIRECTED {admin / 'gitdir'}" in runner_check.admin_problems(
+        main / ".git", [main, tree, other]
+    )
+
+
+@pytest.mark.req("AUTO-2")
+def test_a_gitdir_naming_the_main_git_is_reported(tmp_path: Path) -> None:
+    main, tree, admin = sibling_worktree(tmp_path)
+    (admin / "gitdir").write_text(f"{main / '.git'}\n")
+    assert f"REDIRECTED {admin / 'gitdir'}" in runner_check.admin_problems(
+        main / ".git", [main, tree]
+    )
+
+
+@pytest.mark.req("AUTO-2")
+def test_a_relative_gitdir_is_reported(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    main, tree, admin = sibling_worktree(tmp_path)
+    (admin / "gitdir").write_text("main-b/.git\n")
+    monkeypatch.chdir(tmp_path)
+    assert f"REDIRECTED {admin / 'gitdir'}" in runner_check.admin_problems(
+        main / ".git", [main, tree]
+    )
+
+
+@pytest.mark.req("AUTO-2")
+def test_main_does_not_take_the_checkouts_from_git_for_the_admin_check(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`tree` here is not named as a sibling. Listing it must not vouch for it."""
+    main, _, python = wired(tmp_path, monkeypatch)
+    assert runner_check.main(python) == 1
+    file = main / ".git" / "worktrees" / "tree" / "gitdir"
+    assert f"REDIRECTED {file}" in capsys.readouterr().out.splitlines()
+
+
+@pytest.mark.req("AUTO-2")
+@pytest.mark.parametrize("name", ["commondir", "gitdir"])
+def test_a_fifo_in_the_admin_folder_is_reported_not_read(tmp_path: Path, name: str) -> None:
+    """A read would block for ever, and output only prints at the end."""
+    main, tree = linked_worktree(tmp_path)
+    file = main / ".git" / "worktrees" / "tree" / name
+    file.unlink()
+    os.mkfifo(file)
+    assert f"NOT A FILE {file}" in runner_check.admin_problems(main / ".git", [main, tree])
+
+
+@pytest.mark.req("AUTO-2")
+@pytest.mark.parametrize("name", ["commondir", "gitdir"])
+def test_a_symlink_in_the_admin_folder_is_named(tmp_path: Path, name: str) -> None:
+    main, tree = linked_worktree(tmp_path)
+    file = main / ".git" / "worktrees" / "tree" / name
+    moved = tmp_path / "moved"
+    file.rename(moved)
+    file.symlink_to(moved)
+    assert f"SYMLINK {file}" in runner_check.admin_problems(main / ".git", [main, tree])
+
+
+@pytest.mark.req("AUTO-2")
+def test_a_commondir_that_is_not_text_is_reported_and_keeps_the_folders_after_it(
+    tmp_path: Path,
+) -> None:
+    main, tree = linked_worktree(tmp_path)
+    file = main / ".git" / "worktrees" / "tree" / "commondir"
+    file.write_bytes(b"\xff\xfe")
+    assert f"REDIRECTED {file}" in runner_check.admin_problems(main / ".git", [main, tree])
+
+
+@pytest.mark.req("AUTO-2")
+@pytest.mark.parametrize("dangling", [True, False], ids=["dangling", "to-an-empty-folder"])
+def test_a_symlinked_worktrees_folder_is_reported(tmp_path: Path, dangling: bool) -> None:
+    """Either way it used to read as clean, with nothing read."""
+    main, tree = linked_worktree(tmp_path)
+    folder = main / ".git" / "worktrees"
+    shutil.rmtree(folder)
+    target = tmp_path / "elsewhere"
+    if not dangling:
+        target.mkdir()
+    folder.symlink_to(target)
+    assert f"SYMLINK {folder}" in runner_check.admin_problems(main / ".git", [main, tree])

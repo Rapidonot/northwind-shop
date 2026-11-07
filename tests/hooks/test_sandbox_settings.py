@@ -31,6 +31,12 @@ SANDBOX = {
             # A session must not edit its own reviewers or skills (AUTO-2).
             "./.claude/agents",
             "./.claude/skills",
+            # What else steers a session: loaded like `CLAUDE.md`, or names what it can run.
+            "./.claude/commands",
+            "./.claude/rules",
+            "./.claude/output-styles",
+            "./.claude/workflows",
+            "./.mcp.json",
             "./.env*",
             "~/.northwind",  # the runner, its caches, the ledger and its lock are all budget state
             "~/.northwind/secrets",  # stated on its own, so narrowing the line above cannot lose it
@@ -120,6 +126,12 @@ PERMISSIONS = {
         "Write(./.claude/agents/**)",
         "Edit(./.claude/skills/**)",
         "Write(./.claude/skills/**)",
+        # The same for what else steers a session. `Edit` only: 5a found `Write(...)` never matches.
+        "Edit(./.claude/commands/**)",
+        "Edit(./.claude/rules/**)",
+        "Edit(./.claude/output-styles/**)",
+        "Edit(./.claude/workflows/**)",
+        "Edit(./.mcp.json)",
         # The file tools never meet the sandbox, so route B needs its own rules (second re-review).
         "Edit(./**/.git)",
         "Edit(./**/.git/**)",
@@ -289,6 +301,23 @@ def test_a_session_cannot_edit_its_own_reviewers_or_skills() -> None:
         assert f"./.claude/{folder}" in deny_write
         assert f"Edit(./.claude/{folder}/**)" in settings["permissions"]["deny"]
         assert f"Write(./.claude/{folder}/**)" in settings["permissions"]["deny"]
+
+
+@pytest.mark.req("AUTO-2")
+@pytest.mark.parametrize(
+    ("write", "edit"),
+    [
+        ("./.claude/commands", "Edit(./.claude/commands/**)"),
+        ("./.claude/rules", "Edit(./.claude/rules/**)"),
+        ("./.claude/output-styles", "Edit(./.claude/output-styles/**)"),
+        ("./.claude/workflows", "Edit(./.claude/workflows/**)"),
+        ("./.mcp.json", "Edit(./.mcp.json)"),
+    ],
+)
+def test_what_else_steers_a_session_is_denied_to_both_routes(write: str, edit: str) -> None:
+    settings = load("settings.proposed.json")
+    assert write in settings["sandbox"]["filesystem"]["denyWrite"]
+    assert edit in settings["permissions"]["deny"]
 
 
 @pytest.mark.req("RAG-12")

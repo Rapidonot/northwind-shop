@@ -61,13 +61,15 @@ case "$real" in
 	worktrees="gitdir: $main_checkout/.git/worktrees/"
 	[[ "$pointer" == "$worktrees"* && "${pointer#"$worktrees"}" =~ ^[A-Za-z0-9._-]+$ ]] ||
 		refuse "not a checkout: its .git points elsewhere"
-	[[ -d "$main_checkout/.git" && ! -L "$main_checkout/.git" ]] || refuse "not a checkout: no main .git"
+	[[ ! -L "$main_checkout" && -d "$main_checkout/.git" && ! -L "$main_checkout/.git" ]] ||
+		refuse "not a checkout: no main .git"
 	git_dir=$main_checkout/.git/worktrees/${pointer#"$worktrees"}
 	[[ -d "$git_dir" && ! -L "$git_dir" ]] || refuse "not a checkout: its admin folder is not a folder"
 	# A session can replace this folder whole, past the rules on the files in it (measured, decision 0011).
-	[[ ! -L "$git_dir/commondir" && "$(cat "$git_dir/commondir" 2>/dev/null)" == "../.." ]] ||
+	# `-f` first: `cat` on a FIFO would block for ever.
+	[[ -f "$git_dir/commondir" && ! -L "$git_dir/commondir" && "$(cat "$git_dir/commondir")" == "../.." ]] ||
 		refuse "commondir is redirected: do not run git in this checkout until it is put right"
-	[[ ! -L "$git_dir/gitdir" && "$(cat "$git_dir/gitdir" 2>/dev/null)" == "$real/.git" ]] ||
+	[[ -f "$git_dir/gitdir" && ! -L "$git_dir/gitdir" && "$(cat "$git_dir/gitdir")" == "$real/.git" ]] ||
 		refuse "gitdir points elsewhere: do not run git in this checkout until it is put right"
 	;;
 *) refuse "not a checkout: $real" ;;
@@ -92,13 +94,13 @@ in_checkout ls-files -s -z >"$work/entries" || refuse "git ls-files failed"
 in_checkout ls-tree -r -z HEAD >>"$work/entries" || refuse "git ls-tree failed"
 in_checkout ls-tree -r -z "$reviewed" >>"$work/entries" || refuse "cannot read the reviewed commit"
 tr '\0' '\n' <"$work/entries" >"$work/lines"
-{ grep '^160000 ' "$work/lines" || true; } | cut -f2 >"$work/gitlinks"
+{ grep '^160000 ' "$work/lines" || [[ $? -eq 1 ]]; } | cut -f2 >"$work/gitlinks"
 if [[ -s "$work/gitlinks" ]]; then
 	cat -v "$work/gitlinks" >&2
 	refuse "a gitlink is tracked: do not run git status in this checkout until it is gone"
 fi
 # Through a file: `| grep -q` closes the pipe on a match, and under pipefail that reads as no match (measured).
-cut -f2 "$work/lines" | { grep -E '(^|/)\.gitmodules$' || true; } >"$work/modules"
+cut -f2 "$work/lines" | { grep -E '(^|/)\.gitmodules$' || [[ $? -eq 1 ]]; } >"$work/modules"
 if [[ -s "$work/modules" ]]; then
 	refuse "a .gitmodules file is tracked: do not run git status in this checkout until it is gone"
 fi

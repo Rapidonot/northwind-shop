@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import shutil
 import socket
 import subprocess
@@ -905,3 +906,292 @@ def test_the_fake_view_tracks_the_pushed_head(row: Row) -> None:
     row.finish(answers=["n"])
     view = json.loads((row.rig.scn / "view.json").read_text())
     assert view["headRefOid"] == row.git("rev-parse", "HEAD")
+
+
+# -- AUTO-2, extra cases: redirects, shapes of the files, and a normal finish in both shapes ---
+
+
+def linked_row(row: Row) -> Row:
+    row.checkout = worktree(row)
+    row.write("PROGRESS.md", "written by /req-done\n")
+    return row
+
+
+def refused_in_linked(row: Row, word: str) -> None:
+    done = row.finish()
+    assert done.returncode != 0
+    assert word in done.stdout + done.stderr
+    assert row.creates() == []
+    assert not row.on_origin()
+    assert row.rig.merge_calls() == []
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["../../\n", "../.\n", "..//..\n", "../..\n../..\n", "../.. \n", "", "/abs/elsewhere\n"],
+    ids=["slash", "dot", "double-slash", "twice", "trailing-space", "empty", "absolute"],
+)
+def test_a_commondir_that_is_not_exactly_two_levels_up_is_refused(row: Row, text: str) -> None:
+    linked_row(row)
+    (admin_folder(row) / "commondir").write_text(text)
+    refused_in_linked(row, "commondir")
+
+
+def test_a_missing_commondir_is_refused(row: Row) -> None:
+    linked_row(row)
+    (admin_folder(row) / "commondir").unlink()
+    refused_in_linked(row, "commondir")
+
+
+def test_a_commondir_symlink_to_a_file_that_reads_right_is_refused(row: Row) -> None:
+    linked_row(row)
+    target = row.rig.root / "reads-right"
+    target.write_text("../..\n")
+    file = admin_folder(row) / "commondir"
+    file.unlink()
+    file.symlink_to(target)
+    refused_in_linked(row, "commondir")
+
+
+def test_a_dangling_commondir_symlink_is_refused(row: Row) -> None:
+    linked_row(row)
+    file = admin_folder(row) / "commondir"
+    file.unlink()
+    file.symlink_to(row.rig.root / "nowhere")
+    refused_in_linked(row, "commondir")
+
+
+def test_a_gitdir_symlink_to_a_file_that_reads_right_is_refused(row: Row) -> None:
+    path = linked_row(row).checkout
+    target = row.rig.root / "reads-right"
+    target.write_text(f"{path.resolve()}/.git\n")
+    file = admin_folder(row) / "gitdir"
+    file.unlink()
+    file.symlink_to(target)
+    refused_in_linked(row, "gitdir")
+
+
+def test_a_missing_gitdir_is_refused(row: Row) -> None:
+    linked_row(row)
+    (admin_folder(row) / "gitdir").unlink()
+    refused_in_linked(row, "gitdir")
+
+
+def test_a_gitdir_naming_another_checkout_is_refused(row: Row) -> None:
+    linked_row(row)
+    other = row.rig.root / "Projects" / "northwind-shop-x"
+    (admin_folder(row) / "gitdir").write_text(f"{other}/.git\n")
+    refused_in_linked(row, "gitdir")
+
+
+def test_a_gitdir_naming_the_main_checkout_is_refused(row: Row) -> None:
+    main = row.checkout
+    linked_row(row)
+    (admin_folder(row) / "gitdir").write_text(f"{main.resolve()}/.git\n")
+    refused_in_linked(row, "gitdir")
+
+
+def test_a_dangling_config_worktree_symlink_in_the_admin_folder_is_refused(row: Row) -> None:
+    linked_row(row)
+    (admin_folder(row) / "config.worktree").symlink_to(row.rig.root / "nowhere")
+    refused_in_linked(row, "config.worktree")
+
+
+def test_a_config_worktree_in_the_main_git_is_refused_for_a_linked_checkout(row: Row) -> None:
+    main = row.checkout
+    linked_row(row)
+    (main / ".git" / "config.worktree").write_text("[core]\n")
+    refused_in_linked(row, "config.worktree")
+
+
+def test_a_commondir_in_the_main_git_is_refused_for_a_linked_checkout(row: Row) -> None:
+    main = row.checkout
+    linked_row(row)
+    (main / ".git" / "commondir").write_text("/somewhere/else\n")
+    refused_in_linked(row, "commondir")
+
+
+def test_a_dangling_commondir_symlink_in_the_main_git_is_refused(row: Row) -> None:
+    (row.checkout / ".git" / "commondir").symlink_to(row.rig.root / "nowhere")
+    done = row.finish()
+    assert done.returncode != 0
+    assert "commondir" in done.stdout + done.stderr
+    assert row.creates() == []
+
+
+def test_a_planted_config_worktree_in_the_admin_folder_runs_nothing(row: Row) -> None:
+    """The file only loads with `extensions.worktreeConfig`, so turn that on, then plant a hook."""
+    marker = row.rig.root / "MARKER"
+    hooks = row.rig.root / "planted-hooks"
+    hooks.mkdir()
+    for name in ("pre-commit", "post-commit", "pre-push"):
+        (hooks / name).write_text(f'#!/bin/sh\n: > "{marker}"\n')
+        (hooks / name).chmod(0o755)
+    row.git("config", "extensions.worktreeConfig", "true")
+    linked_row(row)
+    (admin_folder(row) / "config.worktree").write_text(f"[core]\n\thooksPath = {hooks}\n")
+    refused_in_linked(row, "config.worktree")
+    assert not marker.exists(), "planted code ran outside the sandbox"
+
+
+@pytest.mark.parametrize("where", ["docs/.gitmodules", ".gitmodules"])
+@pytest.mark.parametrize("stage", ["index", "head", "reviewed"])
+def test_a_tracked_gitmodules_is_refused_wherever_it_is_seen(
+    row: Row, where: str, stage: str
+) -> None:
+    row.write(where, '[submodule "s"]\n\tpath = s\n\turl = ./x\n')
+    row.git("add", where)
+    if stage != "index":
+        row.git("commit", "-q", "-m", "modules")
+    if stage == "reviewed":
+        row.reviewed = row.git("rev-parse", "HEAD")
+    if stage != "index":
+        row.git("rm", "-q", "--cached", where)
+        (row.checkout / where).unlink()
+        if stage == "reviewed":
+            row.git("commit", "-q", "-m", "gone again")
+    if stage == "index":
+        (row.checkout / where).unlink()
+    done = row.finish()
+    assert done.returncode != 0
+    assert "gitmodules" in done.stdout + done.stderr or "not committed" in done.stdout
+    assert row.creates() == []
+    assert not row.on_origin()
+
+
+def test_a_tracked_gitmodules_in_a_linked_checkout_is_refused(row: Row) -> None:
+    row.write(".gitmodules", '[submodule "s"]\n\tpath = s\n\turl = ./x\n\tignore = none\n')
+    row.git("add", ".gitmodules")
+    row.git("commit", "-q", "-m", "modules")
+    row.reviewed = row.git("rev-parse", "HEAD")
+    linked_row(row)
+    refused_in_linked(row, "gitmodules")
+
+
+def test_a_gitlink_in_a_linked_checkout_runs_nothing_and_is_refused(row: Row) -> None:
+    marker = row.rig.root / "MARKER"
+    plant_gitlink(row, marker, commit=True)
+    path = worktree(row)
+    row.checkout = path
+    row.write("PROGRESS.md", "written by /req-done\n")
+    done = row.finish()
+    assert done.returncode != 0
+    assert "gitlink" in done.stdout
+    assert not marker.exists()
+    assert row.creates() == []
+
+
+def test_a_main_checkout_finish_commits_pushes_and_opens_the_pr(row: Row) -> None:
+    done = row.finish()
+    assert done.returncode == 0, done.stdout + done.stderr
+    assert row.commits() == 1
+    assert row.on_origin()
+    assert len(row.creates()) == 1
+    assert row.rig.git("rev-parse", f"refs/heads/{BRANCH}") == row.git("rev-parse", "HEAD")
+
+
+def test_a_linked_worktree_finish_commits_pushes_and_opens_the_pr(row: Row) -> None:
+    linked_row(row)
+    done = row.finish()
+    assert done.returncode == 0, done.stdout + done.stderr
+    assert row.commits() == 1
+    assert row.on_origin()
+    assert len(row.creates()) == 1
+    assert row.rig.git("rev-parse", f"refs/heads/{BRANCH}") == row.git("rev-parse", "HEAD")
+
+
+def test_a_linked_worktree_finish_runs_the_main_checkouts_pre_push_hook(row: Row) -> None:
+    log = hook(row, "exit 0")
+    linked_row(row)
+    assert row.finish().returncode == 0
+    assert log.read_text() == "NW_ALLOW_CONTROL=[]\n"
+
+
+def test_a_linked_worktree_hook_refusal_stops_before_the_pr(row: Row) -> None:
+    hook(row, "echo pre-push: refused >&2; exit 1")
+    linked_row(row)
+    done = row.finish()
+    assert done.returncode != 0
+    assert "NW_ALLOW_CONTROL=1" in done.stdout
+    assert not row.on_origin()
+    assert row.creates() == []
+
+
+# -- third read --------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("name", ["commondir", "gitdir"])
+def test_a_fifo_in_the_admin_folder_is_refused_not_read(row: Row, name: str) -> None:
+    """`$(cat fifo)` would block for ever."""
+    path = worktree(row)
+    file = admin_folder(row) / name
+    file.unlink()
+    os.mkfifo(file)
+    row.checkout = path
+    row.write("PROGRESS.md", "written by /req-done\n")
+    done = row.finish()
+    assert done.returncode != 0
+    assert name in done.stdout + done.stderr
+    assert row.creates() == []
+
+
+def test_a_symlinked_main_checkout_is_refused_for_a_linked_worktree(row: Row) -> None:
+    path = worktree(row)
+    main = row.rig.root / "Projects" / "northwind-shop"
+    moved = row.rig.root / "moved-main"
+    main.rename(moved)
+    main.symlink_to(moved)
+    row.checkout = path
+    row.write("PROGRESS.md", "written by /req-done\n")
+    done = row.finish()
+    assert done.returncode != 0
+    assert "not a checkout" in done.stdout + done.stderr
+    assert row.creates() == []
+
+
+def test_a_commondir_swapped_after_the_check_changes_nothing(row: Row) -> None:
+    """The pin's claim, run: a hook in the real common directory swaps it mid-run, as a process left
+    behind by a session could. Without the pin, the push would then load the planted hooks."""
+    marker = row.rig.root / "MARKER"
+    fake = planted_common(row, marker)
+    admin = admin_folder(row)
+    swap = row.checkout / ".git" / "hooks" / "pre-commit"
+    swap.write_text(f'#!/bin/sh\nprintf "%s\\n" "{fake}" > "{admin / "commondir"}"\n')
+    swap.chmod(0o755)
+    path = worktree(row)
+    row.checkout = path
+    row.write("PROGRESS.md", "written by /req-done\n")
+    done = row.finish()
+    assert (admin / "commondir").read_text() == f"{fake}\n", "the swap did not happen"
+    assert not marker.exists(), f"planted code ran outside the sandbox: {done.stdout}"
+    assert done.returncode == 0, done.stdout + done.stderr  # unpinned, git would see other refs
+    assert len(row.rig.merge_calls()) == 1
+
+
+def test_the_real_pre_push_hook_runs_under_the_pin_and_leaves_the_main_config_alone(
+    row: Row,
+) -> None:
+    """Third read: every other hook here is a stub, so the pin had never met the real one."""
+    common = row.checkout / ".git"
+    hook = common / "hooks" / "pre-push"
+    hook.write_text((ship_rig.REPO / "tools" / "pre-push.proposed.sh").read_text())
+    hook.chmod(0o755)
+    before = (common / "config").read_bytes()
+    path = worktree(row)
+    row.checkout = path
+    row.write("PROGRESS.md", "written by /req-done\n")
+    done = row.finish()
+    assert done.returncode == 0, done.stdout + done.stderr
+    assert (common / "config").read_bytes() == before
+    assert len(row.rig.merge_calls()) == 1
+
+
+def test_the_hook_clears_the_pin_before_its_empty_repo() -> None:
+    script = (ship_rig.REPO / "tools" / "pre-push.proposed.sh").read_text()
+    assert script.count("unset GIT_DIR GIT_COMMON_DIR GIT_WORK_TREE GIT_INDEX_FILE") == 2
+
+
+def test_a_grep_failure_is_not_read_as_no_match() -> None:
+    script = (ship_rig.REPO / "tools" / "finish.sh").read_text()
+    assert script.count("|| [[ $? -eq 1 ]]") == 2
+    assert "grep '^160000 ' \"$work/lines\" || true" not in script
