@@ -13,9 +13,8 @@ not commit, push or merge; the user reviews and merges.
    For each criterion, find a test tagged with the ID (`@pytest.mark.req("<ID>")` or
    `describe("[<ID>] …")`) that passed in step 1. A skipped or xfail test does not count. Show the
    table.
-3. **Run the eval gate.** If `make eval-gate` exists, run it, and treat a regression as a failure
-   (stop as in step 1). If it does not exist yet, say so; the requirement can still close, and the
-   evidence must record that it was absent.
+3. **Read the eval gate result.** `make ci` in step 1 ran the gate, so do not run `make eval-gate`
+   again. Read its result from step 1, and treat a regression as a failure (stop as in step 1).
 4. **Decide the status.** `done` only when every in-scope criterion has a passing tagged test, CI
    passes and the eval gate did not regress. Any gap means `partial`, with what is left written
    down. Never `done` with a gap.

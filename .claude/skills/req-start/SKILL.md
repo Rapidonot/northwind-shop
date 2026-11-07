@@ -24,4 +24,5 @@ branch. If no ID was given, read `PROGRESS.md`, name the next `todo` row and sto
 4. **Create the branch.** Stop if `git status --short` shows changes. Otherwise run `git fetch
    origin`, then `git switch --no-track -c req/<ID>-<slug> origin/main`, with a short kebab-case slug.
 5. **Propose a plan.** End with a plan that maps each criterion to the change and to at least one
-   tagged test. Do not start implementing until the user approves it.
+   tagged test. Do not start implementing until the plan is approved: by the user, or, on a routine
+   row as `CLAUDE.md`, "Running a row", defines it, by `advisor-reviewer`.
