@@ -33,7 +33,7 @@ git cat-file -e "$main_sha^{commit}" 2>/dev/null || refuse "run git fetch origin
 git show "$main_sha:.gitignore" >"$work/main.gitignore" || refuse "cannot read main's .gitignore"
 mkdir "$work/ignore"
 (
-	unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
+	unset GIT_DIR GIT_COMMON_DIR GIT_WORK_TREE GIT_INDEX_FILE
 	git init -q --template= "$work/ignore"
 ) || refuse "cannot set up the ignore check"
 cp "$work/main.gitignore" "$work/ignore/.gitignore"
@@ -71,7 +71,7 @@ check_range() {
 
 	if [[ -s "$work/paths" ]]; then
 		(
-			unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
+			unset GIT_DIR GIT_COMMON_DIR GIT_WORK_TREE GIT_INDEX_FILE
 			cd "$work/ignore" || exit 128
 			git check-ignore --no-index -z --stdin <"$work/paths" >"$work/ignored"
 		) || rc=$?
@@ -82,9 +82,10 @@ check_range() {
 		esac
 	fi
 
-	# A tracked symlink checks out clean, so nothing else would show it (row 5b).
+	# A tracked symlink checks out clean, so nothing else would show it (row 5b). A gitlink makes
+	# `git status` run a child git in that folder, with that folder's config (AUTO-2, measured).
 	git ls-tree -r -z "$2" >"$work/modes" || refuse "git ls-tree failed"
-	tr '\0' '\n' <"$work/modes" | { grep '^120000 ' || true; } | cut -f2 >>"$work/hits"
+	tr '\0' '\n' <"$work/modes" | { grep -E '^(120000|160000) ' || true; } | cut -f2 >>"$work/hits"
 
 	if [[ -s "$work/hits" ]]; then
 		cat -v "$work/hits" >&2

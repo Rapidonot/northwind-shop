@@ -34,6 +34,13 @@ ENV_DENY = (
     "Write(./.env.*)",
 )
 SPEND_ASK = ("Bash(make record*)", "Bash(make eval-live*)", "Bash(make llm-proxy*)")
+# In the proposal only until the user installs it: the session cannot write the installed file, so
+# these fold into SPEND_ASK in the settings install commit (AUTO-2, item 5).
+PROPOSED_ASK = (
+    "Bash(make *enrich*)",
+    "Bash(uv run *make*enrich*)",
+    "Bash(uv run *northwind_evals*enrich*)",
+)
 
 
 def guarded_tools(settings: dict[str, Any]) -> set[str]:
@@ -47,7 +54,7 @@ def guarded_tools(settings: dict[str, Any]) -> set[str]:
     return covered
 
 
-def problems(raw: str) -> list[str]:
+def problems(raw: str, ask: tuple[str, ...] = SPEND_ASK) -> list[str]:
     try:
         settings = json.loads(raw)
     except ValueError as exc:
@@ -65,7 +72,7 @@ def problems(raw: str) -> list[str]:
     permissions = settings.get("permissions", {})
     if permissions.get("defaultMode") == "bypassPermissions":
         found.append("bypassPermissions skips the ask rules")
-    for name, rules in (("deny", ENV_DENY), ("ask", SPEND_ASK)):
+    for name, rules in (("deny", ENV_DENY), ("ask", ask)):
         missing_rules = set(rules) - set(permissions.get(name, []))
         if missing_rules:
             found.append(f"missing {name} rules: {sorted(missing_rules)}")
@@ -79,7 +86,15 @@ def test_settings_file_keeps_the_guard_and_the_rules() -> None:
 @pytest.mark.req("CC-27")
 def test_proposed_settings_keep_the_guard_and_the_rules() -> None:
     """Installing the sandbox proposal must not lose anything this file protects."""
-    assert problems(PROPOSED.read_text()) == []
+    assert problems(PROPOSED.read_text(), SPEND_ASK + PROPOSED_ASK) == []
+
+
+@pytest.mark.req("AUTO-2")
+@pytest.mark.parametrize("rule", PROPOSED_ASK)
+def test_a_proposal_without_an_enrich_rule_is_caught(rule: str) -> None:
+    settings = json.loads(PROPOSED.read_text())
+    settings["permissions"]["ask"].remove(rule)
+    assert problems(json.dumps(settings), SPEND_ASK + PROPOSED_ASK)
 
 
 @pytest.mark.parametrize(

@@ -185,6 +185,7 @@ def test_retrieve_context_is_registered_as_read_only() -> None:
         "llm-proxy",
         "eval-promote",
         "ship",
+        "finish",
         "runner-sync",
     ],
 )

@@ -10,11 +10,16 @@ It also proves the runner can still price a call. Prices moved to `northwind_com
 Each file is measured in place. Replacing a file through its folder is not measured, and a parent
 check would be a false alarm: the parents of `.git` and `gitdir` are writable by design, because a
 sandboxed commit writes beside them. Decision 0006's rig covers that move for the pointer file.
+
+It also reports what would make a `git status` outside the sandbox run a child git in a folder,
+with that folder's config: a gitlink, a `.gitmodules` or a nested `.git` (AUTO-2, decision 0011).
+The rule in the sandbox stops one being written in place, not a folder moved in already holding one.
 """
 
 from __future__ import annotations
 
 import errno
+import glob
 import json
 import os
 import shutil
@@ -55,6 +60,13 @@ REFUSED = (errno.EPERM, errno.EACCES, errno.EROFS)
 REPLACEMENT_LIMIT = (
     "each file is measured in place: replacing a file through its folder is not measured here"
 )
+
+# Compared case-folded: on a case-insensitive volume git finds `sub/.GIT`, and the child runs
+# (measured).
+GIT_FOLDER = ".git"
+GITMODULES = ".gitmodules"
+GITLINK_MODE = "160000"
+CHILD_GIT_SUMMARY = "searched {} checkout(s) for a gitlink, a .gitmodules or a nested .git"
 
 
 def kind(path: Path) -> str:
@@ -307,6 +319,130 @@ def checkouts() -> list[Path]:
     return [Path(line[9:]) for line in done.stdout.splitlines() if line.startswith("worktree ")]
 
 
+def tracked_entries(tree: Path) -> list[str]:
+    """Each `<mode> ...<TAB><path>` in the index and at HEAD. Neither command reads the working
+    tree, so neither can start a child. Replace refs are off: the sandbox can write them."""
+    entries: list[str] = []
+    for command in (("ls-files", "-s", "-z"), ("ls-tree", "-r", "-z", "HEAD")):
+        fixed = ["--no-replace-objects", "-c", "core.fsmonitor=false", "-C", str(tree)]
+        done = subprocess.run(  # noqa: S603 - fixed git arguments, no shell
+            ["git", *fixed, *command],  # noqa: S607
+            capture_output=True,
+            check=True,
+            timeout=30,
+        )
+        entries += done.stdout.decode(errors="replace").split("\0")
+    return [entry for entry in entries if entry]
+
+
+def tracked_problems(tree: Path) -> list[str]:
+    try:
+        entries = tracked_entries(tree)
+    except subprocess.SubprocessError as error:
+        return [f"ERROR {tree}: {type(error).__name__}: git could not list what is tracked"]
+    problems: set[str] = set()
+    for entry in entries:
+        meta, _, path = entry.partition("\t")
+        if meta.split(" ", 1)[0] == GITLINK_MODE:
+            problems.add(f"GITLINK {tree}: {path}")
+        if path.rsplit("/", 1)[-1].casefold() == GITMODULES:
+            problems.add(f"GITMODULES {tree}: {path}")
+    return sorted(problems)
+
+
+def walked_problems(tree: Path) -> list[str]:
+    """Every folder, ignored ones too: a gitlink can point anywhere. Names links, follows none."""
+    problems: list[str] = []
+
+    def unreadable(error: OSError) -> None:
+        problems.append(f"ERROR {error.filename}: {type(error).__name__}: {error.strerror}")
+
+    for root, folders, files in os.walk(tree, onerror=unreadable):
+        here = Path(root)
+        if (
+            here == tree
+        ):  # the checkout's own `.git`: a folder in the main one, a file in a linked one
+            folders[:] = [name for name in folders if name != GIT_FOLDER]
+            files = [name for name in files if name != GIT_FOLDER]
+        for name in sorted([*folders, *files]):
+            if name.casefold() == GIT_FOLDER:
+                problems.append(f"NESTED GIT {here / name}")
+            elif name.casefold() == GITMODULES:
+                problems.append(f"GITMODULES {here / name}")
+        folders[:] = [name for name in folders if name.casefold() != GIT_FOLDER]
+    return problems
+
+
+def sibling_checkouts(git_dir: Path) -> list[Path]:
+    """Where a checkout may be, by name. Not `git worktree list`: git builds that from the same
+    `gitdir` files this checks, so whatever a file says would vouch for itself."""
+    main = git_dir.parent
+    found = main.parent.glob(f"{glob.escape(main.name)}-*")
+    return [main, *sorted(path for path in found if path.is_dir())]
+
+
+def redirect_value(path: Path) -> tuple[str, list[str]]:
+    """The value as git reads it: it trims line ends only, so ` ../..` is another path, which
+    `strip` would pass. Only a file is read, because a read of a FIFO blocks for ever."""
+    found = kind(path)
+    if found == MISSING:
+        return "", [f"MISSING {path}"]
+    if found == SYMLINK:
+        return "", [f"SYMLINK {path}"]
+    if found not in (FILE, DENIED):
+        return "", [f"NOT A FILE {path}"]
+    return path.read_text(errors="replace").rstrip("\r\n"), []
+
+
+def names_this_folder(value: str, folder: Path, gitdirs: set[Path]) -> bool:
+    """`value` is a known checkout's `.git`, and that denied pointer points back here."""
+    path = Path(value)
+    if path not in gitdirs or kind(path) != FILE:
+        return False
+    return redirect_value(path)[0] == f"gitdir: {folder.parent.resolve() / folder.name}"
+
+
+def admin_folder_problems(folder: Path, gitdirs: set[Path]) -> list[str]:
+    """Its contents, not only whether they can be written: the folder can be replaced whole, past
+    the rules on these names, and a redirected `commondir` runs a planted config (decision 0011)."""
+    found = kind(folder)
+    if found == SYMLINK:
+        return [f"SYMLINK {folder}"]
+    if found != DIRECTORY:
+        return [f"NOT A DIRECTORY {folder}"]
+    problems: list[str] = []
+    commondir, unread = redirect_value(folder / "commondir")
+    problems += unread or ([] if commondir == "../.." else [f"REDIRECTED {folder / 'commondir'}"])
+    gitdir, unread = redirect_value(folder / "gitdir")
+    good = names_this_folder(gitdir, folder, gitdirs)
+    problems += unread or ([] if good else [f"REDIRECTED {folder / 'gitdir'}"])
+    if kind(folder / "config.worktree") != MISSING:
+        problems.append(f"REDIRECTED {folder / 'config.worktree'}")
+    return problems
+
+
+def admin_problems(git_dir: Path, trees: Iterable[Path]) -> list[str]:
+    """Read from the folder itself: `git worktree list` skips one with no `gitdir`."""
+    gitdirs = {tree.resolve() / GIT_FOLDER for tree in linked(git_dir, trees)}
+    root = git_dir / "worktrees"
+    found = kind(root)
+    if found == MISSING:
+        return []
+    if found == SYMLINK:
+        return [f"SYMLINK {root}"]
+    if found != DIRECTORY:
+        return [f"NOT A DIRECTORY {root}"]
+    return [
+        line
+        for folder in sorted(root.iterdir())
+        for line in measured(lambda path: admin_folder_problems(path, gitdirs), folder)
+    ]
+
+
+def child_git_problems(tree: Path) -> list[str]:
+    return [*measured(tracked_problems, tree), *measured(walked_problems, tree)]
+
+
 def check(directories: Iterable[Path], files: Iterable[Path], hidden: Iterable[Path]) -> list[str]:
     """One line per writable or visible path; empty means every attempt was refused."""
     problems = [line for path in directories for line in measured(directory_problems, path)]
@@ -385,6 +521,7 @@ def main(python: Path) -> int:
             ledger.with_suffix(".lock"),
             git_dir / "config",
             git_dir / "config.worktree",
+            git_dir / "commondir",  # git honours one in a main checkout too (measured)
             Path.home() / ".gitconfig",
             Path.home() / ".config" / "git" / "config",
         ]
@@ -401,10 +538,15 @@ def main(python: Path) -> int:
     run_stage("redirect files", problems, redirects)
     run_stage("pricing", problems, prices)
     run_stage("settings", problems, lambda: settings_problems(trees))
+    run_stage("child git", problems, lambda: [p for t in trees for p in child_git_problems(t)])
+    run_stage(
+        "admin folders", problems, lambda: admin_problems(git_dir, sibling_checkouts(git_dir))
+    )
     for line in problems:
         print(printable(line))
     print(f"runner-check: {len(directories)} directories, {len(problems)} problem(s)")
     print(f"runner prices from: {printable(pricing or 'unavailable')}")
     print(REPLACEMENT_LIMIT)
+    print(CHILD_GIT_SUMMARY.format(len(trees)))
     print("this proves the settings of this checkout: run it in each one")
     return 1 if problems else 0

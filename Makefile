@@ -14,10 +14,11 @@ override CHECK := $(value CHECK)
 override CANDIDATE_SHA := $(value CANDIDATE_SHA)
 export ACCEPT_REGRESSION BOOTSTRAP APPROVED_BY CHECKOUT CHECK CANDIDATE_SHA
 
-# The same for `ship`, which runs in your terminal with your GitHub login (AUTO-1).
+# The same for `ship` and `finish`, which run in your terminal with your GitHub login (AUTO-1, AUTO-2).
 override PR := $(value PR)
 override SHA := $(value SHA)
-export PR SHA
+override BODY := $(value BODY)
+export PR SHA BODY
 
 export COREPACK_ENABLE_DOWNLOAD_PROMPT := 0
 PNPM ?= corepack pnpm
@@ -57,9 +58,9 @@ SCAN_PYTHON := $(RUNNER_PYTHON)
 MODEL_PYTHON := .venv-model/bin/python -I
 endif
 
-.PHONY: help setup up down dev dev-gateway dev-portal data model ingest ingest-enriched enrich fmt lint test \
+.PHONY: help setup up down dev dev-gateway dev-portal data model ingest ingest-enriched enrich fmt lint test check \
 	test-integration ci scan-cassettes llm-spend llm-proxy llm-runner runner-sync runner-check \
-	ship review-diff record eval-live eval-rescore eval-gate eval-integrity eval-gate-stale-ok eval-promote \
+	ship finish review-diff record eval-live eval-rescore eval-gate eval-integrity eval-gate-stale-ok eval-promote \
 	eval-snapshot eval-review-list eval-enrichment-report e2e e2e-scripted
 
 # A stable cache, not fastembed's temp-dir default: Claude's sandbox has a different temp dir and
@@ -119,11 +120,29 @@ lint: ## Lint + type-check Python and TypeScript
 	$(PNPM) -r lint
 	$(PNPM) -r typecheck
 
+# Prints the filter that skips the slow ship and pre-push tests, only when it is sure that nothing they
+# cover differs from the merge base with main. Anything it cannot tell prints nothing, so they run.
+# GitHub CI's plain `uv run pytest` takes `addopts`, which does not name the marker, so it always runs
+# them (AUTO-2, decision 0011). Through the environment so that the recipe stays one pytest call: a
+# command-line `-m` still wins, so `test-integration` is not touched.
+SHIP_TEST_PATHS := tools tests/ship .github Makefile
+SHIP_FILTER := base=$$(git merge-base origin/main HEAD 2>/dev/null) && git diff --quiet "$$base" -- $(SHIP_TEST_PATHS) 2>/dev/null && untracked=$$(git ls-files --others --exclude-standard -- $(SHIP_TEST_PATHS) 2>/dev/null) && [[ -z "$$untracked" ]] && echo '-m "not integration and not e2e and not ship"'
+
 # LLM_MODE is pinned on the recipe line, so neither the shell, the key file nor
 # `make test LLM_MODE=…` can turn these targets into spending ones (decision 0001).
-test: ## Unit tests (Python + portal), always in replay
-	LLM_MODE=replay uv run pytest
+test: ## Unit tests (Python + portal), always in replay; ship tests only when what they cover changed
+	@if [[ -n "$$($(SHIP_FILTER))" ]]; then echo "make test: ship tests skipped, nothing they cover differs from origin/main; GitHub CI runs them"; fi
+	LLM_MODE=replay PYTEST_ADDOPTS="$$PYTEST_ADDOPTS $$($(SHIP_FILTER))" uv run pytest
 	$(PNPM) -r test
+
+# For during a row, and never evidence: only `make ci` is (AUTO-2, decision 0011).
+check: lint ## Lint, then only the tests for changed paths, always in replay
+	@plan=$$(uv run python tools/changed_tests.py) || exit 2; \
+	echo "make check: $${plan:-no tests for these paths}"; \
+	if [[ "$$plan" == all ]]; then $(MAKE) --no-print-directory test; exit $$?; fi; \
+	py=$${plan//portal/}; \
+	if [[ -n "$${py// /}" ]]; then LLM_MODE=replay uv run pytest $$py || exit $$?; fi; \
+	if [[ "$$plan" == *portal* ]]; then $(PNPM) -r test; fi
 
 test-integration: ## Integration tests against the local stack (run `make up` first), always in replay
 	LLM_MODE=replay uv run pytest -m integration
@@ -152,7 +171,7 @@ llm-runner: ## Open one spending window (SUITE=name RUN_BUDGET=usd; own terminal
 
 # Key-loaded code, what builds the environment, what `model` and `up` run beside the key, what `ship`
 # runs with the user's GitHub login, and what `eval-promote` loads and trusts (row 5b).
-RUNNER_SYNC_PATHS := services/llm-replay services/common services/rag data/src evals/src evals/fixtures/starter_set.jsonl evals/fixtures/known_failures.json evals/baselines infra Makefile tools/ship.sh tools/refused-paths.sh pyproject.toml uv.lock uv.toml .python-version .gitattributes .gitignore ':(glob)**/.gitignore' ':(glob)**/pyproject.toml' ':(glob)**/sitecustomize.py' ':(glob)**/usercustomize.py'
+RUNNER_SYNC_PATHS := services/llm-replay services/common services/rag data/src evals/src evals/fixtures/starter_set.jsonl evals/fixtures/known_failures.json evals/baselines infra Makefile tools/ship.sh tools/finish.sh tools/refused-paths.sh pyproject.toml uv.lock uv.toml .python-version .gitattributes .gitignore ':(glob)**/.gitignore' ':(glob)**/pyproject.toml' ':(glob)**/sitecustomize.py' ':(glob)**/usercustomize.py'
 RUNNER_INCOMING := refs/runner/incoming
 # --icase-pathspecs: on a case-insensitive clone `Services/common/x.py` lands on the reviewed path.
 RUNNER_DIFF := git --no-pager --icase-pathspecs diff --text --no-ext-diff --no-textconv
@@ -189,6 +208,15 @@ ship: ## Check a PR, wait for CI, ask, merge, then runner-sync (PR=<n> SHA=<revi
 	@/bin/bash tools/ship.sh "$$PR" "$$SHA" $(RUNNER_SYNC_PATHS)
 	@$(MAKE) --no-print-directory runner-sync
 
+# Your own terminal, from the clean clone, as `make -C ~/.northwind/runner finish CHECKOUT=$HOME/… SHA=<reviewed>
+# BODY=docs/reviews/<file>`: after `/req-done`, commits what it wrote, pushes, opens the PR from the body file,
+# adds `ci-change` if the diff needs it, then runs `ship`, which still asks. Git trusts a checkout's `.git`, so
+# CHECKOUT must be one that `denyWrite` protects: tools/finish.sh checks. Safe to rerun. `baseline-change`, `gate-change` and NW_ALLOW_CONTROL stay yours to give (AUTO-2, decision 0011).
+finish: ## Commit /req-done's files, push, open the PR, then ship (CHECKOUT=/abs/path SHA=<reviewed> BODY=<file>; runner clone only)
+	@[[ "$(CURDIR)" == "$(realpath $(RUNNER_DIR))" ]] || (echo "only in the clone: make -C $(RUNNER_DIR) finish CHECKOUT=/abs/path SHA=<reviewed> BODY=docs/reviews/<file>" && exit 2)
+	@! $(RUNNER_BUSY) || (echo "a spending window is open: close it first" && exit 2)
+	@RUNNER_DIR="$(RUNNER_DIR)" /bin/bash tools/finish.sh
+
 # The one diff advisor-reviewer accepts: base and head SHA first, so it can tell what it read. Refuses
 # uncommitted work, because the head line would not describe it (AUTO-1).
 REVIEW_DIFF ?= $(or $(TMPDIR),/tmp)/northwind-review.diff
@@ -197,7 +225,7 @@ review-diff: ## Write the committed diff against origin/main for review, SHAs fi
 	@base=$$(git merge-base origin/main HEAD) && head=$$(git rev-parse HEAD) && { echo "base $$base"; echo "head $$head"; git --no-pager diff --text --no-ext-diff --no-textconv --no-renames "$$base" "$$head"; } > "$(REVIEW_DIFF)" && echo "$(REVIEW_DIFF)"
 
 # Must run sandboxed: from a terminal every write succeeds, and it reports exactly that.
-runner-check: ## From the sandbox: measure that nothing the runner loads is writable here (CC-27)
+runner-check: ## From the sandbox: nothing the runner loads is writable here; no gitlink or nested .git (CC-27, AUTO-2)
 	uv run python -m northwind_llm_replay.cli runner-check
 
 # SPENDS API CREDIT, through the window you opened with `llm-runner`; with none open it stops at once.
@@ -266,4 +294,5 @@ eval-enrichment-report: ## Compare the enriched index with the plain one; change
 eval-review-list: ## Write the list of eval items waiting for human review (RAG-12)
 	uv run python -m northwind_evals.cli review-list
 
+# `make test` here can skip the ship tests when nothing they cover changed; GitHub CI runs them all.
 ci: lint scan-cassettes test test-integration eval-integrity eval-gate ## What CI runs, in the same order, except its browser job

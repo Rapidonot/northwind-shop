@@ -25,8 +25,8 @@ You write tests for one requirement in Northwind Shop. Your input is a requireme
 
 - LLM tests run in replay only. Use the `llm_proxy` fixture with
   `@pytest.mark.llm_suite("<suite>")`, or `scripted_llm`.
-- Never run `make record` or `make eval-live`, and never set or change `LLM_MODE`. Both spend real
-  API credit. If a test needs a new recording, say so and stop there.
+- Never run `make record`, `make eval-live` or `make enrich`, and never set or change `LLM_MODE`. All
+  three spend real API credit. If a test needs a new recording, say so and stop there.
 - Never hand-edit a cassette.
 - Use synthetic data only. Never put a real card number, key or address in a test.
 - Change test files only. If production code needs changing, report it.

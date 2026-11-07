@@ -80,12 +80,14 @@ CONTROL_SURFACE = [
     "Makefile",
     "tools/*.proposed*",
     "tools/ship.sh",
+    "tools/finish.sh",
     "tools/refused-paths.sh",
     "RUNNER_SYNC_PATHS",
     "evals/baselines/**",
     "evals/src/**",
     "evals/fixtures/**",
     "cassettes/**",
+    "data/enrichment/**",
     "**/conftest.py",
     ".gitignore",
     "pyproject.toml",
@@ -135,10 +137,9 @@ CHAIN = [
     "`security-reviewer`",
     "fix",
     "one scoped re-review",
-    "`make ci`",
-    "`make eval-gate`",
     "commit",
     "pr body",
+    "`make ci`",
     "`advisor-reviewer`",
     "gate report",
 ]
@@ -152,6 +153,158 @@ def test_chain_steps_appear_in_order() -> None:
         found = text.find(step, position)
         assert found >= 0, f"{step!r} missing or out of order"
         position = found + len(step)
+
+
+def chain_paragraph() -> str:
+    return flat(next(p for p in SECTION.split("\n\n") if p.lstrip().startswith("implement")))
+
+
+@pytest.mark.req("AUTO-2")
+def test_the_chain_does_not_run_the_gate_a_second_time() -> None:
+    assert "make eval-gate" not in chain_paragraph()
+    # `make ci` must still hold the gate, or dropping it above would drop the gate.
+    makefile = (Path(__file__).resolve().parents[2] / "Makefile").read_text()
+    ci = re.search(r"^ci: (.*?)##", makefile, re.M)
+    assert ci and "eval-gate" in ci.group(1).split()
+
+
+@pytest.mark.req("AUTO-2")
+def test_make_ci_runs_once_at_the_head_the_advisor_reads() -> None:
+    text = chain_paragraph()
+    assert text.count("`make ci`") == 1
+    assert text.index("commit") < text.index("`make ci`") < text.index("`advisor-reviewer`")
+
+
+@pytest.mark.req("AUTO-2")
+def test_a_change_after_make_ci_means_another_run() -> None:
+    assert "any change after `make ci`" in FLAT
+    assert "a new commit and another `make ci`" in FLAT
+
+
+@pytest.mark.req("AUTO-2")
+def test_make_check_is_for_during_a_row_and_is_never_evidence() -> None:
+    assert "`make check`" in FLAT
+    assert "never evidence" in FLAT
+
+
+ROUTINE = re.search(r"\*\*Routine rows\.\*\*.*?(?=\n\n\S*The control surface|\Z)", SECTION, re.S)
+
+
+def routine() -> str:
+    assert ROUTINE, "no routine rows text"
+    return flat(ROUTINE.group(0))
+
+
+@pytest.mark.req("AUTO-2")
+def test_stop_one_is_kept_with_only_the_routine_exception() -> None:
+    assert STOPS[0] == "1. plan approval, except on a routine row (below)."
+
+
+@pytest.mark.req("AUTO-2")
+@pytest.mark.parametrize(
+    "needle",
+    [
+        "the user names its scope in the start prompt and says it is routine",
+        "no hard-rule 1 or 9 path",
+        "no hard-rule 6, 7 or 8 path",
+        "no control surface path",
+        "files added under `cassettes/<suite>/` by `make record suite=<suite>`",
+        "a window the user opened for that suite",
+        "names the suite, the model input that changed and the expected spend",
+    ],
+)
+def test_the_routine_definition(needle: str) -> None:
+    assert needle in routine()
+
+
+@pytest.mark.req("AUTO-2")
+@pytest.mark.parametrize(
+    "needle",
+    [
+        "a modified, deleted or hand-written cassette",
+        "any file added under `cassettes/eval-answers/`",
+        "`make eval-live`",
+        "`make enrich`",
+    ],
+)
+def test_what_makes_a_row_not_routine(needle: str) -> None:
+    text = routine()
+    assert needle in text
+    assert text.index(needle) < text.index("make the row not routine")
+
+
+@pytest.mark.req("AUTO-2")
+def test_the_cassette_rule_is_stated_as_a_rule_not_a_proof() -> None:
+    assert "a rule the session keeps" in routine()
+    assert "the gate report lists every added cassette" in routine()
+
+
+@pytest.mark.req("AUTO-2")
+def test_stop_one_holds_until_the_advisor_can_check_a_routine_row() -> None:
+    assert (
+        "until the `advisor-reviewer` proposal is installed, stop 1 applies to every row"
+        in routine()
+    )
+
+
+@pytest.mark.req("AUTO-2")
+def test_the_routine_rule_names_its_hard_rule_paths() -> None:
+    for path in ("`services/backend/**`", "cards.py", "chat.py"):
+        assert path in routine()
+
+
+@pytest.mark.req("AUTO-2")
+@pytest.mark.parametrize(
+    "path",
+    [
+        "`services/assistant/**`",  # rules 6, 8: the prompt, the tools, the caller
+        "`services/rag/**`",  # rule 7: visibility and region, from ingest to retrieval
+        "`services/common/src/northwind_common/llm.py`",  # rule 8: what a client may be given
+        "any later agent, mcp or tool-scoping code",
+    ],
+)
+def test_the_routine_rule_names_the_paths_of_hard_rules_six_seven_and_eight(path: str) -> None:
+    assert path in routine()
+
+
+@pytest.mark.req("AUTO-2")
+def test_an_unplanned_cassette_miss_is_a_scope_question() -> None:
+    assert "an unplanned cassette miss is a scope question (stop 7)" in routine()
+    assert "never an automatic re-record" in routine()
+
+
+@pytest.mark.req("AUTO-2")
+def test_only_the_added_cassette_exception_narrows_stop_eight() -> None:
+    stop = next(item for item in STOPS if "in a row not about them" in item)
+    assert "routine row's added cassettes" in stop
+
+
+@pytest.mark.req("AUTO-2")
+@pytest.mark.parametrize(
+    "needle",
+    [
+        "`pass`: carry on",
+        "`findings`, medium or low only: triage, then carry on",
+        "`findings` with a high or critical, or `unconfirmed`: stop",
+    ],
+)
+def test_what_each_advisor_answer_does(needle: str) -> None:
+    assert needle in routine()
+
+
+@pytest.mark.req("AUTO-2")
+@pytest.mark.parametrize(
+    "needle",
+    [
+        "critical or high is stop 10",
+        "unsafe at any severity",
+        "stop 6 if the fix changes the design",
+        "medium: fix it if it is inside the row's files, otherwise log it with an owner",
+        "low: log it in `progress.md`",
+    ],
+)
+def test_the_triage_rule_is_fixed(needle: str) -> None:
+    assert needle in routine().lower()
 
 
 def test_never_push() -> None:
@@ -181,4 +334,6 @@ def test_commands_list_has_ship_and_review_diff() -> None:
     block = CLAUDE.split("## Commands", 1)[1].split("```")[1]
     lines = [line for line in block.splitlines() if line.startswith("make ")]
     assert any(line.startswith("make ship PR=<n> SHA=<reviewed>") for line in lines)
+    assert any(line.startswith("make finish ") for line in lines)
+    assert any(line.startswith("make check ") for line in lines)
     assert any(line.startswith("make review-diff") for line in lines)

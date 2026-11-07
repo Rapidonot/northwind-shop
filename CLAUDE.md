@@ -61,9 +61,10 @@ make ingest           # load data/fixtures into the RAG index (needs `make up`; 
 make ingest-enriched  # load fixtures with cached context into the isolated `northwind_enriched` database (no LLM; refuses `northwind`; decision 0010)
 make fmt              # ruff format + autofix
 make lint             # ruff, ruff format --check, mypy (strict), eslint, tsc
-make test             # unit tests: pytest (excludes integration) + vitest
+make test             # unit tests: pytest (excludes integration) + vitest; ship tests only if tools/, tests/ship/, .github/ or Makefile changed
+make check            # during a row: lint + only the tests for changed paths; never evidence, only make ci is
 make test-integration # pytest -m integration (needs `make up`)
-make ci               # lint + scan-cassettes + test + test-integration + eval-integrity + eval-gate; GitHub CI also runs a browser job
+make ci               # lint + scan-cassettes + test + test-integration + eval-integrity + eval-gate; GitHub CI also runs a browser job and every ship test
 make e2e              # smoke test in replay: assistant, then Playwright (needs a browser and the cassette)
 make e2e-scripted     # the Playwright smoke test on a canned model (no recording needed)
 make record SUITE=…   # SPENDS through an open runner window: re-record one cassette suite
@@ -81,8 +82,9 @@ make scan-cassettes   # secret/PAN scan of cassettes, data/enrichment, ledger an
 make llm-proxy        # dev LLM proxy on this worktree's port (LLM_MODE, default replay)
 make llm-runner SUITE=… RUN_BUDGET=<usd>  # USER ONLY, own terminal, `make -C ~/.northwind/runner`: open one spending window
 make runner-sync      # USER ONLY, in the runner clone: show what changed, ask, fast-forward to origin/main
-make runner-check     # from the sandbox, in each checkout: measure that nothing the runner loads is writable
+make runner-check     # from the sandbox, in each checkout: measure that nothing the runner loads is writable; report any gitlink, .gitmodules or nested .git
 make ship PR=<n> SHA=<reviewed>  # USER ONLY, `make -C ~/.northwind/runner`: check a PR, wait for CI, ask, merge, runner-sync
+make finish CHECKOUT=$HOME/… SHA=<reviewed> BODY=docs/reviews/<file>  # USER ONLY, `make -C ~/.northwind/runner`: after /req-done, commit its files, push, open the PR, add ci-change if needed, then ship (decision 0011)
 make review-diff      # write the committed diff for advisor-reviewer, base and head SHA first
 ```
 Only `make record`, `make eval-live` and `make enrich` spend API credit, and only
@@ -137,9 +139,9 @@ Toolchain notes:
 ## How we work
 - One requirement per session. Start by reading PROGRESS.md, pick the next ID, and
   restate its acceptance criteria from docs/PRD.md. Use plan mode for anything beyond a
-  one-file change.
+  one-file change, except on a routine row (see "Running a row").
 - Per-requirement flow: `/req-start <ID>` → plan → the chain in "Running a row" below → gate report
-  → `/req-done` → the user reviews and merges. Only the user can run `/req-start` and `/req-done`.
+  → `/req-done` → `make finish`, where the user reviews and merges. Only the user can run `/req-start` and `/req-done`.
 - Every acceptance criterion gets at least one automated test. Tag it with the ID:
   pytest `@pytest.mark.req("RAG-03")` / Vitest/Playwright `describe("[SA-01] …")`.
   A requirement is done only when its tagged tests pass, lint passes and
@@ -175,14 +177,19 @@ Toolchain notes:
   never hand-edit a cassette.
 
 ## Running a row (AUTO-1, decision 0008)
-Once the user approves a plan, carry on without waiting for prompts. The chain:
+Once a plan is approved, by the user or on a routine row by `advisor-reviewer`, carry on without waiting
+for prompts. The chain:
 
 implement → `test-writer` → `security-reviewer` (read-only: write the diff to a file and pass the
-path) → fix → one scoped re-review → `make ci` + `make eval-gate` → commit → PR body →
-`advisor-reviewer` → gate report
+path) → fix → one scoped re-review → commit → PR body (a committed file in `docs/reviews/`) → `make ci`,
+once, at that head → `advisor-reviewer` → gate report
 
 Commit on the row's branch; never push. Any revised plan goes to `advisor-reviewer` before it is shown
 to the user.
+
+`make ci` already runs the gate, so nothing in the chain runs `make eval-gate` again. During the row use
+`make check`, which is never evidence. Any change after `make ci`, a fix or an advisor finding, is a new
+commit and another `make ci`, because the reviewed head moved.
 
 `advisor-reviewer` reviews one diff, from one fixed command: `make review-diff`. It writes the committed
 diff against `origin/main`, with `base <sha>` and `head <sha>` as its first two lines. Pass the path, both
@@ -190,7 +197,7 @@ SHAs, the failing-first log, the plan and the list of requested changes. If the 
 do not match, the review is `unconfirmed`.
 
 Stop only for:
-1. Plan approval.
+1. Plan approval, except on a routine row (below).
 2. A spending window.
 3. Terminal-only steps: push, PR, merge, settings install, runner-sync, Docker.
 4. Any git output with one of the five error strings in "How we work".
@@ -198,7 +205,8 @@ Stop only for:
    `known_failures.json`.
 6. An unsafe security finding that changes the design.
 7. A scope question.
-8. In a row not about them, changing anything on the control surface below.
+8. In a row not about them, changing anything on the control surface below, except a routine row's added
+   cassettes.
 9. Two failed attempts to fix the same failure.
 10. Any high or critical finding still open after the re-review.
 
@@ -208,14 +216,37 @@ records). Then stop with the stopped-variant note, listing what is waiting on th
 These add to the ask-first rules above; they do not replace them. Changing a human-reviewed eval label
 and raising a budget cap still need asking.
 
+**Routine rows.** A row is routine when the user names its scope in the start prompt and says it is routine,
+and the plan changes no hard-rule 1 or 9 path (`services/backend/**`,
+`services/common/src/northwind_common/cards.py`, `services/gateway/src/northwind_gateway/chat.py`, and any
+later payment code), no hard-rule 6, 7 or 8 path (`services/assistant/**`, `services/rag/**`,
+`services/common/src/northwind_common/llm.py`, and any later agent, MCP or tool-scoping code) and no control
+surface path, with one exception: files added
+under `cassettes/<suite>/` by `make record SUITE=<suite>`, in a window the user opened for that suite. The
+plan names the suite, the model input that changed and the expected spend. Stop 2 still stops for the window.
+A modified, deleted or hand-written cassette, any file added under `cassettes/eval-answers/`, `make eval-live`
+and `make enrich` make the row not routine. That is a rule the session keeps, not a property a check proves,
+so the gate report lists every added cassette. An unplanned cassette miss is a scope question (stop 7), never
+an automatic re-record.
+
+On a routine row the session saves the plan to `docs/reviews/` and sends it to `advisor-reviewer` with the
+start prompt, in place of stop 1. `pass`: carry on. `findings`, medium or low only: triage, then carry on.
+`findings` with a high or critical, or `unconfirmed`: stop. Until the `advisor-reviewer` proposal is
+installed, stop 1 applies to every row: the installed copy cannot check that a row is routine.
+
+Triage on a routine row is fixed: critical or high is stop 10. Unsafe at any severity, meaning it breaks a
+hard rule or a protected path: fix it, and stop 6 if the fix changes the design. Medium: fix it if it is
+inside the row's files, otherwise log it with an owner. Low: log it in `PROGRESS.md`, "Open items".
+
 The control surface: `CLAUDE.md`, `.claude/**`, `.github/workflows/**`, `Makefile`, `tools/*.proposed*`,
-`tools/ship.sh`, `tools/refused-paths.sh`, the files in `RUNNER_SYNC_PATHS`, `evals/baselines/**`,
-`evals/src/**`, `evals/fixtures/**`, `cassettes/**`, `**/conftest.py`, `.gitignore`, the root
+`tools/ship.sh`, `tools/finish.sh`, `tools/refused-paths.sh`, the files in `RUNNER_SYNC_PATHS`,
+`evals/baselines/**`, `evals/src/**`, `evals/fixtures/**`, `cassettes/**`, `data/enrichment/**`,
+`**/conftest.py`, `.gitignore`, the root
 `pyproject.toml` and the `package.json` files. `make ship` lists these above its question, and asks for the
 PR number instead of `y` when any changed.
 
 Gate report (`tools/gate-report.proposed.SKILL.md`, once installed the `gate-report` skill) has four
 sections: what's done; evidence (base and head SHA, the exact diff command, `make llm-spend` total before
-and after); open findings; the exact terminal commands, ending `/req-done`, a docs-only commit of what it
-wrote, push, PR, `ship`, with `SHA` the head the reviewers read. If the chain stopped, write the stopped
+and after); open findings; the exact terminal commands, ending `/req-done`, then `make finish`,
+with `SHA` the head the reviewers read. If the chain stopped, write the stopped
 variant instead: where it stopped, why, what is waiting on the answer, and exactly what the user must do.

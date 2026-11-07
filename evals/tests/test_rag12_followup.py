@@ -902,7 +902,8 @@ def test_the_pins_come_before_the_first_shell_call() -> None:
         "CANDIDATE_SHA",
         "PR",
         "SHA",
-    }  # PR, SHA: `ship`
+        "BODY",
+    }  # PR, SHA: `ship`. BODY: `finish`
     assert max(pins.values()) < min(first_shell, first_include)
 
 

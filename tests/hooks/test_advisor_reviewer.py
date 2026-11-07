@@ -71,12 +71,14 @@ CONTROL_SURFACE = [
     "tools/*.proposed*",
     "makefile",
     "tools/ship.sh",
+    "tools/finish.sh",
     "tools/refused-paths.sh",
     "runner_sync_paths",
     "evals/baselines/**",
     "evals/src/**",
     "evals/fixtures/**",
     "cassettes/**",
+    "data/enrichment/**",
     "**/conftest.py",
     ".gitignore",
     "pyproject.toml",
@@ -87,6 +89,21 @@ CONTROL_SURFACE = [
 @pytest.mark.parametrize("path", CONTROL_SURFACE)
 def test_control_surface_names_the_path(path: str) -> None:
     assert path in BODY
+
+
+@pytest.mark.req("AUTO-2")
+@pytest.mark.parametrize(
+    "needle",
+    [
+        "plan approval on a routine row",
+        "the user's start prompt",
+        "that the row is routine as `claude.md`",
+        "a row that is not routine is a high finding",
+        "`pass` approves the plan",
+    ],
+)
+def test_the_advisor_can_approve_a_routine_plan(needle: str) -> None:
+    assert needle in BODY
 
 
 def test_returns_pass_or_findings_with_severity() -> None:

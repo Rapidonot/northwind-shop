@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pytest
 
-pytestmark = pytest.mark.req("AUTO-1")
+pytestmark = [pytest.mark.req("AUTO-1"), pytest.mark.ship]
 
 _spec = importlib.util.spec_from_file_location("ship_shared", Path(__file__).with_name("shared.py"))
 assert _spec is not None and _spec.loader is not None
@@ -59,9 +59,17 @@ class Hook:
         changes: dict[str, str | None],
         parent: str | None = None,
         links: dict[str, str] | None = None,
+        gitlinks: dict[str, str] | None = None,
     ) -> str:
         sha = str(
-            shared.make_commit(self.origin, self.sh_env, parent or self.base, changes, links=links)
+            shared.make_commit(
+                self.origin,
+                self.sh_env,
+                parent or self.base,
+                changes,
+                links=links,
+                gitlinks=gitlinks,
+            )
         )
         ref = f"refs/tmp/{sha}"
         self.git(self.origin, "update-ref", ref, sha)
@@ -197,6 +205,15 @@ def test_refuses_a_tracked_symlink_and_names_it(hook: Hook, mode: str) -> None:
     passed(attempt(hook, mode, hook.commit({path: "x\n"})))
     hook.remote_branch(None)
     done = attempt(hook, mode, hook.commit({}, links={path: "/elsewhere"}))
+    refused(hook, done)
+    assert path in done.stdout + done.stderr
+
+
+@pytest.mark.req("AUTO-2")
+def test_refuses_a_tracked_gitlink_and_names_it(hook: Hook, mode: str) -> None:
+    """In step with tools/refused-paths.sh: `git status` runs a child git in such a folder."""
+    path = "sub"
+    done = attempt(hook, mode, hook.commit({}, gitlinks={path: hook.base}))
     refused(hook, done)
     assert path in done.stdout + done.stderr
 

@@ -24,11 +24,22 @@ refuse() {
 	exit 1
 }
 
-[[ $# -ge 3 && "$1" =~ ^[0-9]+$ && "$2" =~ ^[0-9a-f]{40}$ ]] ||
-	refuse "usage: ship.sh <pr-number> <reviewed-sha> <sync-pathspec>..."
-pr=$1
-reviewed=$2
-shift 2
+# `--labels <base> <head>`: which labels this diff needs, for `finish`, so that one classifier decides.
+# Local git only: it returns below, before the first gh call.
+labels_only=0
+if [[ "${1:-}" == --labels ]]; then
+	[[ $# -eq 3 && "$2" =~ ^[0-9a-f]{40}$ && ("$3" =~ ^[0-9a-f]{40}$ || "$3" == "$HEAD_REF") ]] ||
+		refuse "usage: ship.sh --labels <base-sha> <head-sha or $HEAD_REF>"
+	labels_only=1
+	bases=$2
+	labels_head=$3
+else
+	[[ $# -ge 3 && "$1" =~ ^[0-9]+$ && "$2" =~ ^[0-9a-f]{40}$ ]] ||
+		refuse "usage: ship.sh <pr-number> <reviewed-sha> <sync-pathspec>..."
+	pr=$1
+	reviewed=$2
+	shift 2
+fi
 
 work=$(mktemp -d "${TMPDIR:-/tmp}/ship.XXXXXX")
 trap 'rm -rf "$work"' EXIT
@@ -114,14 +125,21 @@ classify() {
 	ci_hit=0
 	gate_hit=0
 	: >"$work/surface"
+	: >"$work/labels"
 	shopt -s nocasematch
 	while IFS= read -r -d '' path; do
 		case "$path" in
 		evals/baselines | evals/baselines/* | evals/fixtures/known_failures.json | \
-			evals/fixtures/starter_set.jsonl) baseline_hit=1 ;;
+			evals/fixtures/starter_set.jsonl)
+			baseline_hit=1
+			printf 'baseline-change\t%s\n' "${path//$'\n'/\\n}" >>"$work/labels"
+			;;
 		esac
 		case "$path" in
-		.github/workflows | .github/workflows/*) ci_hit=1 ;;
+		.github/workflows | .github/workflows/*)
+			ci_hit=1
+			printf 'ci-change\t%s\n' "${path//$'\n'/\\n}" >>"$work/labels"
+			;;
 		esac
 		case "$path" in
 		evals/src | evals/src/*) gate_hit=1 ;;
@@ -130,7 +148,7 @@ classify() {
 		.github/workflows | .github/workflows/* | .claude | .claude/* | CLAUDE.md | Makefile | \
 			tools/*.proposed* | tools/ship.sh | tools/refused-paths.sh | \
 			evals/baselines | evals/baselines/* | evals/src | evals/src/* | evals/fixtures | evals/fixtures/* | \
-			cassettes | cassettes/* | conftest.py | */conftest.py | .gitignore | */.gitignore | \
+			cassettes | cassettes/* | data/enrichment | data/enrichment/* | conftest.py | */conftest.py | .gitignore | */.gitignore | \
 			pyproject.toml | package.json | */package.json)
 			printf '%s\0' "$path" >>"$work/surface"
 			;;
@@ -222,6 +240,14 @@ show_list() {
 	fi
 }
 
+if ((labels_only)); then
+	"${NAMES[@]}" "$bases" "$labels_head" >"$work/paths" || refuse "git diff failed"
+	: >"$work/sync"
+	classify
+	cat "$work/labels"
+	exit 0
+fi
+
 gate_accepted=0
 check_gh
 snapshot
@@ -246,6 +272,9 @@ check_labels
 echo "ship: full diff of the paths that load with the key, run with your login, or need a label:"
 "${GIT_DIFF[@]}" "$bases" "$HEAD_REF" -- "$@" evals/baselines evals/fixtures/known_failures.json \
 	.github/workflows evals/src | cat -v || refuse "git diff failed"
+# The only files allowed to move after the review, and PROGRESS.md is imported into CLAUDE.md.
+echo "ship: PROGRESS.md and COVERAGE.md since the reviewed commit:"
+"${GIT_DIFF[@]}" "$reviewed" "$HEAD_REF" -- PROGRESS.md COVERAGE.md | cat -v || refuse "git diff failed"
 if ((gate_accepted)); then
 	echo "ship: main's gate did not pass on this PR, accepted by gate-change. Green here means only that the"
 	echo "ship: PR's own gate passed, not that the gate is intact: read the evals/src diff above."
