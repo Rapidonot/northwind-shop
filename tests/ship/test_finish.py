@@ -1,0 +1,540 @@
+"""AUTO-2, item 2: `make finish`, driven end to end on the rig in test_ship.py.
+
+A real bare origin, a real runner clone and a real checkout; `gh` is the fake from test_ship.py.
+These prove how `finish` reacts, not what real `gh` returns.
+"""
+
+from __future__ import annotations
+
+import importlib.util
+import json
+import socket
+import subprocess
+import sys
+from collections.abc import Iterator
+from dataclasses import dataclass
+from pathlib import Path
+
+import pytest
+
+pytestmark = [pytest.mark.req("AUTO-2"), pytest.mark.ship]
+
+_spec = importlib.util.spec_from_file_location("ship_rig", Path(__file__).with_name("test_ship.py"))
+assert _spec is not None and _spec.loader is not None
+ship_rig = importlib.util.module_from_spec(_spec)
+sys.modules["ship_rig"] = ship_rig
+_spec.loader.exec_module(ship_rig)
+
+rig = ship_rig.rig  # the fixture
+Rig = ship_rig.Rig
+PR: str = ship_rig.PR
+BRANCH = "req/AUTO-2-finish-and-speed"
+BODY = "docs/reviews/pr.md"
+BODY_TEXT = "The body the reviewers read.\n"
+
+
+@dataclass
+class Row:
+    rig: Rig
+    checkout: Path
+    reviewed: str
+    body: str = BODY
+
+    def git(self, *args: str) -> str:
+        return str(self.rig.git(*args, cwd=self.checkout))
+
+    def write(self, name: str, text: str) -> None:
+        target = self.checkout / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(text)
+
+    def commit_all(self, message: str = "more") -> str:
+        self.git("add", "-A")
+        self.git("commit", "-q", "-m", message)
+        return self.git("rev-parse", "HEAD")
+
+    def finish(
+        self,
+        answers: list[str] | None = None,
+        checkout: str | None = None,
+        sha: str | None = None,
+        body: str | None = None,
+        runner_dir: Path | None = None,
+    ) -> subprocess.CompletedProcess[str]:
+        self.rig.write_scenario()
+        return ship_rig.interact(
+            [
+                "make",
+                "-s",
+                "finish",
+                f"CHECKOUT={self.checkout if checkout is None else checkout}",
+                f"SHA={self.reviewed if sha is None else sha}",
+                f"BODY={self.body if body is None else body}",
+                f"RUNNER_DIR={runner_dir or self.rig.clone}",
+            ],
+            self.rig.clone,
+            self.rig.sh_env,
+            answers=answers,
+        )
+
+    def creates(self) -> list[str]:
+        return [c for c in self.rig.gh_calls() if c.startswith("pr create")]
+
+    def label_adds(self) -> list[str]:
+        return [c for c in self.rig.gh_calls() if c.startswith("pr edit")]
+
+    def on_origin(self) -> bool:
+        heads = self.rig.git("for-each-ref", "--format=%(refname)", "refs/heads")
+        return f"refs/heads/{BRANCH}" in heads.split()
+
+    def commits(self) -> int:
+        return int(self.git("rev-list", "--count", f"{self.reviewed}..HEAD"))
+
+
+def make_row(rig: Rig, changes: dict[str, str] | None = None) -> Row:
+    checkout = rig.root / "checkout"
+    done = ship_rig.run(
+        rig.root, "git", "clone", "-q", str(rig.origin), str(checkout), sh_env=rig.sh_env
+    )
+    done.check_returncode()
+    row = Row(rig, checkout, "")
+    row.git("switch", "-q", "--no-track", "-c", BRANCH, "origin/main")
+    row.write(BODY, BODY_TEXT)
+    for name, text in (changes or {"docs/x.md": "the row's work\n"}).items():
+        row.write(name, text)
+    row.reviewed = row.commit_all("the row")
+    row.write("PROGRESS.md", "written by /req-done\n")
+    row.write("COVERAGE.md", "written by /req-done\n")
+    return row
+
+
+@pytest.fixture
+def row(rig: Rig) -> Row:
+    return make_row(rig)
+
+
+def assert_stopped_before_any_change(
+    row: Row, done: subprocess.CompletedProcess[str], why: str
+) -> None:
+    out = done.stdout + done.stderr
+    assert done.returncode != 0, out
+    assert why in out, out
+    assert row.commits() == 0, "it committed before it refused"
+    assert not row.on_origin(), "it pushed before it refused"
+    assert row.creates() == []
+    assert row.rig.merge_calls() == []
+
+
+# -- the plain path ---------------------------------------------------------------------------
+
+
+def test_a_row_goes_from_req_done_to_merged(row: Row) -> None:
+    done = row.finish()
+    assert done.returncode == 0, done.stdout
+    assert row.on_origin()
+    assert len(row.creates()) == 1
+    assert len(row.rig.merge_calls()) == 1
+    assert f"ship: PR #{PR} merged" in done.stdout
+
+
+def test_the_commit_holds_only_the_two_files_and_a_fixed_subject(row: Row) -> None:
+    row.finish()
+    assert row.commits() == 1
+    assert row.git("log", "-1", "--format=%s") == "AUTO-2: req-done"
+    names = row.git("show", "--name-only", "--format=", "HEAD").split()
+    assert sorted(names) == ["COVERAGE.md", "PROGRESS.md"]
+
+
+def test_the_pr_body_is_the_committed_file_and_the_title_comes_from_the_branch(row: Row) -> None:
+    row.finish()
+    assert (row.rig.scn / "created_body").read_text() == BODY_TEXT
+    assert "--title AUTO-2: finish and speed" in row.creates()[0]
+    assert "--base main" in row.creates()[0]
+
+
+def test_ship_still_asks(row: Row) -> None:
+    done = row.finish(answers=["n"])
+    assert done.returncode != 0
+    assert "[y/N]" in done.stdout or "Type the PR number" in done.stdout
+    assert row.rig.merge_calls() == []
+
+
+def test_a_control_surface_row_still_needs_the_pr_number(rig: Rig) -> None:
+    row = make_row(rig, {"CLAUDE.md": "changed\n"})
+    done = row.finish(answers=["y"])
+    assert "Type the PR number" in done.stdout
+    assert row.rig.merge_calls() == []
+
+
+def test_with_nothing_for_req_done_to_commit_it_still_ships(rig: Rig) -> None:
+    row = make_row(rig)
+    row.git("checkout", "--", "PROGRESS.md", "COVERAGE.md")
+    assert row.finish().returncode == 0
+    assert row.commits() == 0
+    assert len(row.rig.merge_calls()) == 1
+
+
+# -- a rerun ----------------------------------------------------------------------------------
+
+
+def test_a_rerun_uses_the_open_pr_and_makes_no_second_commit(row: Row) -> None:
+    assert row.finish(answers=["n"]).returncode != 0
+    row.rig.open_prs = [int(PR)]
+    done = row.finish()
+    assert done.returncode == 0, done.stdout
+    assert row.commits() == 1
+    assert len(row.creates()) == 0  # the scenario was reset, so this counts the rerun only
+    assert f"PR #{PR} is already open" in done.stdout
+    assert len(row.rig.merge_calls()) == 1
+
+
+def test_two_open_prs_for_the_branch_are_refused(row: Row) -> None:
+    row.rig.open_prs = [7, 8]
+    done = row.finish()
+    assert done.returncode != 0
+    assert "more than one open PR" in done.stdout
+    assert row.rig.merge_calls() == []
+
+
+# -- refusals before anything changes ---------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("checkout", "why"),
+    [
+        ("relative/path", "CHECKOUT"),
+        ("", "CHECKOUT"),
+        ("/x/a b", "CHECKOUT"),
+        ("/x/../etc", "CHECKOUT"),
+        ("/x/$(id)", "CHECKOUT"),
+        ("/no/such/checkout", "no such checkout"),
+    ],
+)
+def test_a_bad_checkout_is_refused(row: Row, checkout: str, why: str) -> None:
+    assert_stopped_before_any_change(row, row.finish(checkout=checkout), why)
+
+
+@pytest.mark.parametrize("sha", ["", "abc", "A" * 40, "x; id"])
+def test_a_bad_sha_is_refused(row: Row, sha: str) -> None:
+    assert_stopped_before_any_change(row, row.finish(sha=sha), "SHA")
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "",
+        "PROGRESS.md",
+        "docs/x.md",
+        "docs/reviews/../../x.md",
+        "docs/reviews/a/b.md",
+        "/etc/passwd",
+    ],
+)
+def test_a_body_outside_docs_reviews_is_refused(row: Row, body: str) -> None:
+    assert_stopped_before_any_change(row, row.finish(body=body), "BODY")
+
+
+def test_a_body_missing_at_the_reviewed_commit_is_refused(row: Row) -> None:
+    done = row.finish(body="docs/reviews/none.md")
+    assert_stopped_before_any_change(row, done, "at the reviewed commit")
+
+
+def test_an_empty_body_is_refused(rig: Rig) -> None:
+    row = make_row(rig, {"docs/reviews/empty.md": ""})
+    assert_stopped_before_any_change(row, row.finish(body="docs/reviews/empty.md"), "is empty")
+
+
+@pytest.mark.parametrize(
+    "branch", ["main", "feature/x", "req/lower-case", "settings/x-install", "req/AUTO-2-A_b"]
+)
+def test_only_a_row_branch_can_finish(row: Row, branch: str) -> None:
+    row.git("branch", "-M", branch) if branch != "main" else row.git("switch", "-q", "main")
+    if branch == "main":
+        row.git("checkout", "--", ".")
+    done = row.finish(sha=row.git("rev-parse", "HEAD"))
+    out = done.stdout
+    assert done.returncode != 0
+    assert "not a row branch" in out
+    assert row.creates() == []
+
+
+def test_a_detached_head_is_refused(row: Row) -> None:
+    row.git("checkout", "--", "PROGRESS.md", "COVERAGE.md")
+    row.git("switch", "-q", "--detach")
+    done = row.finish()
+    assert done.returncode != 0
+    assert "not on a branch" in done.stdout
+    assert row.creates() == []
+
+
+def test_an_uncommitted_change_to_anything_else_is_refused(row: Row) -> None:
+    row.write("docs/x.md", "after the review\n")
+    assert_stopped_before_any_change(row, row.finish(), "not committed: docs/x.md")
+
+
+def test_an_untracked_file_is_refused(row: Row) -> None:
+    row.write("docs/new.md", "new\n")
+    assert_stopped_before_any_change(row, row.finish(), "not committed: docs/new.md")
+
+
+def test_a_deleted_progress_file_is_refused(row: Row) -> None:
+    (row.checkout / "PROGRESS.md").unlink()
+    assert_stopped_before_any_change(row, row.finish(), "unexpected state")
+
+
+def test_a_reviewed_commit_not_on_the_branch_is_refused(row: Row) -> None:
+    other = row.rig.commit(changes={"docs/other.md": "x\n"})
+    row.git("fetch", "-q", "origin", other)
+    assert_stopped_before_any_change(row, row.finish(sha=other), "not on this branch")
+
+
+def test_a_commit_after_the_review_touching_more_than_the_docs_is_refused(rig: Rig) -> None:
+    row = make_row(rig)
+    row.git("checkout", "--", "PROGRESS.md", "COVERAGE.md")
+    row.write("docs/x.md", "after the review\n")
+    row.commit_all()
+    done = row.finish()
+    assert done.returncode != 0
+    assert "changed since the reviewed commit: docs/x.md" in done.stdout
+    assert not row.on_origin()
+    assert row.creates() == []
+
+
+def test_an_escape_in_a_path_is_shown_escaped(row: Row) -> None:
+    row.write("docs/a\x1b[31m.md", "x\n")
+    done = row.finish()
+    assert done.returncode != 0
+    assert "\x1b" not in done.stdout
+    assert "^[" in done.stdout
+
+
+@pytest.fixture
+def open_window(rig: Rig) -> Iterator[int]:
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        listener.listen(4)
+        port = int(listener.getsockname()[1])
+        rig.sh_env["LLM_RUNNER_PORT"] = str(port)
+        yield port
+
+
+def test_an_open_window_is_refused(row: Row, open_window: int) -> None:
+    assert_stopped_before_any_change(row, row.finish(), "spending window")
+
+
+def test_it_refuses_outside_the_clone(row: Row, tmp_path: Path) -> None:
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    assert_stopped_before_any_change(row, row.finish(runner_dir=elsewhere), "only in the clone")
+
+
+# -- the push ---------------------------------------------------------------------------------
+
+
+def hook(row: Row, script: str) -> Path:
+    log = row.rig.root / "hook.log"
+    path = row.checkout / ".git" / "hooks" / "pre-push"
+    path.write_text(
+        f'#!/bin/bash\necho "NW_ALLOW_CONTROL=[$NW_ALLOW_CONTROL]" >> "{log}"\n{script}\n'
+    )
+    path.chmod(0o755)
+    return log
+
+
+def test_the_hook_runs_and_finish_does_not_set_the_override(row: Row) -> None:
+    log = hook(row, "exit 0")
+    assert row.finish().returncode == 0
+    assert log.read_text() == "NW_ALLOW_CONTROL=[]\n"
+
+
+def test_a_hook_refusal_stops_before_the_pr(row: Row) -> None:
+    hook(row, "echo pre-push: refused >&2; exit 1")
+    done = row.finish()
+    assert done.returncode != 0
+    assert "NW_ALLOW_CONTROL=1" in done.stdout
+    assert not row.on_origin()
+    assert row.creates() == []
+
+
+def test_the_override_passes_through_only_when_the_user_typed_it(row: Row) -> None:
+    log = hook(row, '[[ "$NW_ALLOW_CONTROL" == 1 ]]')
+    assert row.finish(answers=["n"]).returncode != 0
+    assert row.creates() == []
+    row.rig.sh_env["NW_ALLOW_CONTROL"] = "1"
+    assert row.finish().returncode == 0
+    assert log.read_text().splitlines()[-1] == "NW_ALLOW_CONTROL=[1]"
+
+
+def test_a_diverged_branch_is_not_forced(row: Row) -> None:
+    other = row.rig.commit(changes={"docs/other.md": "x\n"})
+    row.rig.git("update-ref", f"refs/heads/{BRANCH}", other)
+    done = row.finish()
+    assert done.returncode != 0
+    assert "the push failed" in done.stdout
+    assert row.rig.git("rev-parse", f"refs/heads/{BRANCH}") == other
+    assert row.creates() == []
+
+
+def test_the_script_holds_no_force_and_no_override() -> None:
+    script = (ship_rig.REPO / "tools" / "finish.sh").read_text()
+    code = "\n".join(line for line in script.splitlines() if not line.lstrip().startswith("#"))
+    assert "--force" not in code
+    assert "NW_ALLOW_CONTROL=" not in code.replace("with NW_ALLOW_CONTROL=1 in front", "")
+    assert "--add-label gate-change" not in code
+    assert "--admin" not in code
+
+
+# -- gh failures ------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("flag", "why"),
+    [
+        ("list_fail", "gh pr list failed"),
+        ("create_fail", "gh pr create failed"),
+        ("create_no_url", "cannot read the PR number"),
+    ],
+)
+def test_a_gh_failure_stops_before_the_merge(row: Row, flag: str, why: str) -> None:
+    row.rig.flags.add(flag)
+    done = row.finish()
+    assert done.returncode != 0
+    assert why in done.stdout
+    assert row.rig.merge_calls() == []
+
+
+def test_a_label_failure_stops_before_the_merge(rig: Rig) -> None:
+    row = make_row(rig, {".github/workflows/ci.yml": "name: changed\n"})
+    row.rig.flags.add("edit_fail")
+    done = row.finish()
+    assert done.returncode != 0
+    assert "gh pr edit failed" in done.stdout
+    assert row.rig.merge_calls() == []
+
+
+# -- labels (decision 0011): ci-change only ---------------------------------------------------
+
+
+def test_a_workflow_change_gets_ci_change_and_says_why(rig: Rig) -> None:
+    row = make_row(rig, {".github/workflows/ci.yml": "name: changed\n"})
+    done = row.finish()
+    assert done.returncode == 0, done.stdout
+    assert row.label_adds() == [f"pr edit {PR} --add-label ci-change"]
+    assert "ci-change, because of .github/workflows/ci.yml" in done.stdout
+
+
+def test_a_plain_row_gets_no_label(row: Row) -> None:
+    row.finish()
+    assert row.label_adds() == []
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "evals/baselines/a.json",
+        "evals/fixtures/known_failures.json",
+        "evals/fixtures/starter_set.jsonl",
+    ],
+)
+def test_baseline_change_stays_by_hand(rig: Rig, path: str) -> None:
+    row = make_row(rig, {path: "changed\n"})
+    done = row.finish()
+    assert done.returncode != 0
+    assert row.label_adds() == []
+    assert f"baseline-change needed, because of {path}" in done.stdout
+    assert "yours to add" in done.stdout
+    assert "baseline-change label" in done.stdout  # ship's refusal
+    assert row.rig.merge_calls() == []
+
+
+def test_with_the_users_baseline_label_it_ships(rig: Rig) -> None:
+    row = make_row(rig, {"evals/baselines/a.json": "changed\n"})
+    row.rig.labels("baseline-change")
+    done = row.finish()
+    assert done.returncode == 0, done.stdout
+    assert row.label_adds() == []
+
+
+def test_an_evals_src_change_gets_no_gate_change(rig: Rig) -> None:
+    row = make_row(rig, {"evals/src/x.py": "x = 1\n"})
+    assert row.finish().returncode == 0
+    assert row.label_adds() == []
+
+
+def test_main_gate_failing_is_refused_with_no_label_added(rig: Rig) -> None:
+    row = make_row(rig, {"evals/src/x.py": "x = 1\n"})
+    row.rig.checks = [
+        *[c for c in ship_rig.passing_checks() if c["name"] != "eval-gate-main"],
+        {"name": "eval-gate-main", "bucket": "fail", "workflow": "Guard"},
+    ]
+    done = row.finish()
+    assert done.returncode != 0
+    assert "eval-gate-main" in done.stdout
+    assert row.label_adds() == []
+    assert row.rig.merge_calls() == []
+
+
+# -- ship.sh --labels -------------------------------------------------------------------------
+
+
+def labels(rig: Rig, *args: str) -> subprocess.CompletedProcess[str]:
+    return ship_rig.run(
+        rig.clone, "/bin/bash", "tools/ship.sh", "--labels", *args, sh_env=rig.sh_env
+    )
+
+
+def fetched(rig: Rig) -> tuple[str, str]:
+    rig.git("fetch", "-q", "origin", rig.head, cwd=rig.clone)
+    return rig.base, rig.head
+
+
+@pytest.mark.parametrize(
+    ("path", "label"),
+    [
+        (".github/workflows/ci.yml", "ci-change"),
+        ("evals/baselines/a.json", "baseline-change"),
+        ("evals/fixtures/known_failures.json", "baseline-change"),
+        ("evals/fixtures/starter_set.jsonl", "baseline-change"),
+    ],
+)
+def test_the_labels_mode_names_the_label_and_the_path(rig: Rig, path: str, label: str) -> None:
+    rig.pr({path: "changed\n"})
+    done = labels(rig, *fetched(rig))
+    assert done.returncode == 0, done.stderr
+    assert done.stdout == f"{label}\t{path}\n"
+
+
+def test_the_labels_mode_says_nothing_for_a_plain_diff(rig: Rig) -> None:
+    rig.pr({"docs/x.md": "changed\n", "evals/src/x.py": "x = 1\n"})
+    assert labels(rig, *fetched(rig)).stdout == ""
+
+
+def test_the_labels_mode_calls_no_gh_and_merges_nothing(rig: Rig) -> None:
+    rig.write_scenario()
+    rig.pr({".github/workflows/ci.yml": "changed\n"})
+    labels(rig, *fetched(rig))
+    assert rig.gh_calls() == []
+
+
+def test_the_labels_mode_escapes_a_newline_in_a_path(rig: Rig) -> None:
+    rig.pr({".github/workflows/a\nb.yml": "x\n"})
+    out = labels(rig, *fetched(rig)).stdout
+    assert out == "ci-change\t.github/workflows/a\\nb.yml\n"
+
+
+@pytest.mark.parametrize("args", [(), ("a",), ("a", "b", "c")])
+def test_the_labels_mode_needs_exactly_two_refs(rig: Rig, args: tuple[str, ...]) -> None:
+    done = labels(rig, *args)
+    assert done.returncode != 0
+    assert "usage" in done.stderr
+
+
+def test_a_bad_ref_in_the_labels_mode_fails(rig: Rig) -> None:
+    assert labels(rig, "nope", "nada").returncode != 0
+
+
+def test_the_fake_view_tracks_the_pushed_head(row: Row) -> None:
+    """Guards the rig: `ship` reads the head GitHub would report after the push."""
+    row.finish(answers=["n"])
+    view = json.loads((row.rig.scn / "view.json").read_text())
+    assert view["headRefOid"] == row.git("rev-parse", "HEAD")

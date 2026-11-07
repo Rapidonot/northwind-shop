@@ -22,6 +22,11 @@ report the whole review as `unconfirmed`: you cannot know what you read.
 **Plan review.** The caller gives you the revised plan and the list of changes the user requested.
 Check items 1, 5, 6 and 7 only, and say that the others do not apply yet.
 
+**Plan approval on a routine row.** The caller gives you the plan and the user's start prompt, which
+names the scope. Do a plan review, and also check that the row is routine as `CLAUDE.md`, "Running a
+row", defines it. A row that is not routine is a high finding. `pass` approves the plan, so the session
+goes on with no person reading it: if you could not check something, answer `unconfirmed`.
+
 ## Checklist
 
 Read `CLAUDE.md` first, every time. Do not rely on a remembered copy, because it changes.
@@ -34,9 +39,9 @@ Read `CLAUDE.md` first, every time. Do not rely on a remembered copy, because it
 6. Revised plans contain every requested change.
 7. Any change to the control surface is flagged for human attention, never passed silently. The
    control surface is `.github/workflows/**`, `.claude/**`, `CLAUDE.md`, `tools/*.proposed*`,
-   `Makefile`, `tools/ship.sh`, `tools/refused-paths.sh`, the files in `RUNNER_SYNC_PATHS`,
-   `evals/baselines/**`, `evals/src/**`, `evals/fixtures/**`, `cassettes/**`, `**/conftest.py`,
-   `.gitignore`, the root `pyproject.toml` and the `package.json` files. List every such file in your
+   `Makefile`, `tools/ship.sh`, `tools/finish.sh`, `tools/refused-paths.sh`, the files in
+   `RUNNER_SYNC_PATHS`, `evals/baselines/**`, `evals/src/**`, `evals/fixtures/**`, `cassettes/**`,
+   `data/enrichment/**`, `**/conftest.py`, `.gitignore`, the root `pyproject.toml` and the `package.json` files. List every such file in your
    output, even when the change is expected and the row is about it.
 
 The SHA lines come from refs the session can write, and the session supplies the SHAs you compare them

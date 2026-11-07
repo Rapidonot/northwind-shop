@@ -33,3 +33,20 @@ tests/hooks/test_ship_marker.py: 6 failed, 18 passed
 
 The 18 passed because a Makefile with no filter prints nothing, which is what the run-the-tests cases expect, or because they pin what
 must not change. They get their failing run from the mutations below.
+
+### Item 2, before the code
+
+```
+tests/ship/test_finish.py: 61 failed, 8 passed (no `finish` target, no `--labels` mode)
+```
+
+The 8 that passed were refusals a missing target also satisfies, such as a bad checkout, or checks on the script's text. Their
+failing run is in the mutations below.
+
+### Items 3, 4 and 7b, before the changes
+
+```
+tests/hooks test_notify_hook, test_req_skills, test_stop_conditions, test_gate_report, test_advisor_reviewer: 78 failed, 108 passed
+```
+
+One of the 78 was a mistake in the test, not a finding: the token `cat` matches "notification". It now looks for ` cat`.

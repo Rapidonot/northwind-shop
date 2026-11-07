@@ -60,7 +60,9 @@ def test_the_filter_leaves_only_the_guard_tests_in_tests_ship() -> None:
     assert {line.split("::")[0] for line in left} == {"tests/ship/test_guard.py"}
 
 
-@pytest.mark.parametrize("name", ["test_ship.py", "test_pre_push.py", "test_refused_paths.py"])
+@pytest.mark.parametrize(
+    "name", ["test_ship.py", "test_pre_push.py", "test_refused_paths.py", "test_finish.py"]
+)
 def test_each_ship_file_is_behind_the_marker(name: str) -> None:
     assert collect(f"tests/ship/{name}")
     assert collect(f"tests/ship/{name}", addopts=FILTER) == []

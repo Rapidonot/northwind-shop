@@ -60,7 +60,10 @@ def test_evidence_asks_spend_before_and_after() -> None:
     assert "total before and after" in section("Evidence")
 
 
-SHIP = "make -C ~/.northwind/runner ship PR=<n> SHA=<reviewed>"
+FINISH = (
+    "make -C ~/.northwind/runner finish CHECKOUT=$HOME/Projects/<checkout> SHA=<reviewed>"
+    " BODY=docs/reviews/<file>"
+)
 
 
 def test_terminal_commands_end_in_the_fixed_order() -> None:
@@ -70,7 +73,7 @@ def test_terminal_commands_end_in_the_fixed_order() -> None:
         r"docs-only commit",
         r"\bpush\b",
         r"\bPR\b",
-        re.escape(SHIP),
+        re.escape(FINISH),
     ]
     position = 0
     for step in steps:
@@ -79,8 +82,26 @@ def test_terminal_commands_end_in_the_fixed_order() -> None:
         position = match.end()
 
 
-def test_ship_command_is_the_literal_one() -> None:
-    assert SHIP in section("Terminal commands")
+def test_finish_command_is_the_literal_one() -> None:
+    assert FINISH in section("Terminal commands")
+
+
+@pytest.mark.req("AUTO-2")
+def test_the_gate_is_read_from_make_ci_not_run_again() -> None:
+    assert "`make eval-gate`" not in section("Evidence")
+    assert "`make ci` results" in section("Evidence")
+
+
+@pytest.mark.req("AUTO-2")
+def test_every_added_cassette_is_listed() -> None:
+    assert "every added cassette" in section("Evidence").lower()
+
+
+@pytest.mark.req("AUTO-2")
+def test_the_labels_finish_leaves_to_the_user_are_named() -> None:
+    text = section("Terminal commands")
+    assert "`baseline-change`" in text
+    assert "`gate-change`" in text
 
 
 def test_user_is_told_to_read_each_command_before_pasting() -> None:

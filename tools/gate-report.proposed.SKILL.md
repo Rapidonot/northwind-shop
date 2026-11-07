@@ -26,7 +26,8 @@ Each criterion and its status (`done`, `partial` or `not done`), with what is le
 - Base SHA and head SHA
 - The exact diff command: `make review-diff`
 - `make llm-spend` total before and after
-- `make ci` and `make eval-gate` results, with counts
+- `make ci` results, with counts, including the eval gate it ran, and the SHA it ran at
+- Every added cassette, on a row that recorded any
 - Tagged tests, and where the failing-first log is
 - `security-reviewer` and `advisor-reviewer` results
 
@@ -38,15 +39,17 @@ every control surface file the row changed.
 ### Terminal commands
 
 The exact commands for the user, in order, each ready to paste, starting with a line telling them to
-read each command before pasting it. They always end in this order: `/req-done`, a docs-only commit of
-what it wrote (`PROGRESS.md` and `COVERAGE.md` only), push, PR, then this, where only the PR number and
-the 40-character reviewed SHA vary:
+read each command before pasting it. They always end in this order: `/req-done`, then `finish`, which
+makes a docs-only commit of what it wrote (`PROGRESS.md` and `COVERAGE.md` only), push, PR and `ship`.
+Only the checkout, the 40-character reviewed SHA and the body file vary:
 
 ```
-make -C ~/.northwind/runner ship PR=<n> SHA=<reviewed>
+make -C ~/.northwind/runner finish CHECKOUT=$HOME/Projects/<checkout> SHA=<reviewed> BODY=docs/reviews/<file>
 ```
 
-`SHA` is the head the reviewers read, not the head after the docs commit.
+`SHA` is the head the reviewers read, not the head after the docs commit. `finish` adds `ci-change` itself.
+`baseline-change` and `gate-change` stay the user's: if the row needs either, say so and why, above the
+command.
 
 ## Stopped report
 

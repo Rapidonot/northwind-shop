@@ -66,6 +66,18 @@ done
 serve() {  # canned JSON through the real jq, like gh --jq
   if [[ -n "$jq_expr" ]]; then jq -r "$jq_expr" < "$1"; else cat "$1"; fi
 }
+arg_after() {  # the value after a flag in this call
+  for ((i = 0; i < ${#args[@]}; i++)); do
+    if [[ "${args[i]}" == "$1" ]]; then printf '%s' "${args[i+1]}"; fi
+  done
+}
+follow_branch() {  # what GitHub does: refs/pull/<n>/head and the PR's head follow its branch
+  tip="$(git -C "$GH_ORIGIN" rev-parse "refs/heads/$2")"
+  git -C "$GH_ORIGIN" update-ref "refs/pull/$1/head" "$tip"
+  printf '%s' "$tip" > "$S/head"
+  jq --arg h "$tip" '.headRefOid = $h' "$S/view.json" > "$S/view.new"
+  mv "$S/view.new" "$S/view.json"
+}
 if [[ "$1" == "--version" ]]; then
   cat "$S/version"
   exit 0
@@ -76,6 +88,29 @@ case " $* " in
     exit 0 ;;
 esac
 case "$1 $2" in
+  "pr list")
+    [[ -e "$S/list_fail" ]] && { echo "gh: list failed" >&2; exit 1; }
+    for n in $(jq -r '.[].number' "$S/list.json"); do follow_branch "$n" "$(arg_after --head)"; done
+    serve "$S/list.json"
+    exit 0 ;;
+  "pr create")
+    [[ -e "$S/create_fail" ]] && { echo "gh: create failed" >&2; exit 1; }
+    cp "$(arg_after --body-file)" "$S/created_body"
+    follow_branch "$(cat "$S/create_number")" "$(arg_after --head)"
+    [[ -e "$S/create_no_url" ]] && { echo "created"; exit 0; }
+    echo "https://github.com/o/r/pull/$(cat "$S/create_number")"
+    exit 0 ;;
+  "pr edit")
+    [[ -e "$S/edit_fail" ]] && { echo "gh: edit failed" >&2; exit 1; }
+    label="$(arg_after --add-label)"
+    jq --arg l "$label" '.labels += [{"name": $l}]' "$S/view.json" > "$S/view.new"
+    mv "$S/view.new" "$S/view.json"
+    jq --arg l "$label" --arg me "$(jq -r .login "$S/user.json")" \
+      '.[0] += [{event: "labeled", created_at: "2026-11-05T12:00:00Z",
+                 label: {name: $l}, actor: {login: $me, type: "User"}}]' \
+      "$S/events.json" > "$S/events.new"
+    mv "$S/events.new" "$S/events.json"
+    exit 0 ;;
   "pr view")
     [[ -e "$S/view_fail" ]] && { echo "gh: view failed" >&2; exit 1; }
     if [[ "$json" == "state" ]]; then serve "$S/final.json"
@@ -307,6 +342,7 @@ class Rig:
     events: list[list[dict[str, Any]]] | None = None
     events_after: list[list[dict[str, Any]]] | None = None
     flags: set[str] = field(default_factory=set)
+    open_prs: list[int] = field(default_factory=list)  # what `gh pr list` reports for `finish`
 
     @property
     def scn(self) -> Path:
@@ -352,6 +388,11 @@ class Rig:
             "user_fail",
             "events_fail",
             "merge_esc",
+            "list_fail",
+            "create_fail",
+            "create_no_url",
+            "edit_fail",
+            "created_body",
             "watched",
             "argv.log",
             "merge_state.log",
@@ -390,7 +431,19 @@ class Rig:
         (self.scn / "version").write_text(self.version)
         (self.scn / "help_pr_checks").write_text(self.help_checks)
         (self.scn / "help_pr_merge").write_text(self.help_merge)
-        for flag in ("view_fail", "checks_fail", "user_fail", "events_fail", "merge_esc"):
+        (self.scn / "list.json").write_text(json.dumps([{"number": n} for n in self.open_prs]))
+        (self.scn / "create_number").write_text(PR)
+        for flag in (
+            "view_fail",
+            "checks_fail",
+            "user_fail",
+            "events_fail",
+            "merge_esc",
+            "list_fail",
+            "create_fail",
+            "create_no_url",
+            "edit_fail",
+        ):
             if flag in self.flags:
                 (self.scn / flag).write_text("")
 
@@ -456,6 +509,7 @@ BASE_FILES = {
     "Makefile": (REPO / "Makefile").read_text(),
     "tools/ship.sh": (REPO / "tools" / "ship.sh").read_text(),
     "tools/refused-paths.sh": (REPO / "tools" / "refused-paths.sh").read_text(),
+    "tools/finish.sh": (REPO / "tools" / "finish.sh").read_text(),
     ".gitignore": "*.log\nignored-dir/\n",
     ".github/workflows/ci.yml": "name: CI\n",
     ".claude/settings.json": "{}\n",

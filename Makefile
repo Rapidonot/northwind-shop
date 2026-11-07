@@ -14,10 +14,11 @@ override CHECK := $(value CHECK)
 override CANDIDATE_SHA := $(value CANDIDATE_SHA)
 export ACCEPT_REGRESSION BOOTSTRAP APPROVED_BY CHECKOUT CHECK CANDIDATE_SHA
 
-# The same for `ship`, which runs in your terminal with your GitHub login (AUTO-1).
+# The same for `ship` and `finish`, which run in your terminal with your GitHub login (AUTO-1, AUTO-2).
 override PR := $(value PR)
 override SHA := $(value SHA)
-export PR SHA
+override BODY := $(value BODY)
+export PR SHA BODY
 
 export COREPACK_ENABLE_DOWNLOAD_PROMPT := 0
 PNPM ?= corepack pnpm
@@ -59,7 +60,7 @@ endif
 
 .PHONY: help setup up down dev dev-gateway dev-portal data model ingest ingest-enriched enrich fmt lint test check \
 	test-integration ci scan-cassettes llm-spend llm-proxy llm-runner runner-sync runner-check \
-	ship review-diff record eval-live eval-rescore eval-gate eval-integrity eval-gate-stale-ok eval-promote \
+	ship finish review-diff record eval-live eval-rescore eval-gate eval-integrity eval-gate-stale-ok eval-promote \
 	eval-snapshot eval-review-list eval-enrichment-report e2e e2e-scripted
 
 # A stable cache, not fastembed's temp-dir default: Claude's sandbox has a different temp dir and
@@ -169,7 +170,7 @@ llm-runner: ## Open one spending window (SUITE=name RUN_BUDGET=usd; own terminal
 
 # Key-loaded code, what builds the environment, what `model` and `up` run beside the key, what `ship`
 # runs with the user's GitHub login, and what `eval-promote` loads and trusts (row 5b).
-RUNNER_SYNC_PATHS := services/llm-replay services/common services/rag data/src evals/src evals/fixtures/starter_set.jsonl evals/fixtures/known_failures.json evals/baselines infra Makefile tools/ship.sh tools/refused-paths.sh pyproject.toml uv.lock uv.toml .python-version .gitattributes .gitignore ':(glob)**/.gitignore' ':(glob)**/pyproject.toml' ':(glob)**/sitecustomize.py' ':(glob)**/usercustomize.py'
+RUNNER_SYNC_PATHS := services/llm-replay services/common services/rag data/src evals/src evals/fixtures/starter_set.jsonl evals/fixtures/known_failures.json evals/baselines infra Makefile tools/ship.sh tools/finish.sh tools/refused-paths.sh pyproject.toml uv.lock uv.toml .python-version .gitattributes .gitignore ':(glob)**/.gitignore' ':(glob)**/pyproject.toml' ':(glob)**/sitecustomize.py' ':(glob)**/usercustomize.py'
 RUNNER_INCOMING := refs/runner/incoming
 # --icase-pathspecs: on a case-insensitive clone `Services/common/x.py` lands on the reviewed path.
 RUNNER_DIFF := git --no-pager --icase-pathspecs diff --text --no-ext-diff --no-textconv
@@ -205,6 +206,15 @@ ship: ## Check a PR, wait for CI, ask, merge, then runner-sync (PR=<n> SHA=<revi
 	@! $(RUNNER_BUSY) || (echo "a spending window is open: close it first" && exit 2)
 	@/bin/bash tools/ship.sh "$$PR" "$$SHA" $(RUNNER_SYNC_PATHS)
 	@$(MAKE) --no-print-directory runner-sync
+
+# Your own terminal, from the clean clone, as `make -C ~/.northwind/runner finish CHECKOUT=$HOME/… SHA=<reviewed>
+# BODY=docs/reviews/<file>`: after `/req-done`, commits what it wrote, pushes, opens the PR from the body file,
+# adds `ci-change` if the diff needs it, then runs `ship`, which still asks. CHECKOUT is read as data. Safe to
+# rerun. `baseline-change`, `gate-change` and NW_ALLOW_CONTROL stay yours to give (AUTO-2, decision 0011).
+finish: ## Commit /req-done's files, push, open the PR, then ship (CHECKOUT=/abs/path SHA=<reviewed> BODY=<file>; runner clone only)
+	@[[ "$(CURDIR)" == "$(realpath $(RUNNER_DIR))" ]] || (echo "only in the clone: make -C $(RUNNER_DIR) finish CHECKOUT=/abs/path SHA=<reviewed> BODY=docs/reviews/<file>" && exit 2)
+	@! $(RUNNER_BUSY) || (echo "a spending window is open: close it first" && exit 2)
+	@RUNNER_DIR="$(RUNNER_DIR)" /bin/bash tools/finish.sh
 
 # The one diff advisor-reviewer accepts: base and head SHA first, so it can tell what it read. Refuses
 # uncommitted work, because the head line would not describe it (AUTO-1).
