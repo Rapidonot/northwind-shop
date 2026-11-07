@@ -163,3 +163,15 @@ here as part of the full run; #8c re-records it again after its switch.
   - payload mentions in EV-084 and EV-096 (owner #13);
   - the "store locator" in EV-084 (owner #13);
   - EV-045's missed variant (owner RAG-06).
+
+## `make ci` at `5950364`: failed (exit 2), fixed in the next commit
+
+- Lint and the cassette scan were clean. The tests gave 1 failed, 4,096 passed and 22 xfailed, so the run stopped
+  before `eval-integrity` and `eval-gate`.
+- The failure was `test_cache_prefix.py::test_the_recording_holds_only_this_design`, which pins that the
+  `assistant-smoke` recording holds exactly the 5 portal questions. The 8 contradiction questions this row added made
+  it 13.
+- The fix keeps the test exact: it now expects the 5 portal questions plus the 8 from
+  `services/assistant/tests/contradictions.json`, each exactly once, 13 in all. `test_smoke_e2e.py` reads the same
+  file. The question text is unchanged, so no cassette went stale, and a replay gives 14 passed.
+- This is an update for questions the row added, not a loosening, and the gate report lists it.

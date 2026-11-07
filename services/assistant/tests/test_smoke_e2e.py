@@ -225,14 +225,10 @@ def test_a_care_warning_written_for_the_shopper_reaches_them(
 
 # (trap, product cited by the spec, question). Product names are from data/fixtures/products.jsonl.
 CONTRADICTIONS = [
-    ("TRAP-CON-001", "P0011", "Is the Brindlemoor Cairn Storm Jacket waterproof in steady rain?"),
-    ("TRAP-CON-002", "P0087", "Does the Corvane Brook Shirt run small, or is it true to size?"),
-    ("TRAP-CON-003", "P0163", "Can I machine wash the Halvardine Home Merino Washable Throw?"),
-    ("TRAP-CON-004", "P0126", "Will the Halvardine Home Thistle Sheet Set fit a 16-inch mattress?"),
-    ("TRAP-CON-005", "P0019", "Does the Corvane Lantern Down Jacket pack into its own pocket?"),
-    ("TRAP-CON-006", "P0051", "Is the Corvane Cinder Thermal Layer really merino wool?"),
-    ("TRAP-CON-007", "P0177", "Is the Emberquay Larch Rug washable, or spot clean only?"),
-    ("TRAP-CON-008", "P0070", "What is the inseam of the Tidewick Marsh Trail Pants?"),
+    (row["trap_id"], row["product_id"], row["question"])
+    for row in json.loads(
+        (REPO / "services/assistant/tests/contradictions.json").read_text("utf-8")
+    )
 ]
 
 

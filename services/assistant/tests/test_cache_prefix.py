@@ -23,6 +23,13 @@ from northwind_assistant.tools import ALLOWED_TOOL
 REPO = Path(__file__).resolve().parents[3]
 SUITE = REPO / "cassettes" / "assistant-smoke"
 QUESTIONS = json.loads((REPO / "apps/portal/e2e/questions.json").read_text(encoding="utf-8"))
+# The 8 review/spec contradiction questions RAG-03 added to this suite (test_smoke_e2e.py).
+CONTRADICTION_QUESTIONS = [
+    row["question"]
+    for row in json.loads(
+        (REPO / "services/assistant/tests/contradictions.json").read_text("utf-8")
+    )
+]
 # The live docs list 512 for Claude Sonnet 5.5, read 2026-11-04.
 MIN_CACHEABLE_TOKENS = 512
 BILLING_HEADER = "x-anthropic-billing-header"
@@ -94,11 +101,14 @@ def test_later_questions_read_the_prefix_from_cache() -> None:
 
 @pytest.mark.req("SA-02")
 def test_the_recording_holds_only_this_design() -> None:
-    """Every question is there, in the fenced format, and no older recording is left behind."""
+    """Every question is there, in the fenced format, and no older recording is left behind. The
+    suite is the 5 portal questions plus RAG-03's 8 contradiction questions, each exactly once."""
+    questions = [*QUESTIONS.values(), *CONTRADICTION_QUESTIONS]
+    assert len(questions) == 13 and len(set(questions)) == 13
     turns = [first_turn(cassette) for cassette in recorded() if cassette["seq"] == 0]
-    assert len(turns) == len(QUESTIONS)
+    assert len(turns) == len(questions)
     assert all("<sources>" in turn and "<shopper_message>" in turn for turn in turns)
-    for question in QUESTIONS.values():
+    for question in questions:
         wanted = f"<shopper_message>\n{question}\n</shopper_message>"
         assert sum(turn.endswith(wanted) for turn in turns) == 1
 
