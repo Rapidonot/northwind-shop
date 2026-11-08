@@ -17,18 +17,27 @@ competitor: AND would match almost nothing on a natural question.
 
 `region` is an array column, so the region filter is `&&`, and the visibility filter stays because
 internal documents have region ALL (hard rule 7).
+
+The dense order does not depend on the CPU (decision 0012, the PR #30 drift). pgvector's `<=>` is a
+float32 sum whose order varies by platform, so the SQL only picks a pool of `RERANK_FACTOR` times
+the candidates needed, with their exact float32 vectors. Python then ranks the pool by
+`exact_cosine_distance`, which gives the same bits everywhere, and breaks ties on `chunk_id` in
+code-point order, the `COLLATE "C"` the SQL uses too. If the pool's edge is too close to call,
+the same statement runs again with no dense limit, and every filtered row is ranked. Nothing here
+raises on a zero vector: its distance is infinite.
 """
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from fractions import Fraction
-from typing import Literal, get_args
+from math import fsum, inf, isfinite, sqrt
+from typing import Any, Literal, get_args
 
 import psycopg
 
-from northwind_rag.embedding import Embedder
+from northwind_rag.embedding import Embedder, to_float32
 from northwind_rag.sources import ALL_REGIONS
 from northwind_rag.store import vector_literal
 
@@ -39,6 +48,10 @@ RETRIEVER_VERSION = 2
 CONTEXT_K = 5
 RRF_K = 60
 CANDIDATE_DEPTH = 50
+RERANK_FACTOR = 2  # the dense pool is twice what fusion takes, so the edge is rarely close
+# Above the worst case for pgvector's float32 sum over 384 terms (about 2.3e-5), not only the
+# 3.7e-7 measured on macOS, so a pool judged safe is safe on any CPU.
+RERANK_MARGIN = 1e-4
 FTS_CONFIG = "english"  # must match infra/db/migrations/0003_rag_fts.sql
 SHOPPER_REGIONS: frozenset[str] = frozenset(get_args(ShopperRegion))
 _VISIBLE: dict[str, tuple[str, ...]] = {"shopper": ("public",), "staff": ("public", "internal")}
@@ -50,12 +63,16 @@ _FILTER = """visibility = ANY(%(visible)s)
 # casting back cannot inject query syntax. A query of stop words only is empty and matches nothing.
 _QUERY = "SELECT replace(plainto_tsquery('english', %(query)s)::text, ' & ', ' | ')::tsquery AS q"
 
+# The dense pool: `pg_distance` orders it and guards its edge; `exact` is the stored float32 vector,
+# exactly, since float4 to float8 is exact and float8 prints in shortest round-trip form.
+_DENSE_COLUMNS = """chunk_id, source_type, source_id, doc_type, text,
+    embedding <=> %(vector)s::vector AS pg_distance, embedding::real[]::float8[] AS exact"""
 _SEARCH = f"""
-SELECT chunk_id, source_type, source_id, doc_type, text
+SELECT {_DENSE_COLUMNS}
 FROM rag_chunks
 WHERE {_FILTER}
-ORDER BY embedding <=> %(vector)s::vector, chunk_id
-LIMIT %(k)s
+ORDER BY embedding <=> %(vector)s::vector, chunk_id COLLATE "C"
+LIMIT %(pool)s
 """  # noqa: S608 - constants only; every value is bound
 
 _KEYWORD = f"""
@@ -64,30 +81,33 @@ SELECT chunk_id, source_type, source_id, doc_type, text
 FROM rag_chunks, query
 WHERE {_FILTER}
   AND fts @@ query.q
-ORDER BY ts_rank_cd(fts, query.q) DESC, chunk_id
+ORDER BY ts_rank_cd(fts, query.q) DESC, chunk_id COLLATE "C"
 LIMIT %(k)s
 """  # noqa: S608 - constants only; every value is bound
 
 _HYBRID = f"""
 WITH query AS ({_QUERY}),
 dense AS (
-    SELECT chunk_id, source_type, source_id, doc_type, text
+    SELECT {_DENSE_COLUMNS}
     FROM rag_chunks
     WHERE {_FILTER}
-    ORDER BY embedding <=> %(vector)s::vector, chunk_id
-    LIMIT %(depth)s
+    ORDER BY embedding <=> %(vector)s::vector, chunk_id COLLATE "C"
+    LIMIT %(pool)s
 ),
 keyword AS (
     SELECT chunk_id, source_type, source_id, doc_type, text
     FROM rag_chunks, query
     WHERE {_FILTER}
       AND fts @@ query.q
-    ORDER BY ts_rank_cd(fts, query.q) DESC, chunk_id
+    ORDER BY ts_rank_cd(fts, query.q) DESC, chunk_id COLLATE "C"
     LIMIT %(depth)s
 )
-SELECT 'dense' AS arm, chunk_id, source_type, source_id, doc_type, text FROM dense
+SELECT 'dense' AS arm, chunk_id, source_type, source_id, doc_type, text, pg_distance, exact
+FROM dense
 UNION ALL
-SELECT 'keyword' AS arm, chunk_id, source_type, source_id, doc_type, text FROM keyword
+SELECT 'keyword' AS arm, chunk_id, source_type, source_id, doc_type, text,
+    NULL::float8, NULL::float8[]
+FROM keyword
 """  # noqa: S608 - constants only; every value is bound
 
 
@@ -106,6 +126,57 @@ def retriever_id(embedder: Embedder) -> str:
         f"hybrid:v{RETRIEVER_VERSION}:rrf{RRF_K}:d{CANDIDATE_DEPTH}:"
         f"fts-text-{FTS_CONFIG}:{embedder.id}"
     )
+
+
+def exact_cosine_distance(query: Sequence[float], vector: Sequence[float]) -> float:
+    """1 - cosine similarity, the same bits on every CPU: both sides rounded to float32, so each
+    product is exact in float64, each sum is `fsum` (correctly rounded), and sqrt and division
+    are IEEE. A zero vector is infinitely far, where pgvector gives NaN."""
+    q = [to_float32(x) for x in query]
+    v = [to_float32(x) for x in vector]
+    nq, nv = fsum(x * x for x in q), fsum(y * y for y in v)
+    if nq == 0.0 or nv == 0.0:
+        return inf
+    return 1.0 - fsum(x * y for x, y in zip(q, v, strict=True)) / sqrt(nq * nv)
+
+
+def _pool_is_safe(last_pg_distance: float, exact_at_keep: float) -> bool:
+    """No chunk outside the pool can rank inside it: every row outside has a pgvector distance of
+    at least `last_pg_distance`, which is within float32 error of its exact one."""
+    return isfinite(last_pg_distance) and last_pg_distance >= exact_at_keep + RERANK_MARGIN
+
+
+@dataclass(frozen=True)
+class _Candidate:
+    chunk: RetrievedChunk
+    pg_distance: float | None
+    distance: float
+
+
+def _candidates(rows: Sequence[Sequence[Any]], vector: Sequence[float]) -> list[_Candidate]:
+    """Dense rows: the five chunk columns, then `pg_distance`, then `exact`."""
+    return [
+        _Candidate(RetrievedChunk(*row[:5]), row[5], exact_cosine_distance(vector, row[6]))
+        for row in rows
+    ]
+
+
+def _edge_is_safe(found: Sequence[_Candidate], exact_at_keep: float) -> bool:
+    distances = [c.pg_distance for c in found]
+    if any(d is None or not isfinite(d) for d in distances):
+        return False  # a zero-norm row (NaN): rank every row rather than reason about it
+    return _pool_is_safe(max(d for d in distances if d is not None), exact_at_keep)
+
+
+def _exactly_ranked(fetch: Callable[[int | None], list[_Candidate]], keep: int) -> list[_Candidate]:
+    """The `keep` nearest by exact distance, then ID. `fetch(pool)` runs the statement with that
+    dense limit, `fetch(None)` with none. A pool that came back short holds every filtered row."""
+    pool = RERANK_FACTOR * keep
+    found = fetch(pool)
+    ranked = sorted(found, key=lambda c: (c.distance, c.chunk.chunk_id))
+    if len(found) >= pool and not _edge_is_safe(found, ranked[keep - 1].distance):
+        ranked = sorted(fetch(None), key=lambda c: (c.distance, c.chunk.chunk_id))
+    return ranked[:keep]
 
 
 def rrf_fuse(ranked_lists: Sequence[Sequence[str]], *, rrf_k: int = RRF_K) -> list[str]:
@@ -148,9 +219,13 @@ def _dense(
     _check(audience, k)
     [vector] = embedder.embed([query])
     params = {**_params(audience, regions, k), "vector": vector_literal(vector)}
-    with conn.cursor() as cursor:
-        rows = cursor.execute(_SEARCH, params).fetchall()
-    return [RetrievedChunk(*row) for row in rows]
+
+    def fetch(pool: int | None) -> list[_Candidate]:
+        with conn.cursor() as cursor:
+            rows = cursor.execute(_SEARCH, {**params, "pool": pool}).fetchall()
+        return _candidates(rows, vector)
+
+    return [c.chunk for c in _exactly_ranked(fetch, k)]
 
 
 def _keyword(
@@ -179,17 +254,25 @@ def _hybrid(
 ) -> list[RetrievedChunk]:
     _check(audience, k)
     [vector] = embedder.embed([query])
+    # Never fewer candidates than asked for, so a large `k` still sees every match.
+    depth = max(CANDIDATE_DEPTH, k)
     params = {
         **_params(audience, regions, k),
         "vector": vector_literal(vector),
         "query": query,
-        # Never fewer candidates than asked for, so a large `k` still sees every match.
-        "depth": max(CANDIDATE_DEPTH, k),
+        "depth": depth,
     }
-    with conn.cursor() as cursor:
-        rows = cursor.execute(_HYBRID, params).fetchall()
-    chunks = {row[1]: RetrievedChunk(*row[1:]) for row in rows}
-    arms = [[row[1] for row in rows if row[0] == arm] for arm in ("dense", "keyword")]
+    keyword: list[RetrievedChunk] = []
+
+    def fetch(pool: int | None) -> list[_Candidate]:
+        with conn.cursor() as cursor:
+            rows = cursor.execute(_HYBRID, {**params, "pool": pool}).fetchall()
+        keyword[:] = [RetrievedChunk(*row[1:6]) for row in rows if row[0] == "keyword"]
+        return _candidates([row[1:] for row in rows if row[0] == "dense"], vector)
+
+    dense = [c.chunk for c in _exactly_ranked(fetch, depth)]
+    chunks = {c.chunk_id: c for c in [*dense, *keyword]}
+    arms = [[c.chunk_id for c in dense], [c.chunk_id for c in keyword]]
     return [chunks[chunk_id] for chunk_id in rrf_fuse(arms)[:k]]
 
 

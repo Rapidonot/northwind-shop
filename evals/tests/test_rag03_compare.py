@@ -194,7 +194,7 @@ def conn_with_real_index() -> Any:
     import uuid
 
     from northwind_rag.cli import DEFAULT_DATABASE_URL
-    from northwind_rag.embedding import FastEmbedEmbedder
+    from northwind_rag.embedding import CachedEmbedder, FastEmbedEmbedder
     from northwind_rag.ingest import ingest
 
     url = os.environ.get("DATABASE_URL", DEFAULT_DATABASE_URL)
@@ -203,7 +203,8 @@ def conn_with_real_index() -> Any:
     admin.execute(f'CREATE SCHEMA "{schema}"')
     connection = psycopg.connect(url, autocommit=True, options=f"-csearch_path={schema},public")
     try:
-        ingest(connection, REPO / "data" / "fixtures", FastEmbedEmbedder())
+        # Frozen chunk vectors, as `make ingest` writes them, so every platform ranks the same.
+        ingest(connection, REPO / "data" / "fixtures", CachedEmbedder(FastEmbedEmbedder()))
         yield connection
     finally:
         connection.close()

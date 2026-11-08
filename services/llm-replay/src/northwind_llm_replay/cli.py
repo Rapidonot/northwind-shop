@@ -21,14 +21,16 @@ from northwind_llm_replay.scan import load_canaries, printable, scan_paths
 
 CHECKPOINT_CALLS = 20
 PROXY_LOG_DIR = Path(".llm-proxy-log")
-# Committed eval files carry retrieved text and labels, and the enrichment cache carries model
-# output, so they get the regex, PAN and canary scan too. They read as raw text, not decoded JSON.
+# Committed eval files carry retrieved text and labels, the enrichment cache carries model output,
+# and the frozen vectors feed every index, so they get the regex, PAN and canary scan too. They
+# read as raw text, not decoded JSON.
 EVAL_ROOTS = [
     Path("evals/contexts"),
     Path("evals/fixtures"),
     Path("evals/baselines"),
     Path("docs/reviews/RAG-12-eval-review.md"),
     Path("data/enrichment"),
+    Path("data/embeddings"),
 ]
 
 

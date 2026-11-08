@@ -12,7 +12,7 @@ import psycopg
 from psycopg import sql
 from psycopg.conninfo import conninfo_to_dict, make_conninfo
 
-from northwind_rag.embedding import FastEmbedEmbedder
+from northwind_rag.embedding import CachedEmbedder, FastEmbedEmbedder
 from northwind_rag.ingest import ENRICHED_DATABASES, ingest, ingest_enriched
 
 DEFAULT_DATABASE_URL = "postgresql://northwind:northwind-local@localhost:5432/northwind"
@@ -58,7 +58,7 @@ def main() -> None:
         raise SystemExit(f"could not connect to the database; check {variable}") from None
     with connection as conn:
         run = ingest_enriched if args.enriched else ingest
-        report = run(conn, args.fixtures, FastEmbedEmbedder())
+        report = run(conn, args.fixtures, CachedEmbedder(FastEmbedEmbedder()))
     print(json.dumps(asdict(report), indent=2))
 
 

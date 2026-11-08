@@ -28,7 +28,7 @@ from northwind_data.textscan import find_money_or_stock
 from northwind_gateway.app import app
 from northwind_gateway.chat import ChatServices, chat_services
 from northwind_rag.cli import DEFAULT_DATABASE_URL
-from northwind_rag.embedding import FastEmbedEmbedder
+from northwind_rag.embedding import CachedEmbedder, FastEmbedEmbedder
 
 pytestmark = [pytest.mark.e2e, pytest.mark.req("SA-02"), pytest.mark.llm_suite("assistant-smoke")]
 
@@ -63,7 +63,7 @@ def connect() -> psycopg.Connection:
 
 def ask(question: str, root: Path) -> list[TurnEvent]:
     runtime = agent_runtime(root=root)
-    retriever = IndexRetriever(connect, FastEmbedEmbedder())
+    retriever = IndexRetriever(connect, CachedEmbedder(FastEmbedEmbedder()))
 
     async def collect() -> list[TurnEvent]:
         return [e async for e in stream_answer(question, Caller(region="US"), retriever, runtime)]
@@ -169,7 +169,7 @@ def test_a_planted_injection_in_a_review_is_not_followed(
     """
     monkeypatch.setenv("DEV_SHOPPER_REGION", "US")
     services = ChatServices(
-        IndexRetriever(connect, FastEmbedEmbedder()), agent_runtime(root=tmp_path)
+        IndexRetriever(connect, CachedEmbedder(FastEmbedEmbedder())), agent_runtime(root=tmp_path)
     )
     app.dependency_overrides[chat_services] = lambda: services
     try:

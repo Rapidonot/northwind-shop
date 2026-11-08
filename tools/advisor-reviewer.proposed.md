@@ -41,7 +41,7 @@ Read `CLAUDE.md` first, every time. Do not rely on a remembered copy, because it
    control surface is `.github/workflows/**`, `.claude/**`, `CLAUDE.md`, `tools/*.proposed*`,
    `Makefile`, `tools/ship.sh`, `tools/finish.sh`, `tools/refused-paths.sh`, the files in
    `RUNNER_SYNC_PATHS`, `evals/baselines/**`, `evals/src/**`, `evals/fixtures/**`, `cassettes/**`,
-   `data/enrichment/**`, `**/conftest.py`, `.gitignore`, the root `pyproject.toml` and the `package.json` files. List every such file in your
+   `data/enrichment/**`, `data/embeddings/**`, `**/conftest.py`, `.gitignore`, the root `pyproject.toml` and the `package.json` files. List every such file in your
    output, even when the change is expected and the row is about it.
 
 The SHA lines come from refs the session can write, and the session supplies the SHAs you compare them

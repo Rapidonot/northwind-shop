@@ -32,6 +32,7 @@ _spec.loader.exec_module(changed)
         ("evals/src/northwind_evals/cli.py", {"evals"}),
         ("data/src/northwind_data/cli.py", {"data"}),
         ("data/enrichment/public.jsonl", {"data", "services/rag", "evals"}),
+        ("data/embeddings/fastembed-x.jsonl", {"data", "services/rag", "evals"}),
         ("tests/hooks/test_settings.py", {"tests/hooks/test_settings.py"}),
         ("tests/ship/shared.py", {"tests/ship"}),
         ("tools/ship.sh", {"tests/ship", "tests/hooks"}),
