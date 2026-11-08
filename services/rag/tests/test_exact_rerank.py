@@ -347,3 +347,9 @@ def test_zero_vectors_in_the_query_or_the_index_never_raise(
     assert (
         len(retrieve_context(conn, ZeroEmbedder(), QUERIES[0], region="US")) == retrieval.CONTEXT_K
     )
+
+
+def test_the_rerank_constants_are_the_reviewed_ones() -> None:
+    """Pinned so a later loosening is a failing test, not a silent edit (row review, low 2).
+    The margin sits above the textbook worst case for pgvector's float32 sum (about 2.3e-5)."""
+    assert (retrieval.RERANK_FACTOR, retrieval.RERANK_MARGIN) == (2, 1e-4)

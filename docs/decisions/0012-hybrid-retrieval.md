@@ -66,8 +66,11 @@ the closest pair on its own. The diagnosis and both plan reviews are in
   float32 vector. Python ranks the pool by an exact cosine distance (float32 inputs, `fsum`, IEEE `sqrt`
   and division, so the same bits on every CPU), then by `chunk_id`. If the pool's edge is within
   `RERANK_MARGIN` of the last kept distance, the same statement runs again with no dense limit.
-  A zero vector is infinitely far, so nothing raises on the shopper path. Over the 113 frozen queries
-  there were no fallbacks, and the median `retrieve_context` time was 44 ms.
+  A zero vector is infinitely far, so nothing raises on the shopper path. Over the 113 frozen queries,
+  at the shipped margin, there were no fallbacks, and the median `retrieve_context` time was 42 ms.
+  The pool is twice the candidate depth for `retrieve_context`. For the `dense_search` comparison arm it
+  is twice `k`, not twice `max(CANDIDATE_DEPTH, k)` as plan 9.1.2 said: a deviation, recorded here,
+  which changes no result, because the edge guard falls back to ranking every filtered row.
 - **`COLLATE "C"` (e)** on every `chunk_id` tie-break, matching `rrf_fuse`'s code-point order. Today's
   `en_US.utf8` orders every chunk ID the same way, so nothing moves, but a locale can no longer change
   an order.

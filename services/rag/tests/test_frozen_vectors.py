@@ -370,3 +370,8 @@ def test_a_huge_integer_component_fails_closed(tmp_path: Path, digits: int) -> N
     path = write_file(tmp_path, "test:unit:4", [text])
     with pytest.raises(FrozenVectorError):
         load_frozen(path, 4)
+
+
+def test_the_vouch_tolerance_is_the_reviewed_one() -> None:
+    """Pinned: never raise it to pass (row review, low 2; open item N1 says how to tighten it)."""
+    assert embedding.VOUCH_TOLERANCE == 1e-4
