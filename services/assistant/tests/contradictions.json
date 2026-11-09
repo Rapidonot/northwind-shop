@@ -1,0 +1,42 @@
+[
+  {
+    "trap_id": "TRAP-CON-001",
+    "product_id": "P0011",
+    "question": "Is the Brindlemoor Cairn Storm Jacket waterproof in steady rain?"
+  },
+  {
+    "trap_id": "TRAP-CON-002",
+    "product_id": "P0087",
+    "question": "Does the Corvane Brook Shirt run small, or is it true to size?"
+  },
+  {
+    "trap_id": "TRAP-CON-003",
+    "product_id": "P0163",
+    "question": "Can I machine wash the Halvardine Home Merino Washable Throw?"
+  },
+  {
+    "trap_id": "TRAP-CON-004",
+    "product_id": "P0126",
+    "question": "Will the Halvardine Home Thistle Sheet Set fit a 16-inch mattress?"
+  },
+  {
+    "trap_id": "TRAP-CON-005",
+    "product_id": "P0019",
+    "question": "Does the Corvane Lantern Down Jacket pack into its own pocket?"
+  },
+  {
+    "trap_id": "TRAP-CON-006",
+    "product_id": "P0051",
+    "question": "Is the Corvane Cinder Thermal Layer really merino wool?"
+  },
+  {
+    "trap_id": "TRAP-CON-007",
+    "product_id": "P0177",
+    "question": "Is the Emberquay Larch Rug washable, or spot clean only?"
+  },
+  {
+    "trap_id": "TRAP-CON-008",
+    "product_id": "P0070",
+    "question": "What is the inseam of the Tidewick Marsh Trail Pants?"
+  }
+]

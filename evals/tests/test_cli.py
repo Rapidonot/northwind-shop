@@ -978,3 +978,84 @@ def test_promote_still_works_over_an_override_that_names_its_approver(rig: Rig) 
     with_override(dict(GOOD_OVERRIDE))
     write_candidate({"EV-1": dict(GOOD)})
     assert rig.promote() == 0
+
+
+@pytest.mark.req("RAG-03")
+def test_gate_prints_exact_retrieval_metrics_and_the_top_k_hash(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The drift check (row #8): CI's log and the local run must show the same lines."""
+    from northwind_evals.compare import fingerprint
+
+    rig.setup_one_item()
+    with ScriptedLLM() as llm:
+        llm.reply("Answer [P1].").reply(VERDICT)
+        scripted_clients(monkeypatch, llm)
+        assert cli.main(["gate"]) == 0
+    out = capsys.readouterr().out
+    expected = fingerprint({k: [c.chunk_id for c in v] for k, v in rig.live.items()})
+    assert f"  retrieval top-k sha256 {expected}\n" in out
+    assert "  retrieval recall@5 1.000000\n" in out
+
+
+# ---- the stale line names what moved (RAG-03, the PR #30 drift) ------------------------------
+
+SENTINEL = "SENTINEL-CHUNK-TEXT"  # chunk text: never printed, a stale line carries IDs only
+
+
+def stale_lines(out: str) -> list[str]:
+    return [line.strip() for line in out.splitlines() if line.strip().startswith("STALE ")]
+
+
+@pytest.mark.req("RAG-03")
+def test_a_moved_context_names_the_saved_and_the_live_ids(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    rig.setup_one_item()
+    moved = [*chunk_ids(4), "product:P9:0"]
+    rig.live = {"EV-1": [RetrievedChunk(c, "product", "P1", None, SENTINEL) for c in moved]}
+    with ScriptedLLM() as llm:
+        scripted_clients(monkeypatch, llm)
+        assert cli.main(["gate"]) == 1
+    out = capsys.readouterr().out
+    assert stale_lines(out) == [f"STALE EV-1 saved {','.join(chunk_ids())} live {','.join(moved)}"]
+    assert SENTINEL not in out
+
+
+@pytest.mark.req("RAG-03")
+def test_a_missing_context_says_so(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    rig.setup_one_item()
+    save_contexts(cli.CONTEXTS, [context_for("EV-9", chunk_ids())])  # every context but EV-1's
+    with ScriptedLLM() as llm:
+        scripted_clients(monkeypatch, llm)
+        assert cli.main(["gate"]) == 1
+    assert stale_lines(capsys.readouterr().out) == ["STALE EV-1 no saved context"]
+
+
+@pytest.mark.req("RAG-03")
+def test_a_context_from_another_retriever_names_both(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    rig.setup_one_item()
+    chunks = tuple(ContextChunk(c, "P1", "product", "text") for c in chunk_ids())
+    save_contexts(cli.CONTEXTS, [SavedContext("EV-1", "other:retriever", "idx", chunks)])
+    with ScriptedLLM() as llm:
+        scripted_clients(monkeypatch, llm)
+        assert cli.main(["gate"]) == 1
+    current = retriever_id(FakeEmbedder("x"))
+    assert stale_lines(capsys.readouterr().out) == [
+        f"STALE EV-1 retriever other:retriever != {current}"
+    ]
+
+
+@pytest.mark.req("RAG-03")
+def test_a_replay_miss_says_so(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    rig.setup_one_item()
+    monkeypatch.chdir(rig.tmp)  # an empty `cassettes/`, so the call misses
+    monkeypatch.setenv("LLM_MODE", "replay")
+    assert cli.main(["gate"]) == 1
+    assert stale_lines(capsys.readouterr().out) == ["STALE EV-1 replay miss"]

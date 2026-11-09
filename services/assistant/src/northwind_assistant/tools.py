@@ -29,6 +29,7 @@ from claude_agent_sdk import SdkMcpTool, tool
 from northwind_assistant.caller import Caller
 from northwind_common.cards import contains_card_data
 from northwind_rag.retrieval import RetrievedChunk
+from northwind_rag.sources import TRUSTED_SOURCE_TYPES, UNTRUSTED_SOURCE_TYPES
 
 log = logging.getLogger(__name__)
 
@@ -79,7 +80,15 @@ class SearchFailure:
 
 
 def render_sources(chunks: Sequence[RetrievedChunk]) -> str:
-    """Untrusted text cannot open or close a tag (hard rule 6)."""
+    """Untrusted text cannot open or close a tag (hard rule 6). A trusted type and an untrusted one
+    render alike: the prompt's allow-list, built from TRUSTED_SOURCE_TYPES, says which `type` may
+    set facts, so reviews stay visible as one person's experience. A type in neither set is refused,
+    so a new source type is never shown before it is classified (RAG-03)."""
+    unknown = sorted(
+        {chunk.source_type for chunk in chunks} - TRUSTED_SOURCE_TYPES - UNTRUSTED_SOURCE_TYPES
+    )
+    if unknown:
+        raise ValueError(f"unclassified source type: {', '.join(unknown)}")
     return "\n".join(
         f'<source id="{html.escape(chunk.source_id)}" type="{html.escape(chunk.source_type)}">\n'
         f"{html.escape(chunk.text, quote=False)}\n</source>"
@@ -105,6 +114,8 @@ async def search_sources(
     from `caller`, which the server built."""
     if not isinstance(query, str) or not query.strip():
         return SearchFailure("validation", False, BAD_QUERY_MESSAGE)
+    if "\x00" in query:  # Postgres text cannot hold NUL, so it would fail every time (RAG-03)
+        return SearchFailure("validation", False, BAD_QUERY_MESSAGE)
     if contains_card_data(query):  # hard rule 1 names tool arguments too
         return SearchFailure("validation", False, CARD_QUERY_MESSAGE)
     if state.searches >= MAX_SEARCHES:
@@ -116,8 +127,17 @@ async def search_sources(
         log.error("search failed: %s", type(error).__name__)
         state.failed = True
         return SearchFailure("transient", True, FAILED_MESSAGE)
+    if not chunks:
+        return NO_SOURCES
+    try:
+        rendered = render_sources(chunks)
+    except ValueError:
+        # An unclassified source type: nothing from this search is shown or counted as seen.
+        log.error("search refused: unclassified source type")
+        state.failed = True
+        return SearchFailure("business", False, FAILED_MESSAGE)
     state.seen.update(chunk.source_id for chunk in chunks)
-    return render_sources(chunks) if chunks else NO_SOURCES
+    return rendered
 
 
 def retrieve_tool(caller: Caller, retriever: Retriever, state: ToolState) -> SdkMcpTool[Any]:

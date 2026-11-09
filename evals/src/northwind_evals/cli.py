@@ -17,11 +17,15 @@ from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import asdict
 from pathlib import Path
+from typing import cast
 
 import psycopg
 
 from northwind_common.llm import ASSISTANT_MODEL, anthropic_client
 from northwind_evals.answerers import Answerer, SingleShotAnswerer
+from northwind_evals.compare import compare as compare_arms
+from northwind_evals.compare import drift_lines, mean_scores
+from northwind_evals.compare import render as render_comparison
 from northwind_evals.contexts import (
     ANSWER_CONTEXT_K,
     ContextChunk,
@@ -47,7 +51,12 @@ from northwind_evals.gate import (
     summary_problems,
 )
 from northwind_evals.harness import RETRIEVAL_K, ItemResult, run_answers, score_retrieval
-from northwind_evals.integrity import added_known_failures, integrity_problems, merge_base
+from northwind_evals.integrity import (
+    added_frozen_vectors,
+    added_known_failures,
+    integrity_problems,
+    merge_base,
+)
 from northwind_evals.items import (
     MIN_HUMAN_REVIEWED,
     EvalItem,
@@ -61,10 +70,31 @@ from northwind_llm_replay.proxy import ProxyState, RunningProxy, encode_test_id
 from northwind_llm_replay.runner import RunnerUnavailableError, proxy_config
 from northwind_llm_replay.scan import load_canaries, scan_text
 from northwind_rag.cli import DEFAULT_DATABASE_URL, enriched_database_url
-from northwind_rag.embedding import Embedder, FastEmbedEmbedder
+from northwind_rag.embedding import (
+    VOUCH_TOLERANCE,
+    Embedder,
+    FastEmbedEmbedder,
+    FrozenVectorError,
+    add_frozen,
+    cached,
+    check_frozen,
+    export_chunk_vectors,
+    frozen_key,
+    frozen_path,
+    load_frozen,
+    unvouched,
+    vouch_distances,
+)
 from northwind_rag.enrichment import EnrichmentCache
 from northwind_rag.ingest import require_enriched_database
-from northwind_rag.retrieval import RetrievedChunk, dense_search, retriever_id
+from northwind_rag.retrieval import (
+    RetrievedChunk,
+    ShopperRegion,
+    dense_search,
+    keyword_search,
+    retrieve_context,
+    retriever_id,
+)
 from northwind_rag.sources import build_chunks
 
 ITEMS = Path("evals/fixtures/starter_set.jsonl")
@@ -76,6 +106,9 @@ KNOWN_FAILURES = Path("evals/fixtures/known_failures.json")
 LAST_RUN = Path(".llm-proxy-log/eval-last-run.json")
 REVIEW_LIST = Path("docs/reviews/RAG-12-eval-review.md")
 ENRICHMENT_REPORT = Path("docs/reviews/RAG-02-enrichment-report.md")
+SMOKE_QUESTIONS = Path("apps/portal/e2e/questions.json")
+CONTRADICTIONS = Path("services/assistant/tests/contradictions.json")
+RETRIEVAL_REPORT = Path("docs/reviews/RAG-03-retrieval-report.md")
 SUITE = "eval-answers"
 ALLOW_STALE_ENV = "EVAL_ALLOW_STALE"
 
@@ -95,12 +128,46 @@ def _index_version(conn: psycopg.Connection) -> str:
     return str(row[0])
 
 
+def _region(item: EvalItem) -> ShopperRegion:
+    """`load_items` already refused any region outside REGIONS, which equals SHOPPER_REGIONS."""
+    return cast(ShopperRegion, item.region)
+
+
 def _live(
     conn: psycopg.Connection, embedder: Embedder, items: Sequence[EvalItem]
 ) -> dict[str, list[RetrievedChunk]]:
+    """What a shopper in the item's region gets: the agents' path, hybrid (RAG-03, row #8). Queries
+    with a frozen vector use it, so every platform ranks the same (the PR #30 drift)."""
+    embedder = cached(embedder)
     return {
-        item.id: dense_search(conn, embedder, item.query, audience="shopper", k=RETRIEVAL_K)
+        item.id: retrieve_context(
+            conn, embedder, item.query, region=_region(item), audience="shopper", k=RETRIEVAL_K
+        )
         for item in items
+    }
+
+
+def _arms(
+    conn: psycopg.Connection, embedder: Embedder, items: Sequence[EvalItem]
+) -> dict[str, dict[str, list[str]]]:
+    """Each arm's ranked source IDs per item, all on the shopper's region-filtered path."""
+    embedder = cached(embedder)
+    dense = {
+        item.id: dense_search(
+            conn, embedder, item.query, audience="shopper", k=RETRIEVAL_K, region=_region(item)
+        )
+        for item in items
+    }
+    keyword = {
+        item.id: keyword_search(
+            conn, item.query, audience="shopper", k=RETRIEVAL_K, region=_region(item)
+        )
+        for item in items
+    }
+    hybrid = _live(conn, embedder, items)
+    return {
+        arm: {item_id: [chunk.source_id for chunk in chunks] for item_id, chunks in found.items()}
+        for arm, found in (("dense", dense), ("keyword", keyword), ("hybrid", hybrid))
     }
 
 
@@ -112,6 +179,19 @@ def _retrieval_scores(
         for item in items
         if item.retrieval_scored
     }
+
+
+def _stale_reason(
+    saved: SavedContext | None, live: Sequence[RetrievedChunk], retriever: str
+) -> str:
+    """What moved, by chunk ID only: a stale line in a CI log must never carry chunk text."""
+    if saved is None:
+        return "no saved context"
+    if saved.retriever_id != retriever:
+        return f"retriever {saved.retriever_id} != {retriever}"
+    before = ",".join(c.chunk_id for c in saved.chunks)
+    now = ",".join(c.chunk_id for c in live[:ANSWER_CONTEXT_K])
+    return f"saved {before} live {now}" + (" (text changed)" if before == now else "")
 
 
 def _stale_ids(
@@ -284,13 +364,21 @@ def cmd_gate(args: argparse.Namespace) -> int:
         _index_version(conn)
         live = _live(conn, embedder, items)
 
+    ranked = {item_id: [chunk.source_id for chunk in chunks] for item_id, chunks in live.items()}
+    chunk_ids = {item_id: [chunk.chunk_id for chunk in chunks] for item_id, chunks in live.items()}
+    for line in drift_lines(mean_scores(items, ranked), chunk_ids):
+        print(f"  {line}")
+
     recorded = [item for item in items if item.id in baseline.answers]
-    stale = _stale_ids(recorded, contexts, live, retriever_id(embedder))
+    current = retriever_id(embedder)
+    stale = _stale_ids(recorded, contexts, live, current)
+    reasons = {i: _stale_reason(contexts.get(i), live[i], current) for i in stale}
     fresh = [item for item in recorded if item.id not in stale]
     with _clients("replay") as (answerer, judge, _state):
         results = run_answers(fresh, contexts, answerer, judge)
 
     stale += [r.item_id for r in results if r.status == "stale"]
+    reasons.update({r.item_id: "replay miss" for r in results if r.status == "stale"})
     errors = [f"{r.item_id}: {r.detail}" for r in results if r.status == "error"]
     answers = {r.item_id: r.scores for r in results if r.status == "ok"}
     segments = {item.id: item.segment for item in items}
@@ -306,7 +394,9 @@ def cmd_gate(args: argparse.Namespace) -> int:
 
     _print_rows(result)
     print(f"  answers replayed {len(answers)}/{len(baseline.answers)}, stale {len(result.stale)}")
-    stale_lines = [f"STALE {i}" for i in result.stale]
+    stale_lines = [
+        f"STALE {i} {reasons[i]}" if i in reasons else f"STALE {i}" for i in result.stale
+    ]
     missing = [f"{metric} is missing from the baseline" for metric in result.new_metrics]
     missing += [f"{metric} is missing from the current scores" for metric in result.lost_metrics]
     for line in [*result.containment, *missing, *result.problems, *result.errors, *stale_lines]:
@@ -316,6 +406,81 @@ def cmd_gate(args: argparse.Namespace) -> int:
     verdict = "passed" if passed else "FAILED"
     print(f"eval-gate {verdict}" + (f" with {len(result.stale)} stale" if result.stale else ""))
     return 0 if passed else 1
+
+
+def _frozen_queries(items: Sequence[EvalItem]) -> list[str]:
+    """Every query whose ranking a recording or the gate depends on: the eval items and the smoke
+    questions. Follow-up searches the model writes are not here; they embed live (D4)."""
+    portal = json.loads(SMOKE_QUESTIONS.read_text(encoding="utf-8"))
+    traps = json.loads(CONTRADICTIONS.read_text(encoding="utf-8"))
+    texts = [item.query for item in items] + list(portal.values()) + [t["question"] for t in traps]
+    return list(dict.fromkeys(texts))
+
+
+def cmd_embed_cache(args: argparse.Namespace) -> int:
+    """`make embed-cache`: freezes the vectors every saved context was ranked with. No LLM.
+
+    Chunk vectors come bit-exact from the index (`DATABASE_URL`); query vectors are embedded one
+    text per call, as `_hybrid` embeds them. Only keys the file lacks are added, and an existing
+    key is never rewritten. `--check` writes nothing and compares every chunk with the index."""
+    embedder = FastEmbedEmbedder()
+    path = frozen_path(embedder.id)
+    chunks = build_chunks(FIXTURES)
+    queries = _frozen_queries(load_items(ITEMS))
+    with _connect() as conn:
+        if args.check:
+            problems = check_frozen(conn, chunks, path, embedder.id, embedder.dim)
+            frozen = load_frozen(path, embedder.dim) if path.exists() else {}
+            keys = [frozen_key(q) for q in queries]
+            problems += [f"query {key}: no frozen vector" for key in keys if key not in frozen]
+            for problem in problems:
+                print(f"  {problem}")
+            print(
+                f"embed-cache check: {len(chunks)} chunks and {len(queries)} queries against "
+                f"{path}: {len(problems)} problem(s)"
+            )
+            return 1 if problems else 0
+        try:
+            vectors = export_chunk_vectors(conn, chunks, embedder.id)
+        except FrozenVectorError as error:
+            print(f"embed-cache: refused: {error}")
+            return 1
+    clashes = [frozen_key(q) for q in queries if frozen_key(q) in vectors]
+    if clashes:
+        print(f"embed-cache: refused: a query has a chunk's exact text ({clashes[0]})")
+        return 1
+    existing = load_frozen(path, embedder.dim) if path.exists() else {}
+    texts = {frozen_key(chunk.text): chunk.text for chunk in chunks}
+    new_chunks = {key: vector for key, vector in vectors.items() if key not in existing}
+    doubts = unvouched(new_chunks, texts, embedder)
+    if doubts:  # the index row is not what the model gives this text: a planted or stale vector
+        print(f"embed-cache: refused: {doubts[0]} ({len(doubts)} in all)")
+        return 1
+    for query in queries:
+        key = frozen_key(query)
+        if key not in existing and key not in vectors:
+            [vectors[key]] = embedder.embed([query])  # one per call, as retrieval embeds a query
+    try:
+        added = add_frozen(path, vectors, embedder.dim)
+    except FrozenVectorError as error:
+        print(f"embed-cache: refused: {error}")
+        return 1
+    print(f"embed-cache: {added} added to {path} ({len(vectors)} chunks and queries checked)")
+    return 0
+
+
+def cmd_compare_retrievers(_: argparse.Namespace) -> int:
+    """RAG-03's criterion: hybrid strictly above dense-only and keyword-only on recall@5. No LLM."""
+    items = load_items(ITEMS)
+    embedder = FastEmbedEmbedder()
+    with _connect() as conn:
+        _index_version(conn)
+        arms = _arms(conn, embedder, items)
+    comparison = compare_arms(items, arms, _trap_reviews())
+    text = render_comparison(comparison, retriever_id(embedder))
+    RETRIEVAL_REPORT.write_text(text, encoding="utf-8")
+    print(text)
+    return 0 if comparison.hybrid_wins else 1
 
 
 def cmd_review_list(_: argparse.Namespace) -> int:
@@ -353,10 +518,41 @@ def cmd_review_list(_: argparse.Namespace) -> int:
     return 0
 
 
+def _frozen_texts() -> dict[str, str]:
+    """Every text a frozen vector may stand for, by key: plain fixture chunks and the queries."""
+    texts = {frozen_key(chunk.text): chunk.text for chunk in build_chunks(FIXTURES)}
+    return texts | {frozen_key(q): q for q in _frozen_queries(load_items(ITEMS))}
+
+
+def _vouch(added: dict[tuple[str, str], dict[str, list[float]]]) -> list[str]:
+    """Re-embeds the text behind every frozen vector this branch adds (no LLM, the local model), and
+    prints the largest distance it sees, so each platform's noise is on record."""
+    if not added:
+        return []
+    embedder = FastEmbedEmbedder()
+    texts = _frozen_texts()
+    problems: list[str] = []
+    for (path, where), entries in added.items():
+        if Path(path).name != frozen_path(embedder.id).name:
+            problems.append(f"{path} ({where}): no embedder here can vouch for this file")
+            continue
+        distances = vouch_distances(entries, texts, embedder)
+        largest = max(distances.values(), default=0.0)
+        print(
+            f"  frozen vectors vouched ({path}, {where}): {len(distances)} of {len(entries)}, "
+            f"largest distance {largest:.3e} (allowed {VOUCH_TOLERANCE:.0e})"
+        )
+        found = unvouched(entries, texts, embedder, distances=distances)
+        problems += [f"{path} ({where}): {p}" for p in found]
+    return problems
+
+
 def cmd_integrity(args: argparse.Namespace) -> int:
-    """Compares this branch with the base branch. Never spends and needs no database."""
+    """Compares this branch with the base branch. Never spends and needs no database. Frozen vectors
+    this branch adds are re-embedded with the local model and must match it."""
     try:
         problems = integrity_problems(args.base, BASELINE)
+        problems += _vouch(added_frozen_vectors(merge_base(args.base)))
         added = added_known_failures(merge_base(args.base), KNOWN_FAILURES)
     except RuntimeError as error:
         print(f"eval-integrity FAILED: {error}", file=sys.stderr)
@@ -367,6 +563,12 @@ def cmd_integrity(args: argparse.Namespace) -> int:
         print(f"  {problem}", file=sys.stderr)
     print(f"eval-integrity {'FAILED' if problems else 'passed'} against {args.base}")
     return 1 if problems else 0
+
+
+def _trap_reviews() -> dict[str, str]:
+    """Each planted injection review's ID and its trap. Evals may read the answer key."""
+    key = json.loads((FIXTURES / "_answer_key.json").read_text(encoding="utf-8"))
+    return {entry["review_id"]: entry["trap_id"] for entry in key["injection_reviews"]}
 
 
 def _trap_chunks() -> dict[str, str]:
@@ -421,6 +623,10 @@ def main(argv: list[str] | None = None) -> int:
     gate.set_defaults(func=cmd_gate)
     commands.add_parser("review-list").set_defaults(func=cmd_review_list)
     commands.add_parser("enrichment-report").set_defaults(func=cmd_enrichment_report)
+    commands.add_parser("compare-retrievers").set_defaults(func=cmd_compare_retrievers)
+    embed_cache = commands.add_parser("embed-cache")
+    embed_cache.add_argument("--check", action="store_true", help="compare, write nothing")
+    embed_cache.set_defaults(func=cmd_embed_cache)
     integrity = commands.add_parser("integrity")
     integrity.add_argument("--base", default="origin/main")
     integrity.set_defaults(func=cmd_integrity)

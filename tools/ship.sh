@@ -148,7 +148,7 @@ classify() {
 		.github/workflows | .github/workflows/* | .claude | .claude/* | CLAUDE.md | Makefile | \
 			tools/*.proposed* | tools/ship.sh | tools/refused-paths.sh | \
 			evals/baselines | evals/baselines/* | evals/src | evals/src/* | evals/fixtures | evals/fixtures/* | \
-			cassettes | cassettes/* | data/enrichment | data/enrichment/* | conftest.py | */conftest.py | .gitignore | */.gitignore | \
+			cassettes | cassettes/* | data/enrichment | data/enrichment/* | data/embeddings | data/embeddings/* | conftest.py | */conftest.py | .gitignore | */.gitignore | \
 			pyproject.toml | package.json | */package.json)
 			printf '%s\0' "$path" >>"$work/surface"
 			;;

@@ -22,10 +22,6 @@
       "Edit(./.claude/output-styles/**)",
       "Edit(./.claude/workflows/**)",
       "Edit(./.mcp.json)",
-      "Edit(./**/.git)",
-      "Edit(./**/.git/**)",
-      "Edit(~/Projects/northwind-shop/.git/worktrees/**)",
-      "Edit(~/Projects/northwind-shop/.git/commondir)",
       "Read(~/.northwind/secrets)",
       "Read(~/.northwind/secrets/**)",
       "Edit(~/.northwind/secrets/**)",
@@ -111,10 +107,7 @@
         "~/Projects/northwind-shop/.git/worktrees/*/gitdir",
         "~/Projects/northwind-shop/.git/worktrees/*/commondir",
         "~/Projects/northwind-shop/.git/worktrees/*/config.worktree",
-        "~/Projects/northwind-shop/.git/config.worktree",
-        "~/Projects/northwind-shop/.git/commondir",
-        "~/Projects/northwind-shop/*/**/.git",
-        "~/Projects/northwind-shop-*/*/**/.git"
+        "~/Projects/northwind-shop/.git/config.worktree"
       ],
       "denyRead": ["./.env*", "~/Projects/northwind-shop/.env*", "~/Library/Keychains", "~/.northwind/secrets", "~/.northwind/ledger.lock"],
       "allowWrite": ["~/.cache/uv", "~/Library/pnpm/store", "/private/tmp/pnpm-store-operation-locks-502"]

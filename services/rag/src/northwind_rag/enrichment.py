@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Any, Literal, get_args
 
 from northwind_data.textscan import fold_generated
+from northwind_rag.embedding import digit_free
 from northwind_rag.models import Chunk, Visibility
 from northwind_rag.sources import CONTEXT_SOURCE_TYPES, context_problem, shingles
 
@@ -99,8 +100,7 @@ sentence: This review of the Hallin Wool Throw has no product detail to describe
 
 Status = Literal["ok", "rejected"]
 # A hex digest can hold a run of digits that passes the Luhn check, and the scanner allows no
-# exemption, so stored keys hold no digits (the ledger does the same).
-_DIGITS_TO_LETTERS = str.maketrans("0123456789", "ghijklmnop")
+# exemption, so stored keys hold no digits (the ledger and the frozen vectors do the same).
 
 
 class EnrichmentError(RuntimeError):
@@ -150,7 +150,7 @@ def cache_key(chunk: Chunk, parent: Parent) -> str:
         parent.hash,
     )
     digest = hashlib.sha256("|".join(map(str, parts)).encode()).hexdigest()
-    return digest.translate(_DIGITS_TO_LETTERS)
+    return digit_free(digest)
 
 
 def build_request(chunk: Chunk, parent: Parent, model: str) -> dict[str, Any]:

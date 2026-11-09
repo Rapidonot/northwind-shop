@@ -72,13 +72,14 @@ make eval-live EVAL_SLICE=<n>  # SPENDS through an open runner window (SUITE=eva
 make enrich           # SPENDS through an open runner window (SUITE=rag-enrichment): fill data/enrichment; chunks with an entry make no call
 make eval-rescore     # rebuild the candidate from the recordings after a scoring change (never spends)
 make eval-promote     # USER ONLY, `make -C ~/.northwind/runner eval-promote CHECKOUT=$HOME/… APPROVED_BY=…`: replace CHECKOUT's baseline with its candidate (CHECK=1 is a dry run and prints the hash; a regression or relabel needs ACCEPT_REGRESSION and CANDIDATE_SHA; decision 0009)
-make eval-integrity   # refuse edited cassettes and lost overrides, print added known failures, against origin/main
+make eval-integrity   # refuse edited cassettes, lost overrides and changed or unvouched frozen vectors, print added known failures, against origin/main
 make eval-gate        # regression gate: live retrieval + replayed answers vs the baseline (RAG-12)
 make eval-snapshot    # save each eval item's retrieved context, the input for answers (no LLM)
 make eval-review-list # write the list of eval items waiting for human review
 make eval-enrichment-report  # compare the enriched index with the plain one: recall delta, stale items, planted chunks in a top 5
+make embed-cache      # add frozen vectors for new chunks (from the index) and new eval/smoke queries; add-only, no LLM (CHECK=1 compares; decision 0012)
 make llm-spend        # shared ledger: total, per suite/model, 20-call checkpoint
-make scan-cassettes   # secret/PAN scan of cassettes, data/enrichment, ledger and proxy log (CASSETTES_DIR=/abs/path to scan a worktree's)
+make scan-cassettes   # secret/PAN scan of cassettes, data/enrichment, data/embeddings, ledger and proxy log (CASSETTES_DIR=/abs/path to scan a worktree's)
 make llm-proxy        # dev LLM proxy on this worktree's port (LLM_MODE, default replay)
 make llm-runner SUITE=… RUN_BUDGET=<usd>  # USER ONLY, own terminal, `make -C ~/.northwind/runner`: open one spending window
 make runner-sync      # USER ONLY, in the runner clone: show what changed, ask, fast-forward to origin/main
@@ -240,7 +241,7 @@ inside the row's files, otherwise log it with an owner. Low: log it in `PROGRESS
 
 The control surface: `CLAUDE.md`, `.claude/**`, `.github/workflows/**`, `Makefile`, `tools/*.proposed*`,
 `tools/ship.sh`, `tools/finish.sh`, `tools/refused-paths.sh`, the files in `RUNNER_SYNC_PATHS`,
-`evals/baselines/**`, `evals/src/**`, `evals/fixtures/**`, `cassettes/**`, `data/enrichment/**`,
+`evals/baselines/**`, `evals/src/**`, `evals/fixtures/**`, `cassettes/**`, `data/enrichment/**`, `data/embeddings/**`,
 `**/conftest.py`, `.gitignore`, the root
 `pyproject.toml` and the `package.json` files. `make ship` lists these above its question, and asks for the
 PR number instead of `y` when any changed.

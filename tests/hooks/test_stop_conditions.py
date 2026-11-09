@@ -88,6 +88,7 @@ CONTROL_SURFACE = [
     "evals/fixtures/**",
     "cassettes/**",
     "data/enrichment/**",
+    "data/embeddings/**",
     "**/conftest.py",
     ".gitignore",
     "pyproject.toml",

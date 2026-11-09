@@ -957,6 +957,7 @@ SURFACE: dict[str, str] = {
     "evals/fixtures/x.json": "{}\n",
     "cassettes/a/b.json": "{}\n",
     "data/enrichment/public.jsonl": "{}\n",
+    "data/embeddings/fastembed-x-4.jsonl": "{}\n",
     "conftest.py": "x = 1\n",
     "services/x/conftest.py": "x = 1\n",
     ".gitignore": BASE_FILES[".gitignore"] + "unused-pattern-dir/\n",

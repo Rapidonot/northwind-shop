@@ -61,7 +61,7 @@ endif
 .PHONY: help setup up down dev dev-gateway dev-portal data model ingest ingest-enriched enrich fmt lint test check \
 	test-integration ci scan-cassettes llm-spend llm-proxy llm-runner runner-sync runner-check \
 	ship finish review-diff record eval-live eval-rescore eval-gate eval-integrity eval-gate-stale-ok eval-promote \
-	eval-snapshot eval-review-list eval-enrichment-report e2e e2e-scripted
+	eval-snapshot eval-review-list eval-enrichment-report eval-compare-retrievers embed-cache e2e e2e-scripted
 
 # A stable cache, not fastembed's temp-dir default: Claude's sandbox has a different temp dir and
 # cannot reach the model's download hosts, so `make -C ~/.northwind/runner model` fills this (CC-27).
@@ -149,7 +149,7 @@ test-integration: ## Integration tests against the local stack (run `make up` fi
 
 # CASSETTES_DIR scans a worktree's cassettes from the runner clone, where the key-fragment check can
 # run. The walk follows no symlink and findings carry no matched text (decision 0005).
-scan-cassettes: ## Secret/PAN scan of cassettes, data/enrichment, ledger and proxy log (FOUND-2; CASSETTES_DIR=/abs/path)
+scan-cassettes: ## Secret/PAN scan of cassettes, data/enrichment, data/embeddings, ledger and proxy log (FOUND-2; CASSETTES_DIR=/abs/path)
 	@[[ -z "$$CASSETTES_DIR" || "$$CASSETTES_DIR" =~ ^/[A-Za-z0-9._/-]+$$ ]] || (echo "usage: make scan-cassettes CASSETTES_DIR=/absolute/path" && exit 2)
 	$(SCAN_PYTHON) -m northwind_llm_replay.cli scan $${CASSETTES_DIR:+--cassettes-dir "$$CASSETTES_DIR"}
 
@@ -290,6 +290,14 @@ eval-snapshot: ## Save each eval item's retrieved context, the input for answers
 
 eval-enrichment-report: ## Compare the enriched index with the plain one; changes neither (RAG-02)
 	uv run python -m northwind_evals.cli enrichment-report
+
+eval-compare-retrievers: ingest ## Dense vs keyword vs hybrid recall on the shopper path; exits 1 unless hybrid wins (RAG-03; no LLM)
+	uv run python -m northwind_evals.cli compare-retrievers
+
+# Adds frozen vectors for new chunks (bit-exact from the index) and new eval or smoke queries; never
+# rewrites one (decision 0012). CHECK=1 writes nothing and compares every chunk with the index.
+embed-cache: ## Freeze the vectors the fixtures and eval queries are ranked with; add-only (RAG-03; no LLM; CHECK=1 compares)
+	uv run python -m northwind_evals.cli embed-cache $(if $(CHECK),--check)
 
 eval-review-list: ## Write the list of eval items waiting for human review (RAG-12)
 	uv run python -m northwind_evals.cli review-list

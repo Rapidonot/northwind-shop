@@ -268,6 +268,8 @@ def test_what_retrieval_returns_has_no_context_field() -> None:
 
 
 def test_the_search_selects_chunk_text_and_never_context() -> None:
+    """Still exact: the chunk columns, then (RAG-03, the drift fix) the dense distance and the
+    stored vector the exact re-rank needs. Any other column, context above all, fails here."""
     selected = retrieval._SEARCH.split("FROM", 1)[0]
     assert re.findall(r"\b\w+\b", selected.replace("SELECT", "")) == [
         "chunk_id",
@@ -275,6 +277,8 @@ def test_the_search_selects_chunk_text_and_never_context() -> None:
         "source_id",
         "doc_type",
         "text",
+        *("embedding", "vector", "s", "vector", "AS", "pg_distance"),  # <=> %(vector)s::vector
+        *("embedding", "real", "float8", "AS", "exact"),  # embedding::real[]::float8[]
     ]
 
 

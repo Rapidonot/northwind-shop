@@ -24,6 +24,7 @@ SHARED = re.compile(
 RULES: tuple[tuple[re.Pattern[str], tuple[str, ...]], ...] = (
     (re.compile(r"(services/[^/]+)/"), (r"\1",)),
     (re.compile(r"data/enrichment/"), ("data", "services/rag", "evals")),
+    (re.compile(r"data/embeddings/"), ("data", "services/rag", "evals")),
     (re.compile(r"data/"), ("data",)),
     (re.compile(r"evals/"), ("evals",)),
     (re.compile(r"tests/ship/"), ("tests/ship",)),
