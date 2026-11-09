@@ -8,6 +8,8 @@
   two worktrees' dev proxies never collide and each stays on a stable port. Tests use random ports.
 - One runner: a clean clone at `~/.northwind/runner`, on `LLM_RUNNER_PORT` (default 19990, below
   the dev proxy span).
+- An mcp-rag port per worktree (CC-10): `MCP_RAG_PORT`, default derived from the worktree's path in
+  its own span, above the proxy's; `MCP_RAG_URL` overrides the whole URL. Tests use random ports.
 """
 
 from __future__ import annotations
@@ -20,6 +22,7 @@ from pathlib import Path
 PORT_BASE = 20000
 PORT_SPAN = 10000
 RUNNER_PORT = 19990
+MCP_RAG_PORT_BASE = 30000
 
 
 def _git(args: list[str], cwd: Path) -> str | None:
@@ -87,5 +90,20 @@ def proxy_port(cwd: Path | None = None) -> int:
     override = os.environ.get("LLM_PROXY_PORT")
     if override:
         return int(override)
+    return PORT_BASE + _worktree_offset(cwd)
+
+
+def _worktree_offset(cwd: Path | None) -> int:
     digest = hashlib.sha256(str(worktree_root(cwd)).encode("utf-8")).digest()
-    return PORT_BASE + int.from_bytes(digest[:4], "big") % PORT_SPAN
+    return int.from_bytes(digest[:4], "big") % PORT_SPAN
+
+
+def mcp_rag_port(cwd: Path | None = None) -> int:
+    override = os.environ.get("MCP_RAG_PORT")
+    if override:
+        return int(override)
+    return MCP_RAG_PORT_BASE + _worktree_offset(cwd)
+
+
+def mcp_rag_url(cwd: Path | None = None) -> str:
+    return os.environ.get("MCP_RAG_URL") or f"http://127.0.0.1:{mcp_rag_port(cwd)}/mcp"

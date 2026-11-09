@@ -92,3 +92,25 @@ def test_dev_proxy_port_is_per_worktree_and_stable(
         assert localenv.PORT_BASE <= p < localenv.PORT_BASE + localenv.PORT_SPAN
     monkeypatch.setenv("LLM_PROXY_PORT", "24000")
     assert localenv.proxy_port(wt) == 24000
+
+
+@pytest.mark.req("CC-10")
+def test_mcp_rag_port_is_per_worktree_stable_and_clear_of_the_proxy_span(
+    repo_with_worktree: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    main, wt = repo_with_worktree
+    for name in ("MCP_RAG_PORT", "MCP_RAG_URL", "LLM_PROXY_PORT"):
+        monkeypatch.delenv(name, raising=False)
+    m_main, m_wt = localenv.mcp_rag_port(main), localenv.mcp_rag_port(wt)
+    assert m_main != m_wt
+    assert m_main == localenv.mcp_rag_port(main / ".")
+    for port in (m_main, m_wt):
+        assert localenv.MCP_RAG_PORT_BASE <= port < localenv.MCP_RAG_PORT_BASE + localenv.PORT_SPAN
+        assert not localenv.PORT_BASE <= port < localenv.PORT_BASE + localenv.PORT_SPAN
+        assert port != localenv.RUNNER_PORT and port <= 65535
+    assert m_main - localenv.MCP_RAG_PORT_BASE == localenv.proxy_port(main) - localenv.PORT_BASE
+    assert localenv.mcp_rag_url(main) == f"http://127.0.0.1:{m_main}/mcp"
+    monkeypatch.setenv("MCP_RAG_PORT", "31000")
+    assert localenv.mcp_rag_url(wt) == "http://127.0.0.1:31000/mcp"
+    monkeypatch.setenv("MCP_RAG_URL", "http://127.0.0.1:1/x")
+    assert localenv.mcp_rag_url(wt) == "http://127.0.0.1:1/x"
