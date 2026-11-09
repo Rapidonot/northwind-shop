@@ -57,7 +57,8 @@ replayed, stale 0.
 ## 4. Step A (A1 to A4), 2026-11-09: E1 measured, **E1 FAILED**
 
 Approved by the user's rule: revision 2's `advisor-reviewer` verdict had no high or critical. No LLM call. Spend unchanged,
-$2.212140 of $90.00. Nothing is committed. The shared `northwind` index stays plain.
+$2.212140 of $90.00. Nothing was committed at the time of step A (the row was committed later, section 6). The
+shared `northwind` index stays plain.
 
 ### A1. The indexes
 
@@ -179,3 +180,25 @@ until the user decides.
 - **Re-measured once after the fixes**, as the plan requires when E1 or report code changes after A4. `make eval-enrichment-report`
   exited 2: the report command exited 1, with E1: FAILED. Both index checks passed with the new side-aware rules. The stdout and
   `docs/reviews/RAG-02-enrichment-report.md` are byte-identical to A4's.
+- **Re-measure, tied to the code:** the `evals/src/northwind_evals/cli.py` and `enrichment_report.py` measured are
+  byte-identical to commit `782a8d4`. The comparison is `git show 782a8d4:<file>` against the copies taken right after the
+  fix. The whole stdout of the run, minus the `uv run` and `make` lines, is byte-identical to A4's.
+- **A change from the plan:** the stale-index integration test (`test_the_cli_refuses_a_stale_index`) runs in a throwaway
+  schema in the `DATABASE_URL` database, which by default is `northwind`, as several existing integration tests do. The
+  plan said `northwind_enriched_test`. The test creates and drops its own schema and writes nothing outside it.
+
+## 7. Row review (`advisor-reviewer`, at `f0d6379`) and its fixes
+
+- **Verdict:** `findings`, with one medium and three lows, and no high or critical.
+- **Medium:** the PR body overstated the failing-first evidence, and no test had been seen failing because of the exit
+  code. **Fixed:**
+  - three mutants on the exit code were added (E1 failure, E1 pass, index refusal). All are killed by the command tests on
+    behaviour, so 30 of 30 mutants are killed;
+  - the PR body now says which tests failed first and how.
+- **Low:** the integration-test database differed from the plan. Stated above.
+- **Low:** two evidence lines were stale or untied: "Nothing is committed" and the re-measure's code. Both are corrected
+  above.
+- **Low, for the user's attention:** `make review-diff` refuses a tree with untracked files. To run it without committing
+  the 12 untracked files you asked to keep untracked, they were moved to the session scratchpad, then moved back right
+  after. The before and after lists match. The diff reads commits only, so its content was not affected. The same was
+  done for the new head's `make review-diff`.

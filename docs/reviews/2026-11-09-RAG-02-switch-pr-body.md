@@ -42,10 +42,16 @@ RAG-02: E1 measured on the region-filtered path; the switch to an enriched share
 
 ## Evidence
 
-- **Tests:** `evals/tests/test_enrichment_e1.py` (32) and `evals/tests/test_enrichment_e1_more.py` (21, by `test-writer`),
-  all tagged `RAG-02`. They were seen failing first. The decision 0010 guard test passes: the new code reads no generated
-  context.
-- **Mutants:** 27 of 27 killed, 7 of them on the security-review fixes.
+- **Tests:** all tagged `RAG-02`.
+  - `evals/tests/test_enrichment_e1.py` (32 tests) failed first at import, before step A's code existed.
+  - `evals/tests/test_enrichment_e1_more.py` (21 tests): `test-writer` wrote 19 after the code; 2 came with the
+    security fix.
+  - Against the pre-fix source, the fix tests failed. The unit tests failed at import; the (c) test failed on behaviour;
+    7 command tests failed at fixture setup, because `_index_identity` did not exist yet.
+  - Tests written after the code are backed by mutants instead.
+  - The decision 0010 guard test passes: the new code reads no generated context.
+- **Mutants:** 30 of 30 killed: 7 on the security-review fixes and 3 on the command's exit codes (E1 failure, E1 pass,
+  index refusal).
 - **Reviews:**
   - `security-reviewer` found one medium (E1 could compare an index with itself) and one low (an item with no segment
     skipped (c)). Both are fixed, and the scoped re-review closed them;
