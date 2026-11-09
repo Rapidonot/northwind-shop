@@ -36,7 +36,13 @@ from northwind_evals.contexts import (
     load_contexts,
     save_contexts,
 )
-from northwind_evals.enrichment_report import build_report, render
+from northwind_evals.enrichment_report import (
+    MANIFEST_FIELDS,
+    build_report,
+    manifest_problems,
+    render,
+    same_index_problems,
+)
 from northwind_evals.gate import (
     Baseline,
     GateResult,
@@ -69,6 +75,7 @@ from northwind_evals.judge import Judge
 from northwind_llm_replay.proxy import ProxyState, RunningProxy, encode_test_id
 from northwind_llm_replay.runner import RunnerUnavailableError, proxy_config
 from northwind_llm_replay.scan import load_canaries, scan_text
+from northwind_rag.chunking import CHUNKER_VERSION
 from northwind_rag.cli import DEFAULT_DATABASE_URL, enriched_database_url
 from northwind_rag.embedding import (
     VOUCH_TOLERANCE,
@@ -96,6 +103,7 @@ from northwind_rag.retrieval import (
     retriever_id,
 )
 from northwind_rag.sources import build_chunks
+from northwind_rag.store import _corpus_sha256
 
 ITEMS = Path("evals/fixtures/starter_set.jsonl")
 CONTEXTS = Path("evals/contexts/dense-only.jsonl")
@@ -578,11 +586,59 @@ def _trap_chunks() -> dict[str, str]:
     return {c.chunk_id: traps[c.source_id] for c in build_chunks(FIXTURES) if c.source_id in traps}
 
 
+def _contradiction_chunks() -> dict[str, str]:
+    """Every chunk of a planted contradiction review (TRAP-CON), as `_trap_chunks` is for TRAP-INJ.
+    Evals may read the answer key; ingest may not."""
+    key = json.loads((FIXTURES / "_answer_key.json").read_text(encoding="utf-8"))
+    traps = {entry["review_id"]: entry["trap_id"] for entry in key["contradictions"]}
+    return {c.chunk_id: traps[c.source_id] for c in build_chunks(FIXTURES) if c.source_id in traps}
+
+
+def _plain_corpus() -> str:
+    """This checkout's plain build's `corpus_sha256`, as ingest computes it (no cache applied)."""
+    return _corpus_sha256(build_chunks(FIXTURES))
+
+
+def _index_problems(
+    conn: psycopg.Connection, embedder_id: str, side: str | None = None
+) -> list[str]:
+    """Why the index behind `conn` is not the one this checkout builds (row #8c, A2). With `side`
+    ("plain" or "enriched"), also why it is not that kind of index."""
+    row = conn.execute(
+        "SELECT data_version, dataset_sha256, chunker_version, embedder_id, chunk_count, "
+        "corpus_sha256 FROM rag_index_manifest WHERE is_current"
+    ).fetchone()
+    manifest = json.loads((FIXTURES / "manifest.json").read_text(encoding="utf-8"))
+    expected = {
+        "data_version": manifest["data_version"],
+        "dataset_sha256": manifest["dataset_sha256"],
+        "chunker_version": CHUNKER_VERSION,
+        "embedder_id": embedder_id,
+        "chunk_count": len(build_chunks(FIXTURES)),
+    }
+    fields = (*MANIFEST_FIELDS, "corpus_sha256")
+    found = None if row is None else dict(zip(fields, row, strict=True))
+    plain_corpus = _plain_corpus() if side else None
+    return manifest_problems(found, expected, side=side, plain_corpus=plain_corpus)
+
+
+def _index_identity(conn: psycopg.Connection) -> tuple[str | None, str | None]:
+    """(database, current index_version), so the report can refuse to compare an index with
+    itself."""
+    row = conn.execute(
+        "SELECT current_database(), (SELECT index_version FROM rag_index_manifest WHERE is_current)"
+    ).fetchone()
+    return (None, None) if row is None else (row[0], row[1])
+
+
 def cmd_enrichment_report(_: argparse.Namespace) -> int:
-    """Compares the plain and the enriched index. Reads both and changes neither (RAG-02)."""
+    """Compares the plain and the enriched index, and applies E1 (row #8c): exit 1 if it fails.
+    Reads both and changes neither (RAG-02)."""
     items = load_items(ITEMS)
     embedder = FastEmbedEmbedder()
     with _connect() as conn:
+        problems = [f"plain index: {p}" for p in _index_problems(conn, embedder.id, side="plain")]
+        plain_identity = _index_identity(conn)
         plain = _live(conn, embedder, items)
     try:
         enriched_conn = psycopg.connect(enriched_database_url())
@@ -591,6 +647,14 @@ def cmd_enrichment_report(_: argparse.Namespace) -> int:
         return 1
     with enriched_conn as conn:
         require_enriched_database(conn)
+        problems += [
+            f"enriched index: {p}" for p in _index_problems(conn, embedder.id, side="enriched")
+        ]
+        problems += same_index_problems(plain_identity, _index_identity(conn))
+        if problems:
+            for problem in problems:
+                print(f"eval-enrichment-report refused: {problem}", file=sys.stderr)
+            return 1
         enriched = _live(conn, embedder, items)
     report = build_report(
         items,
@@ -601,11 +665,12 @@ def cmd_enrichment_report(_: argparse.Namespace) -> int:
         load_baseline(BASELINE).retrieval,
         _trap_chunks(),
         EnrichmentCache().reason_counts(),
+        contradiction_chunks=_contradiction_chunks(),
     )
     text = render(report)
     ENRICHMENT_REPORT.write_text(text, encoding="utf-8")
     print(text)
-    return 0
+    return 1 if report.e1_failures else 0
 
 
 def main(argv: list[str] | None = None) -> int:
