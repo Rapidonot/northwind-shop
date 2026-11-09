@@ -6,6 +6,7 @@ import hashlib
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import psycopg
 from psycopg.types.json import Jsonb
@@ -150,6 +151,18 @@ _UPDATE = (
     "embedding = COALESCE(%(embedding)s::vector, embedding), updated_at = now() "
     "WHERE chunk_id = %(chunk_id)s"
 )
+
+
+# Plain rows only: generated context stays inside the index writers (decision 0010), so this never
+# fetches it, and a plain chunk's embedded text is its text. Read by the frozen vectors (RAG-03,
+# decision 0012); moved here from `embedding.py` so only the two readers run SQL on the index.
+_PLAIN_ROWS = """SELECT chunk_id, text, embedder_id, embedding::real[]::float8[]
+FROM rag_chunks WHERE chunk_id = ANY(%(ids)s) AND context IS NULL"""
+
+
+def plain_chunk_rows(conn: psycopg.Connection, chunk_ids: Sequence[str]) -> list[tuple[Any, ...]]:
+    """(chunk_id, text, embedder_id, stored vector) for each plain row among `chunk_ids`."""
+    return list(conn.execute(_PLAIN_ROWS, {"ids": list(chunk_ids)}).fetchall())
 
 
 def _publish_manifest(

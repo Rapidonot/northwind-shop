@@ -23,7 +23,7 @@ import re
 import struct
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 if TYPE_CHECKING:
     import psycopg
@@ -283,10 +283,12 @@ def add_frozen(path: Path, entries: Mapping[str, Sequence[float]], dim: int) -> 
     return len(added)
 
 
-# Plain rows only: generated context stays inside the index writers (decision 0010), so this never
-# fetches it, and a plain chunk's embedded text is its text.
-_ROWS = """SELECT chunk_id, text, embedder_id, embedding::real[]::float8[]
-FROM rag_chunks WHERE chunk_id = ANY(%(ids)s) AND context IS NULL"""
+def _plain_rows(conn: psycopg.Connection, chunks: Sequence[Chunk]) -> dict[str, Sequence[Any]]:
+    # The SQL lives in `store.py`, one of the index's two readers (row #10, C1). Imported here
+    # because `store` imports this module.
+    from northwind_rag.store import plain_chunk_rows
+
+    return {r[0]: r for r in plain_chunk_rows(conn, [c.chunk_id for c in chunks])}
 
 
 def export_chunk_vectors(
@@ -295,7 +297,7 @@ def export_chunk_vectors(
     """Each chunk's stored vector, bit-exact, keyed by its text. Refuses a chunk with no plain row
     (missing, or enriched), a row holding other text or from another embedder, and two chunks with
     the same text whose stored vectors differ."""
-    rows = {r[0]: r for r in conn.execute(_ROWS, {"ids": [c.chunk_id for c in chunks]})}
+    rows = _plain_rows(conn, chunks)
     out: dict[str, list[float]] = {}
     for chunk in chunks:
         row = rows.get(chunk.chunk_id)
@@ -320,7 +322,7 @@ def check_frozen(
     """Problems if any chunk lacks an entry, or its entry differs from the index by a single
     bit. Writes nothing."""
     frozen = load_frozen(path, dim) if path.exists() else {}
-    rows = {r[0]: r for r in conn.execute(_ROWS, {"ids": [c.chunk_id for c in chunks]})}
+    rows = _plain_rows(conn, chunks)
     problems: list[str] = []
     for chunk in chunks:
         entry = frozen.get(frozen_key(chunk.text))

@@ -28,6 +28,7 @@ from northwind_rag.enrichment import (
 from northwind_rag.models import Chunk
 from northwind_rag.sources import build_chunks, context_problem
 
+from . import reader_pin  # noqa: TID252
 from .enrich_support import write_entries  # noqa: TID252
 
 pytestmark = pytest.mark.req("RAG-02")
@@ -283,14 +284,202 @@ def test_the_search_selects_chunk_text_and_never_context() -> None:
 
 
 def test_only_the_index_writers_touch_context_or_embed_text() -> None:
-    """A new reader is a new review (decision 0010), so it fails here first."""
-    allowed = {"enrichment.py", "models.py", "sources.py", "store.py"}
-    pattern = re.compile(r"\.context\b|\bembed_text\b|\bembed_hash\b|['\"]context['\"]")
-    roots = [*(REPO / "services").glob("*/src"), REPO / "evals" / "src"]
-    readers = {
-        path.relative_to(REPO).as_posix()
-        for root in roots
-        for path in root.rglob("*.py")
-        if pattern.search(path.read_text(encoding="utf-8")) and path.name not in allowed
+    """A new reader is a new review (decision 0010), so it fails here first. Full paths, every
+    source root (row #10, C1)."""
+    assert reader_pin.context_readers(REPO) == set()
+
+
+# -- who may read the index (row #10, C1; decision 0010) ----------------------------------------
+
+
+@pytest.mark.req("CC-10")
+def test_the_walk_finds_every_source_root_and_skips_tests() -> None:
+    """A broken walk would pass every check below by finding nothing."""
+    found = reader_pin.source_files(REPO)
+    roots = {
+        "services/assistant/src/",
+        "services/backend/src/",
+        "services/common/src/",
+        "services/gateway/src/",
+        "services/llm-replay/src/",
+        "services/rag/src/",
+        "evals/src/",
+        "data/src/",
+        "tools/",
+        "infra/db/migrations/",
+        ".github/workflows/",
     }
-    assert readers == set()
+    assert {r for r in roots if not any(f.startswith(r) for f in found)} == set()
+    assert {"Makefile", *reader_pin.SQL_READERS, *reader_pin.MIGRATIONS} <= set(found)
+    assert not [f for f in found if "/tests/" in f or f.startswith("tests/")]
+    assert not [f for f in found if f.startswith(("cassettes/", "docs/", "data/fixtures/"))]
+
+
+@pytest.mark.req("CC-10")
+def test_nothing_but_retrieval_and_store_runs_sql_on_the_index() -> None:
+    assert reader_pin.raw_sql_readers(REPO) == set()
+
+
+@pytest.mark.req("CC-10")
+def test_no_reader_select_names_a_context_column() -> None:
+    assert reader_pin.context_selects(REPO) == set()
+
+
+@pytest.mark.req("CC-10")
+def test_no_chunk_is_dumped_whole() -> None:
+    assert reader_pin.chunk_dumps(REPO) == set()
+
+
+@pytest.mark.req("CC-10")
+def test_only_the_allowed_modules_import_chunk() -> None:
+    assert reader_pin.chunk_importers(REPO) == set()
+
+
+@pytest.mark.req("CC-10")
+def test_the_allow_lists_name_files_that_exist() -> None:
+    """A stale entry would quietly allow a future file of that name."""
+    paths = {
+        *reader_pin.SQL_READERS,
+        *reader_pin.MIGRATIONS,
+        *reader_pin.CONTEXT_WRITERS,
+        *reader_pin.CHUNK_IMPORTERS,
+        *(path for path, _ in reader_pin.CONTEXT_SELECTS),
+    }
+    assert {p for p in paths if not (REPO / p).is_file()} == set()
+
+
+# Plants, each in a fresh tree that holds the real readers' paths, so only the plant can fail.
+
+
+def _tree(root: Path, files: dict[str, str]) -> Path:
+    for rel, text in files.items():
+        (root / rel).parent.mkdir(parents=True, exist_ok=True)
+        (root / rel).write_text(text, encoding="utf-8")
+    return root
+
+
+READERS = {
+    f"{reader_pin.RAG}/store.py": 'Q = "SELECT chunk_id FROM rag_chunks"\n',
+    f"{reader_pin.RAG}/retrieval.py": 'Q = "SELECT text FROM rag_chunks"\n',
+}
+
+
+@pytest.mark.req("CC-10")
+@pytest.mark.parametrize(
+    ("rel", "text"),
+    [
+        ("services/mcp-new/src/northwind_mcp_new/server.py", 'Q = "SELECT text FROM rag_chunks"\n'),
+        ("services/mcp-new/src/northwind_mcp_new/store.py", 'Q = "SELECT text FROM rag_chunks"\n'),
+        ("evals/src/northwind_evals/x.py", 'Q = f"SELECT {cols} FROM RAG_CHUNKS WHERE {w}"\n'),
+        ("tools/x.py", 'Q = "SELECT text FROM rag_" + "chunks"\n'),
+        ("services/rag/src/northwind_rag/embedding.py", 'def f():\n    return "FROM rag_chunks"\n'),
+        ("infra/db/migrations/0009_view.sql", "CREATE VIEW v AS SELECT context FROM rag_chunks;\n"),
+        ("tools/dump.sh", "psql -c 'select * from rag_chunks'\n"),
+        ("Makefile", "dump:\n\tpsql -c 'TABLE rag_chunks'\n"),
+        (".github/workflows/x.yml", "run: psql -c 'select 1 from rag_chunks'\n"),
+    ],
+    ids=[
+        "another-package",
+        "a-store-py-elsewhere",
+        "f-string",
+        "folded-plus",
+        "rag-package-not-a-reader",
+        "sql-view",
+        "shell",
+        "makefile",
+        "workflow",
+    ],
+)
+def test_a_planted_index_read_is_caught(tmp_path: Path, rel: str, text: str) -> None:
+    root = _tree(tmp_path, {**READERS, rel: text})
+    assert reader_pin.raw_sql_readers(root) == {rel}
+
+
+@pytest.mark.req("CC-10")
+def test_a_planted_index_read_under_tests_or_docs_is_not_scanned(tmp_path: Path) -> None:
+    root = _tree(
+        tmp_path,
+        {
+            **READERS,
+            "services/x/tests/test_x.py": 'Q = "FROM rag_chunks"\n',
+            "docs/x.sql": "SELECT * FROM rag_chunks;\n",
+        },
+    )
+    assert reader_pin.raw_sql_readers(root) == set()
+
+
+@pytest.mark.req("CC-10")
+@pytest.mark.parametrize(
+    "text",
+    [
+        '_NEW = "SELECT chunk_id, context FROM rag_chunks"\n',
+        '_NEW = f"WITH q AS ({x}) SELECT embed_text FROM rag_chunks"\n',
+        'def search():\n    return "SELECT embed_hash FROM rag_chunks"\n',
+    ],
+)
+def test_a_reader_select_naming_context_is_caught(tmp_path: Path, text: str) -> None:
+    rel = f"{reader_pin.RAG}/retrieval.py"
+    root = _tree(tmp_path, {**READERS, rel: text})
+    assert {path for path, _ in reader_pin.context_selects(root)} == {rel}
+
+
+@pytest.mark.req("CC-10")
+@pytest.mark.parametrize(
+    "text",
+    [
+        "from dataclasses import asdict\ndef f(chunk):\n    return asdict(chunk)\n",
+        "def f(chunk):\n    return chunk.__dict__\n",
+        "def f(c):\n    return vars(c.chunk)\n",
+        "from dataclasses import astuple\n"
+        "def f(x):\n    cs = build_chunks(x)\n    return [astuple(c) for c in cs]\n",
+        "import dataclasses\n"
+        "def f(x):\n    for c in apply_cache(x, y):\n        print(dataclasses.asdict(c))\n",
+        "from dataclasses import asdict\n"
+        "class Chunk:\n    def dump(self):\n        return asdict(self)\n",
+    ],
+    ids=[
+        "asdict-chunk",
+        "dunder-dict",
+        "vars-attribute",
+        "from-build-chunks",
+        "from-apply-cache",
+        "self-in-chunk",
+    ],
+)
+def test_a_planted_chunk_dump_is_caught(tmp_path: Path, text: str) -> None:
+    root = _tree(tmp_path, {"services/x/src/northwind_x/dump.py": text})
+    assert reader_pin.chunk_dumps(root) != set()
+
+
+@pytest.mark.req("CC-10")
+def test_dumping_the_metadata_or_a_report_is_not_a_chunk_dump(tmp_path: Path) -> None:
+    text = (
+        "from dataclasses import asdict\n"
+        "class Chunk:\n    def to_json(self):\n        return asdict(self.metadata)\n"
+        "def main(report):\n    return asdict(report)\n"
+    )
+    root = _tree(tmp_path, {f"{reader_pin.RAG}/models.py": text})
+    assert reader_pin.chunk_dumps(root) == set()
+
+
+@pytest.mark.req("CC-10")
+@pytest.mark.parametrize(
+    "text",
+    [
+        "from northwind_rag.models import Chunk\n",
+        "from northwind_rag.models import *\n",
+        "from northwind_rag import models\nX = models.Chunk\n",
+        "import northwind_rag.models\nX = northwind_rag.models.Chunk\n",
+    ],
+)
+def test_a_new_importer_of_chunk_is_caught(tmp_path: Path, text: str) -> None:
+    rel = "services/mcp-rag/src/northwind_mcp_rag/server.py"
+    root = _tree(tmp_path, {rel: text})
+    assert reader_pin.chunk_importers(root) == {rel}
+
+
+@pytest.mark.req("CC-10")
+def test_a_writer_of_the_same_name_elsewhere_is_not_a_writer(tmp_path: Path) -> None:
+    rel = "services/mcp-rag/src/northwind_mcp_rag/store.py"
+    root = _tree(tmp_path, {rel: "def f(c):\n    return c.context\n"})
+    assert reader_pin.context_readers(root) == {rel}
