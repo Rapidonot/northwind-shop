@@ -312,5 +312,7 @@ def test_all_three_metrics_are_reported_overall_and_per_segment() -> None:
 def test_the_report_states_its_own_limits() -> None:
     text = render(Report(0.5, 0.5, 0.5))
     assert "do not confirm the RAG-02 criterion" in text
-    assert "no region filter" in text
-    assert "TRAP-INJ reviews only" in text
+    # Row #8c (L14): the path is region-filtered now, and E1 (c) counts TRAP-CON too, so the two
+    # limits the report states are the first search only and which traps each clause counts.
+    assert "each item's region, the first search of a turn only" in text
+    assert "(a) and (b) count TRAP-INJ chunks only; (c) counts TRAP-INJ and TRAP-CON" in text
