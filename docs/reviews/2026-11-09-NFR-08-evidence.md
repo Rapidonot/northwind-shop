@@ -67,6 +67,13 @@ It loads the A4 module by file path with `importlib.util.spec_from_file_location
     parameter named `system_prompt` in `turn.py` would pass, and the check does not confirm the keyword goes to
     `agent_options(...)`. Fix: reject other bindings, and check the parent call.
 
+## `make ci` and window B
+
+`make ci` ran once, at the head that adds this note, while window B was running #8c step A. The user said on
+2026-11-09 that that step writes only the isolated `northwind_enriched` database, never `northwind`, and that
+integration tests use their own uuid schemas. `ps` in this sandbox cannot see window B, so this rests on the user's
+statement. The results are in the gate report.
+
 ## Playwright: not run here
 
 No browser starts in the sandbox, so I could only check that the e2e files load:
