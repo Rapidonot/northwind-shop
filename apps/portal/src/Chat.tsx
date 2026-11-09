@@ -1,4 +1,5 @@
 import { type FormEvent, useState } from "react";
+import { AiDisclosure } from "./AiDisclosure";
 import { type ChatEvent, type ErrorCode, sendMessage } from "./chatStream";
 
 const ERROR_TEXT: Record<ErrorCode, string> = {
@@ -53,7 +54,8 @@ export function Chat() {
 
   return (
     <section aria-label="Chat">
-      <p>You're chatting with an AI assistant. Prices and stock are on each product page.</p>
+      <AiDisclosure />
+      <p>Prices and stock are on each product page.</p>
       <form onSubmit={(event) => void submit(event)}>
         <label>
           Your question{" "}
