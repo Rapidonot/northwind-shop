@@ -754,7 +754,9 @@ Read by eye, as the plan asks: the 7 region items (RT-018 to RT-024) for the rig
 
 `findings`: no critical or high; 1 medium, 3 low.
 
-- **Medium: some security tests had no failing-first or mutant run.** Now run (logs summarised in the appendix):
+- **Medium: some security tests had no failing-first or mutant run.** Runs added (logs summarised in the appendix).
+  After the advisor's re-read at `4a31925` (one low: 6 of `test-writer`'s 21 tests still had no failing run), five
+  more mutants were added, so **20 of the 21 have been seen failing**:
   - the old `tools.py` (`b42e21c`) against `test_tool_loop.py::test_fullwidth_lookalikes_reach_the_model_escaped`:
     1 failed;
   - the old `tools.py` against `test_rag11_as_data_edges.py`: an import error (no `as_data`), so behavioural mutants
@@ -764,6 +766,15 @@ Read by eye, as the plan asks: the 7 region items (RT-018 to RT-024) for the rig
     `DEV_SHOPPER_REGION` (3 failed), `current_caller` returning a staff audience (5 failed), the shopper message
     NFKC-normalised (1 failed);
   - `test_rag11_frozen_queries.py`: `_frozen_queries` without the red-team queries (1 failed).
+  - Added after the re-read: `as_data` unescaping first (2 failed, including
+    `test_already_escaped_text_is_escaped_again_not_undone`); `as_data` escaping quotes (1 failed,
+    `test_plain_text_and_quotes_are_unchanged`); the type allow-list check removed from `render_sources` (2 failed,
+    including `test_rendering_an_unclassified_source_type_is_still_refused`); `_frozen_queries` without its dedup
+    (2 failed, both remaining frozen-query tests); red-team queries put first (1 failed,
+    `test_the_starter_queries_keep_their_place_ahead_of_the_red_team_ones`).
+  - **One pin has no failing run:** `test_rag11_as_data_edges.py::test_an_empty_string_stays_empty`. It pins
+    behaviour `html.escape` and NFKC give for free, and any mutant that breaks it would be contrived. It is named here
+    instead.
 
   Every mutant was undone after its run, and the tree was clean afterwards. `chat.py`, `settings.py`, `prompt.py`,
   `tools.py` and `cli.py` are unchanged in any commit by this.
@@ -870,4 +881,19 @@ FAILED services/assistant/tests/test_rag11_gateway_caller.py::test_the_server_re
 FAILED services/assistant/tests/test_rag11_gateway_caller.py::test_current_caller_ignores_text_and_is_always_a_shopper
 TW-G4-message-normalised: 1 failed, 9 passed in 5.76s
 FAILED services/assistant/tests/test_rag11_gateway_caller.py::test_the_user_message_is_not_normalised_on_its_way_to_the_model
+
+== Mutants added after the advisor's re-read at 4a31925
+TW-AD4-unescape-first: 2 failed, 6 passed in 1.02s
+FAILED services/assistant/tests/test_rag11_as_data_edges.py::test_already_escaped_text_is_escaped_again_not_undone
+FAILED services/assistant/tests/test_rag11_as_data_edges.py::test_a_fullwidth_ampersand_cannot_forge_an_entity
+TW-AD5-quotes-escaped: 1 failed, 7 passed in 0.88s
+FAILED services/assistant/tests/test_rag11_as_data_edges.py::test_plain_text_and_quotes_are_unchanged
+TW-AD6-type-allowlist-dropped: 2 failed, 6 passed in 0.87s
+FAILED services/assistant/tests/test_rag11_as_data_edges.py::test_rendering_an_unclassified_source_type_is_still_refused
+FAILED services/assistant/tests/test_rag11_as_data_edges.py::test_a_fullwidth_type_name_is_not_normalised_into_a_trusted_one
+TW-FQ2-no-dedup: 2 failed, 1 passed in 1.91s
+FAILED evals/tests/test_rag11_frozen_queries.py::test_the_frozen_list_has_no_repeats_even_for_the_starter_set_repeats
+FAILED evals/tests/test_rag11_frozen_queries.py::test_the_starter_queries_keep_their_place_ahead_of_the_red_team_ones
+TW-FQ3-red-team-first: 1 failed, 2 passed in 1.70s
+FAILED evals/tests/test_rag11_frozen_queries.py::test_the_starter_queries_keep_their_place_ahead_of_the_red_team_ones
 ```
