@@ -86,16 +86,29 @@ def _cosine(q: Sequence[float], v: Sequence[float]) -> float:
     return 1 - dot / math.sqrt(math.fsum(a * a for a in q) * math.fsum(b * b for b in v))
 
 
+def _frozen_query(embedder: Any, query: str) -> list[float]:
+    """The query's frozen vector, which every platform shares. A live embedding is not: on PR #30's
+    x86_64 runners it already had EV-029's pair the other way round, so the precondition failed
+    there (the drift itself, confirming the diagnosis). Missing is a failure, never a fallback."""
+    from northwind_rag.embedding import frozen_key, frozen_path, load_frozen
+
+    frozen = load_frozen(frozen_path(embedder.id), embedder.dim)
+    key = frozen_key(query)
+    assert key in frozen, f"no frozen vector for {query!r}: run `make embed-cache`"
+    return list(frozen[key])
+
+
 class Nudged:
     """The real embedder, except one query's vector moved toward `toward` and away from `away`,
-    just far enough to swap their dense order: what another CPU did to EV-029."""
+    just far enough to swap their dense order: what another CPU did to EV-029. The move starts
+    from the frozen query vector, so the precondition and the flip are the same on every CPU."""
 
     def __init__(self, query: str, toward: list[float], away: list[float]) -> None:
         from northwind_rag.embedding import FastEmbedEmbedder
 
         self._inner = FastEmbedEmbedder()
         self._query = query
-        [q] = self._inner.embed([query])
+        q = _frozen_query(self._inner, query)
         step = [t - a for t, a in zip(toward, away, strict=True)]
         epsilon = 1e-7
         while epsilon < 1e-2:

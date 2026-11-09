@@ -93,9 +93,9 @@ the closest pair on its own. The diagnosis and both plan reviews are in
   6.2e-7, and two different fixture texts are never closer than 1.4e-3. `RERANK_MARGIN` is 1e-4, above
   the textbook worst case for pgvector's float32 sum (about 2.3e-5), not only the 3.7e-7 measured.
 - **Residuals (security review of the drift fix).** The vouch measures how far a vector moved, not which
-  way, so a nudge aimed inside 1e-4 can still move near-tied ranks. Tightening it needs the x86_64
-  distance, which only CI can measure: the integrity step prints the largest it sees (open item, owner
-  hardening). `Guard / eval-integrity-main` runs main's copy, which loads no PR code and no model, so it
+  way, so a nudge aimed inside 1e-4 can still move near-tied ranks. CI's integrity step measured the
+  x86_64 distance on PR #30: at most 6.355e-7, against 6.245e-7 on macOS. Tightening the limit from
+  those figures is an open item, owner hardening. The limit is unchanged in this row. `Guard / eval-integrity-main` runs main's copy, which loads no PR code and no model, so it
   enforces add-only after merge but never vouches. A PR that edits the vouch and plants a vector together
   is visible only through `make ship`'s control-surface listing (`evals/src`, `services/rag`,
   `data/embeddings`).

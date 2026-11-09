@@ -220,4 +220,17 @@ contradiction tests, can fail on the recorded answers (the last two rows).
 - **The key-fragment scan of the 213 new cassettes.** It is a terminal step for the user:
   `make -C ~/.northwind/runner scan-cassettes CASSETTES_DIR=$HOME/Projects/northwind-shop-b/cassettes`. The
   sandbox's scan is regex only.
-- **The Linux drift comparison and `gh pr checks`.** Both come after `make finish`.
+- **`gh pr checks`.** It comes after the user adds `gate-change` and Guard runs again.
+
+## Linux CI after the drift fix (PR #30 at `061386f`, 2026-11-08)
+
+- **The drift comparison passed.** Both Linux `eval-gate` runs printed top-k sha256 `99135472…`, as macOS
+  did, with 100/100 replayed, stale 0, and the gate passed. The x86_64 vouch was 2,458 of 2,458, largest
+  distance 6.355e-7 (macOS 6.245e-7).
+- **The diagnosis is confirmed directly.** The python job failed on one test's precondition, on both
+  runs. `Nudged` embedded EV-029's query live, and the live x86_64 vector already ranked P0014 nearer than
+  P0006, by 3.524e-5 on one runner and 1.862e-5 on the other. macOS has it the other way, by 2.821e-7.
+  That is the reversal that made EV-029 stale on PR #30's first run.
+- **The fix.** The test now starts from the frozen query vector, by the user's authorisation as a setup fix.
+  Details in `docs/reviews/2026-11-08-RAG-03-drift.md`, section 12. Logs:
+  `~/Projects/northwind-shop/docs/reviews/from-b/ci30b-*.log`.
