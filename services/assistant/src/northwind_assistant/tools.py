@@ -20,6 +20,8 @@ import asyncio
 import html
 import json
 import logging
+import re
+import unicodedata
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any, Protocol
@@ -53,6 +55,9 @@ NO_SOURCES = "No sources matched this search."
 FAILED_MESSAGE = "Search is unavailable right now. Tell the shopper you cannot look this up."
 BAD_QUERY_MESSAGE = "The query must be non-empty text."
 CARD_QUERY_MESSAGE = "Search queries must not hold card details."
+# Every source ID the generator writes fits this. Anything else is refused, not escaped, so a
+# fullwidth quote or equals sign in an ID can never imitate an attribute (RAG-11 review, F7).
+SOURCE_ID = re.compile(r"[A-Za-z0-9._-]+")
 LIMIT_MESSAGE = (
     "The search limit is reached. Answer from the sources you have, or say the evidence is not "
     "enough."
@@ -79,19 +84,32 @@ class SearchFailure:
     message: str
 
 
+def as_data(text: str) -> str:
+    """Untrusted text as inert data: NFKC first, then escaping (RAG-11). The order matters: NFKC
+    folds fullwidth and small-form lookalikes such as `＜` (U+FF1C) to ASCII `<`, so escaping
+    first would leave a raw `<` behind. NFKC keeps format characters such as U+200B, so the text
+    the model sees changes only where a compatibility form folds."""
+    return html.escape(unicodedata.normalize("NFKC", text), quote=False)
+
+
 def render_sources(chunks: Sequence[RetrievedChunk]) -> str:
     """Untrusted text cannot open or close a tag (hard rule 6). A trusted type and an untrusted one
     render alike: the prompt's allow-list, built from TRUSTED_SOURCE_TYPES, says which `type` may
     set facts, so reviews stay visible as one person's experience. A type in neither set is refused,
-    so a new source type is never shown before it is classified (RAG-03)."""
+    so a new source type is never shown before it is classified (RAG-03). The text goes through
+    `as_data`. The type must match the trusted and untrusted sets exactly, and an ID outside
+    `SOURCE_ID` is refused here (ingest only requires one to be present), so both are plain ASCII
+    that `html.escape` leaves as it is (RAG-11)."""
     unknown = sorted(
         {chunk.source_type for chunk in chunks} - TRUSTED_SOURCE_TYPES - UNTRUSTED_SOURCE_TYPES
     )
     if unknown:
         raise ValueError(f"unclassified source type: {', '.join(unknown)}")
+    if any(not SOURCE_ID.fullmatch(chunk.source_id) for chunk in chunks):
+        raise ValueError("source id outside the allowed characters")
     return "\n".join(
         f'<source id="{html.escape(chunk.source_id)}" type="{html.escape(chunk.source_type)}">\n'
-        f"{html.escape(chunk.text, quote=False)}\n</source>"
+        f"{as_data(chunk.text)}\n</source>"
         for chunk in chunks
     )
 
@@ -132,8 +150,9 @@ async def search_sources(
     try:
         rendered = render_sources(chunks)
     except ValueError:
-        # An unclassified source type: nothing from this search is shown or counted as seen.
-        log.error("search refused: unclassified source type")
+        # An unclassified source type or a malformed ID: nothing from this search is shown or
+        # counted as seen.
+        log.error("search refused: unclassified source type or malformed source id")
         state.failed = True
         return SearchFailure("business", False, FAILED_MESSAGE)
     state.seen.update(chunk.source_id for chunk in chunks)

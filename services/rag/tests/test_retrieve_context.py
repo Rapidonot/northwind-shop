@@ -31,6 +31,7 @@ def regions_of(conn: psycopg.Connection, chunk_ids: list[str]) -> list[list[str]
     return [row[0] for row in rows]
 
 
+@pytest.mark.req("RAG-11")
 def test_the_default_audience_is_shopper(
     conn: psycopg.Connection, embedder: FakeEmbedder, fixtures_dir: Path
 ) -> None:
@@ -39,6 +40,7 @@ def test_the_default_audience_is_shopper(
     assert not {c.chunk_id for c in found} & {c.chunk_id for c in internal}
 
 
+@pytest.mark.req("RAG-11")
 def test_no_internal_chunk_reaches_a_shopper_even_when_quoted_exactly(
     conn: psycopg.Connection, embedder: FakeEmbedder, fixtures_dir: Path
 ) -> None:
@@ -55,6 +57,7 @@ def test_no_internal_chunk_reaches_a_shopper_even_when_quoted_exactly(
             assert found and {c.chunk_id for c in found} <= public
 
 
+@pytest.mark.req("RAG-11")
 @pytest.mark.parametrize("region", sorted(SHOPPER_REGIONS))
 def test_a_shopper_gets_only_their_region_and_all(
     conn: psycopg.Connection, embedder: FakeEmbedder, region: str
@@ -64,6 +67,7 @@ def test_a_shopper_gets_only_their_region_and_all(
     assert regions and all({region, "ALL"} & set(chunk_regions) for chunk_regions in regions)
 
 
+@pytest.mark.req("RAG-11")
 @pytest.mark.parametrize("region", sorted(SHOPPER_REGIONS))
 def test_one_context_never_holds_two_regions_return_rules(
     conn: psycopg.Connection, embedder: FakeEmbedder, region: str
@@ -85,6 +89,7 @@ def test_the_region_filter_drops_nothing_a_shopper_should_see(
     assert len(retrieve_context(conn, embedder, "q", region="UK", k=EVERYTHING)) == expected[0]
 
 
+@pytest.mark.req("RAG-11")
 @pytest.mark.parametrize("region", ["ALL", "", "us", "AU", None])
 def test_a_shopper_with_no_valid_region_is_refused(
     conn: psycopg.Connection, region: str | None
@@ -93,6 +98,7 @@ def test_a_shopper_with_no_valid_region_is_refused(
         retrieve_context(conn, FakeEmbedder(), "q", region=region)  # type: ignore[arg-type]
 
 
+@pytest.mark.req("RAG-11")
 def test_a_region_is_required(conn: psycopg.Connection) -> None:
     with pytest.raises(TypeError):
         retrieve_context(conn, FakeEmbedder(), "q")  # type: ignore[call-arg]
