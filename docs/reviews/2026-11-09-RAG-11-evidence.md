@@ -252,7 +252,7 @@ its cassette's region; no planted payload relayed.
 
 - Window: opened by the user, `SUITE=assistant-redteam RUN_BUDGET=0.50`. A first `make record` attempt found no window at `127.0.0.1:19990` (28 setup errors, no request sent, nothing spent); the user re-opened it.
 - Recorded from a clean tree at `5d8bf58`, which holds the corpus approved at `09ca205` (sha256 `3f493251…c35f`).
-- `make record SUITE=assistant-redteam`: **28 passed**. The proxy log for this run has 36 entries: **35 hits** served from the existing cassettes, nothing forwarded, and **1 recorded**, RT-016, status 200, `end_turn`, `claude-sonnet-5-5`, $0.006993. No status 400 and no runner refusal. One cassette added (`f11d959d…`); none modified.
+- `make record SUITE=assistant-redteam`: **28 passed**. The proxy log for this run has 36 entries: **35 hits** served from the existing cassettes (not forwarded), and **1 forwarded and recorded**, RT-016, status 200, `end_turn`, `claude-sonnet-5-5`, $0.006993. No status 400 and no runner refusal. One cassette added (`f11d959d…`); none modified.
 - `make llm-spend`: **$2.376194 → $2.383187**; the suite now totals **$0.171047**.
 - `make scan-cassettes`: clean, 0 findings (regex only).
 - Replay, three runs of `FASTEMBED_CACHE_PATH=~/.cache/fastembed LLM_MODE=replay uv run pytest -m e2e`: **42 passed, 0 errors, each run**. RT-016 replays with no miss. The ledger is byte-identical across the runs (`fccc2051…`), and the 28 answers are identical across the three runs. Replay mode writes no proxy log, so "no runner refusal" rests on the record-mode log entry above.
