@@ -66,6 +66,7 @@ for anything in the repo; see the build-time row.
 | `services/common/` | On main | The only LLM client factory; card check; prices | Builds clients for the proxy; holds no key | `services/common/src/northwind_common/llm.py`, `services/common/src/northwind_common/cards.py` |
 | `services/gateway/` | On main | Shopper message, SSE answer | `services/assistant/`, Postgres health check | `services/gateway/src/northwind_gateway/chat.py` |
 | `services/llm-replay/` | On main | Prompts, responses, the key (runner only), the ledger | Anthropic API, from the runner only | Decision 0005 |
+| `services/mcp-rag/` | Row #10, in progress | Search queries from the assistant's turn (phase 2), the per-turn token's claims, retrieved chunks rendered for the model, the index manifest (versions and chunk counts by source type, per audience). Logs categories and codes only: no query, token, key or exception text | Postgres through `services/rag/` (no SQL of its own); local fastembed. Listens on 127.0.0.1 only, behind a bearer token gate; no model, no other network | `services/mcp-rag/src/northwind_mcp_rag/server.py`, `services/mcp-rag/tests/test_server.py::test_no_token_or_key_reaches_the_logs`, `services/mcp-rag/tests/test_manifest.py::test_a_shopper_manifest_counts_only_public_chunks` |
 | `services/rag/` | On main | Chunks, embeddings, query vectors | Local fastembed, Postgres | `services/rag/src/northwind_rag/retrieval.py`, `services/rag/src/northwind_rag/embedding.py` |
 | `apps/portal/` | On main | Shopper message, answers | The gateway only | `apps/portal/` |
 | `evals/` | On main | Eval items, saved contexts, baselines | Proxy, Postgres, local fastembed | `evals/src/northwind_evals/cli.py` |
@@ -76,7 +77,7 @@ for anything in the repo; see the build-time row.
 | `make llm-proxy` | On main | Replay by default. In record or live mode it also needs a window, so it counts as able to spend | The runner, in a window | `services/llm-replay/tests/test_runner_criteria.py::test_serve_in_record_mode_with_no_window_exits_2_with_the_command` |
 | `make enrich` | On main, row #7 `partial` | Sends chunk text, internal-only included, to Haiku. No cassette, because it runs live, and no proxy log, because `log_path` is `None` | The runner, then Anthropic API | `Makefile`, decision 0010 |
 
-Planned, each with its row: `mcp-catalog` and `mcp-rag` (#10); `mcp-orders`, `mcp-policy` and `mcp-cases`
+Planned, each with its row: `mcp-catalog` (#10b); `mcp-orders`, `mcp-policy` and `mcp-cases`
 (#19); `orchestrator` (#24); `payment-port` (Window B adapters; the #19 interface is in `services/backend/`). Each gets a row here when
 its directory lands, or the test fails.
 

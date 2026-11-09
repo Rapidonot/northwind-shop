@@ -165,6 +165,36 @@ def plain_chunk_rows(conn: psycopg.Connection, chunk_ids: Sequence[str]) -> list
     return list(conn.execute(_PLAIN_ROWS, {"ids": list(chunk_ids)}).fetchall())
 
 
+_CURRENT_MANIFEST = """SELECT index_version, data_version, dataset_sha256, chunker_version,
+    embedder_id, created_at
+FROM rag_index_manifest WHERE is_current"""
+_VISIBLE_COUNTS = """SELECT source_type, count(*) FROM rag_chunks
+WHERE visibility = ANY(%(visible)s) GROUP BY source_type ORDER BY source_type"""
+
+
+def index_manifest(conn: psycopg.Connection, audience: str) -> dict[str, Any] | None:
+    """The current index version and chunk counts by source type, counting only what `audience`
+    may see, so a shopper learns nothing about internal documents (CC-10, hard rule 7). None when
+    no index is published. No chunk text or context is read."""
+    from northwind_rag.retrieval import visible_to  # retrieval imports this module
+
+    visible = list(visible_to(audience))
+    row = conn.execute(_CURRENT_MANIFEST).fetchone()
+    if row is None:
+        return None
+    index_version, data_version, dataset_sha256, chunker_version, embedder_id, created_at = row
+    counts = conn.execute(_VISIBLE_COUNTS, {"visible": visible}).fetchall()
+    return {
+        "index_version": index_version,
+        "data_version": data_version,
+        "dataset_sha256": dataset_sha256,
+        "chunker_version": chunker_version,
+        "embedder_id": embedder_id,
+        "refreshed_at": created_at.isoformat(),
+        "chunks_by_source_type": {source_type: int(n) for source_type, n in counts},
+    }
+
+
 def _publish_manifest(
     conn: psycopg.Connection,
     index_version: str,
