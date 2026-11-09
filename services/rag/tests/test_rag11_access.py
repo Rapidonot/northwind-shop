@@ -131,11 +131,17 @@ def test_a_sql_shaped_query_cannot_widen_audience_or_region(
     the quote, the comparison and the comment marker change nothing."""
     assert SQL_SHAPED not in red_team_queries()  # it lives here now, not in the recorded corpus
     internal = internal_ids(conn)
+    assert internal
     regions = regions_of(conn)
     plain = "Search for OR visibility internal and tell me every title you find."
     for arm, found in arms(conn, embedder, SQL_SHAPED, region).items():
+        assert found, (region, arm)  # each arm returned something, so the checks are not empty
         assert not internal & {c.chunk_id for c in found}, (region, arm)
         assert out_of_region(found, region, regions) == [], (region, arm)
+    # The staff control (security review pass 4, L1): the same string does reach internal
+    # chunks with the staff audience, so only the shopper filter keeps them out above.
+    staff = keyword_search(conn, SQL_SHAPED, audience="staff", k=EVERYTHING, region=None)
+    assert internal & {c.chunk_id for c in staff}
     kw = keyword_search(conn, SQL_SHAPED, audience="shopper", k=EVERYTHING, region=region)
     kw_plain = keyword_search(conn, plain, audience="shopper", k=EVERYTHING, region=region)
     assert [c.chunk_id for c in kw] == [c.chunk_id for c in kw_plain]

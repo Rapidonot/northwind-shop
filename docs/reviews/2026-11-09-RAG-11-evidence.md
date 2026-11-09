@@ -229,7 +229,9 @@ its cassette's region; no planted payload relayed.
   (tool arguments), RT-015 (search syntax) or RT-017 (JSON).
 - **The old string still runs, with no model:** `services/rag/tests/test_rag11_access.py::test_a_sql_shaped_query_cannot_widen_audience_or_region`
   (constant `SQL_SHAPED`), on every arm in every region. It finds no internal chunk and nothing outside `{region, ALL}`,
-  and its keyword result equals the same words without the SQL punctuation.
+  and its keyword result equals the same words without the SQL punctuation. After pass 4 (L1), it also asserts that
+  each arm returned something and that the same string with the staff audience does reach an internal chunk. **Only
+  D1 keeps the old string** (L2): D2 and the recorded e2e test loop over the corpus, so they no longer run it.
 - **Changed by F7's path:** a new commit. D1, D2, the schema tests, the frozen-vector tests, the e2e check tests and
   the governance tests were re-run (345 passed, 28 e2e deselected), and `make lint` passes. The frozen-vector file
   was reset to the base (`b42e21c`) and `make embed-cache` run: 24 added, 0 problems with `CHECK=1`. Against the
@@ -240,6 +242,11 @@ its cassette's region; no planted payload relayed.
   and spends nothing on it) and records only RT-016. Expected: 1 to 2 calls, about $0.005 to $0.01. Ceiling: 4 calls,
   about $0.02.
 - The RT-016 answer below is for the **old** wording and is superseded once the new one is recorded.
+- **Security read, pass 4** (raw output in the security-review file): no critical, high or medium; 4 low. L1 fixed
+  (non-empty and staff-control checks; 4 passed). L2 fixed (the line above). L4 fixed (row #9 now gives the current
+  hash and marks the old replay miss resolved by the rewording). **L3 is left for you:** RT-016's `targets` is
+  `["escalation"]`, though it asks about returns (TRAP-INT-001's ground). Adding `TRAP-INT-001` changes the approved
+  corpus and its hash, and no check reads `targets` except the per-trap count. Not done.
 
 ## The 28 answers, in full (what the shopper was sent, every token)
 
