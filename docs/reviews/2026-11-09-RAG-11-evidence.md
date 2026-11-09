@@ -750,6 +750,34 @@ Read by eye, as the plan asks: the 7 region items (RT-018 to RT-024) for the rig
 >
 > I'd suggest checking your tracking first. If the parcel is outside the delivery window, contact care and ask them directly about your options. I can hand you over to a person if you'd like.
 
+## Row review (`advisor-reviewer` at `9ae6494`): findings and what was done
+
+`findings`: no critical or high; 1 medium, 3 low.
+
+- **Medium: some security tests had no failing-first or mutant run.** Now run (logs summarised in the appendix):
+  - the old `tools.py` (`b42e21c`) against `test_tool_loop.py::test_fullwidth_lookalikes_reach_the_model_escaped`:
+    1 failed;
+  - the old `tools.py` against `test_rag11_as_data_edges.py`: an import error (no `as_data`), so behavioural mutants
+    too: `as_data` without NFKC (2 failed), escape then NFKC (3 failed), the source type normalised before the
+    allow-list check (1 failed);
+  - `test_rag11_gateway_caller.py`: `ChatRequest` with `extra="ignore"` (4 failed), `current_caller` not reading
+    `DEV_SHOPPER_REGION` (3 failed), `current_caller` returning a staff audience (5 failed), the shopper message
+    NFKC-normalised (1 failed);
+  - `test_rag11_frozen_queries.py`: `_frozen_queries` without the red-team queries (1 failed).
+
+  Every mutant was undone after its run, and the tree was clean afterwards. `chat.py`, `settings.py`, `prompt.py`,
+  `tools.py` and `cli.py` are unchanged in any commit by this.
+- **Low: check (d) has an exemption the plan did not state.** `test_red_team_e2e.py` accepts an internal ID written
+  in the answer when the query itself holds it (`if m not in item["query"]`); the citations check has no exemption.
+  It covers RT-008 (`P0009-BLK-REG-M`) and RT-014 (`INT-003`), and RT-008's answer does echo the variant ID it was
+  given. **The exemption has been in the test since its first commit, `78a49fc`, before either recording**
+  (`git log -S` finds only that commit). Security pass 3 read RT-008's echo and found nothing leaked. The check is not
+  removed.
+- **Low: `PROGRESS.md` out of date.** Row #9's **Next:** and the row's log line are updated in place (one log line,
+  as the user allowed).
+- **Low: `threat-model.md` said the recorded answers were pending.** Lines 74 and 90 now name the cassettes and the
+  user's read.
+
 ## Appendix: mutant run summaries (copied from the session scratchpad, which does not persist)
 
 ```text
@@ -810,4 +838,36 @@ FAILED services/assistant/tests/test_render_nfkc.py::test_composed_letters_stay_
 == strip-format: 2 failed, 10 passed in 1.58s
 FAILED services/assistant/tests/test_render_nfkc.py::test_r00631s_zero_width_spaces_are_kept
 FAILED services/assistant/tests/test_render_nfkc.py::test_every_built_chunk_renders_byte_for_byte_as_before
+
+== Row-review mutants (advisor finding 1)
+AF-old-tools-tool_loop: 1 failed, 32 deselected in 5.58s
+AF-old-tools-as_data: 1 error in 0.50s
+TW-AD1-as_data-no-nfkc: 2 failed, 6 passed in 0.50s
+FAILED services/assistant/tests/test_rag11_as_data_edges.py::test_mixed_fullwidth_and_ascii_markup_leaves_no_raw_angle_bracket
+FAILED services/assistant/tests/test_rag11_as_data_edges.py::test_a_fullwidth_ampersand_cannot_forge_an_entity
+TW-AD2-escape-then-nfkc: 3 failed, 5 passed in 0.49s
+FAILED services/assistant/tests/test_rag11_as_data_edges.py::test_mixed_fullwidth_and_ascii_markup_leaves_no_raw_angle_bracket
+FAILED services/assistant/tests/test_rag11_as_data_edges.py::test_a_fullwidth_ampersand_cannot_forge_an_entity
+FAILED services/assistant/tests/test_rag11_as_data_edges.py::test_a_fullwidth_close_tag_in_a_review_leaves_exactly_one_close_tag
+TW-AD3-type-normalised: 1 failed, 7 passed in 0.48s
+FAILED services/assistant/tests/test_rag11_as_data_edges.py::test_a_fullwidth_type_name_is_not_normalised_into_a_trusted_one
+TW-FQ-red-team-dropped: 1 failed, 2 passed in 1.09s
+FAILED evals/tests/test_rag11_frozen_queries.py::test_every_red_team_query_is_in_the_frozen_list
+TW-G1-extra-ignore: 4 failed, 6 passed in 8.03s
+FAILED services/assistant/tests/test_rag11_gateway_caller.py::test_a_body_field_that_would_set_the_caller_is_refused_before_any_search[audience]
+FAILED services/assistant/tests/test_rag11_gateway_caller.py::test_a_body_field_that_would_set_the_caller_is_refused_before_any_search[region]
+FAILED services/assistant/tests/test_rag11_gateway_caller.py::test_a_body_field_that_would_set_the_caller_is_refused_before_any_search[caller]
+FAILED services/assistant/tests/test_rag11_gateway_caller.py::test_a_body_field_that_would_set_the_caller_is_refused_before_any_search[role]
+TW-G2-region-not-from-config: 3 failed, 7 passed in 5.71s
+FAILED services/assistant/tests/test_rag11_gateway_caller.py::test_the_server_region_is_what_the_search_gets[EU]
+FAILED services/assistant/tests/test_rag11_gateway_caller.py::test_the_server_region_is_what_the_search_gets[UK]
+FAILED services/assistant/tests/test_rag11_gateway_caller.py::test_current_caller_ignores_text_and_is_always_a_shopper
+TW-G3-staff-audience: 5 failed, 5 passed in 5.55s
+FAILED services/assistant/tests/test_rag11_gateway_caller.py::test_claiming_staff_and_a_region_in_the_message_does_not_change_the_caller
+FAILED services/assistant/tests/test_rag11_gateway_caller.py::test_the_server_region_is_what_the_search_gets[US]
+FAILED services/assistant/tests/test_rag11_gateway_caller.py::test_the_server_region_is_what_the_search_gets[EU]
+FAILED services/assistant/tests/test_rag11_gateway_caller.py::test_the_server_region_is_what_the_search_gets[UK]
+FAILED services/assistant/tests/test_rag11_gateway_caller.py::test_current_caller_ignores_text_and_is_always_a_shopper
+TW-G4-message-normalised: 1 failed, 9 passed in 5.76s
+FAILED services/assistant/tests/test_rag11_gateway_caller.py::test_the_user_message_is_not_normalised_on_its_way_to_the_model
 ```
