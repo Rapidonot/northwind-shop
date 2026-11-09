@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./journey";
 import questions from "./questions.json" with { type: "json" };
 
 test.describe("[SA-02] chat smoke", () => {
