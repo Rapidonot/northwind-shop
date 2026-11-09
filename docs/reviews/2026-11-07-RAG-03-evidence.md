@@ -224,13 +224,18 @@ contradiction tests, can fail on the recorded answers (the last two rows).
 
 ## Linux CI after the drift fix (PR #30 at `061386f`, 2026-11-08)
 
+Run 1 checked out `061386f`. Run 2 checked out GitHub's merge commit of `061386f` into `8218b02`, the
+branch's base.
+
 - **The drift comparison passed.** Both Linux `eval-gate` runs printed top-k sha256 `99135472…`, as macOS
   did, with 100/100 replayed, stale 0, and the gate passed. The x86_64 vouch was 2,458 of 2,458, largest
   distance 6.355e-7 (macOS 6.245e-7).
-- **The diagnosis is confirmed directly.** The python job failed on one test's precondition, on both
-  runs. `Nudged` embedded EV-029's query live, and the live x86_64 vector already ranked P0014 nearer than
-  P0006, by 3.524e-5 on one runner and 1.862e-5 on the other. macOS has it the other way, by 2.821e-7.
-  That is the reversal that made EV-029 stale on PR #30's first run.
+- **Consistent with the diagnosis.** The python job failed on one test's precondition, on both runs.
+  `Nudged` embedded EV-029's query live, and the live x86_64 vector already ranked P0014 nearer than
+  P0006, by 3.524e-5 on one runner and 1.862e-5 on the other. macOS has it the other way, by 2.821e-7
+  (exact sum; 1.958e-7 in pgvector's float32). That is the same pair, flipped in the same direction, as the
+  swap that reproduced the first run's hash. It is not the same measurement: on the first run the chunk
+  vectors were live x86_64 too.
 - **The fix.** The test now starts from the frozen query vector, by the user's authorisation as a setup fix.
   Details in `docs/reviews/2026-11-08-RAG-03-drift.md`, section 12. Logs:
   `~/Projects/northwind-shop/docs/reviews/from-b/ci30b-*.log`.
