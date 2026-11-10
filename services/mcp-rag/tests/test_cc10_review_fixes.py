@@ -199,3 +199,38 @@ def test_the_argument_check_agrees_with_the_raw_card_check(text: str) -> None:
 
     assert holds_card_data({"query": text}) == contains_card_data(text)
     assert holds_card_data({"query": "jacket", "note": text}) == contains_card_data(text)
+
+
+@pytest.mark.req("NFR-04")
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        {"query": "jacket", "4242424242424242": "x"},  # card data in a key
+        {"query": "jacket", "n": 4242424242424242},  # a card number sent as a JSON number
+        {"query": "jacket", "list": [4242424242424242]},  # a number inside a list
+        {"query": "jacket", "cvv": 737},  # a security code sent as a number
+    ],
+    ids=["in-a-key", "a-number-leaf", "a-number-in-a-list", "a-cvv-number"],
+)
+def test_card_data_in_a_key_or_a_non_string_leaf_is_refused(arguments: dict[str, Any]) -> None:
+    """Advisor finding 2: the key and non-string branches of `argument_texts`."""
+    from northwind_mcp_rag.retrieve import holds_card_data
+
+    assert holds_card_data(arguments)
+    retriever = Recording()
+    with serve_retriever(retriever, Who) as (url, _):
+        result = asyncio.run(call_as_dict(url, token()[0], arguments))
+    assert result.get("is_error") is True
+    assert json.loads(result["content"][0]["text"])["code"] == "card_data"
+    assert retriever.queries == []
+
+
+@pytest.mark.req("NFR-04")
+def test_a_card_split_across_a_key_and_its_value_is_refused() -> None:
+    """Only the joined text holds the whole number: neither part alone is card data."""
+    from northwind_common.cards import contains_card_data
+    from northwind_mcp_rag.retrieve import holds_card_data
+
+    arguments = {"query": "jacket", "4242 4242": "4242 4242"}
+    assert not contains_card_data("4242 4242")
+    assert holds_card_data(arguments)
