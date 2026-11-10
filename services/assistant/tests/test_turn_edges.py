@@ -12,6 +12,7 @@ from typing import Any
 import pytest
 
 from northwind_assistant.caller import Caller
+from northwind_assistant.rag_client import RagEndpoint
 from northwind_assistant.tools import (
     ALLOWED_TOOL,
     BAD_QUERY_MESSAGE,
@@ -19,8 +20,7 @@ from northwind_assistant.tools import (
     INPUT_SCHEMA,
     NO_SOURCES,
     ToolState,
-    render_sources,
-    retrieve_tool,
+    record,
 )
 from northwind_assistant.turn import (
     MAX_TURNS,
@@ -34,6 +34,8 @@ from northwind_assistant.turn import (
 )
 from northwind_common.llm import AgentRuntime, agent_runtime
 from northwind_llm_replay.scripted import ScriptedLLM
+from northwind_mcp_rag.render import render_sources
+from northwind_mcp_rag.testing import KEY, call_as_dict, serve_retriever
 from northwind_rag.retrieval import RetrievedChunk
 
 pytestmark = pytest.mark.req("SA-02")
@@ -61,10 +63,11 @@ class Fixed:
 def run(
     message: str, retriever: Fixed, runtime: AgentRuntime, caller: Caller = US
 ) -> list[TurnEvent]:
-    async def collect() -> list[TurnEvent]:
-        return [e async for e in stream_answer(message, caller, retriever, runtime)]
+    async def collect(rag: RagEndpoint) -> list[TurnEvent]:
+        return [e async for e in stream_answer(message, caller, rag, runtime)]
 
-    return asyncio.run(collect())
+    with serve_retriever(retriever, Caller) as (url, _):
+        return asyncio.run(collect(RagEndpoint(url, KEY)))
 
 
 def runtime_for(llm: ScriptedLLM, root: Path) -> AgentRuntime:
@@ -149,7 +152,7 @@ def test_three_searches_and_an_answer_fit_in_the_cap(tmp_path: Path) -> None:
 
 def test_the_options_carry_the_cap_the_mode_and_no_builtin_tools(tmp_path: Path) -> None:
     with ScriptedLLM() as llm:
-        options = assistant_options(US, Fixed([]), runtime_for(llm, tmp_path), ToolState())
+        options = assistant_options(US, "http://127.0.0.1:9/mcp", "t", runtime_for(llm, tmp_path))
     assert options.max_turns == 4
     assert options.permission_mode == "dontAsk"
     assert options.tools == []
@@ -208,11 +211,22 @@ def test_the_system_prompt_ignores_files_around_the_cwd(tmp_path: Path) -> None:
 
 
 def handler_for(retriever: Fixed, state: ToolState | None = None) -> Any:
-    return retrieve_tool(US, retriever, state or ToolState()).handler
+    """`retrieve_context` on a real mcp-rag searching with `retriever`, its result read into
+    `state` the way the assistant reads one (C4')."""
+    turn_state = state if state is not None else ToolState()
+
+    def handler(arguments: dict[str, Any]) -> dict[str, Any]:
+        with serve_retriever(retriever, Caller) as (url, _):
+            result = asyncio.run(call_as_dict(url, RagEndpoint(url, KEY).mint(US), arguments))
+        text = "".join(block["text"] for block in result["content"])
+        record(turn_state, is_error=bool(result.get("is_error")), text=text)
+        return result
+
+    return handler
 
 
 def call(handler: Any, arguments: dict[str, Any]) -> dict[str, Any]:
-    result: dict[str, Any] = asyncio.run(handler(arguments))
+    result: dict[str, Any] = handler(arguments)
     return result
 
 
@@ -243,6 +257,7 @@ def test_a_bad_query_is_a_validation_error_and_searches_nothing(arguments: dict[
         "errorCategory": "validation",
         "isRetryable": False,
         "message": BAD_QUERY_MESSAGE,
+        "code": "bad_query",
     }
     assert retriever.calls == 0
 
@@ -262,7 +277,8 @@ def test_any_failure_returns_fixed_text_with_the_rule_ten_fields(error: Exceptio
     state = ToolState()
     result = call(handler_for(Fixed(error), state), {"query": "q"})
     body = json.loads(result["content"][0]["text"])
-    assert set(body) == {"isError", "errorCategory", "isRetryable", "message"}
+    assert set(body) == {"isError", "errorCategory", "isRetryable", "message", "code"}
+    assert body["code"] == "search_failed"
     assert body["isError"] is True and body["isRetryable"] is True
     assert body["errorCategory"] == "transient" and body["message"] == FAILED_MESSAGE
     assert MARKER not in json.dumps(result) and "hunter2" not in json.dumps(result)
@@ -304,7 +320,8 @@ def test_a_failed_search_that_then_succeeds_is_not_a_failed_turn(tmp_path: Path)
         llm.reply_tool_use(ALLOWED_TOOL, {"query": "q"}, tool_id="t1")
         llm.reply_tool_use(ALLOWED_TOOL, {"query": "q again"}, tool_id="t2")
         llm.reply_stream("Wash cold [FAQ-001].")
-        retriever = Fixed(RuntimeError(MARKER), [SOURCE])
+        # C6'' (c): the first search finds nothing, a refinement fails, the next one succeeds.
+        retriever = Fixed([], RuntimeError(MARKER), [SOURCE])
         events = run("hi", retriever, runtime_for(llm, tmp_path))
     assert events[-1] == Citations(("FAQ-001",))
     assert MARKER not in json.dumps(llm.requests)
@@ -314,7 +331,9 @@ def test_a_failed_search_alone_ends_in_retrieval_failed_even_with_text(tmp_path:
     with ScriptedLLM() as llm:
         llm.reply_tool_use(ALLOWED_TOOL, {"query": "q"})
         llm.reply_stream("It is 100% waterproof [FAQ-001].")
-        events = run("hi", Fixed(RuntimeError("x")), runtime_for(llm, tmp_path))
+        # L11: the first search finds nothing (Q2 would end a turn whose first search failed),
+        # the refinement fails, and the model's text still has nothing behind it.
+        events = run("hi", Fixed([], RuntimeError("x")), runtime_for(llm, tmp_path))
     assert events[-1] == TurnError("retrieval_failed")
     assert not any(isinstance(e, Citations) for e in events)
 

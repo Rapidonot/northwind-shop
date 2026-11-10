@@ -11,6 +11,7 @@ members = [
     "northwind-evals",
     "northwind-gateway",
     "northwind-llm-replay",
+    "northwind-mcp-rag",
     "northwind-rag",
     "northwind-shop",
 ]
@@ -704,6 +705,7 @@ version = "0.0.0"
 source = { editable = "services/assistant" }
 dependencies = [
     { name = "claude-agent-sdk" },
+    { name = "mcp" },
     { name = "northwind-common" },
     { name = "northwind-rag" },
     { name = "psycopg", extra = ["binary"] },
@@ -712,6 +714,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "claude-agent-sdk" },
+    { name = "mcp", specifier = ">=2.3,<3" },
     { name = "northwind-common", editable = "services/common" },
     { name = "northwind-rag", editable = "services/rag" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.3.7" },
@@ -820,6 +823,27 @@ requires-dist = [
 ]
 
 [[package]]
+name = "northwind-mcp-rag"
+version = "0.0.0"
+source = { editable = "services/mcp-rag" }
+dependencies = [
+    { name = "mcp" },
+    { name = "northwind-common" },
+    { name = "northwind-rag" },
+    { name = "psycopg", extra = ["binary"] },
+    { name = "uvicorn", extra = ["standard"] },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "mcp", specifier = ">=2.3,<3" },
+    { name = "northwind-common", editable = "services/common" },
+    { name = "northwind-rag", editable = "services/rag" },
+    { name = "psycopg", extras = ["binary"], specifier = ">=3.3.7" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.54.0" },
+]
+
+[[package]]
 name = "northwind-rag"
 version = "0.0.0"
 source = { editable = "services/rag" }
@@ -848,6 +872,7 @@ dependencies = [
     { name = "northwind-evals" },
     { name = "northwind-gateway" },
     { name = "northwind-llm-replay" },
+    { name = "northwind-mcp-rag" },
     { name = "northwind-rag" },
 ]
 
@@ -868,6 +893,7 @@ requires-dist = [
     { name = "northwind-evals", editable = "evals" },
     { name = "northwind-gateway", editable = "services/gateway" },
     { name = "northwind-llm-replay", editable = "services/llm-replay" },
+    { name = "northwind-mcp-rag", editable = "services/mcp-rag" },
     { name = "northwind-rag", editable = "services/rag" },
 ]
 

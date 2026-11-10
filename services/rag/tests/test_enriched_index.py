@@ -20,7 +20,7 @@ import psycopg
 import pytest
 from psycopg.conninfo import make_conninfo
 
-from northwind_assistant.tools import render_sources
+from northwind_mcp_rag.render import render_sources
 from northwind_rag import cli
 from northwind_rag.cli import (
     DEFAULT_DATABASE_URL,

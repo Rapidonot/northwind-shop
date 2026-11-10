@@ -15,27 +15,28 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from claude_agent_sdk import ClaudeSDKError, ResultMessage, create_sdk_mcp_server, query
-from claude_agent_sdk.types import StreamEvent
+from claude_agent_sdk import AssistantMessage, ClaudeSDKError, ResultMessage, UserMessage, query
+from claude_agent_sdk.types import StreamEvent, ToolResultBlock, ToolUseBlock
 
 from northwind_assistant.caller import Caller
 from northwind_assistant.prompt import system_prompt, user_prompt
+from northwind_assistant.rag_client import McpRagSearcher, RagEndpoint
 from northwind_assistant.tools import (
     ALLOWED_TOOL,
     SERVER_NAME,
-    Retriever,
     SearchFailure,
     ToolState,
-    retrieve_tool,
+    record,
     search_sources,
 )
 from northwind_assistant.usage import TurnUsage
 from northwind_common.llm import ASSISTANT_MODEL, AgentRuntime, agent_options
+from northwind_common.mcp_token import bearer
 
 log = logging.getLogger(__name__)
 
-# Two refinement searches, one refused search and the answer. `search_sources` holds RAG-10's cap
-# of 3 searches, and the refused one tells the model to answer, which takes this extra turn.
+# Two refinement searches, one refused search and the answer. mcp-rag holds RAG-10's cap of 3
+# searches per turn, and the refused one tells the model to answer, which takes this extra turn.
 MAX_TURNS = 4
 # Anything else, such as max_tokens or a refusal, is not a finished answer.
 FINISHED_STOPS = frozenset({"end_turn", "tool_use"})
@@ -85,10 +86,10 @@ def cited_ids(answer: str, seen: set[str]) -> tuple[str, ...]:
     return cited
 
 
-def assistant_options(
-    caller: Caller, retriever: Retriever, runtime: AgentRuntime, state: ToolState
-) -> Any:
-    server = create_sdk_mcp_server(SERVER_NAME, tools=[retrieve_tool(caller, retriever, state)])
+def assistant_options(caller: Caller, url: str, token: str, runtime: AgentRuntime) -> Any:
+    """mcp-rag is the one server, over HTTP with this turn's token; `retrieve_context` the one tool
+    (NFR-01). The CLI gets the token, never the key."""
+    server = {"type": "http", "url": url, "headers": bearer(token)}
     return agent_options(
         system_prompt=system_prompt(caller.region),
         model=ASSISTANT_MODEL,
@@ -110,6 +111,22 @@ def _text_delta(message: StreamEvent) -> str | None:
     return str(delta["text"]) if delta.get("type") == "text_delta" else None
 
 
+def _result_text(block: ToolResultBlock) -> str:
+    content = block.content
+    if isinstance(content, str):
+        return content
+    return "".join(str(part.get("text", "")) for part in content or [] if isinstance(part, dict))
+
+
+def _note_tool_results(item: UserMessage, ours: set[str], state: ToolState) -> None:
+    """The model's `retrieve_context` results, read as the first search's is (C4')."""
+    if not isinstance(item.content, list):
+        return
+    for block in item.content:
+        if isinstance(block, ToolResultBlock) and block.tool_use_id in ours:
+            record(state, is_error=bool(block.is_error), text=_result_text(block))
+
+
 def _result_error(result: ResultMessage) -> ErrorCode | None:
     """An upstream failure arrives as `is_error` with subtype `success`, so test `is_error`. The
     result text is only matched here, never passed on."""
@@ -129,6 +146,7 @@ async def run_turn(prompt: str, options: Any, state: ToolState) -> AsyncIterator
     # A cut stream still ends in `message_stop` and a `success` result, so a stop reason in
     # `message_delta` is the only sign that an attempt reached its end.
     complete = True
+    ours: set[str] = set()  # tool_use ids of this turn's `retrieve_context` calls
     try:
         # Runs to the end even after an error: leaving early strands the SDK's generator.
         async for item in query(prompt=prompt, options=options):
@@ -147,6 +165,14 @@ async def run_turn(prompt: str, options: Any, state: ToolState) -> AsyncIterator
                 if text:
                     parts.append(text)
                     yield TextDelta(text)
+            elif isinstance(item, AssistantMessage):
+                ours.update(
+                    block.id
+                    for block in item.content
+                    if isinstance(block, ToolUseBlock) and block.name == ALLOWED_TOOL
+                )
+            elif isinstance(item, UserMessage):
+                _note_tool_results(item, ours, state)
             elif isinstance(item, ResultMessage):
                 capped = item.subtype == "error_max_turns"
                 code = None if capped else _result_error(item)
@@ -182,17 +208,25 @@ async def run_turn(prompt: str, options: Any, state: ToolState) -> AsyncIterator
 
 
 async def stream_answer(
-    message: str, caller: Caller, retriever: Retriever, runtime: AgentRuntime
+    message: str, caller: Caller, rag: RagEndpoint, runtime: AgentRuntime
 ) -> AsyncIterator[TurnEvent]:
     state = ToolState()
-    found = await search_sources(message, caller, retriever, state)
-    if isinstance(found, SearchFailure) and found.category == "validation":
-        # The gateway refuses these first, but no caller gets to rely on that: a message the search
-        # will not take must not reach the model either (hard rule 1).
-        TurnUsage().report("refused")
-        yield TurnError("internal")
+    token = rag.mint(caller)
+    found = await search_sources(message, McpRagSearcher(rag.url, token), state)
+    if isinstance(found, SearchFailure):
+        usage = TurnUsage()
+        if found.category == "validation":
+            # The gateway refuses these first, but no caller gets to rely on that: a message the
+            # search will not take must not reach the model either (hard rule 1).
+            usage.report("refused")
+            yield TurnError("internal")
+            return
+        # Q2 and Q6: the first search failed (mcp-rag down, a refused token, a refused or failed
+        # search). With nothing to ground it, the turn ends here: no model call.
+        log.error("first search failed: %s", found.category)
+        usage.report("retrieval_failed")
+        yield TurnError("retrieval_failed")
         return
-    sources = found.message if isinstance(found, SearchFailure) else found
-    options = assistant_options(caller, retriever, runtime, state)
-    async for event in run_turn(user_prompt(message, sources), options, state):
+    options = assistant_options(caller, rag.url, token, runtime)
+    async for event in run_turn(user_prompt(message, found), options, state):
         yield event

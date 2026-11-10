@@ -21,11 +21,14 @@ import psycopg
 import pytest
 
 from northwind_assistant.caller import Caller
-from northwind_assistant.retriever import IndexRetriever
+from northwind_assistant.rag_client import RagEndpoint
 from northwind_assistant.tools import ALLOWED_TOOL
 from northwind_assistant.turn import stream_answer
 from northwind_common.llm import agent_runtime
 from northwind_llm_replay.scripted import ScriptedLLM
+from northwind_mcp_rag.retrieve import TOOLS
+from northwind_mcp_rag.server import Backend, RagServer
+from northwind_mcp_rag.testing import KEY, running
 from northwind_rag.cli import DEFAULT_DATABASE_URL
 from northwind_rag.ingest import ingest
 from northwind_rag.sources import build_chunks
@@ -48,7 +51,7 @@ ITEMS = items()
 
 
 @pytest.fixture(scope="module")
-def index_retriever() -> Iterator[IndexRetriever]:
+def index_rag() -> Iterator[RagEndpoint]:
     url = os.environ.get("DATABASE_URL", DEFAULT_DATABASE_URL)
     schema = f"rag11_test_{uuid.uuid4().hex[:12]}"
     admin = psycopg.connect(url, autocommit=True)
@@ -61,7 +64,9 @@ def index_retriever() -> Iterator[IndexRetriever]:
     try:
         with connect() as conn:
             ingest(conn, FIXTURES, embedder)
-        yield IndexRetriever(connect, embedder)
+        server = RagServer(Backend(connect, embedder), key=KEY, tools=TOOLS)
+        with running(server) as rag_url:
+            yield RagEndpoint(rag_url, KEY)
     finally:
         admin.execute(f'DROP SCHEMA "{schema}" CASCADE')
         admin.close()
@@ -78,7 +83,7 @@ def strings(value: Any) -> Iterator[str]:
             yield from strings(item)
 
 
-def everything_sent(query: str, region: Any, retriever: IndexRetriever, root: Path) -> str:
+def everything_sent(query: str, region: Any, rag: RagEndpoint, root: Path) -> str:
     """Every string in every request of a turn that searches twice: the server's search on the
     shopper's message and a refinement with the same text."""
     with ScriptedLLM() as llm:
@@ -87,7 +92,7 @@ def everything_sent(query: str, region: Any, retriever: IndexRetriever, root: Pa
         runtime = agent_runtime(base_url=llm.url, root=root)
 
         async def run() -> None:
-            async for _ in stream_answer(query, Caller(region=region), retriever, runtime):
+            async for _ in stream_answer(query, Caller(region=region), rag, runtime):
                 pass
 
         asyncio.run(run())
@@ -98,10 +103,10 @@ def everything_sent(query: str, region: Any, retriever: IndexRetriever, root: Pa
 _SENT: dict[str, str] = {}
 
 
-def sent_for(item: dict[str, Any], retriever: IndexRetriever, root: Path) -> str:
+def sent_for(item: dict[str, Any], rag: RagEndpoint, root: Path) -> str:
     """One scripted turn per item, shared by the two tests below."""
     if item["id"] not in _SENT:
-        _SENT[item["id"]] = everything_sent(item["query"], item["region"], retriever, root)
+        _SENT[item["id"]] = everything_sent(item["query"], item["region"], rag, root)
     return _SENT[item["id"]]
 
 
@@ -116,9 +121,9 @@ def internal_source_ids() -> set[str]:
 
 @pytest.mark.parametrize("item", ITEMS, ids=[i["id"] for i in ITEMS])
 def test_nothing_internal_reaches_the_model_for_a_red_team_item(
-    item: dict[str, Any], index_retriever: IndexRetriever, tmp_path: Path
+    item: dict[str, Any], index_rag: RagEndpoint, tmp_path: Path
 ) -> None:
-    sent = sent_for(item, index_retriever, tmp_path)
+    sent = sent_for(item, index_rag, tmp_path)
     cited = SOURCE_ID.findall(sent)
     assert cited, "no sources reached the model, so the check would be empty"
     assert not set(cited) & internal_source_ids(), sorted(set(cited) & internal_source_ids())
@@ -140,9 +145,9 @@ def source_regions() -> dict[str, set[str]]:
 
 @pytest.mark.parametrize("item", ITEMS, ids=[i["id"] for i in ITEMS])
 def test_the_model_gets_only_its_regions_policies(
-    item: dict[str, Any], index_retriever: IndexRetriever, tmp_path: Path
+    item: dict[str, Any], index_rag: RagEndpoint, tmp_path: Path
 ) -> None:
-    sent = sent_for(item, index_retriever, tmp_path)
+    sent = sent_for(item, index_rag, tmp_path)
     regions = source_regions()
     allowed = {item["region"], "ALL"}
     wrong = {c for c in SOURCE_ID.findall(sent) if not regions[c] & allowed}

@@ -8,8 +8,8 @@ or approval.
 monetary`. "The user" is the person at their own terminal. A session cannot push, use `gh` or run Docker
 (decision 0004).
 
-**Product agents hold three tools today:** the assistant's `retrieve_context` and, since #20, the Orders
-subagent's two reads, `get_fraud_assessments` and `get_payment_status`. No product agent can reach a
+**Product agents hold three tools today:** the assistant's `retrieve_context`, served by `mcp-rag` since #10,
+and, since #20, the Orders subagent's two in-process reads, `get_fraud_assessments` and `get_payment_status`. No product agent can reach a
 payment, refund or order write on main. Claude Code sessions are different: a session can run `make record`,
 `make eval-live` and `make enrich`, `make llm-proxy` too, and any sandboxed command can claim a window the
 user opened (decision 0005, "Limits"). The file tools can reach both Edit rows at a prompt, and a sandboxed
@@ -21,12 +21,17 @@ row. Read each row's Enforced column.
 
 | Tool | Tier | Limit | Approver | Enforced at |
 |---|---|---|---|---|
-| `retrieve_context` | `read-only` | 3 searches a turn including the server's own (`MAX_SEARCHES`), 4 turns (`MAX_TURNS`), 5 chunks, query only; audience and region are bound on the server | None needed: read-only | `services/assistant/src/northwind_assistant/tools.py`, `services/assistant/src/northwind_assistant/turn.py`; `services/assistant/tests/test_first_request.py::test_the_cap_is_three_searches`, `services/assistant/tests/test_tool_loop.py::test_a_tool_outside_allowed_tools_is_denied_not_just_absent`, `services/assistant/tests/test_first_request.py::test_region_and_audience_are_not_in_the_tool_schema` |
+| `retrieve_context` | `read-only` | Served by `mcp-rag` over HTTP on 127.0.0.1 (CC-10). 3 searches a turn including the server's own, counted by the server per token turn (`SearchLedger`, `MAX_SEARCHES`), 4 turns (`MAX_TURNS`), 5 chunks, query only; audience and region come only from the per-turn token (120 s, HMAC, key from the environment); a bad token gets a 401 before any tool runs | None needed: read-only | `services/mcp-rag/src/northwind_mcp_rag/retrieve.py`, `services/mcp-rag/src/northwind_mcp_rag/ledger.py`, `services/mcp-rag/src/northwind_mcp_rag/server.py`, `services/common/src/northwind_common/tool_scopes.py`, `services/assistant/src/northwind_assistant/turn.py`; `services/mcp-rag/tests/test_retrieve.py::test_a_turn_gets_three_searches_then_the_business_refusal`, `services/mcp-rag/tests/test_retrieve.py::test_concurrent_calls_on_one_turn_never_exceed_three_searches`, `services/mcp-rag/tests/test_server.py::test_a_bad_token_gets_a_bare_401_before_any_tool_runs`, `services/assistant/tests/test_tool_loop.py::test_a_tool_outside_allowed_tools_is_denied_not_just_absent`, `services/assistant/tests/test_first_request.py::test_region_and_audience_are_not_in_the_tool_schema` |
+| The index-manifest resource (URI northwind-rag://index/manifest) | `read-only` | The live index's versions, `retriever_id`, `dataset_verified: false` (verification is #10b) and chunk counts by source type for the caller's audience only; no chunk text. Listed and served to `catalog-subagent` (staff) only; the assistant gets no resource | None needed: read-only | `services/mcp-rag/src/northwind_mcp_rag/server.py`, `services/rag/src/northwind_rag/store.py`; `services/mcp-rag/tests/test_manifest.py::test_a_shopper_manifest_counts_only_public_chunks`, `services/mcp-rag/tests/test_server.py::test_the_assistant_cannot_read_the_manifest` |
 | `get_fraud_assessments` (Orders subagent, #20) | `read-only` | One order per call, and only the task's own: a call for any other order ID is refused (`not_permitted`), audited, and never reaches the port. Read-only fraud view (`FRAUD_READ_ONLY`), 3 attempts with the same call, a 5 s deadline, 6 turns (`MAX_TURNS`); every call audited | None needed: read-only | `services/backend/src/northwind_backend/agents/orders_check.py`, `services/backend/src/northwind_backend/views.py`; `services/backend/tests/backend_audit/test_be08_views.py`, `services/backend/tests/backend_audit/test_be02_agent_scripted.py` |
 | `get_payment_status` (Orders subagent, #20) | `read-only` | One intent per call, given by the task (no lookup by order, PAY-08), and only the task's own: any other intent ID is refused and audited. Read-only payment view (`PAYMENT_READ_ONLY`); same retries, deadline and turns; every call audited | None needed: read-only | As above; the AST pin `test_nothing_under_src_but_fakes_and_views_reaches_a_money_call` keeps every money method out of agent code |
 
 Built-in tools are off (`tools=[]`, `services/assistant/tests/test_tool_loop.py::test_a_built_in_tool_cannot_run`).
-Evidence for the in-process server: `PROGRESS.md` row 5. It moves to `mcp-rag` at #10.
+Since #10 the assistant's tool is on `mcp-rag`, and the assistant's in-process server is gone
+(`tests/governance/test_tool_register.py::test_the_tool_the_assistant_really_offers_has_a_register_row` fails on any
+`@tool(` under `services/assistant/src`). The Orders subagent's two tools (#20) are in-process SDK tools until
+`mcp-orders` lands; the same test requires a register row for each and pins every `@tool(` outside the assistant
+to a tool constant. Every MCP server and its tools are under `tests/mcp/test_contract.py`.
 
 ## Spending commands today
 
@@ -63,7 +68,7 @@ code without one (decision 0005). `make enrich`, which spends too, is under "Lan
 | `tools/rig-5a-ask-rules.sh` | `irreversible or monetary` | Run in the user's terminal, and a session can edit it. The advisor reads it from disk and the user checks the hash just before running | The user | `docs/reviews/2026-11-04-5a-gate-hardening-evidence.md`, second-pass finding 2 |
 | `services/llm-replay/spike/run_spike.py` | `irreversible or monetary` | Not wired to any target. In the sandbox it can neither read the key nor reach the host | The user | Decision 0005, "Limits" |
 | `make up`, `make down`, `make model` | `reversible write` | Run from the runner clone; `make down` keeps the data volume | The user; a session cannot reach Docker | `Makefile`, decisions 0004 and 0005 |
-| `make help`, `make dev`, `make dev-gateway`, `make dev-portal`, `make lint`, `make test`, `make check`, `make scan-cassettes`, `make llm-spend`, `make eval-integrity`, `make runner-check` | `read-only` | Write nothing of lasting note: temp files, caches, reports. `make test` pins replay | None needed: read-only | `Makefile` |
+| `make help`, `make dev`, `make dev-mcp-rag`, `make dev-gateway`, `make dev-portal`, `make lint`, `make test`, `make check`, `make scan-cassettes`, `make llm-spend`, `make eval-integrity`, `make runner-check` | `read-only` | Write nothing of lasting note: temp files, caches, reports. `make test` pins replay | None needed: read-only | `Makefile` |
 
 ## Landed with 5b and #7
 
