@@ -19,9 +19,9 @@ import asyncio
 import json
 import logging
 import time
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Protocol, cast
 
 import mcp.types as t
 import psycopg
@@ -36,7 +36,7 @@ from northwind_common.tool_scopes import allowed_resources, allowed_tools
 from northwind_mcp_rag.ledger import SearchLedger
 from northwind_rag import store
 from northwind_rag.embedding import Embedder
-from northwind_rag.retrieval import retriever_id
+from northwind_rag.retrieval import RetrievedChunk, ShopperRegion, retrieve_context, retriever_id
 
 log = logging.getLogger("northwind_mcp_rag")
 
@@ -76,6 +76,14 @@ class Backend:
 
     connect: Callable[[], psycopg.Connection]
     embedder: Embedder
+
+
+class Searcher(Protocol):
+    """What a search runs through. Production searches the index; tests inject their own."""
+
+    def search(
+        self, query: str, *, audience: str, region: str | None
+    ) -> Sequence[RetrievedChunk]: ...
 
 
 ToolHandler = Callable[["RagServer", Claims, Mapping[str, Any]], Awaitable[t.CallToolResult]]
@@ -127,13 +135,28 @@ class RagServer:
         key: bytes,
         tools: Mapping[str, ToolSpec] | None = None,
         ledger: SearchLedger | None = None,
+        searcher: Searcher | None = None,
         clock: Callable[[], float] = time.time,
     ) -> None:
         self.backend = backend
+        self._searcher = searcher
         self.ledger = ledger or SearchLedger(clock=clock)
         self._key = key
         self._tools = dict(tools or {})
         self._clock = clock
+
+    def search(self, query: str, claims: Claims) -> Sequence[RetrievedChunk]:
+        """One search for the token's caller (hard rule 7): audience and region from the token."""
+        if self._searcher is not None:
+            return self._searcher.search(query, audience=claims.aud, region=claims.region)
+        with self.backend.connect() as conn:
+            return retrieve_context(
+                conn,
+                self.backend.embedder,
+                query,
+                region=cast(ShopperRegion | None, claims.region),
+                audience=claims.aud,
+            )
 
     # ---- MCP handlers --------------------------------------------------------------------------
 

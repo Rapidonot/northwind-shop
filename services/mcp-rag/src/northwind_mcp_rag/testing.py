@@ -10,7 +10,7 @@ import contextlib
 import socket
 import threading
 import time
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator, Sequence
 from typing import Any
 
 import uvicorn
@@ -19,7 +19,9 @@ from mcp.client.streamable_http import streamable_http_client
 from mcp.shared._httpx_utils import create_mcp_http_client
 
 from northwind_common.mcp_token import Claims, bearer, mint
-from northwind_mcp_rag.server import RagServer
+from northwind_mcp_rag.server import Backend, RagServer
+from northwind_rag.retrieval import RetrievedChunk
+from northwind_rag.testing import FakeEmbedder
 
 KEY = b"t" * 40
 
@@ -67,3 +69,54 @@ def token(
 ) -> tuple[str, Claims]:
     audience: Any = "staff" if agent == "catalog-subagent" else "shopper"
     return mint(audience=audience, region=region, agent=agent, key=key, now=now)
+
+
+class CallerSearcher:
+    """Adapts a test double with `search(query, caller)` (the assistant's tests' shape) to the
+    server's `Searcher`, building the caller from the token's audience and region."""
+
+    def __init__(self, retriever: Any, make_caller: Callable[..., Any]) -> None:
+        self.retriever = retriever
+        self.make_caller = make_caller
+
+    def search(self, query: str, *, audience: str, region: str | None) -> Sequence[RetrievedChunk]:
+        result: Sequence[RetrievedChunk] = self.retriever.search(
+            query, self.make_caller(region=region, audience=audience)
+        )
+        return result
+
+
+def _no_db() -> Any:
+    raise RuntimeError("no database behind this test server")
+
+
+@contextlib.contextmanager
+def serve_retriever(
+    retriever: Any, make_caller: Callable[..., Any], *, key: bytes = KEY
+) -> Iterator[tuple[str, RagServer]]:
+    """A real mcp-rag over HTTP, with the real `retrieve_context`, searching through `retriever`."""
+    from northwind_mcp_rag.retrieve import TOOLS
+
+    server = RagServer(
+        Backend(_no_db, FakeEmbedder()),
+        key=key,
+        tools=TOOLS,
+        searcher=CallerSearcher(retriever, make_caller),
+    )
+    with running(server) as url:
+        yield url, server
+
+
+async def call_as_dict(url: str, bearer_token: str, arguments: dict[str, Any]) -> dict[str, Any]:
+    """`retrieve_context` over MCP, as the in-process tool's result dict: `content` blocks, plus
+    `is_error: True` on an error."""
+    from northwind_common.rag_tool import TOOL_NAME
+
+    async with connect(url, bearer_token) as client:
+        result = await client.call_tool(TOOL_NAME, arguments)
+    out: dict[str, Any] = {
+        "content": [b.model_dump(exclude_none=True, by_alias=True) for b in result.content]
+    }
+    if result.is_error:
+        out["is_error"] = True
+    return out

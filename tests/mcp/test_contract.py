@@ -1,8 +1,8 @@
 """Contract tests for Northwind's MCP servers, over the real HTTP transport (CC-10 C5; PRD §7).
 
-Every server in `SERVERS`, every agent in `tool_scopes`. Phase 1 (row #10, before #9 merges): the
-token gate, scoping, the error envelope and the manifest. The per-tool checks run over each
-server's real tool registry; `retrieve_context` joins it with B2, and #10b adds mcp-catalog here.
+Every server in `SERVERS`, every agent in `tool_scopes`: the token gate, scoping, the error
+envelope, and per tool the description rules and a closed schema, over each server's real tool
+registry. #10b adds mcp-catalog here.
 """
 
 from __future__ import annotations
@@ -79,7 +79,8 @@ def test_tools_list_is_within_the_agents_scope_and_read_only(server: str, agent:
     with running(SERVERS[server][0]()) as url:
         listed = run(go(url))
     names = {tool.name for tool in listed}
-    assert names <= allowed_tools(agent, server)
+    # Exactly the agent's scope among what the server has: nothing missing, nothing extra.
+    assert names == allowed_tools(agent, server) & set(SERVERS[server][1])
     assert names <= READ_ONLY_TOOLS
     assert all(tool.annotations and tool.annotations.read_only_hint for tool in listed)
 
