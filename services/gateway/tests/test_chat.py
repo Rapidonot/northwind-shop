@@ -12,6 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from northwind_assistant.caller import Caller
+from northwind_assistant.rag_client import RagEndpoint
 from northwind_assistant.tools import ALLOWED_TOOL
 from northwind_assistant.turn import INSUFFICIENT_EVIDENCE
 from northwind_common.llm import agent_runtime
@@ -19,6 +20,7 @@ from northwind_gateway.app import app
 from northwind_gateway.chat import CARD_MESSAGE, INVALID_MESSAGE, ChatServices, chat_services
 from northwind_gateway.settings import current_caller
 from northwind_llm_replay.scripted import ScriptedLLM
+from northwind_mcp_rag.testing import KEY, serve_retriever
 from northwind_rag.retrieval import RetrievedChunk
 
 pytestmark = pytest.mark.req("SA-02")
@@ -46,8 +48,10 @@ class Stack:
 @pytest.fixture
 def stack(tmp_path: Path) -> Iterator[Stack]:
     retriever = FakeRetriever()
-    with ScriptedLLM() as llm:
-        services = ChatServices(retriever, agent_runtime(base_url=llm.url, root=tmp_path / "rt"))
+    with ScriptedLLM() as llm, serve_retriever(retriever, Caller) as (url, _):
+        services = ChatServices(
+            RagEndpoint(url, KEY), agent_runtime(base_url=llm.url, root=tmp_path / "rt")
+        )
         app.dependency_overrides[chat_services] = lambda: services
         try:
             yield Stack(llm, TestClient(app), retriever)

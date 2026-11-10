@@ -36,7 +36,13 @@ from northwind_common.tool_scopes import allowed_resources, allowed_tools
 from northwind_mcp_rag.ledger import SearchLedger
 from northwind_rag import store
 from northwind_rag.embedding import Embedder
-from northwind_rag.retrieval import RetrievedChunk, ShopperRegion, retrieve_context, retriever_id
+from northwind_rag.retrieval import (
+    Audience,
+    RetrievedChunk,
+    ShopperRegion,
+    retrieve_context,
+    retriever_id,
+)
 
 log = logging.getLogger("northwind_mcp_rag")
 
@@ -84,6 +90,23 @@ class Searcher(Protocol):
     def search(
         self, query: str, *, audience: str, region: str | None
     ) -> Sequence[RetrievedChunk]: ...
+
+
+class IndexSearcher:
+    """The production `Searcher`: hybrid retrieval over the index for the token's caller."""
+
+    def __init__(self, backend: Backend) -> None:
+        self.backend = backend
+
+    def search(self, query: str, *, audience: str, region: str | None) -> Sequence[RetrievedChunk]:
+        with self.backend.connect() as conn:
+            return retrieve_context(
+                conn,
+                self.backend.embedder,
+                query,
+                region=cast(ShopperRegion | None, region),
+                audience=cast(Audience, audience),
+            )
 
 
 ToolHandler = Callable[["RagServer", Claims, Mapping[str, Any]], Awaitable[t.CallToolResult]]
@@ -147,16 +170,8 @@ class RagServer:
 
     def search(self, query: str, claims: Claims) -> Sequence[RetrievedChunk]:
         """One search for the token's caller (hard rule 7): audience and region from the token."""
-        if self._searcher is not None:
-            return self._searcher.search(query, audience=claims.aud, region=claims.region)
-        with self.backend.connect() as conn:
-            return retrieve_context(
-                conn,
-                self.backend.embedder,
-                query,
-                region=cast(ShopperRegion | None, claims.region),
-                audience=claims.aud,
-            )
+        searcher = self._searcher or IndexSearcher(self.backend)
+        return searcher.search(query, audience=claims.aud, region=claims.region)
 
     # ---- MCP handlers --------------------------------------------------------------------------
 

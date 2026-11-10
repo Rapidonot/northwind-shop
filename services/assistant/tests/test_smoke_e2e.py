@@ -20,13 +20,14 @@ import pytest
 from fastapi.testclient import TestClient
 
 from northwind_assistant.caller import Caller
-from northwind_assistant.retriever import IndexRetriever
+from northwind_assistant.rag_client import RagEndpoint
 from northwind_assistant.turn import Citations, TextDelta, TurnEvent, stream_answer
 from northwind_assistant.usage import TELEMETRY_LOGGER
 from northwind_common.llm import agent_runtime
 from northwind_data.textscan import find_money_or_stock
 from northwind_gateway.app import app
 from northwind_gateway.chat import ChatServices, chat_services
+from northwind_mcp_rag.testing import KEY, CallerIndex, serve_retriever
 from northwind_rag.cli import DEFAULT_DATABASE_URL
 from northwind_rag.embedding import CachedEmbedder, FastEmbedEmbedder
 
@@ -62,13 +63,15 @@ def connect() -> psycopg.Connection:
 
 
 def ask(question: str, root: Path) -> list[TurnEvent]:
+    """Through a real mcp-rag over the index, ranking on frozen vectors (decision 0012)."""
     runtime = agent_runtime(root=root)
-    retriever = IndexRetriever(connect, CachedEmbedder(FastEmbedEmbedder()))
+    index = CallerIndex(connect, CachedEmbedder(FastEmbedEmbedder()))
 
-    async def collect() -> list[TurnEvent]:
-        return [e async for e in stream_answer(question, Caller(region="US"), retriever, runtime)]
+    async def collect(rag: RagEndpoint) -> list[TurnEvent]:
+        return [e async for e in stream_answer(question, Caller(region="US"), rag, runtime)]
 
-    return asyncio.run(collect())
+    with serve_retriever(index, Caller) as (url, _):
+        return asyncio.run(collect(RagEndpoint(url, KEY)))
 
 
 def answer_of(events: list[TurnEvent]) -> str:
@@ -168,14 +171,14 @@ def test_a_planted_injection_in_a_review_is_not_followed(
     content gone, read from what stays on screen so a filter that blanks the answer fails.
     """
     monkeypatch.setenv("DEV_SHOPPER_REGION", "US")
-    services = ChatServices(
-        IndexRetriever(connect, CachedEmbedder(FastEmbedEmbedder())), agent_runtime(root=tmp_path)
-    )
-    app.dependency_overrides[chat_services] = lambda: services
-    try:
-        response = TestClient(app).post("/api/chat", json={"message": QUESTIONS["injection"]})
-    finally:
-        app.dependency_overrides.clear()
+    index = CallerIndex(connect, CachedEmbedder(FastEmbedEmbedder()))
+    with serve_retriever(index, Caller) as (url, _):
+        services = ChatServices(RagEndpoint(url, KEY), agent_runtime(root=tmp_path))
+        app.dependency_overrides[chat_services] = lambda: services
+        try:
+            response = TestClient(app).post("/api/chat", json={"message": QUESTIONS["injection"]})
+        finally:
+            app.dependency_overrides.clear()
     sent, shown, names = received(response.text)
     if response.status_code != 200 or "error" in names or "done" not in names or not shown:
         pytest.fail(f"the turn delivered no answer: {response.status_code} {names}", pytrace=False)

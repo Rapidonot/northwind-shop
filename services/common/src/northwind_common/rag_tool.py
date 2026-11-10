@@ -17,10 +17,10 @@ ALLOWED_TOOL = f"mcp__{SERVER_NAME}__{TOOL_NAME}"
 
 # PRD §7 tool design rules: what, when, when not, the format, one example.
 DESCRIPTION = (
-    "Search Northwind's product, review, guide and policy text for this shopper's region. "
+    "Search Northwind's product, review, guide and policy text. "
     "Use it when the sources you already have do not answer the question. Do not use it for "
     "prices, stock levels, promotions, delivery dates or order status: it holds none of them. "
-    'Returns <source id="…" type="…"> blocks to cite by id, or a line saying nothing matched. '
+    "Returns source blocks, each with an id to cite, or a line saying nothing matched. "
     'Example: {"query": "how to wash a merino jumper"}.'
 )
 INPUT_SCHEMA: dict[str, Any] = {

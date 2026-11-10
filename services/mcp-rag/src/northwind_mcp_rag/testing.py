@@ -120,3 +120,17 @@ async def call_as_dict(url: str, bearer_token: str, arguments: dict[str, Any]) -
     if result.is_error:
         out["is_error"] = True
     return out
+
+
+class CallerIndex:
+    """The real index in the assistant tests' `search(query, caller)` shape, for wrapping in a spy
+    and serving with `serve_retriever` (the production search path, `IndexSearcher`)."""
+
+    def __init__(self, connect: Callable[[], Any], embedder: Any) -> None:
+        from northwind_mcp_rag.server import IndexSearcher
+
+        self.embedder = embedder
+        self._index = IndexSearcher(Backend(connect, embedder))
+
+    def search(self, query: str, caller: Any) -> Sequence[RetrievedChunk]:
+        return self._index.search(query, audience=caller.audience, region=caller.region)

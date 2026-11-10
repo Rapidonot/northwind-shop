@@ -5,20 +5,23 @@ from __future__ import annotations
 import asyncio
 import json
 from pathlib import Path
-from typing import get_args
+from typing import Any, get_args
 
 import pytest
 
-from northwind_assistant import prompt, tools
+from northwind_assistant import prompt
 from northwind_assistant.caller import Caller
 from northwind_assistant.prompt import system_prompt
+from northwind_assistant.rag_client import McpRagSearcher, RagEndpoint
 from northwind_assistant.tools import (
     FAILED_MESSAGE,
     SearchFailure,
     ToolState,
-    render_sources,
     search_sources,
 )
+from northwind_mcp_rag import render
+from northwind_mcp_rag.render import render_sources
+from northwind_mcp_rag.testing import KEY, serve_retriever
 from northwind_rag.models import SourceType
 from northwind_rag.retrieval import RetrievedChunk
 from northwind_rag.sources import (
@@ -30,6 +33,13 @@ from northwind_rag.sources import (
 pytestmark = pytest.mark.req("RAG-03")
 
 REPO = Path(__file__).resolve().parents[3]
+
+
+def through_rag(query: str, retriever: Any, state: ToolState, caller: Caller) -> Any:
+    """`search_sources` through a real mcp-rag searching with `retriever` (CC-10)."""
+    with serve_retriever(retriever, Caller) as (url, _):
+        searcher = McpRagSearcher(url, RagEndpoint(url, KEY).mint(caller))
+        return asyncio.run(search_sources(query, searcher, state))
 
 
 def test_trusted_and_untrusted_are_disjoint() -> None:
@@ -53,8 +63,9 @@ def test_the_sets_are_the_ones_the_user_chose() -> None:
 def test_the_prompt_and_render_sources_read_the_same_objects() -> None:
     assert vars(prompt)["TRUSTED_SOURCE_TYPES"] is TRUSTED_SOURCE_TYPES
     assert vars(prompt)["UNTRUSTED_SOURCE_TYPES"] is UNTRUSTED_SOURCE_TYPES
-    assert vars(tools)["TRUSTED_SOURCE_TYPES"] is TRUSTED_SOURCE_TYPES
-    assert vars(tools)["UNTRUSTED_SOURCE_TYPES"] is UNTRUSTED_SOURCE_TYPES
+    # `render_sources` lives on mcp-rag since CC-10 (row #10, B2)
+    assert vars(render)["TRUSTED_SOURCE_TYPES"] is TRUSTED_SOURCE_TYPES
+    assert vars(render)["UNTRUSTED_SOURCE_TYPES"] is UNTRUSTED_SOURCE_TYPES
 
 
 def test_the_prompt_rule_is_an_allow_list() -> None:
@@ -117,7 +128,7 @@ def test_a_search_with_an_unclassified_type_is_a_structured_failure() -> None:
         RetrievedChunk("b", "qa", "Q1", None, "y"),
     ]
     state = ToolState()
-    found = asyncio.run(search_sources("q", Caller(region="US"), _Returns(chunks), state))
+    found = through_rag("q", _Returns(chunks), state, Caller(region="US"))
     assert found == SearchFailure("business", False, FAILED_MESSAGE)
     assert state.failed and not state.seen
 
@@ -127,7 +138,7 @@ def test_a_query_holding_nul_is_a_validation_failure_not_an_outage(query: str) -
     """Security review, row #8: Postgres text cannot hold NUL, so it would fail every time; it is
     refused before retrieval, not labelled transient and retryable."""
     state = ToolState()
-    found = asyncio.run(search_sources(query, Caller(region="US"), _Returns([]), state))
+    found = through_rag(query, _Returns([]), state, Caller(region="US"))
     assert isinstance(found, SearchFailure)
     assert (found.category, found.retryable) == ("validation", False)
     assert state.searches == 0 and not state.failed

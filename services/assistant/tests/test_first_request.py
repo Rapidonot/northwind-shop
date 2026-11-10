@@ -18,6 +18,7 @@ import pytest
 
 from northwind_assistant.caller import Caller
 from northwind_assistant.prompt import user_prompt
+from northwind_assistant.rag_client import McpRagSearcher, RagEndpoint
 from northwind_assistant.tools import (
     ALLOWED_TOOL,
     FAILED_MESSAGE,
@@ -26,8 +27,6 @@ from northwind_assistant.tools import (
     NO_SOURCES,
     SearchFailure,
     ToolState,
-    render_sources,
-    retrieve_tool,
     search_sources,
 )
 from northwind_assistant.turn import (
@@ -41,6 +40,8 @@ from northwind_assistant.turn import (
 )
 from northwind_common.llm import agent_runtime
 from northwind_llm_replay.scripted import ScriptedLLM, blocks_sse
+from northwind_mcp_rag.render import render_sources
+from northwind_mcp_rag.testing import KEY, call_as_dict, serve_retriever
 from northwind_rag.retrieval import RetrievedChunk
 
 UK = Caller(region="UK")
@@ -79,10 +80,18 @@ def run(
 ) -> list[TurnEvent]:
     runtime = agent_runtime(base_url=llm.url, root=root)
 
-    async def collect() -> list[TurnEvent]:
-        return [e async for e in stream_answer(message, caller, retriever, runtime)]
+    async def collect(rag: RagEndpoint) -> list[TurnEvent]:
+        return [e async for e in stream_answer(message, caller, rag, runtime)]
 
-    return asyncio.run(collect())
+    with serve_retriever(retriever, Caller) as (url, _):
+        return asyncio.run(collect(RagEndpoint(url, KEY)))
+
+
+def search(query: Any, retriever: Any, state: ToolState, caller: Caller = UK) -> Any:
+    """`search_sources` through a real mcp-rag searching with `retriever`."""
+    with serve_retriever(retriever, Caller) as (url, _):
+        searcher = McpRagSearcher(url, RagEndpoint(url, KEY).mint(caller))
+        return asyncio.run(search_sources(query, searcher, state))
 
 
 def script(llm: ScriptedLLM, blocks: list[dict[str, Any]], stop: str = "end_turn") -> None:
@@ -168,14 +177,9 @@ def test_a_model_supplied_audience_or_region_changes_nothing(tmp_path: Path) -> 
 @pytest.mark.req("SA-02")
 def test_the_handler_ignores_an_audience_or_region_in_its_arguments() -> None:
     retriever = Recording()
-    handler = retrieve_tool(UK, retriever, ToolState()).handler
     arguments = {"query": "q", "audience": "staff", "region": "US"}
-
-    async def call() -> dict[str, Any]:
-        result: dict[str, Any] = await handler(arguments)
-        return result
-
-    result = asyncio.run(call())
+    with serve_retriever(retriever, Caller) as (url, _):
+        result = asyncio.run(call_as_dict(url, RagEndpoint(url, KEY).mint(UK), arguments))
     assert retriever.calls == [("q", UK)]
     assert "LEAK" not in json.dumps(result) and "UK-ONLY" in json.dumps(result)
 
@@ -210,7 +214,7 @@ def test_card_text_in_a_tool_argument_never_reaches_the_retriever(tmp_path: Path
 def test_search_sources_refuses_card_text_before_searching() -> None:
     retriever = Recording()
     state = ToolState()
-    found = asyncio.run(search_sources(f"card {CARD}", UK, retriever, state))
+    found = search(f"card {CARD}", retriever, state)
     assert isinstance(found, SearchFailure) and found.category == "validation"
     assert retriever.calls == [] and state.searches == 0
 
@@ -309,7 +313,7 @@ def test_the_cap_is_three_searches() -> None:
 def test_a_refused_search_is_a_structured_business_error_and_searches_nothing() -> None:
     retriever = Recording()
     state = ToolState(searches=MAX_SEARCHES)
-    found = asyncio.run(search_sources("q", UK, retriever, state))
+    found = search("q", retriever, state)
     assert found == SearchFailure("business", False, LIMIT_MESSAGE)
     assert retriever.calls == [] and state.searches == MAX_SEARCHES and not state.failed
 
@@ -370,6 +374,7 @@ def test_the_refusal_reaches_the_model_as_a_business_error(tmp_path: Path) -> No
         "errorCategory": "business",
         "isRetryable": False,
         "message": LIMIT_MESSAGE,
+        "code": "search_limit",
     }
 
 
@@ -445,7 +450,7 @@ def test_when_every_search_fails_and_the_model_answers_it_is_still_retrieval_fai
 @pytest.mark.req("SA-02")
 def test_a_failed_search_returns_the_fixed_failure_and_marks_the_state() -> None:
     state = ToolState()
-    found = asyncio.run(search_sources("q", UK, Recording(fail=True), state))
+    found = search("q", Recording(fail=True), state)
     assert found == SearchFailure("transient", True, FAILED_MESSAGE)
     assert state.failed and not state.seen
     assert "hunter2" not in repr(found) and "MARK-RAW-ERROR" not in repr(found)
@@ -454,21 +459,23 @@ def test_a_failed_search_returns_the_fixed_failure_and_marks_the_state() -> None
 @pytest.mark.req("SA-02")
 def test_an_empty_search_is_no_sources_and_not_a_failure() -> None:
     state = ToolState()
-    found = asyncio.run(search_sources("q", UK, Recording(empty=True), state))
+    found = search("q", Recording(empty=True), state)
     assert found == NO_SOURCES
     assert not state.failed and not state.seen and state.searches == 1
 
 
 @pytest.mark.req("SA-02")
-def test_a_failed_pre_retrieval_gives_the_model_the_fixed_failure_text(tmp_path: Path) -> None:
+def test_a_failed_pre_retrieval_ends_the_turn_with_no_model_call(tmp_path: Path) -> None:
+    """Q2 (the user's decision, 2026-11-09): with the first search failed there is nothing to
+    ground an answer, so no model call is made. Replaces the check that the model was given the
+    fixed failure text (C6'' (a); that first request no longer exists)."""
     with ScriptedLLM() as llm:
         script(llm, [text("I can't look that up right now.")])
         events = run("hi", Recording(fail=True), llm, tmp_path)
-    first = first_user_turn(llm)
-    assert FAILED_MESSAGE in first and NO_SOURCES not in first
+    assert llm.requests == []
     assert "hunter2" not in json.dumps(llm.requests)
     assert "MARK-RAW-ERROR" not in json.dumps(llm.requests)
-    assert events[-1] == TurnError("retrieval_failed")
+    assert events == [TurnError("retrieval_failed")]
 
 
 @pytest.mark.req("SA-02")

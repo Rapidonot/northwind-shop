@@ -705,6 +705,7 @@ version = "0.0.0"
 source = { editable = "services/assistant" }
 dependencies = [
     { name = "claude-agent-sdk" },
+    { name = "mcp" },
     { name = "northwind-common" },
     { name = "northwind-rag" },
     { name = "psycopg", extra = ["binary"] },
@@ -713,6 +714,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "claude-agent-sdk" },
+    { name = "mcp", specifier = ">=2.3,<3" },
     { name = "northwind-common", editable = "services/common" },
     { name = "northwind-rag", editable = "services/rag" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.3.7" },

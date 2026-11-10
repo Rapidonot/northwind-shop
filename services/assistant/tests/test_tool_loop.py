@@ -1,7 +1,8 @@
 """The assistant through the real CLI and a scripted model (SA-02). No cassette, no spend.
 
-This is the free proof that an in-process tool works under `--bare`, `--tools ""` and the `env -i`
-launcher, and that the agent is scoped as designed (hard rules 5, 7, 8, 10; NFR-01).
+This is the free proof that the assistant's one tool, `retrieve_context` on a real mcp-rag over
+HTTP (CC-10), works under `--bare`, `--tools ""` and the `env -i` launcher, and that the agent is
+scoped as designed (hard rules 5, 7, 8, 10; NFR-01). The test doubles search inside that server.
 """
 
 from __future__ import annotations
@@ -18,15 +19,14 @@ from claude_agent_sdk import create_sdk_mcp_server, tool
 
 from northwind_assistant.caller import Caller
 from northwind_assistant.prompt import system_prompt
+from northwind_assistant.rag_client import RagEndpoint
 from northwind_assistant.tools import (
     ALLOWED_TOOL,
     CARD_QUERY_MESSAGE,
     FAILED_MESSAGE,
     NO_SOURCES,
     SERVER_NAME,
-    Retriever,
     ToolState,
-    retrieve_tool,
 )
 from northwind_assistant.turn import (
     INSUFFICIENT_EVIDENCE,
@@ -43,6 +43,7 @@ from northwind_assistant.turn import (
 from northwind_common.llm import AgentRuntime, agent_runtime
 from northwind_llm_replay.scripted import ScriptedLLM, blocks_sse
 from northwind_llm_replay.scrub import match_key, request_hash, scrub
+from northwind_mcp_rag.testing import KEY, call_as_dict, serve_retriever
 from northwind_rag.retrieval import RetrievedChunk
 
 pytestmark = pytest.mark.req("SA-02")
@@ -68,13 +69,28 @@ class BrokenRetriever:
         raise RuntimeError(f"password=hunter2 {MARKER}")
 
 
-def turn(
-    message: str, retriever: Retriever, runtime: AgentRuntime, caller: Caller = US
-) -> list[TurnEvent]:
-    async def collect() -> list[TurnEvent]:
-        return [e async for e in stream_answer(message, caller, retriever, runtime)]
+class EmptyThenBroken:
+    """The first search (the server's own) finds nothing, which is not a failure; every
+    refinement raises like `BrokenRetriever` (C6'' (b): Q2 ends a turn whose first search fails)."""
 
-    return asyncio.run(collect())
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def search(self, query: str, caller: Caller) -> Sequence[RetrievedChunk]:
+        self.calls += 1
+        if self.calls == 1:
+            return []
+        raise RuntimeError(f"password=hunter2 {MARKER}")
+
+
+def turn(
+    message: str, retriever: Any, runtime: AgentRuntime, caller: Caller = US
+) -> list[TurnEvent]:
+    async def collect(rag: RagEndpoint) -> list[TurnEvent]:
+        return [e async for e in stream_answer(message, caller, rag, runtime)]
+
+    with serve_retriever(retriever, Caller) as (url, _):
+        return asyncio.run(collect(RagEndpoint(url, KEY)))
 
 
 def runtime_for(llm: ScriptedLLM, root: Path) -> AgentRuntime:
@@ -217,16 +233,15 @@ def test_a_tool_outside_allowed_tools_is_denied_not_just_absent(tmp_path: Path) 
         return {"content": [{"type": "text", "text": MARKER}]}
 
     name = f"mcp__{SERVER_NAME}__not_allowed"
-    with ScriptedLLM() as llm:
+    with ScriptedLLM() as llm, serve_retriever(FakeRetriever(), Caller) as (url, _):
         llm.reply_tool_use(name, {})
         llm.reply_stream("done")
         state = ToolState()
-        options = assistant_options(US, FakeRetriever(), runtime_for(llm, tmp_path), state)
-        options.mcp_servers = {
-            SERVER_NAME: create_sdk_mcp_server(
-                SERVER_NAME, tools=[retrieve_tool(US, FakeRetriever(), state), not_allowed]
-            )
-        }
+        token = RagEndpoint(url, KEY).mint(US)
+        options = assistant_options(US, url, token, runtime_for(llm, tmp_path))
+        # mcp-rag lists only an agent's own tools, so the planted tool needs a server that offers
+        # it: an in-process one, in the same slot, so only the CLI's permission check can stop it.
+        options.mcp_servers = {SERVER_NAME: create_sdk_mcp_server(SERVER_NAME, tools=[not_allowed])}
 
         async def collect() -> list[TurnEvent]:
             return [e async for e in run_turn("hi", options, state)]
@@ -274,12 +289,11 @@ def test_model_supplied_audience_and_region_change_nothing_through_the_cli(tmp_p
 def test_the_handler_reads_only_the_query() -> None:
     """Past the schema check too: the handler itself ignores anything else."""
     retriever = FakeRetriever()
-    handler = retrieve_tool(US, retriever, ToolState()).handler
-
-    async def call() -> None:
-        await handler({"query": "q", "audience": "staff", "region": "UK", "k": 500})
-
-    asyncio.run(call())
+    with serve_retriever(retriever, Caller) as (url, _):
+        token = RagEndpoint(url, KEY).mint(US)
+        asyncio.run(
+            call_as_dict(url, token, {"query": "q", "audience": "staff", "region": "UK", "k": 500})
+        )
     assert retriever.calls == [("q", US)]
 
 
@@ -287,7 +301,7 @@ def test_a_retrieval_failure_tells_the_model_nothing_about_why(tmp_path: Path) -
     with ScriptedLLM() as llm:
         llm.reply_tool_use(ALLOWED_TOOL, {"query": "q"})
         llm.reply_stream("I can't look that up.")
-        events = turn("hi", BrokenRetriever(), runtime_for(llm, tmp_path))
+        events = turn("hi", EmptyThenBroken(), runtime_for(llm, tmp_path))
     [result] = tool_results(llm)
     assert result["is_error"] is True
     assert json.loads(result_text(result)) == {
@@ -295,6 +309,7 @@ def test_a_retrieval_failure_tells_the_model_nothing_about_why(tmp_path: Path) -
         "errorCategory": "transient",
         "isRetryable": True,
         "message": FAILED_MESSAGE,
+        "code": "search_failed",
     }
     assert "hunter2" not in json.dumps(llm.requests) and MARKER not in json.dumps(llm.requests)
     assert events[-1] == TurnError("retrieval_failed")
@@ -406,7 +421,7 @@ def test_text_with_no_sources_behind_it_is_cleared_when_search_failed(tmp_path: 
     with ScriptedLLM() as llm:
         llm.reply_tool_use(ALLOWED_TOOL, {"query": "q"})
         llm.reply_stream("It is 100% waterproof.")
-        events = turn("hi", BrokenRetriever(), runtime_for(llm, tmp_path))
+        events = turn("hi", EmptyThenBroken(), runtime_for(llm, tmp_path))
     assert events[-2:] == [Reset(), TurnError("retrieval_failed")]
 
 
@@ -425,7 +440,7 @@ def test_failed_search_text_is_cleared_when_another_error_ends_the_turn(tmp_path
             ]
             body = blocks_sse("m", blocks, "tool_use", usage, f"msg_{n}")
             llm.reply_raw(200, body, "text/event-stream")
-        events = turn("hi", BrokenRetriever(), runtime_for(llm, tmp_path))
+        events = turn("hi", EmptyThenBroken(), runtime_for(llm, tmp_path))
     assert events[-2:] == [Reset(), TurnError("retrieval_failed")]  # an outage, not a thin answer
 
 
