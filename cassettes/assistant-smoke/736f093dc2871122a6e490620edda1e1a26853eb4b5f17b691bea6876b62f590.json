@@ -1,10 +1,10 @@
 {
-  "body": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"model\":\"claude-sonnet-5-5\",\"id\":\"msg_011Cgodc17P7QTbfKeox4knk\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"container\":null,\"stop_reason\":null,\"stop_sequence\":null,\"stop_details\":null,\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":1203,\"cache_read_input_tokens\":883,\"cache_creation\":{\"ephemeral_5m_input_tokens\":1203,\"ephemeral_1h_input_tokens\":0},\"output_tokens\":4,\"service_tier\":\"standard\",\"inference_geo\":\"global\",\"speed\":\"standard\"},\"diagnostics\":null,\"context_management\":null}  }\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\nevent: ping\ndata: {\"type\": \"ping\"}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"Yes.\"}           }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" The Corvane Cin\"}            }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"der Thermal Layer\"}               }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" is made from 100% merino\"}   }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" wool, according\"}               }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" to its\"}     }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" product listing [\"}    }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"P0051]. The\"}          }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" fabric is 250 g\"}       }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"sm, which is the hea\"}           }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"viest weight among\"}    }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" the Corvane base layers\"}           }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" I found\"}           }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" [P0051].\"}         }\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0   }\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null,\"stop_details\":null,\"container\":null},\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":1203,\"cache_read_input_tokens\":883,\"output_tokens\":82,\"output_tokens_details\":{\"thinking_tokens\":0}},\"context_management\":{\"applied_edits\":[]}   }\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"      }\n\n",
+  "body": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"model\":\"claude-sonnet-5-5\",\"id\":\"msg_011CgtV855pGPfGj15TejY5J\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"container\":null,\"stop_reason\":null,\"stop_sequence\":null,\"stop_details\":null,\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":1203,\"cache_read_input_tokens\":966,\"cache_creation\":{\"ephemeral_5m_input_tokens\":1203,\"ephemeral_1h_input_tokens\":0},\"output_tokens\":4,\"service_tier\":\"standard\",\"inference_geo\":\"global\",\"speed\":\"standard\"},\"diagnostics\":null,\"context_management\":null}             }\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}           }\n\nevent: ping\ndata: {\"type\": \"ping\"}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"Yes.\"}          }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" The Corvane Cin\"}   }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"der Thermal Layer\"}               }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" is made from 100% merino\"}          }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" wool, and its f\"}           }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"abric we\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"ight is 250 gsm\"}          }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" [P0051].\"}   }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"\\n\\nFor current\"}          }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" price\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" and availability, please check the live\"}    }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" product page.\"}     }\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0   }\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null,\"stop_details\":null,\"container\":null},\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":1203,\"cache_read_input_tokens\":966,\"output_tokens\":67,\"output_tokens_details\":{\"thinking_tokens\":0}},\"context_management\":{\"applied_edits\":[]}               }\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"   }\n\n",
   "content_type": "text/event-stream",
-  "cost_usd": 0.0039238,
+  "cost_usd": 0.0037821,
   "extra": {},
   "format": 1,
-  "hash": "1aa52598b13b6a1fdac8b50bc7dd4287a8f7c813ba762a46dbf0e465223bc08d",
+  "hash": "736f093dc2871122a6e490620edda1e1a26853eb4b5f17b691bea6876b62f590",
   "kind": "sse",
   "match": {
     "body": {
@@ -72,7 +72,7 @@
       },
       "tools": [
         {
-          "description": "Search Northwind's product, review, guide and policy text. Returns sources to cite by id. It holds no prices or stock levels.",
+          "description": "Search Northwind's product, review, guide and policy text. Use it when the sources you already have do not answer the question. Do not use it for prices, stock levels, promotions, delivery dates or order status: it holds none of them. Returns source blocks, each with an id to cite, or a line saying nothing matched. Example: {\"query\": \"how to wash a merino jumper\"}.",
           "input_schema": {
             "additionalProperties": false,
             "properties": {
@@ -86,7 +86,7 @@
             ],
             "type": "object"
           },
-          "name": "mcp__northwind__retrieve_context"
+          "name": "mcp__northwind-rag__retrieve_context"
         }
       ]
     },
@@ -98,7 +98,7 @@
     "path": "/v1/messages?beta=true"
   },
   "model": "claude-sonnet-5-5",
-  "recorded_at": "2026-11-07T13:17:18Z",
+  "recorded_at": "2026-11-10T02:49:00Z",
   "seq": 0,
   "status": 200,
   "suite": "assistant-smoke",
@@ -109,10 +109,10 @@
       "ephemeral_5m_input_tokens": 1203
     },
     "cache_creation_input_tokens": 1203,
-    "cache_read_input_tokens": 883,
+    "cache_read_input_tokens": 966,
     "inference_geo": "global",
     "input_tokens": 4,
-    "output_tokens": 82,
+    "output_tokens": 67,
     "output_tokens_details": {
       "thinking_tokens": 0
     },

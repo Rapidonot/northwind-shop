@@ -1,10 +1,10 @@
 {
-  "body": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"model\":\"claude-sonnet-5-5\",\"id\":\"msg_011Cgodckd2i6JLE5KjLEpnt\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"container\":null,\"stop_reason\":null,\"stop_sequence\":null,\"stop_details\":null,\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":990,\"cache_read_input_tokens\":883,\"cache_creation\":{\"ephemeral_5m_input_tokens\":990,\"ephemeral_1h_input_tokens\":0},\"output_tokens\":8,\"service_tier\":\"standard\",\"inference_geo\":\"global\",\"speed\":\"standard\"},\"diagnostics\":null,\"context_management\":null}       }\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}        }\n\nevent: ping\ndata: {\"type\": \"ping\"}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"The Tidewick Mar\"}  }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"sh Trail Pants\"}             }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" have a 32 \"}    }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"in inseam [P0070\"}    }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"].\"}           }\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0  }\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null,\"stop_details\":null,\"container\":null},\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":990,\"cache_read_input_tokens\":883,\"output_tokens\":32,\"output_tokens_details\":{\"thinking_tokens\":0}},\"context_management\":{\"applied_edits\":[]}           }\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"     }\n\n",
+  "body": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"model\":\"claude-sonnet-5-5\",\"id\":\"msg_011CgtV8euHwduHew9G6npMG\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"container\":null,\"stop_reason\":null,\"stop_sequence\":null,\"stop_details\":null,\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":990,\"cache_read_input_tokens\":966,\"cache_creation\":{\"ephemeral_5m_input_tokens\":990,\"ephemeral_1h_input_tokens\":0},\"output_tokens\":8,\"service_tier\":\"standard\",\"inference_geo\":\"global\",\"speed\":\"standard\"},\"diagnostics\":null,\"context_management\":null}        }\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\nevent: ping\ndata: {\"type\": \"ping\"}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"The Tidewick Mar\"}         }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"sh Trail Pants\"}    }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" have a\"}  }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" 32 \"}       }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"in inseam [\"}      }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"P0070].\"}     }\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0             }\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null,\"stop_details\":null,\"container\":null},\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":990,\"cache_read_input_tokens\":966,\"output_tokens\":32,\"output_tokens_details\":{\"thinking_tokens\":0}},\"context_management\":{\"applied_edits\":[]}       }\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"      }\n\n",
   "content_type": "text/event-stream",
-  "cost_usd": 0.0028913,
+  "cost_usd": 0.0028996,
   "extra": {},
   "format": 1,
-  "hash": "640ccc93a6a22e92b4a0834f66a994876bb0dbc7f6762d0af887a1d2b29adb5f",
+  "hash": "4614e18eef4a0163e84c2a17177b1d986acc38bedb27789520f8e2ed090dbb9e",
   "kind": "sse",
   "match": {
     "body": {
@@ -72,7 +72,7 @@
       },
       "tools": [
         {
-          "description": "Search Northwind's product, review, guide and policy text. Returns sources to cite by id. It holds no prices or stock levels.",
+          "description": "Search Northwind's product, review, guide and policy text. Use it when the sources you already have do not answer the question. Do not use it for prices, stock levels, promotions, delivery dates or order status: it holds none of them. Returns source blocks, each with an id to cite, or a line saying nothing matched. Example: {\"query\": \"how to wash a merino jumper\"}.",
           "input_schema": {
             "additionalProperties": false,
             "properties": {
@@ -86,7 +86,7 @@
             ],
             "type": "object"
           },
-          "name": "mcp__northwind__retrieve_context"
+          "name": "mcp__northwind-rag__retrieve_context"
         }
       ]
     },
@@ -98,7 +98,7 @@
     "path": "/v1/messages?beta=true"
   },
   "model": "claude-sonnet-5-5",
-  "recorded_at": "2026-11-07T13:17:24Z",
+  "recorded_at": "2026-11-10T02:49:07Z",
   "seq": 0,
   "status": 200,
   "suite": "assistant-smoke",
@@ -109,7 +109,7 @@
       "ephemeral_5m_input_tokens": 990
     },
     "cache_creation_input_tokens": 990,
-    "cache_read_input_tokens": 883,
+    "cache_read_input_tokens": 966,
     "inference_geo": "global",
     "input_tokens": 4,
     "output_tokens": 32,
