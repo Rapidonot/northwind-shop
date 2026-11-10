@@ -11,9 +11,8 @@ failure is a fixed envelope, with nothing of the exception.
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from typing import Any
 
 import mcp.types as t
@@ -43,6 +42,27 @@ from northwind_mcp_rag.server import RagServer, ToolSpec, text_result
 log = logging.getLogger("northwind_mcp_rag")
 
 
+def argument_texts(value: Any) -> Iterator[str]:
+    """Every key and scalar leaf of the arguments, as raw text. Raw, not a JSON encoding: JSON
+    writes a newline or tab between digit groups as `\\n` or `\\t`, which hides a split card number
+    from the card check (security re-review M1)."""
+    if isinstance(value, Mapping):
+        for key, item in value.items():
+            yield str(key)
+            yield from argument_texts(item)
+    elif isinstance(value, list | tuple):
+        for item in value:
+            yield from argument_texts(item)
+    elif value is not None:
+        yield str(value)
+
+
+def holds_card_data(args: Mapping[str, Any]) -> bool:
+    """Card data in any key or value, or split across them (hard rule 1 names tool arguments)."""
+    texts = list(argument_texts(args))
+    return any(contains_card_data(text) for text in texts) or contains_card_data("\n".join(texts))
+
+
 def _bad_query() -> ToolError:
     return ToolError("validation", False, BAD_QUERY, BAD_QUERY_MESSAGE)
 
@@ -51,8 +71,8 @@ async def retrieve_context(
     server: RagServer, claims: Claims, args: Mapping[str, Any]
 ) -> t.CallToolResult:
     # Hard rule 1 names tool arguments: card data anywhere in them is refused, even in a key the
-    # handler would otherwise ignore (security review L5).
-    if contains_card_data(json.dumps(dict(args), ensure_ascii=False, default=str)):
+    # handler would otherwise ignore (security review L5), checked on the raw text (re-review M1).
+    if holds_card_data(args):
         raise ToolError("validation", False, CARD_DATA, CARD_QUERY_MESSAGE)
     query = args.get("query")
     if not isinstance(query, str) or not query.strip() or len(query) > MAX_QUERY_CHARS:

@@ -148,3 +148,54 @@ def test_make_dev_gives_the_key_to_mcp_rag_and_the_gateway_but_not_the_portal() 
     makefile = (REPO / "Makefile").read_text(encoding="utf-8")
     recipe = makefile.split("\ndev-portal:\n", 1)[1].split("\n\n", 1)[0]
     assert recipe.strip().startswith("env -u NORTHWIND_MCP_TOKEN_KEY ")
+
+
+# ---- re-review M1: the card check reads raw text, not a JSON encoding ---------------------------
+
+SPLIT = ["\n", "\t", "\r", "\x01", "\x0c", " ", "-", "."]
+
+
+@pytest.mark.req("NFR-04")
+@pytest.mark.parametrize("sep", SPLIT, ids=[repr(s) for s in SPLIT])
+@pytest.mark.parametrize("where", ["query", "extra"])
+def test_a_card_split_by_any_separator_is_refused_in_any_argument(sep: str, where: str) -> None:
+    card = sep.join(["4242"] * 4)
+    arguments = {"query": card} if where == "query" else {"query": "jacket", "note": card}
+    retriever = Recording()
+    with serve_retriever(retriever, Who) as (url, _):
+        result = asyncio.run(call_as_dict(url, token()[0], arguments))
+    assert result.get("is_error") is True
+    assert json.loads(result["content"][0]["text"])["code"] == "card_data"
+    assert retriever.queries == []
+
+
+@pytest.mark.req("NFR-04")
+def test_a_card_split_across_two_arguments_is_refused() -> None:
+    from northwind_mcp_rag.retrieve import holds_card_data
+
+    assert holds_card_data({"query": "4242 4242", "note": "4242 4242"})
+    assert not holds_card_data({"query": "jacket size 42", "note": "two pairs"})
+
+
+CORPUS = [
+    *[sep.join(["4242"] * 4) for sep in SPLIT],
+    "4242424242424242",
+    "cvv 737",
+    "my CVC is 123",
+    "４２４２４２４２４２４２４２４２",  # fullwidth digits
+    "jacket size 42",
+    "order 12345",
+    "call 0800 123 4567",
+    "4242 4242 4242 4241",  # Luhn fails
+    "",
+]
+
+
+@pytest.mark.req("NFR-04")
+@pytest.mark.parametrize("text", CORPUS, ids=range(len(CORPUS)))
+def test_the_argument_check_agrees_with_the_raw_card_check(text: str) -> None:
+    from northwind_common.cards import contains_card_data
+    from northwind_mcp_rag.retrieve import holds_card_data
+
+    assert holds_card_data({"query": text}) == contains_card_data(text)
+    assert holds_card_data({"query": "jacket", "note": text}) == contains_card_data(text)
