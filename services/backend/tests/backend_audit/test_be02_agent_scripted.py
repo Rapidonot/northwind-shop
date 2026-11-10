@@ -39,6 +39,7 @@ from ._driver import (
     setup_captured,
     setup_unassessed,
 )
+from ._reconcile import assert_reconciles
 
 pytestmark = pytest.mark.req("BE-02")
 
@@ -120,6 +121,7 @@ def test_a_healthy_two_step_run_is_complete_and_fully_audited(tmp_path: Path) ->
         "length": len(result.summary),
     }
     record = reconstruct_order(s.sink.read_all(), s.order_id)
+    assert_reconciles(record, s.fakes)
     assert "run-1" in record.agent_runs
 
 

@@ -33,6 +33,7 @@ from ._driver import (
     orders,
     run_all,
 )
+from ._reconcile import assert_reconciles
 
 pytestmark = pytest.mark.req("BE-08")
 
@@ -109,6 +110,7 @@ def test_all_1000_orders_rebuild_from_reloaded_events_alone(tmp_path: Path) -> N
     assert verify_chain(list(events)) == []
     for row in rows:
         record = reconstruct_order(events, row["order_id"])
+        assert_reconciles(record, fakes)
         assert_matches_truth(record, row, fakes, truths[row["order_id"]])
         assert [e.action for e in record.timeline if e.phase == "outcome"] == EXPECTED_ACTIONS[
             row["exception"]
@@ -123,6 +125,7 @@ def test_each_exception_kind_has_its_expected_timeline() -> None:
     assert set(kinds) == set(EXPECTED_ACTIONS)
     for kind, row in kinds.items():
         record = reconstruct_order(sink.read_all(), row["order_id"])
+        assert_reconciles(record, fakes)
         assert truths[row["order_id"]].actions == EXPECTED_ACTIONS[kind]
         assert [e.phase for e in record.timeline] == ["attempt", "outcome"] * len(
             EXPECTED_ACTIONS[kind]
@@ -139,9 +142,10 @@ def test_each_exception_kind_has_its_expected_timeline() -> None:
 
 def test_one_order_never_sees_another_orders_events() -> None:
     rows = orders()[:40]
-    _, sink, _ = run_all(rows)
+    fakes, sink, _ = run_all(rows)
     for row in rows:
         record = reconstruct_order(sink.read_all(), row["order_id"])
+        assert_reconciles(record, fakes)
         assert {e.correlation_id for e in record.timeline} == {f"corr-{row['order_id']}"}
 
 
@@ -172,6 +176,7 @@ def test_fifty_interleaved_flows_keep_their_correlation_ids() -> None:
     assert verify_chain(list(events)) == []
     for row in rows:
         record = reconstruct_order(events, row["order_id"])
+        assert_reconciles(record, fakes)
         assert {e.correlation_id for e in record.timeline} == {f"corr-{row['order_id']}"}
 
 
@@ -210,6 +215,7 @@ def test_a_failed_capture_appears_in_its_orders_timeline(fault: str) -> None:
     views.payment.status(intent_id)
     fakes.payment.outage = False
     record = reconstruct_order(sink.read_all(), row["order_id"])
+    assert_reconciles(record, fakes)
     assert [(e.action, e.phase) for e in record.timeline][-4:] == [
         ("payment.capture", "attempt"),
         ("payment.capture", "outcome"),
@@ -235,6 +241,7 @@ def test_a_failed_void_and_status_join_their_order_through_the_intent(fault: str
     views.payment.void(idempotency_key="void-1", intent_id=intent_id)
     views.payment.status(intent_id)
     record = reconstruct_order(sink.read_all(), row["order_id"])
+    assert_reconciles(record, fakes)
     actions = [e.action for e in record.timeline]
     assert actions.count("payment.void") == 2 and actions.count("payment.status") == 2
 
@@ -256,6 +263,7 @@ def test_an_audit_unavailable_capture_leaves_nothing_and_changes_nothing() -> No
     sink.fail_on = {sink.calls}
     views.payment.capture(idempotency_key="cap-1", intent_id=authorized.value.intent_id)
     record = reconstruct_order(sink.read_all(), row["order_id"])
+    assert_reconciles(record, fakes)
     assert record.payment_status == "authorized" and record.uncertain == ()
     assert [e.operation for e in fakes.payment.effects] == ["authorize"]
 
@@ -270,6 +278,7 @@ def test_an_uncertain_capture_is_never_reported_as_absent(attempts: int) -> None
     truth = fakes.payment.status(intent_id)
     assert isinstance(truth, Ok) and truth.value.status is PaymentStatus.CAPTURED
     record = reconstruct_order(sink.read_all(), row["order_id"])
+    assert_reconciles(record, fakes)
     assert [u.action for u in record.uncertain] == ["payment.capture"]
     entry = record.uncertain[0]
     assert entry.settled == "open"
@@ -285,6 +294,7 @@ def test_a_later_status_read_settles_an_uncertain_capture() -> None:
     views.payment.capture(idempotency_key="cap-1", intent_id=intent_id)
     views.payment.status(intent_id)
     record = reconstruct_order(sink.read_all(), row["order_id"])
+    assert_reconciles(record, fakes)
     assert record.uncertain[0].settled == "done"
     assert record.payment_status == "captured"
     assert record.captured_minor == amount_for(row).amount_minor
@@ -296,6 +306,7 @@ def test_a_status_read_that_shows_no_capture_settles_it_as_not_done() -> None:
     views.payment.capture(idempotency_key="cap-1", intent_id=intent_id)
     views.payment.status(intent_id)
     record = reconstruct_order(sink.read_all(), row["order_id"])
+    assert_reconciles(record, fakes)
     assert record.uncertain[0].settled == "not_done"
     assert record.payment_status == "authorized" and record.captured_minor == 0
 
@@ -312,6 +323,7 @@ def test_a_same_key_ok_settles_it_whatever_the_order_and_counts_once() -> None:
     reordered = events[:-3] + [events[-1], events[-3], events[-2]]
     for seen in (events, reordered):
         record = reconstruct_order(tuple(seen), row["order_id"])
+        assert_reconciles(record, fakes)
         assert [u.settled for u in record.uncertain] == ["done"]
         assert record.captured_minor == amount_for(row).amount_minor
     assert [e.operation for e in fakes.payment.effects] == ["authorize", "capture"]
@@ -332,6 +344,7 @@ def test_other_money_calls_that_time_out_after_effect_are_uncertain(operation: s
             order_id=row["order_id"],
         )
         record = reconstruct_order(sink.read_all(), row["order_id"])
+        assert_reconciles(record, fakes)
         assert [u.action for u in record.uncertain] == ["payment.authorize"]
         assert record.uncertain[0].amount_minor == amount_for(row).amount_minor
         assert record.payment_label == "none (payment.authorize uncertain)"
@@ -346,6 +359,7 @@ def test_other_money_calls_that_time_out_after_effect_are_uncertain(operation: s
     fakes.payment.faults.inject("void", FaultKind.TIMEOUT_AFTER)
     views.payment.void(idempotency_key="void-1", intent_id=authorized.value.intent_id)
     record = reconstruct_order(sink.read_all(), row["order_id"])
+    assert_reconciles(record, fakes)
     assert [u.action for u in record.uncertain] == ["payment.void"]
     assert record.payment_status == "authorized"
 
@@ -360,6 +374,7 @@ def test_a_refund_that_times_out_after_effect_is_uncertain() -> None:
         idempotency_key="ref-1", intent_id=intent_id, amount=Money(100, amount_for(row).currency)
     )
     record = reconstruct_order(sink.read_all(), row["order_id"])
+    assert_reconciles(record, fakes)
     assert [(u.action, u.amount_minor) for u in record.uncertain] == [("payment.refund", 100)]
     assert record.refunded_minor == 0
 
@@ -382,10 +397,12 @@ def test_an_audit_incomplete_capture_is_uncertain_until_its_retry() -> None:
     intent_id = authorized.value.intent_id
     views.payment.capture(idempotency_key="cap-1", intent_id=intent_id)
     record = reconstruct_order(sink.read_all(), row["order_id"])
+    assert_reconciles(record, fakes)
     assert [u.settled for u in record.uncertain] == ["open"]
     assert record.unknown != ()
     views.payment.capture(idempotency_key="cap-1", intent_id=intent_id)
     record = reconstruct_order(sink.read_all(), row["order_id"])
+    assert_reconciles(record, fakes)
     assert [u.settled for u in record.uncertain] == ["done"]
     assert record.captured_minor == amount_for(row).amount_minor
 
@@ -395,6 +412,7 @@ def test_a_timed_out_read_is_a_failed_read_not_an_uncertain_action() -> None:
     fakes.payment.faults.inject("status", FaultKind.TIMEOUT_BEFORE)
     views.payment.status(intent_id)
     record = reconstruct_order(sink.read_all(), row["order_id"])
+    assert_reconciles(record, fakes)
     assert record.uncertain == ()
 
 

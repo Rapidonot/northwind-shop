@@ -44,6 +44,7 @@ from northwind_backend.recovery import (
 )
 
 from ._driver import Fakes, Views, amount_for, context, first_of, orders
+from ._reconcile import assert_reconciles
 
 pytestmark = pytest.mark.req("BE-02")
 
@@ -311,6 +312,7 @@ def test_hang_case_1_no_retry_no_effect(order_setup: Any) -> None:
     assert [e.phase for e in captures] == ["attempt", "outcome"]
     assert captures[1].outcome["code"] == "timeout"
     record = reconstruct_order(sink.read_all(), row["order_id"])
+    assert_reconciles(record, fakes)
     assert [(u.action, u.settled) for u in record.uncertain] == [("payment.capture", "open")]
     assert record.captured_minor == 0
 
@@ -325,6 +327,7 @@ def test_hang_case_2_the_recoverys_own_retry_runs_it_once(order_setup: Any) -> N
     ]
     assert [e.outcome["ok"] for e in captures] == [False, True]
     record = reconstruct_order(sink.read_all(), row["order_id"])
+    assert_reconciles(record, fakes)
     assert [u.settled for u in record.uncertain] == ["done"]
     assert record.captured_minor == amount_for(row).amount_minor
 
@@ -348,6 +351,7 @@ def test_hang_case_3_a_same_key_call_during_the_hang_runs_once(order_setup: Any)
     status = fakes.payment.status(intent_id)
     assert isinstance(status, Ok) and status.value.captured_minor == amount_for(row).amount_minor
     record = reconstruct_order(sink.read_all(), row["order_id"])
+    assert_reconciles(record, fakes)
     assert [u.settled for u in record.uncertain] == ["done"]
     assert record.captured_minor == amount_for(row).amount_minor  # counted once
 
@@ -362,6 +366,7 @@ def test_hang_case_4_a_same_key_call_after_the_cancel_finds_nothing_stored(
     second = _capture(views, intent_id)()
     assert isinstance(second, Ok) and _effects(fakes) == 1
     record = reconstruct_order(sink.read_all(), row["order_id"])
+    assert_reconciles(record, fakes)
     assert [u.settled for u in record.uncertain] == ["done"]
     assert record.captured_minor == amount_for(row).amount_minor
 

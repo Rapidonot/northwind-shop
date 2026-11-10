@@ -22,6 +22,7 @@ from northwind_common.llm import agent_runtime
 from northwind_llm_replay.pytest_plugin import LLMProxyHandle
 
 from ._driver import Fakes, context, first_of, orders, run_order, setup_captured, setup_unassessed
+from ._reconcile import assert_reconciles
 
 pytestmark = [
     pytest.mark.req("BE-02"),
@@ -99,6 +100,7 @@ def test_recorded_scenario(
     assert result.status is expected, (run, result.to_envelope())
     assert result.summary, run
     record = reconstruct_order(sink.read_all(), row["order_id"])
+    assert_reconciles(record, fakes)
     assert f"run-{run}" in record.agent_runs
     assert {e.actor for e in sink.read_all() if e.correlation_id == f"run-{run}"} == {ACTOR}
     # A read-only agent: its run changed nothing anywhere.

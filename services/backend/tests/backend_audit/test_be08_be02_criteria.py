@@ -56,6 +56,7 @@ from ._driver import (
     orders,
     setup_captured,
 )
+from ._reconcile import assert_reconciles
 
 TEST_PAN = "4111111111111111"  # the sandbox test card
 
@@ -163,6 +164,7 @@ def test_a_faulted_order_rebuilds_from_a_reloaded_jsonl_file_alone(tmp_path: Pat
     reloaded = JsonlAuditSink(path)
     assert verify_chain(reloaded.read_all()) == []
     record = reconstruct_order(reloaded.read_all(), order_id)
+    assert_reconciles(record, fakes)
     assert [(u.action, u.amount_minor, u.settled) for u in record.uncertain] == [
         ("payment.capture", expected, "open")
     ]
@@ -174,6 +176,7 @@ def test_a_faulted_order_rebuilds_from_a_reloaded_jsonl_file_alone(tmp_path: Pat
     )
     assert isinstance(reader.status(intent_id), Ok)
     settled = reconstruct_order(JsonlAuditSink(path).read_all(), order_id)
+    assert_reconciles(settled, fakes)
     assert settled.uncertain[0].settled == "done"
     assert settled.captured_minor == expected and settled.payment_status == "captured"
 
@@ -193,6 +196,7 @@ def test_dry_runs_never_change_the_reconstructed_order() -> None:
     truth = fakes.payment.status(intent_id)
     assert isinstance(truth, Ok) and truth.value.status is PaymentStatus.AUTHORIZED
     record = reconstruct_order(sink.read_all(), row["order_id"])
+    assert_reconciles(record, fakes)
     assert record.intent_id == intent_id
     assert record.payment_status == "authorized" and record.captured_minor == 0
     assert record.uncertain == ()
@@ -215,7 +219,9 @@ def test_one_orders_fault_never_appears_in_another_orders_record() -> None:
     assert isinstance(views_b.payment.capture(idempotency_key="cap-b", intent_id=intent_b), Ok)
 
     record_a = reconstruct_order(sink.read_all(), first["order_id"])
+    assert_reconciles(record_a, fakes)
     record_b = reconstruct_order(sink.read_all(), second["order_id"])
+    assert_reconciles(record_b, fakes)
     assert [u.action for u in record_a.uncertain] == ["payment.capture"]
     assert record_b.uncertain == ()
     assert record_b.payment_status == "captured"
@@ -242,6 +248,7 @@ def test_fail_closed_survives_recovery_a_refused_attempt_never_runs_the_action()
     truth = fakes.payment.status(intent_id)
     assert isinstance(truth, Ok) and truth.value.status is PaymentStatus.AUTHORIZED
     record = reconstruct_order(sink.read_all(), row["order_id"])
+    assert_reconciles(record, fakes)
     assert record.payment_status == "authorized" and record.uncertain == ()
 
 
@@ -274,6 +281,7 @@ def test_a_lost_outcome_write_is_recovered_locally_with_one_effect() -> None:
     assert isinstance(done.result, Ok) and done.attempts == 2
     assert [e.operation for e in fakes.payment.effects].count("capture") == 1
     record = reconstruct_order(sink.read_all(), row["order_id"])
+    assert_reconciles(record, fakes)
     assert record.payment_status == "captured"
     assert record.captured_minor == amount_for(row).amount_minor
     assert all(u.settled == "done" for u in record.uncertain)
@@ -432,4 +440,5 @@ def test_a_hung_fraud_read_gives_an_annotated_partial_result_through_the_agent(
     assert len(set(ids)) == 2 and ids[0] == ids[1] and ids[2] == ids[3]
     assert verify_chain(sink.read_all()) == []
     record = reconstruct_order(sink.read_all(), order_id)
+    assert_reconciles(record, fakes)
     assert "run-hang" in record.agent_runs

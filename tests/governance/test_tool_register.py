@@ -211,9 +211,10 @@ def test_the_tool_the_assistant_really_offers_has_a_register_row() -> None:
     assistant, `FRAUD_TOOL` and `PAYMENT_TOOL` in the Orders subagent since #20) is a tool an agent
     can call, and each `@tool(` uses one of them."""
     code = [path.read_text() for path in (REPO / "services").glob("*/src/**/*.py")]
+    # Any name the constant holds, as before: the scan is wider in files, never narrower in names.
     tools = {
-        name for text in code for name in re.findall(r'^[A-Z_]*TOOL = "([a-z_]+)"$', text, re.M)
-    } | {name for text in code for name in re.findall(r'^TOOL_NAME = "([a-z_]+)"$', text, re.M)}
+        name for text in code for name in re.findall(r'^[A-Z_]*TOOL = "([^"]+)"$', text, re.M)
+    } | {name for text in code for name in re.findall(r'^TOOL_NAME = "([^"]+)"$', text, re.M)}
     assert {"retrieve_context", "get_fraud_assessments", "get_payment_status"} <= tools
     assert sum(text.count("@tool(") for text in code) == len(tools), "a tool has another name"
     # Only this table counts: a planned row naming the same tool says nothing about today.

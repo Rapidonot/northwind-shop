@@ -27,6 +27,7 @@ from northwind_common.llm import agent_runtime
 from northwind_llm_replay.scripted import ScriptedLLM
 
 from ._driver import fixed_clock, orders, run_all
+from ._reconcile import assert_reconciles
 from .test_be02_agent_scripted import Setup, run_events, script_both
 
 pytestmark = pytest.mark.req("BE-08")
@@ -141,11 +142,12 @@ def test_a_reader_cannot_edit_the_in_memory_log_in_place() -> None:
 
 
 def test_reconstruct_checked_reports_a_tampered_chain() -> None:
-    _, sink, _ = run_all(orders()[:5])
+    fakes, sink, _ = run_all(orders()[:5])
     events = list(sink.read_all())
     order_id = "O000001"
     record, problems = reconstruct_checked(tuple(events), order_id)
     assert problems == [] and record.order_id == order_id
+    assert_reconciles(record, fakes)
     target = next(
         i for i, e in enumerate(events) if e.action == "payment.capture" and e.phase == "outcome"
     )

@@ -64,6 +64,13 @@ class Uncertain:
 
 @dataclass(frozen=True, slots=True)
 class OrderRecord:
+    """One order as its events show it.
+
+    The payment fields (`payment_status`, `captured_minor`, `refunded_minor`) are the *confirmed*
+    state only: what an `Ok` outcome proved. They are never the whole state while an `uncertain`
+    entry is open. Show `payment_label`, which carries the doubt, or read `uncertain` alongside
+    them; never show the confirmed fields alone (row review F8)."""
+
     order_id: str
     timeline: tuple[TimelineEntry, ...] = ()
     fraud_decision: str | None = None
@@ -218,13 +225,20 @@ def reconstruct_order(events: Sequence[AuditEvent], order_id: str) -> OrderRecor
 def _uncertain(
     mine: list[AuditEvent], unknown: set[str], intents: set[str], order_id: str
 ) -> tuple[Uncertain, ...]:
-    groups: dict[tuple[str, str | None], list[AuditEvent]] = {}
+    groups: dict[tuple[str, str], list[AuditEvent]] = {}
     for event in mine:
-        if event.action in STATE_CHANGING:
-            group_key = (event.action, _str(event.inputs, "idempotency_key"))
-            groups.setdefault(group_key, []).append(event)
+        # A dry run skips the idempotency store, so it proves nothing about the real call: it is
+        # never part of a group and never settles one (row review F2).
+        if event.action not in STATE_CHANGING or event.inputs.get("dry_run") is True:
+            continue
+        key = _str(event.inputs, "idempotency_key")
+        # A key written only as type and length can't be read back, so such calls are never
+        # merged: each stands alone, by its own action ID (F2, related low).
+        slot = (event.action, key if key is not None else f"#{event.action_id}")
+        groups.setdefault(slot, []).append(event)
     found: list[Uncertain] = []
-    for (action, key), group in groups.items():
+    for (action, slot_key), group in groups.items():
+        key = None if slot_key.startswith("#") else slot_key
         # Settled by key (S1): any Ok under it, whatever the event order.
         outcome_known = any(_is_ok(e) for e in group)
         doubtful = [
@@ -235,9 +249,11 @@ def _uncertain(
         ]
         if not doubtful:
             continue
-        first = doubtful[0]
+        first, last = doubtful[0], doubtful[-1]
+        # Only a read after the last doubtful attempt can settle it: a read between two attempts
+        # says nothing about the later one (row review F1).
         settled: Settled = (
-            "done" if outcome_known else _settle_by_read(action, first, mine, order_id)
+            "done" if outcome_known else _settle_by_read(action, first, last, mine, order_id)
         )
         found.append(
             Uncertain(
@@ -265,9 +281,12 @@ def _amount_of(
 
 
 def _settle_by_read(
-    action: str, event: AuditEvent, mine: list[AuditEvent], order_id: str
+    action: str, first: AuditEvent, last: AuditEvent, mine: list[AuditEvent], order_id: str
 ) -> Settled:
-    later = [e for e in mine if e.seq > event.seq and _is_ok(e)]
+    """Reads after `last`, the group's last doubtful event; a refund's baseline is the amount
+    refunded before `first`, where the logical action began."""
+    event = first
+    later = [e for e in mine if e.seq > last.seq and _is_ok(e)]
     if action in ("payment.capture", "payment.void", "payment.refund"):
         intent = _str(event.inputs, "intent_id")
         reads = [
