@@ -277,11 +277,18 @@ class RagServer:
 
 def token_gate(app: ASGIApp, key: bytes, clock: Callable[[], float]) -> ASGIApp:
     """A bare 401 for any HTTP request without a valid token; the verified claims ride in the
-    request scope's state. Lifespan events pass through."""
+    request scope's state. Lifespan events pass through; a websocket is closed, so a later route of
+    that kind could never be reached ungated (security review L3)."""
 
     async def gate(scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] != "http":
+        if scope["type"] == "lifespan":
             await app(scope, receive, send)
+            return
+        if scope["type"] == "websocket":
+            log.warning("request refused: websocket")
+            await send({"type": "websocket.close", "code": 1008})
+            return
+        if scope["type"] != "http":
             return
         scheme, _, token = Headers(scope=scope).get("authorization", "").partition(" ")
         try:

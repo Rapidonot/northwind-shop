@@ -3,8 +3,9 @@
 `search_sources` is the assistant's one path to a search. The server calls it on the shopper's
 message before the first model call (decision 0007); the model's refinement calls go from the CLI
 to the same `retrieve_context` on mcp-rag, with the same per-turn token, so the checks, the failure
-handling and RAG-10's cap are the server's for both. The card check runs here first as well, so card
-text never leaves this process (hard rule 1).
+handling and RAG-10's cap are the server's for both. On the first search the card check runs here
+first, so card text in a shopper's message never leaves this process; a query the model writes goes
+from the CLI to mcp-rag, which refuses card data in any argument before searching (hard rule 1).
 
 What a search found or how it failed is read the same way for both: `record` takes a result's text
 and error flag. Source IDs come from the server-rendered `<source id="…">` lines, so citations stay
@@ -116,7 +117,7 @@ async def search_sources(query: Any, searcher: Searcher, state: ToolState) -> st
         return SearchFailure("validation", False, BAD_QUERY_MESSAGE)
     if "\x00" in query:  # Postgres text cannot hold NUL, so it would fail every time (RAG-03)
         return SearchFailure("validation", False, BAD_QUERY_MESSAGE)
-    if contains_card_data(query):  # hard rule 1: card text never leaves this process
+    if contains_card_data(query):  # hard rule 1: the shopper's card text never leaves here
         return SearchFailure("validation", False, CARD_QUERY_MESSAGE)
     if state.searches >= MAX_SEARCHES:  # the server holds the cap too; this one never sends
         return SearchFailure("business", False, LIMIT_MESSAGE)

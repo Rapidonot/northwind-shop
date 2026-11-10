@@ -30,6 +30,8 @@ INPUT_SCHEMA: dict[str, Any] = {
     "additionalProperties": False,
 }
 
+# The longest query searched: the gateway's message limit (security review L5).
+MAX_QUERY_CHARS = 2000
 # RAG-10: no answer needs more than 3 retrieval rounds, and the first is the server's own search.
 MAX_SEARCHES = 3
 NO_SOURCES = "No sources matched this search."

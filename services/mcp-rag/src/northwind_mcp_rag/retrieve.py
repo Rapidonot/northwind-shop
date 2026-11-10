@@ -11,6 +11,7 @@ failure is a fixed envelope, with nothing of the exception.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from collections.abc import Mapping
 from typing import Any
@@ -29,6 +30,7 @@ from northwind_common.rag_tool import (
     FAILED_MESSAGE,
     INPUT_SCHEMA,
     LIMIT_MESSAGE,
+    MAX_QUERY_CHARS,
     NO_SOURCES,
     SEARCH_FAILED,
     SEARCH_LIMIT,
@@ -48,13 +50,15 @@ def _bad_query() -> ToolError:
 async def retrieve_context(
     server: RagServer, claims: Claims, args: Mapping[str, Any]
 ) -> t.CallToolResult:
+    # Hard rule 1 names tool arguments: card data anywhere in them is refused, even in a key the
+    # handler would otherwise ignore (security review L5).
+    if contains_card_data(json.dumps(dict(args), ensure_ascii=False, default=str)):
+        raise ToolError("validation", False, CARD_DATA, CARD_QUERY_MESSAGE)
     query = args.get("query")
-    if not isinstance(query, str) or not query.strip():
+    if not isinstance(query, str) or not query.strip() or len(query) > MAX_QUERY_CHARS:
         raise _bad_query()
     if "\x00" in query:  # Postgres text cannot hold NUL, so it would fail every time (RAG-03)
         raise _bad_query()
-    if contains_card_data(query):
-        raise ToolError("validation", False, CARD_DATA, CARD_QUERY_MESSAGE)
     if not await server.ledger.take(claims.turn, claims.exp):
         raise ToolError("business", False, SEARCH_LIMIT, LIMIT_MESSAGE)
     try:

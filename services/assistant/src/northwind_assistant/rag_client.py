@@ -15,9 +15,10 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 
+import httpx2
 from mcp import Client
 from mcp.client.streamable_http import streamable_http_client
-from mcp.shared._httpx_utils import create_mcp_http_client
+from mcp.shared._httpx_utils import MCP_DEFAULT_SSE_READ_TIMEOUT, MCP_DEFAULT_TIMEOUT
 
 from northwind_assistant.caller import Caller
 from northwind_common.mcp_token import bearer, mint
@@ -25,7 +26,7 @@ from northwind_common.rag_tool import TOOL_NAME
 
 AGENT = "shopper-assistant"
 # Every logger under these names stays at WARNING or above, whatever the root level.
-QUIET_LOGGERS = ("mcp.client", "mcp.shared", "httpx", "httpcore")
+QUIET_LOGGERS = ("mcp.client", "mcp.shared", "httpx", "httpcore", "httpx2", "httpcore2")
 
 
 def quiet_client_logs() -> None:
@@ -66,7 +67,13 @@ class McpRagSearcher:
     async def search(self, query: str) -> SearchResult:
         """Raises on any transport failure (unreachable, 401, timeout); the caller maps it."""
         quiet_client_logs()  # again, in case logging was configured after import
-        http = create_mcp_http_client(headers=bearer(self._token))
+        # The SDK's defaults, plus `trust_env=False`: an `HTTP_PROXY` in the gateway's environment
+        # must never carry the token (security review, unconfirmed item 3).
+        http = httpx2.AsyncClient(
+            headers=bearer(self._token),
+            timeout=httpx2.Timeout(MCP_DEFAULT_TIMEOUT, read=MCP_DEFAULT_SSE_READ_TIMEOUT),
+            trust_env=False,
+        )
         async with Client(streamable_http_client(self._url, http_client=http)) as client:
             result = await client.call_tool(TOOL_NAME, {"query": query})
         text = "".join(getattr(block, "text", "") for block in result.content)

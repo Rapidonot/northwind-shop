@@ -100,7 +100,7 @@ dev-gateway:
 	uv run uvicorn northwind_gateway.app:app --reload --port 8000
 
 dev-portal:
-	$(PNPM) --filter @northwind/portal dev
+	env -u NORTHWIND_MCP_TOKEN_KEY $(PNPM) --filter @northwind/portal dev
 
 data: ## Generate synthetic fixtures into data/fixtures (deterministic; FOUND-1)
 	uv run python -m northwind_data.cli --out data/fixtures

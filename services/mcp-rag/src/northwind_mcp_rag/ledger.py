@@ -29,6 +29,8 @@ class SearchLedger:
         """Count one search for `turn` and say whether it may run."""
         async with self._lock:
             now = self._clock()
+            if exp <= now:  # a token expiring between the gate and here gets nothing (review L2)
+                return False
             for key in [k for k, (_, e) in self._used.items() if e <= now]:
                 del self._used[key]
             used, _ = self._used.get(turn, (0, exp))
