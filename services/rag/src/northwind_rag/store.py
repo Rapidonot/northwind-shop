@@ -6,6 +6,7 @@ import hashlib
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import psycopg
 from psycopg.types.json import Jsonb
@@ -150,6 +151,48 @@ _UPDATE = (
     "embedding = COALESCE(%(embedding)s::vector, embedding), updated_at = now() "
     "WHERE chunk_id = %(chunk_id)s"
 )
+
+
+# Plain rows only: generated context stays inside the index writers (decision 0010), so this never
+# fetches it, and a plain chunk's embedded text is its text. Read by the frozen vectors (RAG-03,
+# decision 0012); moved here from `embedding.py` so only the two readers run SQL on the index.
+_PLAIN_ROWS = """SELECT chunk_id, text, embedder_id, embedding::real[]::float8[]
+FROM rag_chunks WHERE chunk_id = ANY(%(ids)s) AND context IS NULL"""
+
+
+def plain_chunk_rows(conn: psycopg.Connection, chunk_ids: Sequence[str]) -> list[tuple[Any, ...]]:
+    """(chunk_id, text, embedder_id, stored vector) for each plain row among `chunk_ids`."""
+    return list(conn.execute(_PLAIN_ROWS, {"ids": list(chunk_ids)}).fetchall())
+
+
+_CURRENT_MANIFEST = """SELECT index_version, data_version, dataset_sha256, chunker_version,
+    embedder_id, created_at
+FROM rag_index_manifest WHERE is_current"""
+_VISIBLE_COUNTS = """SELECT source_type, count(*) FROM rag_chunks
+WHERE visibility = ANY(%(visible)s) GROUP BY source_type ORDER BY source_type"""
+
+
+def index_manifest(conn: psycopg.Connection, audience: str) -> dict[str, Any] | None:
+    """The current index version and chunk counts by source type, counting only what `audience`
+    may see, so a shopper learns nothing about internal documents (CC-10, hard rule 7). None when
+    no index is published. No chunk text or context is read."""
+    from northwind_rag.retrieval import visible_to  # retrieval imports this module
+
+    visible = list(visible_to(audience))
+    row = conn.execute(_CURRENT_MANIFEST).fetchone()
+    if row is None:
+        return None
+    index_version, data_version, dataset_sha256, chunker_version, embedder_id, created_at = row
+    counts = conn.execute(_VISIBLE_COUNTS, {"visible": visible}).fetchall()
+    return {
+        "index_version": index_version,
+        "data_version": data_version,
+        "dataset_sha256": dataset_sha256,
+        "chunker_version": chunker_version,
+        "embedder_id": embedder_id,
+        "refreshed_at": created_at.isoformat(),
+        "chunks_by_source_type": {source_type: int(n) for source_type, n in counts},
+    }
 
 
 def _publish_manifest(

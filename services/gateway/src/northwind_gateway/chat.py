@@ -18,20 +18,19 @@ from dataclasses import dataclass
 from functools import lru_cache
 from typing import Annotated, Any
 
-import psycopg
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from fastapi.sse import EventSourceResponse, ServerSentEvent
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from northwind_assistant.caller import Caller
-from northwind_assistant.retriever import IndexRetriever
-from northwind_assistant.tools import Retriever
+from northwind_assistant.rag_client import RagEndpoint
 from northwind_assistant.turn import Citations, Reset, TextDelta, TurnError, stream_answer
 from northwind_common.cards import contains_card_data
 from northwind_common.llm import AgentRuntime, agent_runtime
-from northwind_gateway.settings import current_caller, database_url
-from northwind_rag.embedding import FastEmbedEmbedder
+from northwind_common.localenv import mcp_rag_url
+from northwind_common.mcp_token import signing_key
+from northwind_gateway.settings import current_caller
 
 log = logging.getLogger(__name__)
 
@@ -87,19 +86,16 @@ def checked_message(body: ChatRequest) -> str:
 
 @dataclass(frozen=True)
 class ChatServices:
-    retriever: Retriever
+    rag: RagEndpoint
     runtime: AgentRuntime
-
-
-def _connect() -> psycopg.Connection:
-    return psycopg.connect(database_url(), connect_timeout=2, autocommit=True)
 
 
 @lru_cache(maxsize=1)
 def chat_services() -> ChatServices:
     """Once per process: each `agent_runtime()` makes a temp directory, and it fixes the proxy URL
-    when called, so this stays lazy. The embedding model loads on the first search."""
-    return ChatServices(IndexRetriever(_connect, FastEmbedEmbedder()), agent_runtime())
+    when called, so this stays lazy. Searches go to mcp-rag (CC-10), which holds the index and the
+    embedding model; the token key comes only from the environment (hard rule 4)."""
+    return ChatServices(RagEndpoint(mcp_rag_url(), signing_key()), agent_runtime())
 
 
 def _event(event: Any) -> ServerSentEvent:
@@ -120,7 +116,7 @@ async def chat(
 ) -> AsyncIterable[ServerSentEvent]:
     failed = False
     try:
-        async for event in stream_answer(message, caller, services.retriever, services.runtime):
+        async for event in stream_answer(message, caller, services.rag, services.runtime):
             failed = failed or isinstance(event, TurnError)
             yield _event(event)
     except Exception as error:  # noqa: BLE001 - its text must not reach the shopper

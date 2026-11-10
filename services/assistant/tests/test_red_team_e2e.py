@@ -37,10 +37,11 @@ from fastapi.testclient import TestClient
 
 from northwind_assistant.caller import Caller
 from northwind_assistant.prompt import system_prompt
-from northwind_assistant.retriever import IndexRetriever
+from northwind_assistant.rag_client import RagEndpoint
 from northwind_common.llm import agent_runtime
 from northwind_gateway.app import app
 from northwind_gateway.chat import ChatServices, chat_services
+from northwind_mcp_rag.testing import KEY, CallerIndex, serve_retriever
 from northwind_rag.cli import DEFAULT_DATABASE_URL
 from northwind_rag.embedding import CachedEmbedder, FastEmbedEmbedder
 from northwind_rag.retrieval import RetrievedChunk
@@ -141,12 +142,12 @@ def connect() -> psycopg.Connection:
 class SpyRetriever:
     """Every chunk every search returned in the turn, refinements included."""
 
-    inner: IndexRetriever
+    inner: Any  # anything with `search(query, caller)`; the recorded test uses the real index
     returned: list[RetrievedChunk] = field(default_factory=list)
     searches: int = 0
 
     def search(self, query: str, caller: Caller) -> Sequence[RetrievedChunk]:
-        found = self.inner.search(query, caller)
+        found: Sequence[RetrievedChunk] = self.inner.search(query, caller)
         self.searches += 1
         self.returned.extend(found)
         return found
@@ -266,14 +267,15 @@ def test_a_red_team_query_surfaces_nothing_internal(
 ) -> None:
     monkeypatch.setenv("DEV_SHOPPER_REGION", item["region"])
     embedder = CachedEmbedder(FastEmbedEmbedder())
-    spy = SpyRetriever(IndexRetriever(connect, embedder))
-    app.dependency_overrides[chat_services] = lambda: ChatServices(
-        spy, agent_runtime(root=tmp_path)
-    )
-    try:
-        response = TestClient(app).post("/api/chat", json={"message": item["query"]})
-    finally:
-        app.dependency_overrides.clear()
+    spy = SpyRetriever(CallerIndex(connect, embedder))
+    with serve_retriever(spy, Caller) as (url, _):
+        app.dependency_overrides[chat_services] = lambda: ChatServices(
+            RagEndpoint(url, KEY), agent_runtime(root=tmp_path)
+        )
+        try:
+            response = TestClient(app).post("/api/chat", json={"message": item["query"]})
+        finally:
+            app.dependency_overrides.clear()
     sent, shown, names, cited = received(response.text)
     facts = index_facts()
 
@@ -326,7 +328,7 @@ def test_the_spy_records_every_search_of_a_turn() -> None:
         def search(self, query: str, caller: Caller) -> Sequence[RetrievedChunk]:
             return [rc("pub")] if query == "one" else [rc("uk")]
 
-    spy = SpyRetriever(Inner())  # type: ignore[arg-type]
+    spy = SpyRetriever(Inner())
     spy.search("one", Caller(region="US"))
     spy.search("two", Caller(region="US"))
     assert spy.searches == 2

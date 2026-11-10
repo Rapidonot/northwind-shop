@@ -196,6 +196,13 @@ def rrf_fuse(ranked_lists: Sequence[Sequence[str]], *, rrf_k: int = RRF_K) -> li
     return sorted(scores, key=lambda item: (-scores[item], item))
 
 
+def visible_to(audience: str) -> tuple[str, ...]:
+    """The visibilities `audience` may see; the one definition every reader uses (hard rule 7)."""
+    if audience not in _VISIBLE:
+        raise ValueError(f"unknown audience: {audience!r}")
+    return _VISIBLE[audience]
+
+
 def _check(audience: str, k: int) -> None:
     if audience not in _VISIBLE:
         raise ValueError(f"unknown audience: {audience!r}")

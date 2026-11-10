@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from northwind_assistant.tools import as_data, render_sources
+from northwind_mcp_rag.render import as_data, render_sources
 from northwind_rag.retrieval import RetrievedChunk
 
 pytestmark = pytest.mark.req("RAG-11")

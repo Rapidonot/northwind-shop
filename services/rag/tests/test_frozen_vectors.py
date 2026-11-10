@@ -19,7 +19,7 @@ from pathlib import Path
 import psycopg
 import pytest
 
-from northwind_rag import embedding
+from northwind_rag import embedding, store
 from northwind_rag.embedding import (
     CachedEmbedder,
     FastEmbedEmbedder,
@@ -371,7 +371,7 @@ def test_a_key_with_no_known_text_is_not_vouched_for() -> None:
 
 def test_the_export_query_never_selects_context() -> None:
     """Low 3 of the security review: context may appear only as the `IS NULL` predicate."""
-    selected, _, where = embedding._ROWS.partition("FROM")
+    selected, _, where = store._PLAIN_ROWS.partition("FROM")
     assert re.findall(r"\b\w+\b", selected.replace("SELECT", "")) == [
         *("chunk_id", "text", "embedder_id"),
         *("embedding", "real", "float8"),  # embedding::real[]::float8[]

@@ -123,6 +123,8 @@ def test_agent_options_refuse_anything_but_a_list(tmp_path: Path, tools: Any) ->
         "add-dir",
         "allowedTools",
         "allowed-tools",
+        "strict-mcp-config",
+        "--strict_mcp_config",
         "disallowedTools",
     ],
 )
@@ -225,7 +227,12 @@ def test_other_extra_args_pass_through_beside_the_pinned_flags(tmp_path: Path) -
         runtime=rt,
         extra_args={"debug": None},
     )
-    assert opts.extra_args == {"bare": None, "no-session-persistence": None, "debug": None}
+    assert opts.extra_args == {
+        "bare": None,
+        "no-session-persistence": None,
+        "strict-mcp-config": None,
+        "debug": None,
+    }
 
 
 @pytest.mark.req("SA-02")

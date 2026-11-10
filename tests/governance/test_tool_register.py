@@ -207,15 +207,22 @@ def test_every_makefile_target_has_a_register_row() -> None:
 
 
 def test_the_tool_the_assistant_really_offers_has_a_register_row() -> None:
-    """Compares with the code: every `TOOL_NAME` constant is a tool an agent can call."""
-    source = REPO / "services/assistant/src/northwind_assistant/tools.py"
-    tools = set(re.findall(r'^TOOL_NAME = "([^"]+)"$', source.read_text(), re.M))
-    assert tools, "the tool scan found nothing"
+    """Compares with the code (CC-10, rewritten in the row #10 plan before implementation): every
+    tool an MCP server's registry holds, and every tool an agent is scoped to, needs a row in
+    today's table. No in-process `@tool(` may remain: since #10 every agent tool is served."""
+    from northwind_common.tool_scopes import AGENT_TOOLS
+    from northwind_mcp_rag.retrieve import TOOLS as RAG_TOOLS
+
+    served = set(RAG_TOOLS)
+    scoped = {name for row in AGENT_TOOLS.values() for names in row.values() for name in names}
+    assert served, "the tool scan found nothing"
+    assert scoped <= served, "an agent is scoped to a tool no server offers"
     code = [path.read_text() for path in (REPO / "services").glob("*/src/**/*.py")]
-    assert sum(text.count("@tool(") for text in code) == len(tools), "a tool has another name"
+    assert sum(text.count("@tool(") for text in code) == 0, "an in-process tool came back"
     # Only this table counts: a planned row naming the same tool says nothing about today.
     today = REGISTER.read_text().partition("## Agent tools today")[2].partition("\n## ")[0]
-    assert tools - {name for row in register_rows(today)[0] for name in row.names} == set()
+    registered = {name for row in register_rows(today)[0] for name in row.names}
+    assert (served | scoped) - registered == set()
 
 
 def test_a_target_scan_sees_rules_and_skips_assignments() -> None:

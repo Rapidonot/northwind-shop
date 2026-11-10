@@ -58,7 +58,7 @@ SCAN_PYTHON := $(RUNNER_PYTHON)
 MODEL_PYTHON := .venv-model/bin/python -I
 endif
 
-.PHONY: help setup up down dev dev-gateway dev-portal data model ingest ingest-enriched enrich fmt lint test check \
+.PHONY: help setup up down dev dev-mcp-rag dev-gateway dev-portal data model ingest ingest-enriched enrich fmt lint test check \
 	test-integration ci scan-cassettes llm-spend llm-proxy llm-runner runner-sync runner-check \
 	ship finish review-diff record eval-live eval-rescore eval-gate eval-integrity eval-gate-stale-ok eval-promote \
 	eval-snapshot eval-review-list eval-enrichment-report eval-compare-retrievers embed-cache e2e e2e-scripted
@@ -88,14 +88,19 @@ up: ## Start the local stack (Postgres + pgvector) and wait until healthy
 down: ## Stop the local stack (data volume is kept)
 	$(COMPOSE) down
 
-dev: ## Run gateway (:8000) and portal (:5173) together
-	$(MAKE) -j2 dev-gateway dev-portal
+# A fresh token signing key per run (CC-10), in the environment only: never echoed or written.
+dev: ## Run mcp-rag (this worktree's port), gateway (:8000) and portal (:5173) together
+	@NORTHWIND_MCP_TOKEN_KEY="$$(uv run python -c 'import secrets; print(secrets.token_urlsafe(48))')" \
+		$(MAKE) -j3 dev-mcp-rag dev-gateway dev-portal
+
+dev-mcp-rag:
+	uv run python -m northwind_mcp_rag.app
 
 dev-gateway:
 	uv run uvicorn northwind_gateway.app:app --reload --port 8000
 
 dev-portal:
-	$(PNPM) --filter @northwind/portal dev
+	env -u NORTHWIND_MCP_TOKEN_KEY $(PNPM) --filter @northwind/portal dev
 
 data: ## Generate synthetic fixtures into data/fixtures (deterministic; FOUND-1)
 	uv run python -m northwind_data.cli --out data/fixtures

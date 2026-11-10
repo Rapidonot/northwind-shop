@@ -13,11 +13,14 @@ import psycopg
 import pytest
 
 from northwind_assistant.caller import Caller
-from northwind_assistant.retriever import IndexRetriever
+from northwind_assistant.rag_client import RagEndpoint
 from northwind_assistant.tools import ALLOWED_TOOL
 from northwind_assistant.turn import stream_answer
 from northwind_common.llm import agent_runtime
 from northwind_llm_replay.scripted import ScriptedLLM
+from northwind_mcp_rag.retrieve import TOOLS
+from northwind_mcp_rag.server import Backend, RagServer
+from northwind_mcp_rag.testing import KEY, running
 from northwind_rag.cli import DEFAULT_DATABASE_URL
 from northwind_rag.ingest import ingest
 from northwind_rag.models import Chunk
@@ -32,7 +35,7 @@ FIXTURES = REPO / "data" / "fixtures"
 
 
 @pytest.fixture
-def index_retriever() -> Iterator[IndexRetriever]:
+def index_rag() -> Iterator[RagEndpoint]:
     """A throwaway schema holding the real fixtures, with a fake embedder (no model download)."""
     url = os.environ.get("DATABASE_URL", DEFAULT_DATABASE_URL)
     schema = f"sa02_test_{uuid.uuid4().hex[:12]}"
@@ -46,7 +49,9 @@ def index_retriever() -> Iterator[IndexRetriever]:
     try:
         with connect() as conn:
             ingest(conn, FIXTURES, embedder)
-        yield IndexRetriever(connect, embedder)
+        server = RagServer(Backend(connect, embedder), key=KEY, tools=TOOLS)
+        with running(server) as rag_url:
+            yield RagEndpoint(rag_url, KEY)
     finally:
         admin.execute(f'DROP SCHEMA "{schema}" CASCADE')
         admin.close()
@@ -64,7 +69,7 @@ def tool_result_text(llm: ScriptedLLM) -> str:
     )
 
 
-def model_context(query: str, region: ShopperRegion, retriever: IndexRetriever, root: Path) -> str:
+def model_context(query: str, region: ShopperRegion, rag: RagEndpoint, root: Path) -> str:
     """The tool result the model is given. The fake embedder puts a chunk's own text at distance
     zero from itself, so quoting a chunk makes it the nearest, and only a filter keeps it out."""
     with ScriptedLLM() as llm:
@@ -73,7 +78,7 @@ def model_context(query: str, region: ShopperRegion, retriever: IndexRetriever, 
         runtime = agent_runtime(base_url=llm.url, root=root)
 
         async def run() -> None:
-            async for _ in stream_answer("hi", Caller(region=region), retriever, runtime):
+            async for _ in stream_answer("hi", Caller(region=region), rag, runtime):
                 pass
 
         asyncio.run(run())
@@ -89,18 +94,18 @@ def returns_policy(region: str) -> Chunk:
     ("region", "other"), [("US", "UK"), ("CA", "US"), ("UK", "EU"), ("EU", "CA")]
 )
 def test_the_model_sees_its_own_regions_policy_and_never_anothers(
-    region: ShopperRegion, other: str, index_retriever: IndexRetriever, tmp_path: Path
+    region: ShopperRegion, other: str, index_rag: RagEndpoint, tmp_path: Path
 ) -> None:
     """RAG-12 security review, finding 3: one prompt held all four regions' conflicting rules."""
-    own = model_context(returns_policy(region).text, region, index_retriever, tmp_path / "own")
+    own = model_context(returns_policy(region).text, region, index_rag, tmp_path / "own")
     assert f'id="POL-RETURNS-{region}"' in own
-    quoted = model_context(returns_policy(other).text, region, index_retriever, tmp_path / "other")
+    quoted = model_context(returns_policy(other).text, region, index_rag, tmp_path / "other")
     assert quoted, "the shopper still gets sources"
     assert f'id="POL-RETURNS-{other}"' not in quoted
 
 
 @pytest.mark.req("RAG-11")
-def test_no_canary_reaches_the_model(index_retriever: IndexRetriever, tmp_path: Path) -> None:
+def test_no_canary_reaches_the_model(index_rag: RagEndpoint, tmp_path: Path) -> None:
     """Quotes each internal chunk that holds a canary, the closest a query can get."""
     key = json.loads((FIXTURES / "_answer_key.json").read_text(encoding="utf-8"))
     canaries = [entry["canary"] for entry in key["internal_only"]]
@@ -109,5 +114,5 @@ def test_no_canary_reaches_the_model(index_retriever: IndexRetriever, tmp_path: 
     holding = {canary: [c for c in internal if canary in c.text] for canary in canaries}
     assert all(holding.values())
     for number, (canary, chunks) in enumerate(holding.items()):
-        context = model_context(chunks[0].text, "US", index_retriever, tmp_path / str(number))
+        context = model_context(chunks[0].text, "US", index_rag, tmp_path / str(number))
         assert context and canary not in context

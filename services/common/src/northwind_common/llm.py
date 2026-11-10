@@ -161,6 +161,7 @@ PINNED_CLI_FLAGS = frozenset(
         "permission-mode",
         "setting-sources",
         "settings",
+        "strict-mcp-config",
         "tools",
     }
 )
@@ -204,7 +205,12 @@ def agent_options(
         raise ValueError(f"extra_args may not set {pinned}: the factory controls them")
     rt = runtime or agent_runtime()
     # The CLI otherwise writes every turn, prompt included, to a transcript under its config dir.
-    args: dict[str, str | None] = {"bare": None, "no-session-persistence": None}
+    # `--strict-mcp-config`: only `mcp_servers` count; a planted `.mcp.json` adds nothing (CC-10).
+    args: dict[str, str | None] = {
+        "bare": None,
+        "no-session-persistence": None,
+        "strict-mcp-config": None,
+    }
     if extra_args:
         args.update(extra_args)
     return ClaudeAgentOptions(

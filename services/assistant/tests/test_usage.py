@@ -17,6 +17,7 @@ import pytest
 
 from northwind_assistant import turn as turn_module
 from northwind_assistant.caller import Caller
+from northwind_assistant.rag_client import RagEndpoint
 from northwind_assistant.tools import ALLOWED_TOOL
 from northwind_assistant.turn import (
     INSUFFICIENT_EVIDENCE,
@@ -30,6 +31,7 @@ from northwind_assistant.usage import TELEMETRY_LOGGER, TurnUsage
 from northwind_common.llm import ASSISTANT_MODEL, AgentRuntime, agent_runtime
 from northwind_common.pricing import cost_usd
 from northwind_llm_replay.scripted import ScriptedLLM, blocks_sse
+from northwind_mcp_rag.testing import KEY, serve_retriever
 from northwind_rag.retrieval import RetrievedChunk
 
 pytestmark = [pytest.mark.req("RAG-13"), pytest.mark.req("NFR-16")]
@@ -84,10 +86,11 @@ def run(
 ) -> list[TurnEvent]:
     runtime: AgentRuntime = agent_runtime(base_url=llm.url, root=root)
 
-    async def collect() -> list[TurnEvent]:
-        return [e async for e in stream_answer(message, caller, retriever, runtime)]
+    async def collect(rag: RagEndpoint) -> list[TurnEvent]:
+        return [e async for e in stream_answer(message, caller, rag, runtime)]
 
-    return asyncio.run(collect())
+    with serve_retriever(retriever, Caller) as (url, _):
+        return asyncio.run(collect(RagEndpoint(url, KEY)))
 
 
 def script(
