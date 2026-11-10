@@ -8,8 +8,9 @@ or approval.
 monetary`. "The user" is the person at their own terminal. A session cannot push, use `gh` or run Docker
 (decision 0004).
 
-**The only tool a product agent holds today is `retrieve_context`.** No product agent can reach a payment,
-refund or order tool on main. Claude Code sessions are different: a session can run `make record`,
+**Product agents hold three tools today:** the assistant's `retrieve_context` and, since #20, the Orders
+subagent's two reads, `get_fraud_assessments` and `get_payment_status`. No product agent can reach a
+payment, refund or order write on main. Claude Code sessions are different: a session can run `make record`,
 `make eval-live` and `make enrich`, `make llm-proxy` too, and any sandboxed command can claim a window the
 user opened (decision 0005, "Limits"). The file tools can reach both Edit rows at a prompt, and a sandboxed
 `git commit` changed the committed baseline in rig run 2 (decision 0006, "Open limits"); since 5b, `Guard` and
@@ -21,6 +22,8 @@ row. Read each row's Enforced column.
 | Tool | Tier | Limit | Approver | Enforced at |
 |---|---|---|---|---|
 | `retrieve_context` | `read-only` | 3 searches a turn including the server's own (`MAX_SEARCHES`), 4 turns (`MAX_TURNS`), 5 chunks, query only; audience and region are bound on the server | None needed: read-only | `services/assistant/src/northwind_assistant/tools.py`, `services/assistant/src/northwind_assistant/turn.py`; `services/assistant/tests/test_first_request.py::test_the_cap_is_three_searches`, `services/assistant/tests/test_tool_loop.py::test_a_tool_outside_allowed_tools_is_denied_not_just_absent`, `services/assistant/tests/test_first_request.py::test_region_and_audience_are_not_in_the_tool_schema` |
+| `get_fraud_assessments` (Orders subagent, #20) | `read-only` | One order per call, and only the task's own: a call for any other order ID is refused (`not_permitted`), audited, and never reaches the port. Read-only fraud view (`FRAUD_READ_ONLY`), 3 attempts with the same call, a 5 s deadline, 6 turns (`MAX_TURNS`); every call audited | None needed: read-only | `services/backend/src/northwind_backend/agents/orders_check.py`, `services/backend/src/northwind_backend/views.py`; `services/backend/tests/backend_audit/test_be08_views.py`, `services/backend/tests/backend_audit/test_be02_agent_scripted.py` |
+| `get_payment_status` (Orders subagent, #20) | `read-only` | One intent per call, given by the task (no lookup by order, PAY-08), and only the task's own: any other intent ID is refused and audited. Read-only payment view (`PAYMENT_READ_ONLY`); same retries, deadline and turns; every call audited | None needed: read-only | As above; the AST pin `test_nothing_under_src_but_fakes_and_views_reaches_a_money_call` keeps every money method out of agent code |
 
 Built-in tools are off (`tools=[]`, `services/assistant/tests/test_tool_loop.py::test_a_built_in_tool_cannot_run`).
 Evidence for the in-process server: `PROGRESS.md` row 5. It moves to `mcp-rag` at #10.
@@ -109,7 +112,7 @@ Owners placed at GOV-1 are explained in `docs/governance/threat-model.md`, "Owne
 |---|---|
 | The PRD gives no value for the refund cap or the spend, velocity, partner and order ceilings | Rows above, when built |
 | Kill switches by agent, tool and payment route do not exist (NFR-12) | Window B, P6 |
-| No audit log exists yet, so no tool here writes one (NFR-10, BE-08) | #20 |
+| The audit log covers backend port calls and the Orders subagent (#20, BE-08 partial). The assistant's tools, MCP and A2A calls write none yet, and the chain has no outside anchor (NFR-10) | Window B P6, NFR-10 |
 | `make -s record` and `make SUITE=x record` miss the `ask` rules. Read from the rule text, not run. The window still holds | AUTO-2 |
 | `make eval-promote` refuses outside the clone, but its input, `CANDIDATE` in `evals/src/northwind_evals/cli.py`, is still a local file a session can write. The hash is compared only when something needs a reason, so a clean candidate swapped in after a dry run is written if it passes every rule (`docs/reviews/2026-11-05-5b-evidence.md`, second re-review, F4) | 5b, logged low |
 | 12 `ship` and pre-push refusals have no test | AUTO-2, `docs/reviews/2026-11-05-auto-1-evidence.md` |

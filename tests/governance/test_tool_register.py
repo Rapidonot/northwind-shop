@@ -207,11 +207,14 @@ def test_every_makefile_target_has_a_register_row() -> None:
 
 
 def test_the_tool_the_assistant_really_offers_has_a_register_row() -> None:
-    """Compares with the code: every `TOOL_NAME` constant is a tool an agent can call."""
-    source = REPO / "services/assistant/src/northwind_assistant/tools.py"
-    tools = set(re.findall(r'^TOOL_NAME = "([^"]+)"$', source.read_text(), re.M))
-    assert tools, "the tool scan found nothing"
+    """Compares with the code: every tool-name constant under `services/` (`TOOL_NAME` in the
+    assistant, `FRAUD_TOOL` and `PAYMENT_TOOL` in the Orders subagent since #20) is a tool an agent
+    can call, and each `@tool(` uses one of them."""
     code = [path.read_text() for path in (REPO / "services").glob("*/src/**/*.py")]
+    tools = {
+        name for text in code for name in re.findall(r'^[A-Z_]*TOOL = "([a-z_]+)"$', text, re.M)
+    } | {name for text in code for name in re.findall(r'^TOOL_NAME = "([a-z_]+)"$', text, re.M)}
+    assert {"retrieve_context", "get_fraud_assessments", "get_payment_status"} <= tools
     assert sum(text.count("@tool(") for text in code) == len(tools), "a tool has another name"
     # Only this table counts: a planned row naming the same tool says nothing about today.
     today = REGISTER.read_text().partition("## Agent tools today")[2].partition("\n## ")[0]
