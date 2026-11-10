@@ -8,8 +8,8 @@ per-order limit, hard rule 9).
 The task text supplies the intent ID or says there is none (M2): there is no lookup by order
 (PAY-08). Each handler goes through an audited, read-only view of the shared port, with local
 recovery and a real deadline (BE-02). What reaches the model: the task's order and intent IDs, the
-intent's status and minor amounts, and the fraud decision, score, reasons and shopper ID. No names,
-emails, addresses, payment tokens or correlation IDs."""
+intent's status, currency and minor amounts, and the fraud assessment ID, decision, score, reasons
+and shopper ID. No names, emails, addresses, payment tokens or correlation IDs."""
 
 from __future__ import annotations
 
