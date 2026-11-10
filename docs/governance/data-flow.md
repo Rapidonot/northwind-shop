@@ -25,7 +25,7 @@ for anything in the repo; see the build-time row.
 | Shopper message | Window | Only test questions held in cassettes | Yes, as the search query | Query vector only, not stored |
 | Retrieved chunk | Window | Yes | Yes, at ingest | Yes, stored |
 | Review text | Window | Yes | Yes, at ingest | Yes, stored |
-| Internal-only docs | **Bodies: yes, through `make enrich`, in a window; none at runtime.** **Names and topics: yes, through eval items, in a window** | Yes, in fixtures and in `data/enrichment/internal.jsonl` | Yes, at ingest | Yes, stored as `internal` |
+| Internal-only docs | **Bodies: yes, through `make enrich`, in a window; none at runtime.** **Names and topics: yes, through eval items and the 28 red-team queries (`evals/adversarial/rag11_red_team.jsonl`, suite `assistant-redteam`), in a window** | Yes, in fixtures and in `data/enrichment/internal.jsonl` | Yes, at ingest | Yes, stored as `internal` |
 | Generated context | **Produced by Haiku, in a window** | Yes, the committed cache | Yes, embedded ahead of the chunk, enriched index only | `northwind_enriched` only; the shared index stays plain until #8 |
 | Model answers and telemetry | Answers come from it, in a window | Answers held in cassettes | No | No |
 | Prices and stock | No | Yes, in fixtures | No | No exact values |

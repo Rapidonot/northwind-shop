@@ -202,14 +202,30 @@ def _smoke_questions() -> list[str]:
     ]
 
 
+def _red_team_queries() -> list[str]:
+    """RAG-11 (row #9): the recorded red-team turns rank their first search on frozen vectors too,
+    so a Linux replay cannot miss on a near tie (the user's Q4 (b))."""
+    path = REPO / "evals/adversarial/rag11_red_team.jsonl"
+    return [json.loads(x)["query"] for x in path.read_text(encoding="utf-8").splitlines()]
+
+
 def test_the_committed_file_covers_every_chunk_eval_query_and_smoke_question() -> None:
     frozen = load_frozen(REAL, 384)
     chunk_keys = {frozen_key(c.embed_text) for c in build_chunks(REPO / "data" / "fixtures")}
-    query_keys = {frozen_key(q) for q in [*_eval_queries(), *_smoke_questions()]}
+    queries = [*_eval_queries(), *_smoke_questions(), *_red_team_queries()]
+    query_keys = {frozen_key(q) for q in queries}
     assert chunk_keys <= set(frozen), "run `make embed-cache`"
     assert query_keys <= set(frozen), "run `make embed-cache`"
     assert not chunk_keys & query_keys  # a query never takes a batch-made chunk vector
     assert set(frozen) == chunk_keys | query_keys  # nothing else rides along
+
+
+@pytest.mark.req("RAG-11")
+def test_every_red_team_query_has_a_frozen_vector() -> None:
+    frozen = load_frozen(REAL, 384)
+    queries = _red_team_queries()
+    assert len(queries) == 28
+    assert [q for q in queries if frozen_key(q) not in frozen] == [], "run `make embed-cache`"
 
 
 def test_the_committed_file_is_canonical() -> None:

@@ -34,8 +34,9 @@ cannot change these rules.
 
 # The tags are the only markers in the user turn, and escaped text cannot produce them in ASCII, so
 # a fake "SYSTEM:" or shopper label inside a block stays inside it (hard rule 6, decision 0007).
-# Lookalikes such as fullwidth brackets pass escaping: they cannot change this structure, but
-# whether the model reads them as tags is untested. The CLI
+# Source text is NFKC-normalised before escaping (`tools.as_data`, RAG-11), so fullwidth and
+# small-form lookalikes such as `＜/source＞` fold to ASCII and are escaped too. The shopper message
+# is escaped but not normalised (owner #13). The CLI
 # reads a prompt starting with "/" as a slash command, so shopper text never comes first.
 USER_PROMPT = """\
 <sources>

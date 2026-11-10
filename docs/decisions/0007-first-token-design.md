@@ -34,7 +34,11 @@ change after it re-records them.
    block stays inside it. This replaces the plain `Shopper's message:` label, which a source could
    have imitated once both share the user turn. Escaping covers ASCII: a lookalike such as fullwidth
    `＜/source＞` passes it. That cannot change the structure, but whether the model reads it as a tag
-   is untested.
+   is untested. **Amended 2026-11-09 by RAG-11 (row #9):** retrieved text is NFKC-normalised before it
+   is escaped (`tools.as_data`), so fullwidth and small-form lookalikes fold to ASCII and are escaped
+   too. Format characters such as U+200B are kept (whether to strip them is #13's call), and the
+   shopper message is escaped but not normalised (owner #13). Every fixture string and recorded
+   `<source>` block is NFKC-stable, so no cassette changed.
 6. Reaching the turn limit is not an error. The refused search tells the model to answer from what
    it has; if it still does not, the shopper gets a fixed insufficient-evidence reply with no
    product claim. The `turn_limit` error code is gone. An outage, where every search failed, stays
