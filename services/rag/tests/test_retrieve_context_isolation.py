@@ -46,6 +46,7 @@ def moved_corpus(
     return embedder, moved
 
 
+@pytest.mark.req("RAG-11")
 @pytest.mark.parametrize("region", sorted(SHOPPER_REGIONS))
 def test_an_internal_document_in_the_shoppers_own_region_is_still_hidden(
     conn: psycopg.Connection,
@@ -65,6 +66,7 @@ def test_an_internal_document_in_the_shoppers_own_region_is_still_hidden(
         assert chunk.chunk_id not in {c.chunk_id for c in quoted}
 
 
+@pytest.mark.req("RAG-11")
 @pytest.mark.parametrize("region", sorted(SHOPPER_REGIONS))
 def test_staff_in_the_same_region_do_get_them(
     conn: psycopg.Connection, moved_corpus: tuple[FakeEmbedder, set[str]], region: str
@@ -82,6 +84,7 @@ def test_staff_in_the_same_region_do_get_them(
     assert {c.source_id for c in found} & moved
 
 
+@pytest.mark.req("RAG-11")
 def test_a_call_that_names_no_audience_is_a_shopper_call(
     conn: psycopg.Connection, moved_corpus: tuple[FakeEmbedder, set[str]]
 ) -> None:

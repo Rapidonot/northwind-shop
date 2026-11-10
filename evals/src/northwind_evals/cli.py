@@ -116,6 +116,7 @@ REVIEW_LIST = Path("docs/reviews/RAG-12-eval-review.md")
 ENRICHMENT_REPORT = Path("docs/reviews/RAG-02-enrichment-report.md")
 SMOKE_QUESTIONS = Path("apps/portal/e2e/questions.json")
 CONTRADICTIONS = Path("services/assistant/tests/contradictions.json")
+RED_TEAM = Path("evals/adversarial/rag11_red_team.jsonl")
 RETRIEVAL_REPORT = Path("docs/reviews/RAG-03-retrieval-report.md")
 SUITE = "eval-answers"
 ALLOW_STALE_ENV = "EVAL_ALLOW_STALE"
@@ -417,11 +418,14 @@ def cmd_gate(args: argparse.Namespace) -> int:
 
 
 def _frozen_queries(items: Sequence[EvalItem]) -> list[str]:
-    """Every query whose ranking a recording or the gate depends on: the eval items and the smoke
-    questions. Follow-up searches the model writes are not here; they embed live (D4)."""
+    """Every query whose ranking a recording or the gate depends on: the eval items, the smoke
+    questions and the RAG-11 red-team queries. Follow-up searches the model writes are not here;
+    they embed live (D4)."""
     portal = json.loads(SMOKE_QUESTIONS.read_text(encoding="utf-8"))
     traps = json.loads(CONTRADICTIONS.read_text(encoding="utf-8"))
+    red_team = [json.loads(line)["query"] for line in RED_TEAM.read_text("utf-8").splitlines()]
     texts = [item.query for item in items] + list(portal.values()) + [t["question"] for t in traps]
+    texts += red_team
     return list(dict.fromkeys(texts))
 
 

@@ -34,6 +34,7 @@ def ids(chunks: Any) -> list[str]:
     return [c.chunk_id for c in chunks]
 
 
+@pytest.mark.req("RAG-11")
 @pytest.mark.integration
 @pytest.mark.parametrize("region", REGIONS)
 def test_no_arm_returns_an_internal_chunk_to_a_shopper(
@@ -52,6 +53,7 @@ def test_no_arm_returns_an_internal_chunk_to_a_shopper(
             assert not internal & set(ids(found))
 
 
+@pytest.mark.req("RAG-11")
 @pytest.mark.integration
 def test_p0009_is_never_returned_to_a_shopper(
     conn: psycopg.Connection, embedder: FakeEmbedder
@@ -69,6 +71,7 @@ def test_p0009_is_never_returned_to_a_shopper(
             assert not p0009 & set(ids(found_kw))
 
 
+@pytest.mark.req("RAG-11")
 @pytest.mark.integration
 def test_a_shopper_without_a_valid_region_is_refused(
     conn: psycopg.Connection, embedder: FakeEmbedder
@@ -95,6 +98,7 @@ def test_an_unknown_audience_or_empty_k_is_refused(
         keyword_search(conn, "jacket", audience="shopper", k=0, region="US")
 
 
+@pytest.mark.req("RAG-11")
 @pytest.mark.integration
 @pytest.mark.parametrize("region", REGIONS)
 def test_policy_chunks_stay_in_the_callers_region_on_every_arm(

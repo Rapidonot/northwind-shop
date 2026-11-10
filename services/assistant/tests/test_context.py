@@ -84,6 +84,7 @@ def returns_policy(region: str) -> Chunk:
     return next(c for c in build_chunks(FIXTURES) if c.source_id == f"POL-RETURNS-{region}")
 
 
+@pytest.mark.req("RAG-11")
 @pytest.mark.parametrize(
     ("region", "other"), [("US", "UK"), ("CA", "US"), ("UK", "EU"), ("EU", "CA")]
 )
@@ -98,6 +99,7 @@ def test_the_model_sees_its_own_regions_policy_and_never_anothers(
     assert f'id="POL-RETURNS-{other}"' not in quoted
 
 
+@pytest.mark.req("RAG-11")
 def test_no_canary_reaches_the_model(index_retriever: IndexRetriever, tmp_path: Path) -> None:
     """Quotes each internal chunk that holds a canary, the closest a query can get."""
     key = json.loads((FIXTURES / "_answer_key.json").read_text(encoding="utf-8"))
