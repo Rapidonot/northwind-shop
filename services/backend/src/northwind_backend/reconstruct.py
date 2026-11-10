@@ -253,7 +253,7 @@ def _uncertain(
         # Only a read after the last doubtful attempt can settle it: a read between two attempts
         # says nothing about the later one (row review F1).
         settled: Settled = (
-            "done" if outcome_known else _settle_by_read(action, first, last, mine, order_id)
+            "done" if outcome_known else _settle_by_read(action, key, first, last, mine, order_id)
         )
         found.append(
             Uncertain(
@@ -281,10 +281,19 @@ def _amount_of(
 
 
 def _settle_by_read(
-    action: str, first: AuditEvent, last: AuditEvent, mine: list[AuditEvent], order_id: str
+    action: str,
+    key: str | None,
+    first: AuditEvent,
+    last: AuditEvent,
+    mine: list[AuditEvent],
+    order_id: str,
 ) -> Settled:
     """Reads after `last`, the group's last doubtful event; a refund's baseline is the amount
-    refunded before `first`, where the logical action began."""
+    refunded before `first`, where the logical action began.
+
+    A refund total can also grow from another key's refund, so a doubtful refund is left `open`
+    when any other refund on the same intent succeeded or was doubtful after `first`: a later
+    read can't tell whose refund it shows (re-review L1)."""
     event = first
     later = [e for e in mine if e.seq > last.seq and _is_ok(e)]
     if action in ("payment.capture", "payment.void", "payment.refund"):
@@ -301,6 +310,17 @@ def _settle_by_read(
             return "done" if (_int(out, "captured_minor") or 0) > 0 else "not_done"
         if action == "payment.void":
             return "done" if out.get("status") == "voided" else "not_done"
+        others = [
+            e
+            for e in mine
+            if e.action == "payment.refund"
+            and e.seq > first.seq
+            and _str(e.inputs, "intent_id") == intent
+            and e.inputs.get("dry_run") is not True
+            and _str(e.inputs, "idempotency_key") != key
+        ]
+        if others:
+            return "open"
         before = _refunded_before(event, mine, intent)
         return "done" if (_int(out, "refunded_minor") or 0) > before else "not_done"
     if action == "fraud.assess":

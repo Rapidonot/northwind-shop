@@ -97,12 +97,21 @@ def test_a_same_key_dry_run_never_settles_a_timed_out_call() -> None:
 
 
 def test_a_same_key_dry_run_after_an_effect_still_leaves_it_open() -> None:
-    row, fakes, sink, views, intent_id = _authorized()
-    fakes.payment.faults.inject("capture", FaultKind.TIMEOUT_AFTER, times=1)
-    assert views.payment.capture(idempotency_key="k-1", intent_id=intent_id) is TIMEOUT
-    views.payment.capture(idempotency_key="k-1", intent_id=intent_id, dry_run=True)
+    """Re-review L2: a refund lets a dry-run preview succeed after a real refund under the same key,
+    so the dry-run `Ok` really reaches the group and must still settle nothing."""
+    row, fakes, sink, views, intent_id = _authorized(capture=True)
+    amount = Money(100, amount_for(row).currency)
+    fakes.payment.faults.inject("refund", FaultKind.TIMEOUT_AFTER, times=1)
+    assert (
+        views.payment.refund(idempotency_key="r-1", intent_id=intent_id, amount=amount) is TIMEOUT
+    )
+    preview = views.payment.refund(
+        idempotency_key="r-1", intent_id=intent_id, amount=amount, dry_run=True
+    )
+    assert isinstance(preview, Ok) and preview.value.dry_run
     record = reconstruct_order(sink.read_all(), row["order_id"])
-    assert [u.settled for u in record.uncertain] == ["open"]
+    assert [(u.action, u.settled) for u in record.uncertain] == [("payment.refund", "open")]
+    assert record.refunded_minor == 0
     assert_reconciles(record, fakes)
 
 
@@ -126,3 +135,42 @@ def test_calls_whose_keys_are_unreadable_are_never_one_group() -> None:
     )
     record = reconstruct_order(sink.read_all(), row["order_id"])
     assert [u.settled for u in record.uncertain] == ["open"]
+    assert_reconciles(record, fakes)
+
+
+# Re-review L1: another key's refund must not settle a refund that never happened ----------------
+
+
+def test_another_keys_refund_does_not_settle_a_refund_that_never_happened() -> None:
+    """Refund K times out before its effect; refund J on the same intent succeeds; a later status
+    read shows a larger refunded total. K never happened, so it must not be labelled `done`."""
+    row, fakes, sink, views, intent_id = _authorized(capture=True)
+    amount = Money(100, amount_for(row).currency)
+    fakes.payment.faults.inject("refund", FaultKind.TIMEOUT_BEFORE, times=1)
+    assert (
+        views.payment.refund(idempotency_key="r-k", intent_id=intent_id, amount=amount) is TIMEOUT
+    )
+    assert isinstance(
+        views.payment.refund(idempotency_key="r-j", intent_id=intent_id, amount=amount), Ok
+    )
+    assert isinstance(views.payment.status(intent_id), Ok)
+    record = reconstruct_order(sink.read_all(), row["order_id"])
+    [entry] = [u for u in record.uncertain if u.idempotency_key == "r-k"]
+    assert entry.settled != "done"
+    assert record.refunded_minor == 100
+    assert_reconciles(record, fakes)
+
+
+def test_a_refund_that_never_happened_is_settled_not_done_by_a_later_read() -> None:
+    """With no other refund on the intent, a later status read settles a timed-out refund, and the
+    label must agree with the fake's own record for its key (re-review L1, helper check)."""
+    row, fakes, sink, views, intent_id = _authorized(capture=True)
+    amount = Money(100, amount_for(row).currency)
+    fakes.payment.faults.inject("refund", FaultKind.TIMEOUT_BEFORE, times=1)
+    assert (
+        views.payment.refund(idempotency_key="r-k", intent_id=intent_id, amount=amount) is TIMEOUT
+    )
+    assert isinstance(views.payment.status(intent_id), Ok)
+    record = reconstruct_order(sink.read_all(), row["order_id"])
+    assert [(u.idempotency_key, u.settled) for u in record.uncertain] == [("r-k", "not_done")]
+    assert_reconciles(record, fakes)
