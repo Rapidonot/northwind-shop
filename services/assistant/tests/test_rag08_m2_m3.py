@@ -1,7 +1,9 @@
-"""Row #13, the user's decisions on security findings M2 and M3 (2026-11-11), part of the class
-freeze. M2: a policy duration passes only if a sentence of a public document holds the same
-duration and the same policy stem; the policy context takes in the preceding heading or parent
-bullet line. M3: the added wordings. No model call, no spend."""
+"""Row #13, the user's decisions on security findings M2 and M3 and at the third stop (2026-11-11),
+part of the class freeze. A duration counts only in a policy sentence (a policy stem in it, its
+list parent, the nearest heading above, or the previous sentence in the paragraph), and passes only
+if a public, non-internal document returned this turn states the same value; the document-side
+stem matching first built for M2 was dropped by the user's P3-4 decision. M3: the added wordings.
+No model call, no spend."""
 
 from __future__ import annotations
 

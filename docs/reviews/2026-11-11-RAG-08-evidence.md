@@ -1,8 +1,11 @@
 # RAG-08 + NFR-03 (partial), row #13: evidence, 2026-11-11
 
-Branch `req/RAG-08-grounding`, base `201c97a` (origin/main, PR #35). Plan: `2026-11-11-RAG-08-plan.md`
-(approved, with the user's three changes and the revision's advisor fixes). Committed on the branch,
-not pushed. Ledger: **$2.588401 at the start; $2.703501 at the last read, all of it spent by another session (window A).** This row recorded nothing.
+Branch `req/RAG-08-grounding`. It started from `201c97a` (origin/main, PR #35). After row #21 merged as PR #36, the
+branch merged `origin/main` at `ba4a04e` (merge `773adc1`), so the review base is `ba4a04e`. Plan:
+`2026-11-11-RAG-08-plan.md` (approved, with the user's three changes and the revision's advisor fixes). Committed on
+the branch, not pushed. Ledger: **$2.588401 at the start, $2.950179 at the end**, all of the increase spent by
+another session (window A, #21). The last two readings, at 19:06:37 and 19:11:37, matched. This row recorded
+nothing.
 
 ## Failing first (AC8)
 
@@ -251,7 +254,10 @@ Raw, verbatim, appended to `docs/reviews/2026-11-11-RAG-08-security-review.md`, 
   `test_p3_3a_a_parent_beyond_the_window_fails_closed`.
 - **The earlier sets were re-run on this code:**
   - M2/M3: 13 of 15 killed. The 2 that did not apply were rewritten for `_context_stems` and killed.
-  - The main set: 35 of 37 killed. The other 2 are inexact entries whose exact versions were killed.
+  - The main set: 35 of 37 killed (`/tmp/claude-502/rag08-mutants-final-c.log`). The other 2, "N3 old moved()" (an
+    inexact rewrite, SURVIVED) and "no policy-stem rule" (NOT APPLIED), were re-run as exact mutants and killed
+    (`/tmp/claude-502/rag08-mutants-last-c.log`: "no policy-stem rule (every duration is policy)" and "N3 exact
+    pass-1 moved()").
 
 **Over-blocking, re-run:**
 - The same 38 sentences are blocked: none new, none removed.
@@ -282,7 +288,8 @@ Raw, verbatim, appended to `docs/reviews/2026-11-11-RAG-08-security-review.md`, 
   FAQ-007's one hour now vouches;
 - `test_m2_a_long_policy_sentence_keeps_the_stems_read_up_to_the_bound`: FAQ-017's 14 days now vouches for
   the long "Returns take 14 days…", and with no source it is still replaced;
-- `test_m2_a_documents_heading_vouches_for_a_bullet_with_no_stem_of_its_own`: the bare bullet now vouches, and
+- `test_m2_a_documents_heading_vouches_for_a_bullet_with_no_stem_of_its_own` (renamed at P4-9 to
+  `test_m2_a_public_documents_bullet_vouches_with_or_without_a_heading`): the bare bullet now vouches, and
   with no source it is still replaced.
 
 **Kept, as you asked:** a duration only in a review, only in an internal document or only in a product is
@@ -437,6 +444,48 @@ rule).**
 - #21 merges first. This row then merges `origin/main` (no rebase), renumbers its decision 0014 to 0015, and resolves
   `PROGRESS.md`, `docs/governance/*` and `tests/governance/*`. It stops to show the resolution before committing
   the merge.
+
+## The merge of `origin/main` after row #21 (2026-11-11)
+
+- **The user's signal:** "origin/main is fetched (ba4a04e, #21 merged as PR #36)".
+- **The merge:** `git merge --no-commit --no-ff origin/main`, with no rebase and no git error strings.
+- **Conflicts:** one, in `COVERAGE.md`. Both rows had appended a 2026-11-11 entry to the CC-04 line; the resolution
+  keeps both, #21's first.
+- **Merged without conflict:**
+  - `PROGRESS.md`: against main, only this row's lines differ (#12's text, the #13b row, the #13 open items and
+    the residuals);
+  - `docs/governance/threat-model.md`: only this row's rows 70, 86, 89, 167, 193 and 194 differ; #21's row 76
+    keeps "decision 0014";
+  - `docs/governance/data-flow.md` and `tool-register.md`: identical to main.
+- **`tests/governance/`:** changed by neither row; 192 passed on the merged tree.
+- **Renumbering:** this row's decision went from 0014 to 0015. #21's `0014-payment-confirmation-and-order-limit.md`
+  keeps 0014.
+  - The file was moved with `git mv`, its title changed to "# 0015", and its numbering note rewritten.
+  - Every reference to it was changed: code, tests, decision 0007, the threat-model rows, the PROGRESS lines, the
+    plan, this file, the PR body, and the security-review file (with a note).
+  - Lines that describe the numbering plan itself were left as they were.
+- **Approval:** the resolution was shown to the user before the merge commit, and the user replied "Resolution
+  approved". The merge commit is `773adc1`.
+
+## The row review (`advisor-reviewer`, at `05f1f0c`)
+
+**`findings`: no high or critical; 3 mediums and 3 lows, all process or documentation. All were fixed in the
+next commit:**
+1. **AC8 at the reviewed head:** the e2e replay is re-run at the final head, with its SHA in the log (below).
+2. **AC2:** `test_tool_loop.py::test_a_fifth_turn_never_happens` (the turn cap's fixed insufficient-evidence
+   reply) gains `req("RAG-08")`. A marker was added; nothing else changed.
+3. **PROGRESS.md:**
+   - row #13's scope records the split;
+   - every item other rows gave to #13 (rows #6, #9, #10 and #14) is marked done or re-owned;
+   - row #13's status and evidence are left to `/req-done`;
+   - RT-016's `targets` was already kept by the user's decision at #9, so it is closed with no change.
+4. **Residuals:** the missing ones are added to decision 0015, `PROGRESS.md` and the PR body.
+5. **Stale text corrected:**
+   - threat-model rows 85 and 92;
+   - the `answerers.py` docstring (#13b);
+   - the `test_rag08_m2_m3.py` docstring;
+   - this file's header, the renamed test and the mutant logs.
+6. **The merge record:** the section above.
 
 ## Pre-row tests changed (for the user's read)
 
