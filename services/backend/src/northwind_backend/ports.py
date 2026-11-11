@@ -209,6 +209,8 @@ class Order:
 def claim_payment_view(order: Order, claim: str) -> dict[str, Any]:
     """The claim and any payment on it, as an escalation context shows them (F1)."""
     return {
+        # What the claim owner last reported, not the payment port's state (re-review N1).
+        "source": "claim_report",
         "status": order.payment_status or "payment_claimed",
         "claim": claim,
         "intent_id": order.intent_id,

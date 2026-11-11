@@ -206,7 +206,9 @@ class OrderStoreFake(FakeService):
                     # Under the store's lock (F1, claim-fix review C1): the caller's view and the
                     # claim's as it stands now; the one showing more money moved is kept, so a
                     # stale read on either side never hides a hold or a capture.
-                    label = str((caller or {}).get("claim") or "another_run")
+                    label = str(
+                        (caller or {}).get("claim") or "unreported"
+                    )  # the store can't tell who escalated (N3)
                     stored["payment"] = further_along(caller, claim_payment_view(order, label))
                 self.state.escalations[order_id] = MappingProxyType(stored)
             return self._save("escalate", updated, dry)
@@ -276,7 +278,9 @@ class OrderStoreFake(FakeService):
             kept = dict(self.state.escalations.get(order.order_id, {}))
             before = kept.get("payment")
             caller = before if isinstance(before, Mapping) else None
-            label = str((caller or {}).get("claim") or "another_run")
+            label = str(
+                (caller or {}).get("claim") or "unreported"
+            )  # the store can't tell who escalated (N3)
             kept["payment"] = further_along(caller, claim_payment_view(updated, label))
             self.state.escalations[order.order_id] = MappingProxyType(kept)
         return self._keep_claim("authorization_reported", updated, dry)

@@ -25,10 +25,12 @@ What the model decides is the order of calls. Everything that matters is decided
   the user's Option 1). A run that doesn't own the claim never authorizes and escalates
   (`duplicate_in_progress`), a rerun after a crash included. The owner reports its intent on the
   claim after authorize and after capture, and an escalation of a paying order stores whichever
-  view of the payment shows more money moved, so a hold or a capture is always reported.
+  view of the payment shows more money moved, so a hold or a capture is reported unless both
+  views are stale (a failed report and a crashed owner); the audit still has it (re-review N1).
 - The escalation reason and context are built from the run's state, never from model text (#20 C1):
   amounts come from step values. A run that ends with the order neither confirmed nor escalated is
-  escalated by code (`not_finished`), so no run ends silently.
+  escalated by code (`not_finished`, or `duplicate_in_progress` when another run's claim holds it),
+  so no run ends silently.
 
 What reaches the model: validation issue codes and the line count, the fraud decision, score and
 reasons, payment, order and escalation statuses, and fixed-text errors (`agents/messages.py`). Never
@@ -232,7 +234,9 @@ Reason = Literal[
 RECOMMENDED: dict[str, str] = {
     "uncertain_write": "read the payment and order state, settle the uncertain action, then finish",
     "duplicate_in_progress": (
-        "another run holds the payment claim: check its authorization (in `payment`) first"
+        "another run holds the payment claim: read the order's intent at the payment port, or the "
+        "order's reconstruction (payment_label), before acting; `payment` is only what was "
+        "last reported"
     ),
     "fraud_review": "review the fraud assessment; release or cancel the order",
     "out_of_stock": "offer a substitute or a back-order, or cancel (BE-04)",
@@ -965,8 +969,8 @@ async def finish(handlers: _Handlers, result: AgentResult) -> PlacementResult:
 
     before = await stored()
     # Re-review N1: skip the code escalation only when the store positively holds the order as
-    # not pending, or this run's escalation is doubtful; a failed read still tries (the store's
-    # own checks make that safe).
+    # confirmed or escalated, or this run's escalation is doubtful; a failed read still tries
+    # (the store's own checks make that safe).
     # Claim-fix review C2: an order another run's claim holds in `paying` is not closed. That
     # owner may have crashed, so this run escalates it too (fail closed, the user's rule 2).
     closed = before is not None and before.status in (OrderStatus.CONFIRMED, OrderStatus.ESCALATED)
