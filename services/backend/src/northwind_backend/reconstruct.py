@@ -41,6 +41,8 @@ STATE_CHANGING = frozenset(
         "order.address_on_file",
         "order.confirm",
         "order.escalate",
+        # The payment claim (F1): no key, so each call stands alone by action ID (C3).
+        "order.claim_payment",
     }
 )
 ORDER_ACTIONS = frozenset(

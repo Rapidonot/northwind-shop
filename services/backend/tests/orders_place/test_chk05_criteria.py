@@ -91,13 +91,15 @@ def test_ten_duplicates_of_one_order_in_threads_yield_one_order() -> None:
     # one of each, and one is added: an escalated order reports any live payment.
     outcomes = {r.outcome for r in results if r is not None}
     assert len(outcomes) == 1 and None not in results
+    assert outcomes <= {"placed", "escalated"}  # claim-fix review C6: never `failed`
     ops = [op for op, _ in world.effects()]
     assert ops.count("authorize") <= 1 and ops.count("capture") <= 1 and ops.count("confirm") <= 1
     assert charges(world, row["order_id"]) <= 1
     if outcomes == {"placed"}:
         assert ops.count("confirm") == 1 and charges(world, row["order_id"]) == 1
-    elif ops.count("authorize"):
-        assert world.orders.escalations[row["order_id"]]["payment"] is not None
+    from .test_chk05_idempotent_placement import assert_at_most_one_of_everything
+
+    assert_at_most_one_of_everything(world, row, outcomes.pop())  # C6: intent and capture match
 
 
 def test_a_duplicate_with_a_fresh_confirmation_after_placement_charges_nothing_more() -> None:

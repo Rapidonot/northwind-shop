@@ -41,6 +41,7 @@ from northwind_backend.ports import (
     OrderStatus,
     PaymentIntent,
     claim_payment_view,
+    further_along,
 )
 
 ORDER_SCOPES = frozenset({"get", "use_address_on_file", "confirm", "escalate", "claim_payment"})
@@ -200,18 +201,13 @@ class OrderStoreFake(FakeService):
             if not dry:
                 stored = dict(kept)
                 payment = stored.get("payment")
-                if (
-                    order.claimed_by is not None
-                    and order.intent_id is not None
-                    and (
-                        not isinstance(payment, Mapping)
-                        or payment.get("intent_id") != order.intent_id
-                    )
-                ):
-                    # The caller read the order before the claim owner reported: the store, under
-                    # its lock, puts the claim's payment as it stands now (F1).
-                    claim = payment.get("claim") if isinstance(payment, Mapping) else None
-                    stored["payment"] = claim_payment_view(order, str(claim or "another_run"))
+                caller = payment if isinstance(payment, Mapping) else None
+                if order.claimed_by is not None:
+                    # Under the store's lock (F1, claim-fix review C1): the caller's view and the
+                    # claim's as it stands now; the one showing more money moved is kept, so a
+                    # stale read on either side never hides a hold or a capture.
+                    label = str((caller or {}).get("claim") or "another_run")
+                    stored["payment"] = further_along(caller, claim_payment_view(order, label))
                 self.state.escalations[order_id] = MappingProxyType(stored)
             return self._save("escalate", updated, dry)
 
@@ -278,7 +274,10 @@ class OrderStoreFake(FakeService):
         if not dry and order.status is OrderStatus.ESCALATED:
             # Escalated while this run was paying: the stored escalation now shows the money.
             kept = dict(self.state.escalations.get(order.order_id, {}))
-            kept["payment"] = claim_payment_view(updated, "another_run")
+            before = kept.get("payment")
+            caller = before if isinstance(before, Mapping) else None
+            label = str((caller or {}).get("claim") or "another_run")
+            kept["payment"] = further_along(caller, claim_payment_view(updated, label))
             self.state.escalations[order.order_id] = MappingProxyType(kept)
         return self._keep_claim("authorization_reported", updated, dry)
 

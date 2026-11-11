@@ -144,8 +144,12 @@ def test_ten_replays_at_once_never_charge_twice_and_report_money(kind: str) -> N
         return list(await asyncio.gather(*(drive(world, task, kind, n) for n in range(10))))
 
     results = asyncio.run(ten())
-    assert len({r.outcome for r in results}) == 1  # one terminal state, the store's
+    outcomes = {r.outcome for r in results}
+    assert len(outcomes) == 1 and outcomes <= {"placed", "escalated"}  # C6: never `failed`
     assert_at_most_one_of_everything(world, row, results[0].outcome)
+    if OUTCOME[kind] == "escalated":  # kinds that never pay: nothing the claim changes (C6)
+        assert outcomes == {"escalated"}
+        assert_one_order(world, row, kind)
 
 
 def test_two_duplicates_with_the_same_keys_never_both_get_the_claim() -> None:
@@ -174,11 +178,15 @@ def test_two_duplicates_with_the_same_keys_never_both_get_the_claim() -> None:
     asyncio.run(interleave())
     oid = task.order_id
     assert [step for order, step in world.orders.claims if order == oid].count("claimed") == 1
-    keys = {
-        e.correlation_id: [k for k in [e.inputs.get("idempotency_key")] if isinstance(k, str)]
-        for e in world.sink.read_all()
-    }
-    assert keys  # both runs wrote under the same order-ID keys
+    keys: dict[str, list[str]] = {}
+    for e in world.sink.read_all():
+        key = e.inputs.get("idempotency_key")
+        if e.phase == "attempt" and isinstance(key, str):
+            keys.setdefault(e.correlation_id, []).append(key)
+    # C5: both runs present the same order-ID keys for the steps they share.
+    assert f"{oid}:fraud.assess" in keys["run-1"] and f"{oid}:fraud.assess" in keys["run-2"]
+    shared = set(keys["run-2"]) - {f"{oid}:order.escalate"}
+    assert shared <= set(keys["run-1"])
     authorizes = [e for e in world.payment.effects if e.operation == "authorize"]
     assert len(authorizes) == 1
     second = [e for e in world.sink.read_all() if e.correlation_id == "run-2"]

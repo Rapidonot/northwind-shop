@@ -364,3 +364,161 @@ def test_a_run_identity_never_looks_like_card_data() -> None:
     for n in range(2_000):
         h = build_handlers(world.task(row), world.ports(), world.audit(), correlation_id=f"r-{n}")
         assert not card_data(h.run_id), h.run_id
+
+
+# ---- the payment-claim fix's review (`docs/reviews/2026-11-11-BE-05-security-claim-review.md`) ---
+
+
+def test_a_failed_capture_report_never_hides_the_capture_in_the_escalation() -> None:
+    """C1, failure 1: the capture report fails before its effect, so the store still says
+    authorized; the owner's own view says captured. The stored escalation shows the capture, held
+    by this run."""
+    world, row = World.make(), first_of("clean")
+    ports = world.ports()
+    task = world.task(row)
+    h = build_handlers(
+        task,
+        ports,
+        world.audit(),
+        correlation_id="run-1",
+        read_policy=FAST,
+        write_policy=FAST_WRITE,
+    )
+    arg = {"order_id": task.order_id}
+
+    async def run() -> PlacementResult:
+        for call in ("validate_order", "assess_fraud", "authorize_payment"):
+            await getattr(h, call)(arg)
+        ports.orders.faults.inject("claim_payment", FaultKind.TIMEOUT_BEFORE, times=1)  # type: ignore[attr-defined]
+        await h.capture_payment(arg)
+        await h.confirm_order(arg)
+        await h.escalate_order(arg)
+        return await finish(h, AgentResult(RunStatus.COMPLETE, (), (), "run-1"))
+
+    result = asyncio.run(run())
+    assert result.outcome == "escalated"
+    stored = world.orders.escalations[task.order_id]["payment"]
+    intent = next(i for i in world.payment.intents.values() if i.order_id == task.order_id)
+    assert intent.captured_minor > 0
+    assert stored["captured_minor"] == intent.captured_minor
+    assert stored["intent_id"] == intent.intent_id and stored["claim"] == "this_run"
+
+
+def test_a_stale_escalation_view_never_replaces_a_fresher_claim_view() -> None:
+    """C1, failure 2, at the store: an escalation built from a read taken before the owner's capture
+    report lands after it. The store keeps the view that shows the capture."""
+    world, row = World.make(), first_of("clean")
+    ports = world.ports()
+    task = world.task(row)
+    owner = build_handlers(
+        task,
+        ports,
+        world.audit(),
+        correlation_id="run-a",
+        read_policy=FAST,
+        write_policy=FAST_WRITE,
+    )
+    arg = {"order_id": task.order_id}
+
+    async def run() -> None:
+        for call in ("validate_order", "assess_fraud", "authorize_payment"):
+            await getattr(owner, call)(arg)
+
+    asyncio.run(run())
+    intent = next(i for i in world.payment.intents.values() if i.order_id == task.order_id)
+    stale = {
+        "payment": {
+            "status": "authorized",
+            "intent_id": intent.intent_id,
+            "captured_minor": 0,
+            "claim": "another_run",
+        },
+        "reason": "duplicate_in_progress",
+    }
+    asyncio.run(owner.capture_payment(arg))  # the owner captures and reports while still paying
+    done = ports.orders.escalate(
+        idempotency_key=f"{task.order_id}:order.escalate",
+        order_id=task.order_id,
+        reason="duplicate_in_progress",
+        context=stale,
+    )
+    assert getattr(done, "is_error", False) is False
+    stored = world.orders.escalations[task.order_id]["payment"]
+    assert stored["status"] == "captured" and stored["captured_minor"] == intent.authorized_minor
+
+
+def test_a_crashed_owners_order_is_escalated_by_a_rerun_that_stops_short() -> None:
+    """C2: the owner claimed, authorized and died; a rerun that stops after validating still
+    escalates the paying order, with the claim's payment reported."""
+    world, row = World.make(), first_of("clean")
+    task = world.task(row)
+    crashed = build_handlers(
+        task,
+        world.ports(),
+        world.audit(),
+        correlation_id="run-1",
+        read_policy=FAST,
+        write_policy=FAST_WRITE,
+    )
+
+    async def run() -> PlacementResult:
+        for call in HAPPY[:3]:
+            await getattr(crashed, call)({"order_id": task.order_id})
+        return await drive(world, task, ["validate_order"], "run-2")
+
+    rerun = asyncio.run(run())
+    assert rerun.outcome == "escalated" and rerun.reason == "duplicate_in_progress"
+    stored = world.orders.escalations[task.order_id]["payment"]
+    assert stored["intent_id"] is not None and stored["claim"] == "another_run"
+
+
+def test_a_doubtful_claim_is_uncertain_in_the_reconstruction() -> None:
+    """C3: a claim that timed out after its effect is listed as uncertain."""
+    from northwind_backend.reconstruct import reconstruct_order
+
+    world, row = World.make(), first_of("clean")
+    ports = world.ports()
+    ports.orders.faults.inject("claim_payment", FaultKind.TIMEOUT_AFTER, times=1)  # type: ignore[attr-defined]
+    result = asyncio.run(drive(world, world.task(row), HAPPY, "run-1", ports))
+    assert result.outcome == "escalated" and result.reason == "uncertain_write"
+    record = reconstruct_order(world.sink.read_all(), row["order_id"])
+    assert "order.claim_payment" in [u.action for u in record.uncertain]
+    assert money(world, row["order_id"]) == []  # never authorized after a doubtful claim
+
+
+def test_a_duplicate_is_told_escalated_only_when_the_escalation_was_written() -> None:
+    """C4."""
+    world, row = World.make(), first_of("clean")
+    task = world.task(row)
+    owner = build_handlers(
+        task,
+        world.ports(),
+        world.audit(),
+        correlation_id="run-a",
+        read_policy=FAST,
+        write_policy=FAST_WRITE,
+    )
+    dup_ports = world.ports()
+    dup = build_handlers(
+        task,
+        dup_ports,
+        world.audit(),
+        correlation_id="run-b",
+        read_policy=FAST,
+        write_policy=FAST_WRITE,
+    )
+    arg = {"order_id": task.order_id}
+
+    async def run() -> str:
+        for call in ("validate_order", "assess_fraud", "authorize_payment"):
+            await getattr(owner, call)(arg)
+        await dup.validate_order(arg)
+        await dup.assess_fraud(arg)
+        # Only the duplicate's escalation fails: its claim is refused as usual.
+        dup_ports.orders.faults.inject("escalate", FaultKind.OUTAGE)  # type: ignore[attr-defined]
+        answer = await dup.authorize_payment(arg)
+        return str(answer["content"][0]["text"])
+
+    text = asyncio.run(run())
+    assert "has been escalated" not in text
+    assert "service_unavailable" in text

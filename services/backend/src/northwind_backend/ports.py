@@ -218,6 +218,36 @@ def claim_payment_view(order: Order, claim: str) -> dict[str, Any]:
     }
 
 
+_STAGE = {
+    "payment_claimed": 0,
+    "authorized": 1,
+    "voided": 1,
+    "captured": 2,
+    "partially_refunded": 3,
+    "refunded": 3,
+}
+
+
+def further_along(
+    first: Mapping[str, Any] | None, second: Mapping[str, Any] | None
+) -> dict[str, Any] | None:
+    """Of two views of one claim's payment, the one that shows more money moved (claim-fix review
+    C1): a stale view never replaces a fresher one, whoever wrote it."""
+
+    def rank(view: Mapping[str, Any] | None) -> tuple[int, int, int]:
+        if view is None:
+            return (-1, -1, -1)
+        captured = view.get("captured_minor")
+        return (
+            captured if isinstance(captured, int) else 0,
+            _STAGE.get(str(view.get("status")), 0),
+            1 if view.get("intent_id") else 0,
+        )
+
+    best = first if rank(first) >= rank(second) else second
+    return None if best is None else dict(best)
+
+
 @dataclass(frozen=True, slots=True)
 class PriceQuote:
     variant_id: str

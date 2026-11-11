@@ -19,11 +19,13 @@ What the model decides is the order of calls. Everything that matters is decided
   never called again. The action is uncertain, every later write but the escalation is refused, and
   the order is escalated (#20, "exception after the effect").
 - Once the order is escalated, by this run or any other, every later write is refused
-  (`order_escalated`; `test-writer` and security review F1, row #21). Known limit, open for the
-  user (stop 6): a concurrent duplicate can authorize, or in a narrow window capture, while another
-  run escalates, and the stored escalation context then doesn't mention it
-  (`test_be05_security_fixes.py::test_a_concurrent_duplicates_hold_is_reported_in_the_escalation`,
-  strict xfail). Closing it needs a conditional store transition.
+  (`order_escalated`; `test-writer` and security review F1, row #21).
+- Before authorizing, the run claims the order: a compare-and-set from `pending` to `paying` in
+  the order store, owned by the run's code-only identity, never through the idempotency store (F1,
+  the user's Option 1). A run that doesn't own the claim never authorizes and escalates
+  (`duplicate_in_progress`), a rerun after a crash included. The owner reports its intent on the
+  claim after authorize and after capture, and an escalation of a paying order stores whichever
+  view of the payment shows more money moved, so a hold or a capture is always reported.
 - The escalation reason and context are built from the run's state, never from model text (#20 C1):
   amounts come from step values. A run that ends with the order neither confirmed nor escalated is
   escalated by code (`not_finished`), so no run ends silently.
@@ -426,8 +428,8 @@ class _Handlers:
         """Security review F1: the order store, not this run's memory, says whether the order is
         still open. An order another run escalated or placed gets no write from this run, so a
         rerun or a duplicate never moves money on an escalated order. Read just before each write,
-        so the window left is the instant between this read and the port call (see the row's
-        evidence: the remaining race needs a conditional store transition)."""
+        so the window left is the instant between this read and the port call; the payment claim
+        (F1) covers that window for money."""
         p = self.placement
         seen = await self._read(lambda: self.orders.get(self.task.order_id))
         if not isinstance(seen.result, Ok):
@@ -614,7 +616,10 @@ class _Handlers:
         )
         if not isinstance(claimed.result, Ok):
             if claimed.result.code == "claimed_by_another_run":
-                await self.escalate("code")
+                escalated = await self.escalate("code")
+                if not isinstance(escalated.result, Ok):
+                    # Claim-fix review C4: never "it has been escalated" unless it was.
+                    return self._error(ESCALATE, escalated)
                 return self._refuse(AUTHORIZE, DUPLICATE)
             return self._error(AUTHORIZE, claimed)
         key = self.task.key("payment.authorize", attempt)
@@ -786,6 +791,9 @@ class _Handlers:
         results, failures = self.state.results()
         values = {r.step: r.value for r in results}
         payment = values.get(CAPTURE) or values.get(AUTHORIZE)
+        if payment is not None:
+            # This run authorized, so it holds the claim (claim-fix review C1).
+            payment = {**payment, "claim": "this_run"}
         if payment is None and stored is not None and stored.claimed_by is not None:
             claim = "this_run" if stored.claimed_by == self.run_id else "another_run"
             payment = claim_payment_view(stored, claim)
@@ -851,6 +859,7 @@ class _Handlers:
 
 def _money(intent: PaymentIntent) -> dict[str, Any]:
     return {
+        "intent_id": intent.intent_id,  # for the person reading an escalation, never the model
         "status": intent.status.value,
         "currency": intent.currency,
         "authorized_minor": intent.authorized_minor,
@@ -958,10 +967,15 @@ async def finish(handlers: _Handlers, result: AgentResult) -> PlacementResult:
     # Re-review N1: skip the code escalation only when the store positively holds the order as
     # not pending, or this run's escalation is doubtful; a failed read still tries (the store's
     # own checks make that safe).
-    closed = before is not None and (
-        before.status in (OrderStatus.CONFIRMED, OrderStatus.ESCALATED)
-        or (before.status is OrderStatus.PAYING and before.claimed_by != handlers.run_id)
-    )
+    # Claim-fix review C2: an order another run's claim holds in `paying` is not closed. That
+    # owner may have crashed, so this run escalates it too (fail closed, the user's rule 2).
+    closed = before is not None and before.status in (OrderStatus.CONFIRMED, OrderStatus.ESCALATED)
+    if (
+        before is not None
+        and before.status is OrderStatus.PAYING
+        and before.claimed_by != handlers.run_id
+    ):
+        p.codes.append("claimed_by_another_run")
     if (
         p.confirmed is None
         and p.escalated is None
