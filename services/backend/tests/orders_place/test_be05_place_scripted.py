@@ -31,6 +31,7 @@ from northwind_common.llm import agent_runtime
 from northwind_llm_replay.scripted import ScriptedLLM
 
 from ._placement import World, first_of, total_for
+from ._replay import SHOPPER_TEXT
 
 pytestmark = pytest.mark.req("BE-05")
 
@@ -257,24 +258,44 @@ def test_every_write_key_comes_from_the_order_id_alone(tmp_path: Path) -> None:
 
 
 # Security review F5: every kind of path, not just the happy one.
+# (kind, fault, tools, expected outcome, text the targeted tool result must show): re-review N4.
 HIDDEN_PATHS = [
-    ("clean", None, HAPPY),
-    ("stock_out", None, ["validate_order", "escalate_order"]),
-    ("fraud_flag", None, ["validate_order", "assess_fraud", "escalate_order"]),
+    ("clean", None, HAPPY, "placed", "confirmed"),
+    ("stock_out", None, ["validate_order", "escalate_order"], "escalated", "out_of_stock"),
+    (
+        "fraud_flag",
+        None,
+        ["validate_order", "assess_fraud", "escalate_order"],
+        "escalated",
+        "review",
+    ),
     (
         "soft_decline",
         None,
         ["validate_order", "assess_fraud", "authorize_payment", "authorize_payment"]
         + ["capture_payment", "confirm_order"],
+        "placed",
+        "soft_decline",
     ),
-    ("address_error", None, ["validate_order", "use_address_on_file", *HAPPY]),
-    ("clean", "capture", [*HAPPY[:4], "escalate_order"]),  # a doubtful write
+    (
+        "address_error",
+        None,
+        ["validate_order", "use_address_on_file", *HAPPY],
+        "placed",
+        "address_undeliverable",
+    ),
+    ("clean", "capture", [*HAPPY[:4], "escalate_order"], "escalated", "may have taken effect"),
 ]
 
 
-@pytest.mark.parametrize(("kind", "fault", "tools"), HIDDEN_PATHS)
+@pytest.mark.parametrize(("kind", "fault", "tools", "expected", "shown"), HIDDEN_PATHS)
 def test_the_model_sees_no_amount_id_token_address_or_reference(
-    tmp_path: Path, kind: str, fault: str | None, tools: list[str]
+    tmp_path: Path,
+    kind: str,
+    fault: str | None,
+    tools: list[str],
+    expected: str,
+    shown: str,
 ) -> None:
     world, row = World.make(), first_of(kind)
     task = world.task(row)
@@ -298,9 +319,11 @@ def test_the_model_sees_no_amount_id_token_address_or_reference(
         "fa_0",
         str(total_for(row).amount_minor),
     ]
-    for hidden_value in hidden:
+    for hidden_value in [*hidden, *SHOPPER_TEXT, "@example.com"]:
         assert hidden_value not in seen, (kind, hidden_value)
-    assert result.outcome in ("placed", "escalated")
+    # The path really reached the tool result it exists to check (re-review N4).
+    assert result.outcome == expected, (kind, result.reason)
+    assert shown in seen, (kind, shown)
 
 
 def test_the_prompt_names_only_the_order() -> None:

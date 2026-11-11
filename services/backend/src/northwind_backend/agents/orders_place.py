@@ -18,8 +18,12 @@ What the model decides is the order of calls. Everything that matters is decided
 - Writes use `WRITE_POLICY`: after a `timeout`, `unexpected_error` or `audit_incomplete` a write is
   never called again. The action is uncertain, every later write but the escalation is refused, and
   the order is escalated (#20, "exception after the effect").
-- Once the order is escalated, every later write is refused (`order_escalated`): an escalated order
-  moves no money (found by `test-writer`, row #21).
+- Once the order is escalated, by this run or any other, every later write is refused
+  (`order_escalated`; `test-writer` and security review F1, row #21). Known limit, open for the
+  user (stop 6): a concurrent duplicate can authorize, or in a narrow window capture, while another
+  run escalates, and the stored escalation context then doesn't mention it
+  (`test_be05_security_fixes.py::test_a_concurrent_duplicates_hold_is_reported_in_the_escalation`,
+  strict xfail). Closing it needs a conditional store transition.
 - The escalation reason and context are built from the run's state, never from model text (#20 C1):
   amounts come from step values. A run that ends with the order neither confirmed nor escalated is
   escalated by code (`not_finished`), so no run ends silently.
@@ -192,6 +196,9 @@ STOPPED = business(
     "An earlier step may have taken effect, so no more changes are made. Escalate the order.",
 )
 ALREADY_DONE = business("step_already_done", "This step already succeeded in this task.")
+ESCALATION_DOUBTFUL = business(
+    "escalation_doubtful", "The escalation may already have taken effect. Stop here."
+)
 ESCALATED = business(
     "order_escalated", "The order is escalated to a person, so nothing more is done. Stop here."
 )
@@ -608,6 +615,12 @@ class _Handlers:
             return self._refuse(CAPTURE, OUT_OF_ORDER)
         if p.intent is None:
             return self._refuse(CAPTURE, OUT_OF_ORDER)
+        if p.total is None or (p.total.amount_minor, p.total.currency) != (
+            p.intent.authorized_minor,
+            p.intent.currency,
+        ):
+            # Re-review, F3's price variant: a later validation moved the total.
+            return self._refuse(CAPTURE, OUT_OF_ORDER)
         if p.captured is not None:
             return self._refuse(CAPTURE, ALREADY_DONE)
         intent_id = p.intent.intent_id
@@ -685,7 +698,7 @@ class _Handlers:
         if self.placement.escalated is not None:
             return self._refuse(ESCALATE, ALREADY_DONE)
         if self._escalate_doubtful():
-            return self._refuse(ESCALATE, STOPPED)
+            return self._refuse(ESCALATE, ESCALATION_DOUBTFUL)  # re-review N3: no loop
         gated = await self._store_gate(ESCALATE)
         if gated is not None:
             return gated
@@ -891,11 +904,14 @@ async def finish(handlers: _Handlers, result: AgentResult) -> PlacementResult:
         return seen.result.value if isinstance(seen.result, Ok) else None
 
     before = await stored()
-    still_open = before is not None and before.status is OrderStatus.PENDING
+    # Re-review N1: skip the code escalation only when the store positively holds the order as
+    # not pending, or this run's escalation is doubtful; a failed read still tries (the store's
+    # own checks make that safe).
+    closed = before is not None and before.status is not OrderStatus.PENDING
     if (
         p.confirmed is None
         and p.escalated is None
-        and still_open
+        and not closed
         and not handlers._escalate_doubtful()
     ):
         await handlers.escalate("code")
@@ -910,9 +926,10 @@ async def finish(handlers: _Handlers, result: AgentResult) -> PlacementResult:
     # under the store's reason, so every escalated result carries context.
     reason = order.escalation if outcome == "escalated" and order is not None else None
     context = None
-    if outcome == "escalated":
+    if outcome != "placed":
+        # Re-review N1: a failed run reports context too, built from what it saw.
         if p.escalated is None or p.context is None:
-            p.reason = reason
+            p.reason = reason or p.reason or reason_for(p, "code")
             p.context = handlers.context()
         context = p.context
     return PlacementResult(

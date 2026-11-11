@@ -19,7 +19,7 @@ above it, so the PAY-01 contract suite checks it on every adapter. The rule is s
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any, Protocol, runtime_checkable
 
@@ -188,8 +188,8 @@ class Order:
     shopper_id: str
     region: str
     lines: tuple[OrderLine, ...]
-    payment_token: str
-    shipping_postal_code: str
+    payment_token: str = field(repr=False)  # re-review N2: never in a repr or a log
+    shipping_postal_code: str = field(repr=False)
     status: OrderStatus = OrderStatus.PENDING
     intent_id: str | None = None
     amount_minor: int = 0

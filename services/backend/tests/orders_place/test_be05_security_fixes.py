@@ -209,3 +209,151 @@ def test_no_repr_shows_a_confirmation_reference() -> None:
     ref = "cf_ABCDEFGHIJKLMNOP"
     assert ref not in repr(OrderPlacementTask("O000001", ref))
     assert ref not in repr(Confirmation(ref, "O000001", Money(100, "USD")))
+
+
+# ---- the scoped re-review (`docs/reviews/2026-11-11-BE-05-security-rereview.md`) ------------
+
+
+def test_a_failed_escalation_still_reports_context() -> None:
+    """N1: an escalation that times out before its effect leaves the order pending; the run is
+    `failed`, and still reports context built from what it saw."""
+    world, row = World.make(), first_of("stock_out")
+    ports = world.ports()
+    ports.orders.faults.inject("escalate", FaultKind.TIMEOUT_BEFORE)  # type: ignore[attr-defined]
+    result = asyncio.run(
+        drive(world, world.task(row), ["validate_order", "escalate_order"], "run-1", ports)
+    )
+    assert result.outcome == "failed"
+    assert result.context is not None and result.context["reason"] == "out_of_stock"
+    assert result.context["uncertain"] == [
+        {"action": "order.escalate", "idempotency_key": f"{row['order_id']}:order.escalate"}
+    ]
+
+
+def test_a_failed_store_read_does_not_stop_the_code_escalation() -> None:
+    """N1 (b): finish() still tries to escalate when it can't read the order."""
+    world, row = World.make(), first_of("clean")
+    ports = world.ports()
+
+    async def run() -> PlacementResult:
+        h = build_handlers(
+            world.task(row),
+            ports,
+            world.audit(),
+            correlation_id="run-1",
+            read_policy=FAST,
+            write_policy=FAST_WRITE,
+        )
+        ports.orders.faults.inject("get", FaultKind.OUTAGE, times=3)  # type: ignore[attr-defined]
+        return await finish(h, AgentResult(RunStatus.COMPLETE, (), (), "run-1"))
+
+    result = asyncio.run(run())
+    assert result.outcome == "escalated" and result.reason == "not_finished"
+
+
+def test_no_repr_of_an_order_shows_its_token_or_postal_code() -> None:
+    """N2."""
+    world, row = World.make(), first_of("address_error")
+    order = world.orders.orders[row["order_id"]]
+    assert row["payment_token"] not in repr(order)
+    assert row["shipping_postal_code"] not in repr(order)
+
+
+def test_after_a_doubtful_escalation_the_model_is_told_to_stop_not_to_escalate() -> None:
+    """N3: no loop of escalate calls telling the model to escalate."""
+    from northwind_backend.agents.orders_place import ESCALATION_DOUBTFUL
+
+    world, row = World.make(), first_of("stock_out")
+    ports = world.ports()
+    ports.orders.faults.inject("escalate", FaultKind.TIMEOUT_AFTER, times=1)  # type: ignore[attr-defined]
+
+    async def run() -> str:
+        h = build_handlers(
+            world.task(row),
+            ports,
+            world.audit(),
+            correlation_id="run-1",
+            read_policy=FAST,
+            write_policy=FAST_WRITE,
+        )
+        arg = {"order_id": row["order_id"]}
+        await h.validate_order(arg)
+        await h.escalate_order(arg)
+        again = await h.escalate_order(arg)
+        return str(again["content"][0]["text"])
+
+    text = asyncio.run(run())
+    assert ESCALATION_DOUBTFUL.message in text and "Escalate the order" not in text
+
+
+def test_capture_follows_a_later_validation_that_moved_the_total() -> None:
+    """F3's price variant: the authorized amount no longer matches the latest total."""
+    world, row = World.make(), first_of("clean")
+    catalog = CatalogState()
+    base = world.ports()
+    ports = Ports(base.payment, base.fraud, CatalogTableFake(state=catalog), base.orders)
+    task = world.task(row)
+    h = build_handlers(
+        task,
+        ports,
+        world.audit(),
+        correlation_id="run-1",
+        read_policy=FAST,
+        write_policy=FAST_WRITE,
+    )
+
+    async def run() -> None:
+        arg = {"order_id": task.order_id}
+        for call in ("validate_order", "assess_fraud", "authorize_payment"):
+            await getattr(h, call)(arg)
+        line = row["lines"][0]
+        key = (line["variant_id"], row["region"])
+        old = catalog.prices[key]
+        catalog.prices[key] = type(old)(
+            old.variant_id, old.region, old.amount_minor + 1, old.currency
+        )
+        await h.validate_order(arg)
+        await h.capture_payment(arg)
+
+    asyncio.run(run())
+    assert "capture" not in money(world, row["order_id"])
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="F1 residual, open for the user (stop 6): needs a conditional store transition",
+)
+def test_a_concurrent_duplicates_hold_is_reported_in_the_escalation() -> None:
+    """The re-review's hold variant, interleaved by hand. Run A stops; run B authorizes; run A
+    escalates; B's capture is refused. The stored escalation must report B's live authorization.
+    Today it says nothing of it, so this fails, and strict xfail keeps that visible: it passes, and
+    so fails the suite, the moment the gap closes without this mark being removed."""
+    world, row = World.make(), first_of("clean")
+    task = world.task(row)
+    a, b = (
+        build_handlers(
+            task,
+            world.ports(),
+            world.audit(),
+            correlation_id=f"run-{n}",
+            read_policy=FAST,
+            write_policy=FAST_WRITE,
+        )
+        for n in ("a", "b")
+    )
+    arg = {"order_id": task.order_id}
+
+    async def interleave() -> None:
+        await a.validate_order(arg)
+        await a.assess_fraud(arg)
+        await b.validate_order(arg)
+        await b.assess_fraud(arg)
+        await b.authorize_payment(arg)
+        await a.escalate_order(arg)
+        await b.capture_payment(arg)
+
+    asyncio.run(interleave())
+    live = [i for i in world.payment.intents.values() if i.order_id == task.order_id]
+    assert live and "capture" not in money(world, task.order_id)  # the hold is real
+    stored = world.orders.escalations[task.order_id]
+    assert stored["payment"] is not None, "the escalation doesn't mention the live authorization"
