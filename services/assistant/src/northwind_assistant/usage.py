@@ -4,7 +4,8 @@ The assistant's prompt caching is set by the Agent SDK's CLI, which puts `cache_
 system blocks and the last message, so this module only measures it. Cost comes from our own
 prices: `ResultMessage.total_cost_usd` is the CLI's table, not `northwind_common.pricing`.
 
-The telemetry line holds counts only: no shopper text, queries or source IDs.
+The telemetry line holds counts only: no shopper text, queries or source IDs. `blocked` counts the
+output check's blocks per class (NFR-03), never their text.
 """
 
 from __future__ import annotations
@@ -40,6 +41,11 @@ class TurnUsage:
     cache_write_tokens: int = 0
     output_tokens: int = 0
     cost_usd: float | None = 0.0
+    blocked: dict[str, int] = field(default_factory=dict)
+    # `stream_answer` reports once its output check has released the last text, so the line can
+    # hold the check's counts: `report` then only keeps the outcome until `flush`.
+    deferred: bool = False
+    _outcome: str | None = field(default=None, repr=False)
     _model: str = ""
     _open: dict[str, Any] | None = field(default=None, repr=False)
 
@@ -79,6 +85,19 @@ class TurnUsage:
         return round(self.cache_read_tokens / prompt, 4) if prompt else None
 
     def report(self, outcome: str) -> None:
+        if self.deferred:
+            self._outcome = outcome
+            return
+        self._log(outcome)
+
+    def flush(self) -> None:
+        """The deferred line, once. A turn that ended before it reported (the client went away,
+        or the check raised) is logged as `aborted`, so every turn writes exactly one line."""
+        outcome, self._outcome = self._outcome or "aborted", None
+        self.deferred = False
+        self._log(outcome)
+
+    def _log(self, outcome: str) -> None:
         self._close_call()
         telemetry.info(
             json.dumps(
@@ -92,6 +111,7 @@ class TurnUsage:
                     "output_tokens": self.output_tokens,
                     "cost_usd": self.cost_usd,
                     "cache_hit_rate": self.cache_hit_rate,
+                    "blocked": dict(sorted(self.blocked.items())),
                 },
                 sort_keys=True,
             )

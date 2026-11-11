@@ -8,6 +8,7 @@ for the Shopper Assistant; #13 adds an adapter that serves the saved context thr
 from __future__ import annotations
 
 import html
+import unicodedata
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol
@@ -57,10 +58,18 @@ def escaped(text: str) -> str:
     return html.escape(text, quote=False)
 
 
+def as_data(text: str) -> str:
+    """NFKC first, then escaping, as mcp-rag renders (RAG-11; row #13): fullwidth lookalikes
+    such as `＜/source＞` fold to ASCII and are escaped too."""
+    return escaped(unicodedata.normalize("NFKC", text))
+
+
 def render_sources(context: Sequence[ContextChunk]) -> str:
+    """Used by the answerer and the judge. Saved contexts hold no compatibility forms, so this is
+    byte-identical to the rendering their recordings were made with (a test holds that)."""
     return "\n".join(
-        f'<source id="{chunk.source_id}" type="{chunk.source_type}">\n'
-        f"{escaped(chunk.text)}\n</source>"
+        f'<source id="{html.escape(chunk.source_id)}" type="{html.escape(chunk.source_type)}">\n'
+        f"{as_data(chunk.text)}\n</source>"
         for chunk in context
     )
 

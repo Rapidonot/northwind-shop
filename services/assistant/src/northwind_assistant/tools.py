@@ -16,11 +16,14 @@ failed marks the turn, so an answer with nothing behind it is an outage, not an 
 
 from __future__ import annotations
 
+import html
 import json
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
+from northwind_assistant.output_check import Source
 from northwind_assistant.rag_client import SearchResult
 from northwind_common.cards import contains_card_data
 from northwind_common.errors import ENVELOPE_KEYS
@@ -68,11 +71,26 @@ class Searcher(Protocol):
 
 @dataclass
 class ToolState:
-    """What one turn's searches did. `seen` holds the only source IDs that may be cited."""
+    """What one turn's searches did. `seen` holds the only source IDs that may be cited;
+    `sources` their text, which the output check reads to tell policy from a review (NFR-03)."""
 
     seen: set[str] = field(default_factory=set)
     failed: bool = False
     searches: int = 0
+    sources: list[Source] = field(default_factory=list)
+
+
+# mcp-rag's rendering (`northwind_mcp_rag.render`): an ID and type line, the escaped text, a close.
+_SOURCE_BLOCK = re.compile(
+    r'^<source id="([A-Za-z0-9._-]+)" type="([a-z]+)">\n(.*?)\n</source>$', re.MULTILINE | re.DOTALL
+)
+
+
+def parse_sources(rendered: str) -> list[Source]:
+    return [
+        Source(source_id, source_type, html.unescape(text))
+        for source_id, source_type, text in _SOURCE_BLOCK.findall(rendered)
+    ]
 
 
 @dataclass(frozen=True)
@@ -98,6 +116,7 @@ def record(state: ToolState, *, is_error: bool, text: str) -> str | SearchFailur
     or when it is not our envelope at all (the CLI's own error text, a transport failure)."""
     if not is_error:
         state.seen.update(source_ids(text))
+        state.sources.extend(parse_sources(text))
         return text
     body = _envelope(text)
     if body is None:

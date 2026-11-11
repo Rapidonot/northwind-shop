@@ -40,6 +40,7 @@ US = Caller(region="US")
 SONNET = "claude-sonnet-5-5"
 SOURCE = RetrievedChunk("c1", "document", "FAQ-001", "faq", "Wash cold.")
 FIELDS = {
+    "blocked",  # the output check's counts per class, no text (row #13, NFR-03)
     "event",
     "outcome",
     "calls",

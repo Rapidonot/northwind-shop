@@ -1,10 +1,12 @@
 """One shopper message, streamed (SA-02).
 
 Each message stands alone: conversation memory is SA-05. The server searches on the shopper's
-message first, so the first model call can already answer (decision 0007). Citations are the `[ID]`
-markers in the answer that match a source returned this turn, so an invented ID never becomes a
-citation (hard rule 5). Failures surface only as fixed codes: no exception or upstream text goes
-further.
+message first, so the first model call can already answer (decision 0007). Every piece of text the
+model writes goes through the output check before it leaves (`output_check`, NFR-03, decision
+0014): `stream_answer` is the only caller of `run_turn`, which checks nothing (a test pins it).
+Citations are the `[ID]` markers in the text the shopper is left seeing that match a source
+returned this turn, so an invented ID never becomes a citation (hard rule 5). Failures surface only
+as fixed codes: no exception or upstream text goes further.
 """
 
 from __future__ import annotations
@@ -19,6 +21,7 @@ from claude_agent_sdk import AssistantMessage, ClaudeSDKError, ResultMessage, Us
 from claude_agent_sdk.types import StreamEvent, ToolResultBlock, ToolUseBlock
 
 from northwind_assistant.caller import Caller
+from northwind_assistant.output_check import OutputCheck
 from northwind_assistant.prompt import system_prompt, user_prompt
 from northwind_assistant.rag_client import McpRagSearcher, RagEndpoint
 from northwind_assistant.tools import (
@@ -137,12 +140,15 @@ def _result_error(result: ResultMessage) -> ErrorCode | None:
     return "model_unavailable"
 
 
-async def run_turn(prompt: str, options: Any, state: ToolState) -> AsyncIterator[TurnEvent]:
+async def run_turn(
+    prompt: str, options: Any, state: ToolState, usage: TurnUsage | None = None
+) -> AsyncIterator[TurnEvent]:
+    """The model's own events, unchecked: only `stream_answer` may call this."""
     parts: list[str] = []
     code: ErrorCode | None = None
     finished = False
     capped = False
-    usage = TurnUsage()
+    usage = usage if usage is not None else TurnUsage()
     # A cut stream still ends in `message_stop` and a `success` result, so a stop reason in
     # `message_delta` is the only sign that an attempt reached its end.
     complete = True
@@ -228,5 +234,28 @@ async def stream_answer(
         yield TurnError("retrieval_failed")
         return
     options = assistant_options(caller, rag.url, token, runtime)
-    async for event in run_turn(user_prompt(message, found), options, state):
-        yield event
+    usage = TurnUsage(deferred=True)
+    check = OutputCheck(state.seen, state.sources)
+    try:
+        async for event in run_turn(user_prompt(message, found), options, state, usage):
+            if isinstance(event, TextDelta):
+                for out in _sent(check.feed(event.text)):
+                    yield out
+            elif isinstance(event, Reset):
+                outage = state.failed and not state.seen  # text with no sources behind it
+                for out in _sent(check.reset(discard=outage)):
+                    yield out
+            elif isinstance(event, Citations):
+                for out in _sent(check.finish()):
+                    yield out
+                yield Citations(cited_ids(check.shown, state.seen))
+            else:
+                check.abort()  # fail closed: held text is never sent after a failure
+                yield event
+    finally:
+        usage.blocked = dict(check.counts)
+        usage.flush()
+
+
+def _sent(pieces: list[str | None]) -> list[TextDelta | Reset]:
+    return [Reset() if piece is None else TextDelta(piece) for piece in pieces]
