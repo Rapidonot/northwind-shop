@@ -88,7 +88,7 @@ def test_m2_a_long_policy_sentence_keeps_the_stems_read_up_to_the_bound() -> Non
     assert check_text(long_tail, []) == POLICY
 
 
-def test_m2_a_documents_heading_vouches_for_a_bullet_with_no_stem_of_its_own() -> None:
+def test_m2_a_public_documents_bullet_vouches_with_or_without_a_heading() -> None:
     shipping = Source(
         "POL-SHIPPING-XX", "document", "## Delivery times\n\n- **Express:** 1–2 days."
     )

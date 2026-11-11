@@ -126,19 +126,70 @@ _WORDS = rf"(?:[^\W\d_]{{1,10}}{_GAP}){{0,3}}"  # at most three short words in b
 _SUBJECT = r"(?:order|payment|refund|discount|code)"
 # One adverb may sit between the verb and its participle ("is now confirmed", M3). A negation is not
 # one of them, so "is not confirmed" still passes.
-_ADVERB = r"(?:(?:now|already|just|also|since|fully|finally|successfully)\s{1,3})?"
-_NUMBER_WORDS = {
-    "a": 1, "an": 1, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7,
-    "eight": 8, "nine": 9, "ten": 10, "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14,
-    "fifteen": 15, "sixteen": 16, "seventeen": 17, "eighteen": 18, "nineteen": 19, "twenty": 20,
-    "thirty": 30, "forty": 40, "fifty": 50, "sixty": 60, "seventy": 70, "eighty": 80,
-    "ninety": 90,
+_ADVERB_WORD = r"(?:now|already|just|also|since|fully|finally|successfully)"
+_ADVERB = rf"(?:{_ADVERB_WORD}\s{{1,3}})?"
+_UNIT_WORDS = {
+    "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8,
+    "nine": 9,
 }  # fmt: skip
-_NUMBER = "|".join(sorted(_NUMBER_WORDS, key=len, reverse=True))
+_TEEN_WORDS = {
+    "ten": 10, "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14, "fifteen": 15,
+    "sixteen": 16, "seventeen": 17, "eighteen": 18, "nineteen": 19,
+}  # fmt: skip
+_TENS_WORDS = {
+    "twenty": 20, "thirty": 30, "forty": 40, "fifty": 50, "sixty": 60, "seventy": 70,
+    "eighty": 80, "ninety": 90,
+}  # fmt: skip
+_NUMBER_WORDS = {"a": 1, "an": 1, **_UNIT_WORDS, **_TEEN_WORDS, **_TENS_WORDS}
+
+
+def _either_words(words: Mapping[str, int]) -> str:
+    return "|".join(sorted(words, key=len, reverse=True))
+
+
+_UNITS = _either_words(_UNIT_WORDS)
+_TENS_UNITS = (
+    rf"(?:(?:{_either_words(_TENS_WORDS)})(?:[\s-]{{1,2}}(?:{_UNITS}))?"
+    rf"|{_either_words(_TEEN_WORDS)}|{_UNITS})"
+)
+# A number read whole (pass 4, P4-1, P4-4): "sixty-five", "three hundred sixty-five", "a
+# hundred", "1000", "1,000". Reading only the word next to the unit let a document's "5 business
+# days" vouch for "sixty-five days".
+_SPELLED = (
+    rf"(?:(?:a|an|{_UNITS})[\s-]{{1,2}}hundred(?:[\s-]{{1,2}}(?:and[\s-]{{1,2}})?{_TENS_UNITS})?"
+    rf"|{_TENS_UNITS}|an|a)"
+)
+_NUMERAL = rf"(?:\d{{1,3}}(?:,\d{{3}}){{1,2}}|\d{{1,4}}|{_SPELLED})"
+_NUMBER = _either_words(_NUMBER_WORDS)
 DURATION = re.compile(
-    rf"\b(?P<n>\d{{1,3}}|{_NUMBER})(?:[\s-]{{1,2}}(?:full|calendar))?[\s-]{{1,2}}"
+    rf"\b(?P<n>{_NUMERAL})(?:[\s-]{{1,2}}(?:full|calendar))?[\s-]{{1,2}}"
     r"(?:(?:business|working)[\s-]{1,2})?(?P<u>hour|day|week|month|year)s?\b"
 )
+# A number joined to the one a duration starts with: "3–5 days", "3 to 5 days", "365 or 30 days".
+# The two are read as one value, so neither half alone vouches for it.
+_JOINED = re.compile(rf"(?:^|[^\w-])(?P<n>{_NUMERAL})\s{{0,2}}(?:[-–—]|to|or|and)\s{{0,2}}$")
+
+
+def number_value(text: str) -> int:
+    digits = text.replace(",", "")
+    if digits.isdigit():
+        return int(digits)
+    total = 0
+    for word in re.split(r"[\s-]+", text):
+        if word == "hundred":
+            total = (total or 1) * 100
+        elif word in _NUMBER_WORDS:
+            total += _NUMBER_WORDS[word]
+    return total
+
+
+def duration_value(text: str, match: re.Match[str]) -> tuple[tuple[int, ...], str]:
+    """A duration's value: its number, with a number joined before it as part of the value."""
+    value: tuple[int, ...] = (number_value(match["n"]),)
+    joined = _JOINED.search(text[max(0, match.start() - 45) : match.start()])
+    if joined:
+        value = (number_value(joined["n"]), *value)
+    return value, match["u"]
 
 
 @dataclass(frozen=True)
@@ -185,7 +236,7 @@ PATTERNS: tuple[Pattern, ...] = (
     # 3. Order or payment state, said as done.
     _p(
         "confirmation",
-        rf"\b{_SUBJECT}(?:{_S}(?P<cop>is|has{_S}(?:already{_S})?been|was)|['’]s{_S}been){_S}{_ADVERB}"
+        rf"\b{_SUBJECT}(?:{_S}(?P<cop>is|has{_S}(?:{_ADVERB_WORD}{_S})?been|was)|['’]s{_S}been){_S}{_ADVERB}"
         r"(?:confirmed|processed|approved|authori[sz]ed|applied|placed|issued)\b",
         "conditional",
     ),
@@ -226,11 +277,11 @@ FREE_TERMS = re.compile(
 )
 
 # Where a payload can start. Text from the earliest one in the last L characters is held.
-_SPELLED = "|".join(sorted((w for w in _NUMBER_WORDS if len(w) > 2), key=len, reverse=True))
+_SPELLED_WORDS = "|".join(sorted((w for w in _NUMBER_WORDS if len(w) > 2), key=len, reverse=True))
 TRIGGER = re.compile(
     r"disc|coupon|promo|vouch|staff|member|free|prepaid|%|http|www|authori|approv|refund|order|"
     r"payment|confirm|process|appl|placed|issued|stock|sold|issue_|hour|day|week|month|year|"
-    rf"code|\d|\bi['’\s]|\bwe['’\s]|\[|\+|\(|\b(?:{_SPELLED}|out|only|low|half|clearance)\b"
+    rf"code|\d|\bi['’\s]|\bwe['’\s]|\[|\+|\(|\b(?:{_SPELLED_WORDS}|hundred|out|only|low|half|clearance)\b"
 )
 # A duration is a policy term only in a sentence that holds one of these stems (the user's list,
 # row #13): a reviewer's "after an hour of steady rain" is an experience, not a policy.
@@ -241,7 +292,10 @@ POLICY_STEMS = re.compile(
 # A line that heads what follows it: a markdown heading, a wholly bold line, or one ending in ":".
 _HEADING = re.compile(r"\s*(?:#{1,6}\s.*|\*\*[^*\n]{1,80}\*\*:?|[^\n]{1,80}:)\s*")
 _LIST_ITEM = re.compile(r"(\s*)(?:[-*+]|\d{1,3}[.)])\s+")
-# Stems that can never match: a policy sentence whose stems could not be read (fail closed).
+_MARKER_ONLY = re.compile(r"\s*(?:[-*+]|\d{1,3}[.)])\s*")
+_ABBREVIATION = re.compile(r"\b(?:e\.g|i\.e|etc|approx|vs|incl|no)\.$")
+# A policy sentence whose stems could not be read: non-empty, so the policy-word gate holds, and the
+# duration must be vouched (fail closed).
 UNREAD = frozenset({"?"})
 # Present and future only (the user's decision): "If your order is placed" passes, "After your
 # refund was approved" does not. Of these, the confirmation pattern can only match `is`.
@@ -301,13 +355,9 @@ def stems_of(text: str) -> frozenset[str]:
 
 
 @lru_cache(maxsize=512)
-def durations(text: str) -> frozenset[tuple[int, str]]:
-    found = set()
-    for match in DURATION.finditer(view_of(text).text):
-        number = match["n"]
-        value = int(number) if number.isdigit() else _NUMBER_WORDS[number]
-        found.add((value, match["u"]))
-    return frozenset(found)
+def durations(text: str) -> frozenset[tuple[tuple[int, ...], str]]:
+    view = view_of(text).text
+    return frozenset(duration_value(view, match) for match in DURATION.finditer(view))
 
 
 @dataclass
@@ -420,10 +470,12 @@ class OutputCheck:
     def _heading_line(self, end: int) -> None:
         """A line has ended at `end`: if it is a heading, keep its stems for the lines below."""
         start, self._line_start = self._line_start, end + 1
-        if self._wide(start, end) <= 100:
-            line = self._view(start, end).text
+        line = self._view(start, end).text.strip()
+        if len(line) <= 100:
             if _HEADING.fullmatch(line):
                 self._headings.append((start, stems_of(line)))
+        elif line.startswith(("#", "**")):
+            self._headings.append((start, UNREAD))  # too long to read as a heading: fail closed
 
     def _track(self, position: int) -> None:
         if self._raw[position].isspace():
@@ -441,12 +493,29 @@ class OutputCheck:
         self._ws_start = self._word_start = None
         # From the start of the word that holds `_consumed`, which may be partly sent: tracking
         # from `_consumed` itself would split that word in two (pass 3, P3-1).
-        origin = self._consumed
-        while origin > self._plain_since and not self._raw[origin - 1].isspace():
-            origin -= 1
-        for position in range(origin, start):
+        origin = self._word_before(self._consumed)
+        for position in self._visible[
+            bisect_left(self._visible, origin) : bisect_left(self._visible, start)
+        ]:
             self._track(position)
+        if self._word_start is None and origin < start and not self._raw[origin].isspace():
+            self._word_start = origin
         self._index(start)
+
+    def _word_before(self, position: int) -> int:
+        """Where the word holding `position` starts, looking back over at most 32 visible
+        characters: past that, a domain, an email or an IP has its dot within reach anyway, and
+        the walk stays bounded however long the word is (pass 4, P4-5)."""
+        at = bisect_left(self._visible, position)
+        for k in range(at - 1, max(-1, at - 33), -1):
+            here = self._visible[k]
+            if here < self._plain_since:
+                return self._plain_since
+            if self._raw[here].isspace():
+                return here + 1
+        if at == 0:
+            return self._plain_since
+        return max(self._plain_since, self._visible[max(0, at - 32)])
 
     def _back(self, position: int, width: int) -> int:
         """The raw position `width` view characters before `position`."""
@@ -509,12 +578,9 @@ class OutputCheck:
             # A full stop just before the cut must still be found (pass 3, P3-7).
             self._drop_from = min(moved(self._drop_from), max(self._dropping.end, start - 1))
         self._matched_to = min(self._matched_to, start)
-        # The word holding the cut is checked again whole, even if part of it was sent: the
-        # repair takes it back (pass 3, P3-1).
-        word = start
-        while word > self._plain_since and not self._raw[word - 1].isspace():
-            word -= 1
-        self._words_to = min(self._words_to, word)
+        # The word holding the cut is checked again from its start, even if part of it was sent:
+        # the repair takes it back (pass 3, P3-1).
+        self._words_to = min(self._words_to, self._word_before(start))
         self._markers_to = min(self._markers_to, start)
         self._reindex(start)
 
@@ -531,7 +597,7 @@ class OutputCheck:
             introduced = _CONDITIONAL.search(view.text[max(0, start - 40) : start])
             return bool(introduced) and copula in PRESENT_COPULAS
         if pattern.exempt == "duration":
-            return False  # decided in `_first_match`, by policy stems (`_vouched`, M2)
+            return False  # decided in `_first_match`: the policy-word gate, then `_vouched`
         span = re.sub(r"\s+", " ", view.text[start:end])
         if pattern.exempt == "free_terms":
             return any(
@@ -541,18 +607,18 @@ class OutputCheck:
             return any(s.public_policy and span in normal(s.text) for s in self.sources)
         raise ValueError(f"unknown exemption: {pattern.exempt}")  # fail closed on a new kind
 
-    def _vouched(self, text: str) -> bool:
+    def _vouched(self, text: str, match: re.Match[str]) -> bool:
         """A policy duration passes if a public, non-internal document returned this turn states
         the same duration; retrieval returns only the shopper's region or `ALL` (RAG-11). Class 5
         stops relayed or injected numbers. A real policy number on the wrong term ("return any
         item within two years", from the repair warranty) is a grounding error left to #13b's
         judge (the user's decision, 2026-11-11)."""
-        wanted = durations(text)
-        have: set[tuple[int, str]] = set()
+        wanted = duration_value(text, match)
+        have: set[tuple[tuple[int, ...], str]] = set()
         for source in self.sources:
             if source.public_document:
                 have |= durations(source.text)
-        return bool(wanted) and wanted <= have
+        return wanted in have
 
     def _policy_context(self, start: int, end: int, final: bool) -> frozenset[str] | None:
         """Whether the sentence holding a duration is about policy; None while it cannot be told.
@@ -625,10 +691,16 @@ class OutputCheck:
         text = paragraph[-1].rstrip()
         if not text:
             return frozenset()
-        parts = re.split(r"(?<=[.!?])\s+|\n", text)
-        if len(parts) == 1 and len(paragraph) == 1 and back > 0:
+        parts = [part for part in re.split(r"(?<=[.!?])\s+|\n", text) if part.strip()]
+        if not parts:
+            return frozenset()
+        # A list number or an abbreviation is not a sentence (pass 4, P4-2): join back over it.
+        previous = parts.pop()
+        while parts and (_MARKER_ONLY.fullmatch(previous) or _ABBREVIATION.search(parts[-1])):
+            previous = f"{parts.pop()} {previous}"
+        if not parts and len(paragraph) == 1 and back > 0:
             return UNREAD
-        return stems_of(parts[-1])
+        return stems_of(previous)
 
     def _clean_markers(self, final: bool) -> None:
         """An invented citation marker comes out of the held text before anything is matched, so
@@ -686,7 +758,7 @@ class OutputCheck:
                         if self._undecided is None or start < self._undecided:
                             self._undecided = start
                         continue
-                    if not stems or self._vouched(view.text[found.start() : found.end()]):
+                    if not stems or self._vouched(view.text, found):
                         continue
                 if self._exempt(pattern, view, found, self._raw[start:end]):
                     continue

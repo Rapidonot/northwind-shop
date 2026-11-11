@@ -1,7 +1,8 @@
 """Row #13, security review pass 3 (docs/reviews/2026-11-11-RAG-08-security-review.md): a word
 split by a cut marker (P3-1), cost on invisible runs, held durations and many markers (P3-2), the
-answer-side context measured in view characters and failing closed (P3-3 a, b), a document chunk's
-"Title > Section" line as its heading (P3-5), and the dropping state after a cut (P3-7)."""
+answer-side context measured in view characters and failing closed (P3-3 a, b), a chunk-shaped
+document (P3-5; since the user's P3-4 decision any public document with the duration vouches), and
+the dropping state after a cut (P3-7)."""
 
 from __future__ import annotations
 
@@ -98,7 +99,7 @@ def test_p3_3b_a_padded_heading_is_still_a_heading() -> None:
     assert POLICY in check_text(text)
 
 
-def test_p3_5_a_chunks_title_line_is_its_heading() -> None:
+def test_p3_5_a_chunk_shaped_public_document_vouches_like_any_other() -> None:
     chunk = Source(
         "POL-SHIPPING-XX",
         "document",

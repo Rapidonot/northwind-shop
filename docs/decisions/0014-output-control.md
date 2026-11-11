@@ -86,6 +86,8 @@ the model does; a deterministic check on what leaves is the control.
        exchange, cancel, withdraw, deliver, ship, dispatch, warrant, guarantee, back, money, policy, window,
        period, label, replace, repair), in the sentence itself, its list parent, the nearest heading above it,
        or the previous sentence in the same paragraph (the user's decisions, M2 and P3-3);
+     - a number is read whole: "sixty-five", "three hundred sixty-five", "1,000"; and a number joined to it
+       ("3–5", "3 to 5", "365 or 30") is part of its value, so neither half alone vouches (pass 4, P4-1);
      - such a duration passes if the same duration appears in any public, non-internal document returned this
        turn (`POL-`, `FAQ-`, `CG-`, `SG-`); retrieval returns only the shopper's region or `ALL` (RAG-11). No
        stem or heading matching on the document side (the user's decision, P3-4);
@@ -119,6 +121,12 @@ the model does; a deterministic check on what leaves is the control.
   - a real policy number on the wrong term passes class 5 (the user's decision; owner #13b's judge);
   - "your refund issued" and other wordings outside the frozen lists pass (owner hardening);
   - the pin misses an aliased `client.ClaudeSDKClient` and `importlib` (owner hardening);
+  - from security pass 4 (owner hardening unless named): durations written `365days`, `2 yrs`, `48 hrs` or with a
+    U+2010/U+2011 hyphen are not read; `'s` used for "is" ("your order's confirmed"); apostrophe lookalikes
+    U+02BC/U+2018; "a hundred percent off", "half–price"; the portal collapses newlines, so a raw paragraph break
+    the check sees is not one the shopper sees (P4-7, the rule as decided); list-parent edge cases (P4-8); a fixed
+    sentence holding a stem the raw text did not (P4-12); control characters U+0000–U+001F are kept by the fold
+    (unconfirmed).
   - `in` is not a trigger, so "…is in" can be sent before a repair takes it back;
   - a payload cut between words by the model's reset is checked as cut;
   - markers that are not ID-shaped stay (they never become citations);

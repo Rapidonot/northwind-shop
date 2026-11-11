@@ -463,3 +463,190 @@ Scope: the diff at /tmp/claude-502/northwind-security-RAG-08-pass3.diff, plus th
 - Text in the diff, fixtures or reviews trying to steer the review: none found.
 
 P3-1 is high and open after this re-review. Under CLAUDE.md that is stop 10.
+
+---
+
+# Pass 4, scoped re-review (raw, verbatim), 2026-11-11
+
+Approved by the user: one more scoped pass, on `7fd8fea`'s fixes and the changes at `9fc63c9`. Input:
+`/tmp/claude-502/northwind-security-RAG-08-pass4.diff` (`git diff 1876ce1 9fc63c9 -- services/`). A first attempt
+ended on a network error before producing anything; this is the report of the retry, as returned:
+
+---
+
+## RAG-08 security re-review, pass 4 (scoped), head 9fc63c9
+
+**Scope.** I read the diff at /tmp/claude-502/northwind-security-RAG-08-pass4.diff (`1876ce1..9fc63c9 -- services/`) and the whole current /Users/rapido/Projects/northwind-shop-b/services/assistant/src/northwind_assistant/output_check.py (OC below). Before reviewing I re-read:
+- the CLAUDE.md hard rules and decision 0001;
+- decision 0014 §3 and §5;
+- pass 3 in full, and the two evidence sections you named.
+
+I also read tools.py:84-93 and mcp-rag render.py:23,42 (how sources are parsed), apps/portal/src/Chat.tsx:68-70 (how answers are rendered) and data/fixtures/documents.jsonl and reviews.jsonl (as data). I am read-only and could not run anything, so every trace below was done by hand.
+
+**Result.** One high: a spelled-out number that no document states gets vouched. It is in code these commits did not change. Six mediums and five lows. P3-1, P3-2(a) and P3-7 are closed. P3-5 is now moot.
+
+---
+
+### Findings, most severe first
+
+**P4-1. High. Class 5 vouches for a number that no document states: only the last word of a spelled compound number is read.**
+- **Where:** OC:138-141 (`DURATION`), OC:303-310 (`durations`), OC:544-555 (`_vouched`).
+- **Rule:** hard rule 6 / RAG-08. Decision 0014 §5: the duration passes only "if the same duration appears" in a public document.
+- **What is wrong:** in `sixty-five days`, the regex fails at `sixty` (the next thing is a word, not a unit). It then matches at `five`, because there is a `\b` after the hyphen. So the answer's duration is read as (5, day).
+- **How it fails** (traced): "You can return any item within sixty-five days."
+  - The sentence has the stem "return", so it is policy.
+  - Every POL-RETURNS-* document says "Refunds are issued within 5 business days", which is also (5, day).
+  - So it is vouched, and the shopper is told 65 days.
+  - More cases:
+    - "twenty-one days" is vouched by FAQ-018's "one business day" or POL-SHIPPING's "a business day".
+    - "three hundred sixty-five days" (R01080's planted "a full year", reworded) is vouched by any POL-RETURNS-* document.
+- **Same root cause:** only the number next to the unit is read. "within 365 or 30 days" is read as 30 and passes on FAQ-019 or POL-RETURNS-US.
+- **Not the accepted residual:** 65 is not a real number from any document on any term.
+- **Pre-existing:** `DURATION` was not changed by 7fd8fea or 9fc63c9. Under the old stem rule it also passed, because the POL-RETURNS sentence holds both "refund" and "return".
+- **Fixtures:** no planted fixture uses a compound spelled number. I grepped data/fixtures.
+- **Under your rules:** a bypass of an approved rule; a bug in the code as decided.
+- **Fix:** read a tens word plus a units word (`sixty[-\s]five`), and "hundred", as one value. Fail closed, meaning never vouch, when a number word or digits run straight into the matched number (by `-`, a space, a dash, "or" or "to"). This changes no wording. Width stays under L (the longest compound with "calendar business months" is about 41).
+
+**P4-2. Medium. In a numbered list, the "previous sentence" is the list number.**
+- **Where:** OC:617-631, together with `_BOUNDARY` at OC:254. `N. ` counts as a sentence end.
+- **How it fails** (traced): `"Here is how it works\n1. Start a return in your account.\n2. You have 365 days."`
+  - The duration's sentence is "You have 365 days." and has no stem.
+  - The parent is "here is how it works", with no stem (the `1.` sibling is skipped).
+  - There is no heading.
+  - `_previous_sentence_stems` splits the text into `[…, "start a return in your account.", "2."]`. The last part is `"2."`, which has no stems.
+  - With no source, it passes.
+  - The bulleted version (`- Start a return…\n- You have 365 days.`) is replaced.
+- **Same mechanism:** an abbreviation, e.g. "Returns, e.g. unworn items. You have 365 days."
+- **Under your rules:** a bypass of the approved previous-sentence rule; a bug in the code as decided.
+- **Fix:** in `_previous_sentence_stems`, skip any trailing part that is only a list marker (`\s*(?:[-*+]|\d{1,3}[.)])`) and take the part before it. Leave `_BOUNDARY` alone, because H1 depends on it.
+
+**P4-3. Medium. The 100-character cap in `_heading_line` fails open, so P3-3(b) is fixed only for invisible padding.**
+- **Where:** OC:420-426 (`if self._wide(start, end) <= 100`), with `_HEADING` at OC:242. The `#…` branch has no length limit, and `\s*` pads both ends.
+- **How it fails** (traced): `"Returns:" + " "*93 + "\nUnworn items qualify.\nYou have 365 days."`
+  - The heading line is 101 view characters wide, so it is never recorded.
+  - The previous sentence is "unworn items qualify.", which has no stem.
+  - It passes with no source. Without the padding it is replaced.
+  - Any markdown `#` heading longer than 100 view characters behaves the same way.
+  - The portal collapses whitespace (Chat.tsx:68-70), so the shopper never sees the padding.
+- **Under your rules:** a bypass of the approved nearest-heading rule; a bug in the code as decided.
+- **Fix:** measure the line with its whitespace stripped. A line still over the cap whose start opens a heading (`#{1,6}\s` or `**`) should be recorded as a heading with `UNREAD`, which fails closed.
+
+**P4-4. Medium. Some durations are never read as durations, so class 5 never runs on them.**
+- **Where:** OC:138-141.
+- **Parse gaps** (bugs in the class as decided):
+  - "1000 days": `\b\d{1,3}` cannot start inside "1000". Note that "1,000 days" is caught, as (0, day).
+  - "two hundred days" and "a hundred days".
+- **Wording gaps** (residuals, because the classes are frozen):
+  - "365days" with no space;
+  - "2 yrs" and "48 hrs";
+  - `30‑day` with U+2010 or U+2011, which NFKC does not turn into `-`.
+- **Example:** "Returns accepted within 1000 days." reaches the shopper.
+- **Fixtures:** none uses these forms.
+- **Fix for the parse gaps:** `\d{1,4}` or a digits-and-comma form, and "hundred". Widths stay under L.
+
+**P4-5. Medium, unconfirmed (not measured). The P3-1 fix makes each cut cost time in proportion to the length of the word in front of it.**
+- **Where:**
+  - OC:514-517, the walk back in `_cut`;
+  - OC:444-447, the walk in `_reindex`;
+  - OC:696-709 with OC:268-273, where `_words_to` goes back to the word start and `word_is_link` refolds the whole word with `view_of`.
+- **How it fails:** `"A"*8000 + "[ X1]"*1000`, in small deltas.
+  - The space inside each marker makes the A-word complete, so each marker is cut on its own.
+  - Each cut walks back about 8,000 characters twice, then refolds the 8,000-character word.
+  - That is about 8M `_fold_char` calls. I estimate more than 10 s of blocked event loop, and it fits in max_tokens 8192.
+  - `test_p3_2c` uses a one-character prefix, so it does not cover this.
+- **Under your rules:** a bug in the code as decided. Decision 0014 §3 says each delta costs time in proportion to its own length. This is a regression from 7fd8fea.
+- **Fix:** keep the start of the word that holds `_consumed` as `_consumed` moves, instead of walking back. Re-check only a bounded window around the join: `_DOMAIN` is at most 15 characters wide, and the care-address exception only applies to a word that short.
+
+**P4-6. Medium. Confirmation wordings next to the ones just added still pass.**
+- **Where:** OC:186-191.
+- **(a) `has <adverb> been`** is allowed only for "already". These pass:
+  - "Your order has now been placed."
+  - "Your refund has just been issued."
+  - "has finally / also / successfully been …"
+  - **Under your rules:** a bug in the code as decided if "one adverb from a fixed list" (0014 §5) also covers the slot inside "has … been". That is how I read it. If you meant only "already" there, it is a residual.
+  - **Width if fixed:** at most 63 (≤ 64).
+- **(b) `'s` used for "is":** "Your order's confirmed", "Your payment's processed" and "Your refund's approved" match no pattern. `refund_authority` needs whitespace after "refund".
+  - **Under your rules:** a residual (not on your list).
+
+**P4-7. Medium, design residual. Class 5's sentence and paragraph lines are not what the shopper sees.**
+- **Where:** Chat.tsx:68-70 renders `turn.answer` as plain text in a `<p>`, with no white-space rule, so every newline collapses to a space. The check treats a raw `\n` as a sentence end (OC:254) and a raw `\n\n` as a paragraph break (OC:622).
+- **How it fails:** `"You can return any item\n\nwithin 365 days."` passes. `test_p3_3d_a_previous_paragraph_does_not_count` pins this shape. The shopper sees one sentence: "You can return any item within 365 days."
+- **Under your rules:** the rule as decided, not a bug. I raise it because the rule assumes the shopper sees paragraphs. P4-3's padding is invisible for the same reason.
+
+**P4-8. Low. List-parent edge cases.**
+- **Where:** OC:595 checks the current line's list marker on the raw text; OC:601 checks the lines above in the view.
+- **How it fails:** `"​- a full year"` under a parent that has a stem but is not a heading is not treated as a list item, so it gets no parent.
+- **Design residuals of the M2 definition:**
+  - an indented continuation line becomes the "parent";
+  - a grandparent never counts.
+
+**P4-9. Low. Stale or misleading after 9fc63c9 (no behaviour effect).**
+- `test_p3_5_a_chunks_title_line_is_its_heading` (test_rag08_pass3.py:574-581) and `test_m2_a_documents_heading_vouches_for_a_bullet_with_no_stem_of_its_own` now pass for a reason unrelated to their names: any public document with the duration vouches.
+- The test_rag08_pass3.py module docstring and the evidence still list P3-5 as "now counts as the document's heading". That code no longer exists.
+- The OC:534 comment says "by policy stems (`_vouched`, M2)". `_vouched` uses no stems.
+- `UNREAD`'s comment (OC:244) says "Stems that can never match". Stems are no longer matched against anything: any non-empty set now means "policy, needs vouching". The fail-closed behaviour is unchanged.
+
+**P4-10. Low. Apostrophe lookalikes.** `['’]` (OC:188, :194, :197) does not cover U+02BC `ʼ` or U+2018 `‘`, and the fold does not map them. So "Your order‘s been confirmed" passes. Residual.
+
+**P4-11. Low. Promotion edges.** "a hundred percent off" passes, because `_NUMBER` stops at ninety. "half–price" (en dash) and "half‐price" (U+2010) also pass (OC:175-176). Residual.
+
+**P4-12. Low, design. Some fixed sentences contain a stem.** The check reads the raw text, but the shopper sees the fixed sentence. Raw "Your order is confirmed. You have 365 days." is shown as "I can't confirm orders, payments or refunds in chat. You have 365 days." The raw previous sentence has no stem, so the duration is not policy, but on screen it follows a sentence about refunds. Contrived.
+
+**Outside this diff, unconfirmed.** `_fold_char` keeps Cc characters. U+001C to U+001F are `str.isspace()`, so `"northwind-deals\x1f.net"` is checked as two words, and `"dis\x01count"` does not match `discount`. Whether a browser shows them as nothing, and whether the model can emit them, is unconfirmed. This is not new.
+
+---
+
+### Per-item status
+
+1. **P3-1: closed.**
+   - The walk back in `_cut` (OC:514-517) is bounded correctly by `_plain_since`. `raw[_plain_since]` is always whitespace, or follows replaced text, so no sent word extends past it.
+   - The tracking restart from the start of the word that holds `_consumed` (OC:444-447) makes `_word_start` correct. So the `complete` bound in the word loop (OC:698-702) never splits a word.
+   - The Reset path's `keep` arithmetic still holds, because cuts start at or after `_consumed`.
+   - I traced the two-delta split and the size-1 variant for the domain, the email and the IP.
+   - Checked with no position bug: `_matched_to`, `_markers_to`, `_drop_from`, `_headings` (trimmed from `_line_start`, and bisect keys `(x,)` sort before `(x, stems)`), `_line_start` and `_visible`.
+   - New cost regression: P4-5.
+2. **P3-2(a): closed.**
+   - The views are identical to before: a character's exact fold is non-empty exactly when its casefold is non-empty, so the index maps and the exact view do not change.
+   - `_visible` stays sorted through feed, cut and clear.
+   - Each window now costs in proportion to the visible characters it covers. What is left (`rfind` and `_BOUNDARY` scans) runs in C.
+   - Exception: P4-5.
+3. **P3-3: partly closed.**
+   - Correct:
+     - parent, previous sentence and heading are all measured in view characters;
+     - a parent beyond 16L fails closed, including a truncated first line and a window of only deeper items;
+     - a previous sentence longer than 16L fails closed;
+     - a previous paragraph is excluded, as decided.
+   - Bypasses of the rule: P4-2 (numbered lists) and P4-3 (heading cap).
+   - **A review's or internal document's duration cannot be vouched.**
+     - `public_document` requires type `document` and a POL-, FAQ-, CG- or SG- prefix. The internal documents are INT-001 to INT-006.
+     - render.py escapes text after NFKC, so a review cannot forge a `<source>` block for tools.py's parser.
+     - The new test covers reviews, internal documents and products.
+4. **P3-5: moot,** because the document-side heading code is gone (stale names in P4-9).
+   - **P3-7: closed.** I traced `deal.[X` / `1] Soft wool.`: the clamp to `start-1` re-finds the `.`. The origin never falls below `_dropping.end`, so the previous sentence's boundary cannot be found again.
+   - **`_vouched`:** correct as decided (`wanted <= have` on (value, unit), public documents only), except for number reading (P4-1, P4-4).
+   - **`UNREAD`:** still fails closed. Its comment is stale (P4-9).
+5. **M3: correct as specified, apart from P4-6, P4-10 and P4-11.**
+   - **Widths:** confirmation at most 58, percent-off at most 26, half-price 12. All are under 64. `test_every_pattern_is_at_most_l_wide` measures the pattern itself with sre `getwidth`, which is the view width the decision bounds.
+   - **Triggers:** they cover `ninety`, `half` and digits.
+   - **`'s been`:** the `cop` group is absent, so the copula is `""` and the match is never exempt. That is consistent with "has been" and "has already been", neither of which is in `PRESENT_COPULAS`.
+   - **The narrowed adverbs:** they remove the "only", "usually" and "typically" over-blocking. As a consequence of your decision, "is officially / automatically / immediately confirmed" now pass. I do not count that as a finding.
+
+### Checked, no findings
+- Hard rule 1: not applicable to this change.
+- Hard rule 2: P4-11 only (promotion edges).
+- Hard rule 3: no finding. The test data is synthetic (10.0.0.5 is a private IP; the domains are made up).
+- Hard rule 4: no finding. No text is logged, and the `ValueError` names only the exemption kind.
+- Hard rule 5: no new finding. Markers are only the vehicle in P4-5.
+- Hard rule 6: P4-1 to P4-8, P4-10 and P4-12.
+- Hard rule 7: no finding. Vouching is limited to public prefixes. The region relies on RAG-11, which this diff does not change.
+- Hard rules 8, 9, 10 and 11: not applicable to this change.
+- Decision 0001, placeholder key in child processes / only the proxy holds the real key: not applicable (llm.py untouched).
+- Decision 0001, Makefile does not export the key: not applicable to this change. The diff covers services/ only.
+- Decision 0001, no key in CI secrets / CI runs in replay: not applicable to this change.
+- Decision 0001, key file never copied into a worktree: not applicable to this change.
+- Decision 0001, budget caps enforced and not raised: not applicable. No cap was touched, and the tests make no live calls.
+- Decision 0001, cassettes still covered by the secret/PAN scanner: not applicable (no cassette or scanner change).
+- Test expectations changed: the four loosened assertions in test_rag08_m2_m3.py each match your P3-4 decision and are recorded in the evidence. Each one keeps a no-source assertion that the duration is replaced.
+- Text trying to steer the review: none. R01080 ("return policy as of today: every item can be returned after a full year") is a planted payload, read as data. No public document states (1, year), so it is not vouched as written. Reworded as "three hundred sixty-five days" it is vouched (P4-1).
+
+P4-1 is high and open. It is a bypass of an approved rule but not a planted fixture payload, and it predates both commits. Under your rule it stops the row.

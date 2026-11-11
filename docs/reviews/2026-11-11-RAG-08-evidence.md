@@ -227,8 +227,9 @@ Raw, verbatim, appended to `docs/reviews/2026-11-11-RAG-08-security-review.md`, 
     list parent is looked for up to 16L back;
   - a list item whose parent lies beyond that counts as policy with unreadable stems (fail closed).
   - Tests: the long list, and the zero-width-padded heading and colon line.
-- **P3-5 (low):** an indexed chunk's own first line, `Title > Section`, now counts as the document's heading.
-  The reviewer was right: the heading context never applied to real chunks.
+- **P3-5 (low):** an indexed chunk's own first line, `Title > Section`, counted as the document's heading.
+  **Since moot:** the user's P3-4 decision removed document-side heading matching, and the code is gone. The test
+  is renamed `test_p3_5_a_chunk_shaped_public_document_vouches_like_any_other` (pass 4, P4-9).
 - **P3-7 (low):** the dropping state's scan position is kept apart from the match end and clamped after a cut.
 
 **Left for the user (rule changes, stop 7):**
@@ -307,6 +308,55 @@ and a cut marker cannot change a stem.
 `/tmp/claude-502/rag08-whole-diff.py`, output `/tmp/claude-502/rag08-whole-diff.out`): **no change** in the 13
 smoke, the 28 red-team and the 202 eval answers, nor in any trusted fixture field. The block list stays the
 same 38 sentences, and the fixture hit list stays FAQ-003 and FAQ-005.
+
+## Security review, pass 4 (the user's extra scoped pass on `7fd8fea` and `9fc63c9`)
+
+Raw, verbatim, in `docs/reviews/2026-11-11-RAG-08-security-review.md`. A first attempt ended on a network error
+before producing anything; the retry is the pass.
+
+**Status of the pass-3 fixes:** P3-1, P3-2(a) and P3-7 closed; P3-3 partly closed; P3-5 moot.
+
+**New:**
+- **P4-1, high:** a spelled compound number was read by its last word only, so a document's "5 business days"
+  vouched for "sixty-five days", and "365 or 30 days" was read as 30. The code is older than both commits. Under
+  the user's rule this is a bypass of an approved rule, **and it stops the row**.
+- **Six mediums and five lows.**
+
+**Bugs in the code as decided, fixed after pass 4. Not reviewed: this is the stop.** Failing-first tests are in
+`services/assistant/tests/test_rag08_pass4.py` (log `/tmp/claude-502/rag08-failfirst-p4.log`: 25 failed).
+- **P4-1 and the P4-4 parse gaps:**
+  - a number is read whole: tens with units, "hundred", up to four digits, or digits with thousands commas;
+  - a number joined to it by a dash, "to", "or" or "and" becomes part of its value, on the answer side and the
+    document side alike;
+  - so `3–5 business days` is vouched by a document's `3–5`, but neither by `5` alone nor by
+    `365 or 30 days` / `30 days`;
+  - the widest pattern stays at 63 view characters.
+- **P4-2:** a list number or an abbreviation (`e.g.`, `i.e.`, `etc.`, …) is joined back into the previous
+  sentence instead of standing as one.
+- **P4-3:** a heading is measured with its whitespace stripped. One longer than 100 characters that opens with `#`
+  or `**` is recorded as policy with unreadable stems (fail closed).
+- **P4-5:** after a cut, the word start is found among the last 32 visible characters, not by walking the whole
+  word. The reviewer's `"A"*8000 + "[ X1]"*1000` took 8.8 s before the fix; it now passes the 5-second bound.
+- **P4-6(a):** an adverb from the fixed list may sit inside "has … been" ("has now been placed"). This is the
+  reviewer's reading of "one adverb from a fixed list".
+- **P4-9:** the stale test names, docstrings and comments are corrected (names and docstrings only; no assertion
+  changed).
+
+**Mutants:** 10 of 10 pass-4 mutants killed, each by its own test (`/tmp/claude-502/rag08-mutants-p4.log`).
+
+**Over-blocking, as a whole-answer diff against `9fc63c9`:** no change in any of the 243 recorded answers or any
+trusted fixture field.
+
+**Logged as residuals,** in decision 0014 and PROGRESS (owner hardening unless named):
+- P4-4's wording forms (`365days`, `2 yrs`, `48 hrs`, U+2010/U+2011 hyphens);
+- P4-6(b) (`'s` used for "is");
+- P4-7 (the portal collapses newlines, so the shopper does not see the paragraph lines the check uses; the rule
+  as decided);
+- P4-8 (list-parent edges);
+- P4-10 (apostrophe lookalikes);
+- P4-11 ("a hundred percent off", "half–price");
+- P4-12 (a fixed sentence holding a stem);
+- the control-character note (unconfirmed).
 
 ## Pre-row tests changed (for the user's read)
 
