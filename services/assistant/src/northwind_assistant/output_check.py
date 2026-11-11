@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from bisect import bisect_right
+from bisect import bisect_left, bisect_right
 from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -300,37 +300,17 @@ def stems_of(text: str) -> frozenset[str]:
     return frozenset(POLICY_STEMS.findall(normal(text)))
 
 
-def context_line(text: str, line_start: int) -> str:
-    """The line that heads the line starting at `line_start` (M2, the user's decision): for a list
-    item, its parent (the nearest earlier line that is not a list item at its depth or deeper);
-    otherwise the line before it, if that line is a heading. At most 4L characters back."""
-    lines = [
-        line for line in text[max(0, line_start - 4 * L) : line_start].split("\n") if line.strip()
-    ]
-    if not lines:
-        return ""
-    end = text.find("\n", line_start)
-    here = text[line_start : len(text) if end < 0 else end]
-    item = _LIST_ITEM.match(here)
-    if item:
-        depth = len(item.group(1))
-        for line in reversed(lines):
-            above = _LIST_ITEM.match(line)
-            if above is None or len(above.group(1)) < depth:
-                return line
-        return ""
-    return lines[-1] if _HEADING.fullmatch(lines[-1]) else ""
-
-
 @lru_cache(maxsize=512)
 def policy_durations(text: str) -> frozenset[tuple[int, str, str]]:
     """(value, unit, stem) for every duration in a sentence of a document, with every policy stem
     of that sentence and of the heading or parent line above it (M2, the user's decision)."""
     found: set[tuple[int, str, str]] = set()
     heading = ""
-    for paragraph in re.split(r"\n\s*\n", text):
+    for number, paragraph in enumerate(re.split(r"\n\s*\n", text)):
         lines = [line for line in paragraph.split("\n") if line.strip()]
-        if lines and lines[0].lstrip().startswith("#"):
+        # A markdown heading, or an indexed chunk's own first line, "Title > Section" (P3-5).
+        titled = number == 0 and len(lines) == 1 and " > " in lines[0]
+        if lines and (lines[0].lstrip().startswith("#") or titled):
             heading, lines = lines[0], lines[1:]
         parent, prose, units = heading, [], []
         for line in lines:
@@ -385,12 +365,14 @@ class OutputCheck:
     _plain_since: int = 0  # raw text since here was sent unchanged, so `shown` ends with it
     _dropping: Match | None = None
     _lead: str = ""
+    _drop_from: int = 0  # where the dropping state's boundary search goes on from
     _shown: str = ""
     _undecided: int | None = None  # a duration whose sentence has not shown yet if it is policy
     _scan: tuple[int, int, int] = (0, 0, 0)  # (from, scanned to, sentence start): a cache
     _folds: list[str] = field(default_factory=list)  # casefolded view of each raw character
     _exacts: list[str] = field(default_factory=list)  # the same before casefolding
     _vlen: list[int] = field(default_factory=lambda: [0])  # view length of raw[:i]
+    _visible: list[int] = field(default_factory=list)  # raw positions that fold to something
     _matched_to: int = 0  # raw text before this has been matched (patterns are at most L wide)
     _words_to: int = 0  # every complete word before this was checked and is not a link
     _markers_to: int = 0  # every marker starting before this was dealt with
@@ -438,8 +420,8 @@ class OutputCheck:
     def _clear(self, *, keep_shown: bool = False) -> None:
         self._raw, self._deltas, self._consumed, self._plain_since = "", [], 0, 0
         self._scan = (0, 0, 0)
-        self._dropping, self._lead = None, ""
-        self._folds, self._exacts, self._vlen = [], [], [0]
+        self._dropping, self._lead, self._drop_from = None, "", 0
+        self._folds, self._exacts, self._vlen, self._visible = [], [], [0], []
         self._matched_to = self._words_to = self._markers_to = 0
         self._ws_start = self._word_start = None
         if not keep_shown:
@@ -453,6 +435,8 @@ class OutputCheck:
             self._exacts.append(exact)
             self._folds.append(folded)
             self._vlen.append(self._vlen[-1] + len(folded))
+            if folded:
+                self._visible.append(position)
             self._track(position)
 
     def _track(self, position: int) -> None:
@@ -465,8 +449,14 @@ class OutputCheck:
     def _reindex(self, start: int) -> None:
         """After raw text from `start` (not yet sent) changed: refold it and find the tail."""
         del self._folds[start:], self._exacts[start:], self._vlen[start + 1 :]
+        del self._visible[bisect_left(self._visible, start) :]
         self._ws_start = self._word_start = None
-        for position in range(self._consumed, start):
+        # From the start of the word that holds `_consumed`, which may be partly sent: tracking
+        # from `_consumed` itself would split that word in two (pass 3, P3-1).
+        origin = self._consumed
+        while origin > self._plain_since and not self._raw[origin - 1].isspace():
+            origin -= 1
+        for position in range(origin, start):
             self._track(position)
         self._index(start)
 
@@ -486,7 +476,9 @@ class OutputCheck:
         index: list[int] = []
         exact: list[str] = []
         exact_index: list[int] = []
-        for position in range(start, end):
+        # Only positions that fold to something: a long invisible run costs nothing (P3-2).
+        lo, hi = bisect_left(self._visible, start), bisect_left(self._visible, end)
+        for position in self._visible[lo:hi]:
             folded, unfolded = self._folds[position], self._exacts[position]
             text.append(folded)
             index.extend([position] * len(folded))
@@ -526,8 +518,15 @@ class OutputCheck:
             self._scan = (-1, 0, 0)  # the text the cache scanned has changed
         if self._dropping is not None:
             self._dropping.end = moved(self._dropping.end)
+            # A full stop just before the cut must still be found (pass 3, P3-7).
+            self._drop_from = min(moved(self._drop_from), max(self._dropping.end, start - 1))
         self._matched_to = min(self._matched_to, start)
-        self._words_to = min(self._words_to, start)
+        # The word holding the cut is checked again whole, even if part of it was sent: the
+        # repair takes it back (pass 3, P3-1).
+        word = start
+        while word > self._plain_since and not self._raw[word - 1].isspace():
+            word -= 1
+        self._words_to = min(self._words_to, word)
         self._markers_to = min(self._markers_to, start)
         self._reindex(start)
 
@@ -593,11 +592,33 @@ class OutputCheck:
             return UNREAD  # still undecided after this much padding
         else:
             return None
-        line_start = self._raw.rfind("\n", 0, sentence) + 1
-        stems = frozenset(POLICY_STEMS.findall(region)) | stems_of(
-            context_line(self._raw, line_start)
-        )
+        stems = frozenset(POLICY_STEMS.findall(region)) | self._context_stems(sentence)
         return stems if boundary is not None and self._wide(end, boundary) <= L else stems or UNREAD
+
+    def _context_stems(self, sentence: int) -> frozenset[str]:
+        """The policy stems of the line that heads the sentence's line (M2): for a list item its
+        parent, otherwise the line before it if that is a heading. Measured in view characters
+        (pass 3, P3-3): a list item whose parent lies more than 16L back counts as policy with
+        unreadable stems (fail closed)."""
+        line_start = self._raw.rfind("\n", 0, sentence) + 1
+        back = self._back(line_start, 16 * L)
+        truncated = back > 0 and self._raw[back - 1] != "\n"
+        lines = self._view(back, line_start).text.split("\n")
+        marked = [(not (truncated and i == 0), line) for i, line in enumerate(lines)]
+        complete = [(whole, line) for whole, line in marked if line.strip()]
+        item = _LIST_ITEM.match(self._raw, line_start)
+        if item:
+            depth = len(item.group(1))
+            for whole, line in reversed(complete):
+                if not whole:
+                    return UNREAD
+                above = _LIST_ITEM.match(line)
+                if above is None or len(above.group(1)) < depth:
+                    return stems_of(line)
+            return UNREAD if truncated else frozenset()
+        if complete and complete[-1][0] and _HEADING.fullmatch(complete[-1][1]):
+            return stems_of(complete[-1][1])
+        return frozenset()
 
     def _clean_markers(self, final: bool) -> None:
         """An invented citation marker comes out of the held text before anything is matched, so
@@ -662,11 +683,14 @@ class OutputCheck:
                 if best is None or start < best.start:
                     best = Match(pattern.cls, start, end)
                 break
-        checked = max(self._consumed, self._words_to)
-        for word in _WORD.finditer(self._raw, checked):
+        checked = max(self._plain_since, self._words_to)
+        # Only complete words: the trailing one is still being written (unless the stream ended).
+        if final or self._word_start is None:
+            complete = len(self._raw)
+        else:
+            complete = self._word_start
+        for word in _WORD.finditer(self._raw, checked, max(checked, complete)):
             start, end = word.start(), word.end()
-            if end >= len(self._raw) and not final:
-                break  # the trailing word is still being written
             if word_is_link(word.group()):
                 if best is None or start < best.start:
                     best = Match("link", start, end)
@@ -737,9 +761,10 @@ class OutputCheck:
         while True:
             self._clean_markers(final)
             if self._dropping is not None:
-                boundary = _BOUNDARY.search(self._raw, self._dropping.end)
+                origin = max(self._dropping.end, self._drop_from)
+                boundary = _BOUNDARY.search(self._raw, origin)
                 if boundary is None and not final:
-                    self._dropping.end = max(self._dropping.end, len(self._raw) - 1)
+                    self._drop_from = max(origin, len(self._raw) - 1)
                     return out
                 end = len(self._raw) if boundary is None else boundary.start()
                 if boundary is not None and self._raw[boundary.start()] != "\n":
@@ -768,7 +793,7 @@ class OutputCheck:
                 if self._shown:
                     out.append(self._shown)
             self._consumed = start
-            self._dropping = match
+            self._dropping, self._drop_from = match, match.end
 
 
 def check_text(text: str, sources: Sequence[Source] = (), seen: Iterable[str] = ()) -> str:

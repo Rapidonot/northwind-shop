@@ -318,3 +318,148 @@ I am read-only and could not run anything, so every trace below was done by hand
 - **Decision 0001, budget caps enforced and not raised:** not applicable to this change (no cap touched, nothing recorded).
 - **Decision 0001, cassettes still covered by the secret/PAN scanner:** not applicable to this change (no cassette or scanner change).
 - **Data in the diff that tries to steer the review:** none found.
+
+---
+
+# Pass 3, scoped re-review (raw, verbatim), 2026-11-11
+
+Approved by the user: one more scoped pass, covering N1, M4, M2 and M3. Input:
+`/tmp/claude-502/northwind-security-RAG-08-pass3.diff`, from the files as pass 2 read them to head `1876ce1`. The
+report as returned:
+
+---
+
+## RAG-08 security re-review, pass 3 (scoped), head 1876ce1
+
+Scope: the diff at /tmp/claude-502/northwind-security-RAG-08-pass3.diff, plus the current files /Users/rapido/Projects/northwind-shop-b/services/assistant/src/northwind_assistant/output_check.py (OC) and turn.py. Before reviewing I re-read the CLAUDE.md hard rules, decision 0001, decision 0014, pass 1's M2 and M3, pass 2's N1, M4, N3, N4, N5 and L6, and the user's answers in the evidence file. I could not run anything, so every trace below was done by hand from the code.
+
+### Findings, most severe first
+
+**P3-1. High. A word is not checked whole after a cut inside it, so a bare domain or email gets through. This is a regression from the `_words_to` change.**
+- **Where:** OC:530 (`self._words_to = min(self._words_to, start)`) together with OC:665-675, where the word loop starts at `max(_consumed, _words_to)`.
+- **Rule:** hard rule 6 / NFR-03, link class (decision 0014 §5: "any word that is a bare domain").
+- **What is wrong:** a marker may contain whitespace (`[ X1]`, `[X1, Y2]`), so the word in front of it can be complete and checked before the marker closes. When the marker is cut, `_words_to` moves back only to the cut start, which is in the middle of the word. Only the tail of the joined word is ever checked.
+- **Trace,** two deltas: `"Visit northwind-deals[ X"` then `"1].net now."`.
+  1. Delta 1 checks `northwind-deals[`. It is not a link, so `_words_to` becomes 22. Nothing is released yet, so `_consumed` is 0.
+  2. Delta 2 cuts `[ X1]` at 21, so `_words_to` becomes 21.
+  3. The word loop starts at 21 and checks `.net`. `word_is_link(".net")` strips it to `net` and returns False.
+  4. The shopper sees `Visit northwind-deals.net now.`
+- **Pass 2 caught this split,** because its loop started at `_consumed` (0) and checked `northwind-deals.net` whole. Pass 2 also missed the variant where `northwind-deals` had already been released at the `[` trigger (size-1 deltas). Emails (`deals@northwind[ X1].net`) and IPs work the same way.
+- **Fix:** on a cut, move `_words_to` back to the start of the word that holds `start` (just after the last whitespace before it). Bound it below by `_plain_since`, not `_consumed`, so a word that was partly sent is re-checked and the existing Reset path takes it back.
+- **Test:** both strings above at sizes 1, 3 and 4, and the two-delta split.
+
+**P3-2. Medium, unconfirmed (not measured). M4 is still superlinear on three inputs.**
+- **(a) A long run of characters that fold to nothing** (ZWSP, or a combining mark after a letter).
+  - `_back` measures in view characters, so a 3L lookback (OC:635-640) and the L-1 trigger window (OC:687-688) reach back across the whole run.
+  - `_view` (OC:484-495) then loops over every raw position, in Python, twice per delta.
+  - So each delta costs O(run). With about 8k invisible tokens, that is roughly R²/2 view iterations, which I estimate at 10-20 s of blocked event loop.
+  - The N1 fix makes this case possible. The new test uses visible `x`, so it does not cover it.
+  - Fix: keep a list of the raw positions that fold to something, and build views from it with bisect. Or fail closed on a run of more than about 2L zero-width characters.
+- **(b) The `_sentence_start` cache misses on most deltas while a duration is held** (OC:501).
+  - `_policy_context` asks for the duration's start, and the next delta then asks for `_consumed`, which is smaller. Each miss rescans from `_plain_since`, which stays 0 in an answer with no block.
+  - The answer can be benign: "It dries in 2 days." repeated, with token deltas like `" 2"` that end before the trigger. I estimate about 2 s.
+  - Fix: keep an append-only list of boundary ends since `_plain_since`, cut it back on `_cut`, and bisect.
+- **(c) Cuts inside a long held region:** a dropping sentence, or a trailing word with no whitespace, holding many invented markers.
+  - Each `_cut` re-tracks from `_consumed` (OC:469-470) and rebuilds every held delta (OC:524), so it costs O(held length).
+  - With about 2,000 markers I estimate 2-3 s.
+  - Fix: if `start` is inside the current trailing word or whitespace run, restore the tracking state instead of re-tracking, and only remap deltas from the first one that changed.
+- **Minor, C-level:** `_WORD.finditer(raw, checked)` scans the whole held trailing word on every delta, and `context_line` copies the whole current line on every call (`here = text[line_start:end]`). Use `_LIST_ITEM.match(text, line_start)` instead of the copy.
+
+**P3-3. Medium. M2's answer-side context fails open, so the duration counts as non-policy.**
+- **Where:** `context_line` at OC:303-322, `_HEADING` at OC:242, and `_policy_context` at OC:596-599.
+- **Rule:** hard rule 6, class 5 as the user decided it.
+- **(a) A long list.** A parent more than 4L **raw** characters back is lost. The function then returns `""` or a partial sibling line, and the duration passes. Example: `"Returns:\n" + "- Soft and warm fleece that holds its shape well.\n"*6 + "- a full year\n"` passes, with no padding needed.
+- **(b) Padding.** The N1 problem comes back in the new code, because both bounds count raw characters. `"**Return window" + "​"*90 + "**\n365 days."` is no longer a heading (the 80-character limit in `_HEADING`). Padding the heading line past 256 characters drops it too.
+- **(c) An intervening line.** The answer side uses only the line directly before. The document side applies the section heading to every unit in its paragraph (OC:330-344). So `"**Return window**\nUnworn items qualify.\n365 days."` passes. That does not match "both sides".
+- **(d) Design, the user's call:** the previous sentence is not context, so "You can return any item. You have 365 days." passes.
+- **Fix for (a)-(b):** measure in view characters. Fold the line before `_HEADING`. Return `UNREAD` when the window cuts off before a parent or heading is found, the same fail-closed rule as the rest of `_policy_context`.
+- **(c) and (d)** change the rule, so they need the user (stop 7).
+
+**P3-4. Medium, design (stop 7). The stem match is an intersection that the model controls.**
+- **Where:** OC:566-568, the `any(... for stem in stems)` check.
+- **What is wrong:** the answer can add one stem, in the sentence or in a heading, to borrow vouching from an unrelated public duration.
+  - "You can return any item for repair within two years." passes on FAQ-012's repair term.
+  - "**Returns and repairs**\n- Any item, within two years" passes the same way, and a heading with many stems does this for every bullet under it.
+  - "Cancel and get a refund within one hour" passes on FAQ-007.
+- **Your question:** the heading path is inside the user's rule, and no worse than writing the stem into the sentence. The weakness is the intersection itself.
+- **Options for the user:**
+  - the answer sentence's own stems must be a subset of the document unit's stems;
+  - or match on the stem nearest the duration, on both sides.
+- Either option may over-block, so re-run the 202 eval answers.
+
+**P3-5. Low (fail closed). In production, the document side never sees a heading.**
+- **Where:** OC:333, which only treats a `#` line as a heading.
+- Indexed document chunks begin with `"Title > Section\n\n"` (chunking.py:95-110), and render.py:42-43 passes the chunk text through. `policy_durations` reads that line as prose, so the user's document-side heading context is never applied in production.
+- The tests build a `Source` from the whole fixture body. So `test_m2_a_documents_heading_vouches_for_a_bullet_with_no_stem_of_its_own` passes on a shape production never produces.
+- The effect is over-blocking, not a bypass. I did not confirm this against a recorded source block.
+
+**P3-6. Low. M3's new wordings have gaps and some over-blocking risk.**
+- **Still pass:**
+  - two adverbs ("is now fully confirmed");
+  - an adverb inside "has already been processed";
+  - "order's been confirmed";
+  - "half-price";
+  - "ninety percent off";
+  - "your refund issued", which pass 1 listed but which was not added. Please confirm leaving it out was the user's choice.
+- **Over-block:** `[a-z]{2,10}ly` also matches "only", "usually" and "typically". So "Your order is only placed when you press Pay" and "Your refund is usually processed within…" are replaced.
+- **Checked and correct:**
+  - the patterns themselves;
+  - widths, which `test_every_pattern_is_at_most_l_wide` covers;
+  - "not" is excluded from the adverbs;
+  - the triggers `half`, `clearance` and `we`.
+
+**P3-7. Low (fail closed). After a cut, the dropping state can miss a boundary.**
+- **Where:** OC:742, with OC:527-528.
+- `_dropping.end = len-1` and then a cut maps it to the cut start. The search then starts after a `.` that sits right before the cut: in `foo.[X1] bar`, split as `foo.[X` / `1] bar`, the `.` is missed.
+- So the next sentence is dropped as well. That is over-dropping, not a leak.
+- Fix: map it to `max(match_end, start - 1)`.
+
+**P3-8. Low. L6 residual in the pin.**
+- **Where:** test_output_check.py:644-657.
+- These are still not caught:
+  - `from claude_agent_sdk import client` followed by `client.ClaudeSDKClient(...)` (an alias base not named `claude_agent_sdk*`);
+  - `importlib` / `__import__`.
+- northwind_common/llm.py re-exports neither `query` nor `ClaudeSDKClient`.
+
+### Per-item status
+1. **N1: closed for the three named windows. A new raw-measured window was added (P3-3).**
+   - `_first_match` uses `_back` in view characters. I traced the margins: 2L from `_consumed`, and 3L from `_matched_to`, which also covers an undecided duration (at most about 35 + L + 1 view characters).
+   - `_safe_end` uses `_back(len, L-1)`.
+   - `_policy_context` waits in view characters, and its raw 16L caps fail closed as `UNREAD`.
+   - `_CONDITIONAL` uses 40 view characters.
+   - `_folds`, `_exacts` and `_vlen` stay in step with `_raw` through `feed`, `_cut`/`_reindex`, reset, abort and clear.
+   - Residuals: `context_line` and `_HEADING` still count raw characters (P3-3). `_MARKER` and `_markers_to` count raw, but markers are raw-level and that is consistent.
+2. **M4: partly closed.**
+   - Correct: `_matched_to` after a block, a cut and a reset; `_markers_to`, including a marker that closes later; delta pruning; the incremental dropping search; the `_policy_context` caps.
+   - Not closed: the correctness hole in `_words_to` (P3-1, high) and the cost residuals (P3-2).
+3. **M2: implemented as decided, partly effective.**
+   - Correct:
+     - internal documents and reviews cannot vouch (none of the 6 internal fixtures carries a public prefix);
+     - `_exempt` raises on an unknown kind, which fails closed (the exception ends `stream_answer` and nothing held is sent);
+     - the bound keeps the stems read so far and still fails closed (empty means `UNREAD`).
+   - Open: P3-3, P3-4 and P3-5.
+4. **M3: closed as specified. Residuals are in P3-6.**
+5. **N3, N4, L6:**
+   - **N3: closed.** `moved()` is correct for a longer rewrite and the deltas stay contiguous.
+   - **N4: closed.** The rescan from `rfind("[")` terminates.
+   - **L6: mostly closed** (P3-8).
+   - **N5:** decision 0014 §2 and threat-model.md:194 now describe the new fold.
+
+### Checked, no findings
+- Hard rule 1: not applicable to this change.
+- Hard rule 2: P3-6 only.
+- Hard rule 3: no finding. The test data is synthetic.
+- Hard rule 4: no finding. No text is logged, and the ValueError names only the exemption kind.
+- Hard rule 5: no new finding. N3 and N4 are closed, and invented markers are only the vehicle in P3-1.
+- Hard rule 6: P3-1, P3-2, P3-3, P3-4.
+- Hard rule 7: no finding. Vouching is limited to public prefixes. Region relies on RAG-11's retrieval filtering, which this diff does not change.
+- Hard rules 8, 9, 10, 11: not applicable to this change.
+- Decision 0001, placeholder key only / only the proxy holds the real key: not applicable (llm.py untouched).
+- Decision 0001, Makefile does not export the key: not applicable to this change.
+- Decision 0001, no key in CI secrets / CI runs in replay: not applicable to this change.
+- Decision 0001, key file never copied into a worktree: not applicable to this change.
+- Decision 0001, budget caps enforced and not raised: not applicable (no cap touched, and the tests use ScriptedLLM with no spend).
+- Decision 0001, cassettes still covered by the secret/PAN scanner: not applicable to this change.
+- Text in the diff, fixtures or reviews trying to steer the review: none found.
+
+P3-1 is high and open after this re-review. Under CLAUDE.md that is stop 10.

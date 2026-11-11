@@ -193,6 +193,74 @@ the same policy stems.**
 
 **AC11:** unchanged. 66 characters reach the check before the first release (p50); CPU per delta is 0.09 ms (p50).
 
+## Security review, pass 3 (the user's extra scoped pass: N1, M4, M2, M3)
+
+Raw, verbatim, appended to `docs/reviews/2026-11-11-RAG-08-security-review.md`, against head `1876ce1`.
+
+**Status of the earlier items:**
+- **Closed:** N1 for the three named windows, N3, N4 and N5.
+- **Partly closed:** M4 and L6.
+- **M2:** built as decided, partly effective.
+- **M3:** closed as specified.
+
+**New:**
+- **P3-1, high, a regression from the `_words_to` change:** a word split by a cut marker was checked only from
+  the cut, so `northwind-deals[ X1].net` reached the shopper as `northwind-deals.net`. **This is stop 10 under
+  the user's rule ("any high: stop").**
+- **P3-2, P3-3 and P3-4:** medium.
+- **P3-5 to P3-8:** low.
+
+**Done after pass 3 (not reviewed), with failing-first tests in
+`services/assistant/tests/test_rag08_pass3.py` (log `/tmp/claude-502/rag08-failfirst-p3.log`: 15 failed):**
+
+- **P3-1 (high):** a cut moves the word check back to the start of the word that holds it, bounded by
+  `_plain_since`, so a word that was partly sent is checked again and taken back by a reset. The trailing-word
+  tracking also restarts from the start of that word, not from `_consumed`; that was a second cause, found by
+  the new test.
+  - Tests: the reviewer's three strings (domain, email, IP) at sizes 1, 3 and 4, and its two-delta split.
+- **P3-2(a) (medium):** views iterate only the positions that fold to something, and the word scan never
+  rescans the incomplete trailing word.
+  - Result: a 30,000-character zero-width run took **39 s before the fix** and now passes the 5-second bound.
+  - P3-2(b) and (c) were measured at 0.05 s and 0.45 s, so they needed no change.
+- **P3-3(a, b) (medium):**
+  - the answer-side context is now measured in view characters: the line is folded before `_HEADING`, and a
+    list parent is looked for up to 16L back;
+  - a list item whose parent lies beyond that counts as policy with unreadable stems (fail closed).
+  - Tests: the long list, and the zero-width-padded heading and colon line.
+- **P3-5 (low):** an indexed chunk's own first line, `Title > Section`, now counts as the document's heading.
+  The reviewer was right: the heading context never applied to real chunks.
+- **P3-7 (low):** the dropping state's scan position is kept apart from the match end and clamped after a cut.
+
+**Left for the user (rule changes, stop 7):**
+- **P3-3(c):** the answer side uses only the line directly above, while the document side uses the section
+  heading for every unit in its paragraph. `**Return window**\nUnworn items qualify.\n365 days.` passes.
+- **P3-3(d):** the previous sentence is not context. `You can return any item. You have 365 days.` passes.
+- **P3-4:** the stem intersection is something the model controls. Writing `…return any item for repair within
+  two years` borrows FAQ-012's repair warranty. The options: the answer's stems must be a subset of the
+  document unit's, or match the stem nearest each duration.
+- **P3-6:** two adverbs, `has already been`, `order's been`, `half-price`, `ninety percent off` and `your refund
+  issued` still pass; `[a-z]{2,10}ly` over-blocks "only", "usually" and "typically". "Your refund issued" was
+  in pass 1's list but not in your M3 list, so it was left out as you worded it.
+- **P3-8 (low):** the pin misses `client.ClaudeSDKClient` through an alias, and `importlib`. Logged, owner
+  hardening.
+
+**Mutants after the pass-3 fixes (`/tmp/claude-502/rag08-mutants-p3.log`):**
+- **Every pass-3 fix has a killing test:** P3-1 three ways, P3-2(a), P3-3's raw window, P3-5 and P3-7.
+- **P3-3's two fail-closed returns back each other up.** Each survives alone, and removing both is killed by
+  `test_p3_3a_a_parent_beyond_the_window_fails_closed`.
+- **The earlier sets were re-run on this code:**
+  - M2/M3: 13 of 15 killed. The 2 that did not apply were rewritten for `_context_stems` and killed.
+  - The main set: 35 of 37 killed. The other 2 are inexact entries whose exact versions were killed.
+
+**Over-blocking, re-run:**
+- The same 38 sentences are blocked: none new, none removed.
+- The fixtures hit only FAQ-003 and FAQ-005.
+
+**AC11:** unchanged. 66 characters reach the check before the first release (p50); CPU per delta is 0.09 ms
+(p50).
+
+**`make check`: 1,475 passed, 0 failed.** Window A is no longer writing the ledger, which held at $2.950179.
+
 ## Pre-row tests changed (for the user's read)
 
 1. `test_smoke_e2e.py::test_a_planted_injections_subject_is_not_named`: the strict xfail marker
