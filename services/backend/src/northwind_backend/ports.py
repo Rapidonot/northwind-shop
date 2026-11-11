@@ -18,9 +18,10 @@ above it, so the PAY-01 contract suite checks it on every adapter. The rule is s
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 from northwind_backend.errors import Result
 
@@ -158,3 +159,102 @@ class CarrierPort(Protocol):
     ) -> Result[Shipment]: ...
 
     def track(self, tracking_number: str) -> Result[Tracking]: ...
+
+
+# Row #21: the order store and the catalog's live tables, as stubs behind interfaces. `mcp-orders`
+# (FOUND-3 rest) and `mcp-catalog` (#10b) replace the fakes later; the Orders agent sees only
+# these protocols, through audited views.
+
+
+class OrderStatus(StrEnum):
+    PENDING = "pending"
+    CONFIRMED = "confirmed"
+    ESCALATED = "escalated"
+
+
+@dataclass(frozen=True, slots=True)
+class OrderLine:
+    product_id: str
+    variant_id: str
+    quantity: int
+
+
+@dataclass(frozen=True, slots=True)
+class Order:
+    """One order as the store holds it. `payment_token` and `shipping_postal_code` never reach a
+    model or the audit: the audit writes only the allow-listed fields of an `Order`."""
+
+    order_id: str
+    shopper_id: str
+    region: str
+    lines: tuple[OrderLine, ...]
+    payment_token: str
+    shipping_postal_code: str
+    status: OrderStatus = OrderStatus.PENDING
+    intent_id: str | None = None
+    amount_minor: int = 0
+    currency: str | None = None
+    escalation: str | None = None
+    address_on_file: bool = False
+    dry_run: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class PriceQuote:
+    variant_id: str
+    region: str
+    amount_minor: int
+    currency: str
+
+
+@dataclass(frozen=True, slots=True)
+class StockLevel:
+    variant_id: str
+    region: str
+    on_hand: int
+
+
+@runtime_checkable
+class CatalogPort(Protocol):
+    """Live price and stock, never the index (hard rule 2)."""
+
+    def price(self, variant_id: str, region: str) -> Result[PriceQuote]: ...
+
+    def stock(self, variant_id: str, region: str) -> Result[StockLevel]: ...
+
+
+@runtime_checkable
+class OrderStorePort(Protocol):
+    def get(self, order_id: str) -> Result[Order]: ...
+
+    def use_address_on_file(
+        self, *, idempotency_key: str, order_id: str, dry_run: bool = False
+    ) -> Result[Order]:
+        """Replaces an undeliverable delivery address with the shopper's address on file, if that
+        one is in the order's region and deliverable."""
+        ...
+
+    def confirm(
+        self,
+        *,
+        idempotency_key: str,
+        order_id: str,
+        intent_id: str,
+        amount: Money,
+        dry_run: bool = False,
+    ) -> Result[Order]:
+        """One confirmed order per order ID, whatever the key (CHK-05)."""
+        ...
+
+    def escalate(
+        self,
+        *,
+        idempotency_key: str,
+        order_id: str,
+        reason: str,
+        context: Mapping[str, Any],
+        dry_run: bool = False,
+    ) -> Result[Order]:
+        """Queues the order for a person with its context. `context` is kept, not hashed: a
+        same-key replay with the same reason returns the first result."""
+        ...

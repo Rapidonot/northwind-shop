@@ -9,9 +9,12 @@ same-key retry settles it.
 Views share the fake instance they wrap, so the one-payment-per-order rule, the idempotency store
 and the refund cap hold across callers. This closes FOUND-3 open medium (1).
 
-Agents only ever get the read-only sets below; pinned in `test_be08_views.py`, with the AST pin that
-keeps every money method name out of `src` except here and in `fakes/` (L2, N3). This is the only
-module that maps port method names to audit action names (R7).
+Agents get the read-only sets below, and the Orders agent's placement task (row #21) gets the named
+placement sets, in `agents/orders_place.py` only; both pinned in `test_be08_views.py`, with the AST
+pin that keeps every money method name out of `src` except here, in `fakes/`, and `authorize` and
+`capture` in `orders_place.py` (L2, N3; the user's approval of row #21's plan, stop 5). No agent set
+holds `void` or `refund` (hard rule 8, PRD §7). This is the only module that maps port method names
+to audit action names (R7).
 """
 
 from __future__ import annotations
@@ -25,12 +28,17 @@ from northwind_backend.errors import AUDIT_INCOMPLETE, AUDIT_UNAVAILABLE, UNEXPE
 from northwind_backend.fakes._base import NOT_PERMITTED
 from northwind_backend.ports import (
     CarrierPort,
+    CatalogPort,
     FraudAssessment,
     FraudPort,
     Money,
+    Order,
+    OrderStorePort,
     PaymentIntent,
     PaymentPort,
+    PriceQuote,
     Shipment,
+    StockLevel,
     Tracking,
 )
 
@@ -39,6 +47,12 @@ log = logging.getLogger(__name__)
 PAYMENT_READ_ONLY = frozenset({"status"})
 FRAUD_READ_ONLY = frozenset({"read"})
 CARRIER_READ_ONLY = frozenset({"track"})
+
+# The Orders agent's placement task (row #21). No void, no refund, no carrier.
+PAYMENT_PLACE = frozenset({"authorize", "capture", "status"})
+FRAUD_PLACE = frozenset({"assess", "read"})
+CATALOG_READ = frozenset({"price", "stock"})
+ORDERS_PLACE = frozenset({"get", "use_address_on_file", "confirm", "escalate"})
 
 
 def _amount(amount: Money | None) -> dict[str, object]:
@@ -271,4 +285,111 @@ class AuditedCarrierPort(_View):
             "carrier.track",
             {"tracking_number": tracking_number},
             lambda: self._fake.track(tracking_number),
+        )
+
+
+class AuditedCatalogPort(_View):
+    def __init__(self, fake: CatalogPort, audit: AuditContext, *, allowed: frozenset[str]) -> None:
+        super().__init__(audit, allowed)
+        self._fake = fake
+
+    def price(self, variant_id: str, region: str) -> Result[PriceQuote]:
+        return self._run(
+            "price",
+            "catalog.price",
+            {"variant_id": variant_id, "region": region},
+            lambda: self._fake.price(variant_id, region),
+        )
+
+    def stock(self, variant_id: str, region: str) -> Result[StockLevel]:
+        return self._run(
+            "stock",
+            "catalog.stock",
+            {"variant_id": variant_id, "region": region},
+            lambda: self._fake.stock(variant_id, region),
+        )
+
+
+class AuditedOrderStore(_View):
+    def __init__(
+        self, fake: OrderStorePort, audit: AuditContext, *, allowed: frozenset[str]
+    ) -> None:
+        super().__init__(audit, allowed)
+        self._fake = fake
+
+    def get(self, order_id: str) -> Result[Order]:
+        return self._run(
+            "get", "order.get", {"order_id": order_id}, lambda: self._fake.get(order_id)
+        )
+
+    def use_address_on_file(
+        self, *, idempotency_key: str, order_id: str, dry_run: bool = False
+    ) -> Result[Order]:
+        inputs = {"idempotency_key": idempotency_key, "order_id": order_id, "dry_run": dry_run}
+        return self._run(
+            "use_address_on_file",
+            "order.address_on_file",
+            inputs,
+            lambda: self._fake.use_address_on_file(
+                idempotency_key=idempotency_key, order_id=order_id, dry_run=dry_run
+            ),
+        )
+
+    def confirm(
+        self,
+        *,
+        idempotency_key: str,
+        order_id: str,
+        intent_id: str,
+        amount: Money,
+        dry_run: bool = False,
+    ) -> Result[Order]:
+        inputs = {
+            "idempotency_key": idempotency_key,
+            "order_id": order_id,
+            "intent_id": intent_id,
+            **_amount(amount),
+            "dry_run": dry_run,
+        }
+        return self._run(
+            "confirm",
+            "order.confirm",
+            inputs,
+            lambda: self._fake.confirm(
+                idempotency_key=idempotency_key,
+                order_id=order_id,
+                intent_id=intent_id,
+                amount=amount,
+                dry_run=dry_run,
+            ),
+        )
+
+    def escalate(
+        self,
+        *,
+        idempotency_key: str,
+        order_id: str,
+        reason: str,
+        context: Mapping[str, Any],
+        dry_run: bool = False,
+    ) -> Result[Order]:
+        # The context goes to the store, not the audit: the audit has the reason and the events
+        # the context was built from.
+        inputs = {
+            "idempotency_key": idempotency_key,
+            "order_id": order_id,
+            "reason": reason,
+            "dry_run": dry_run,
+        }
+        return self._run(
+            "escalate",
+            "order.escalate",
+            inputs,
+            lambda: self._fake.escalate(
+                idempotency_key=idempotency_key,
+                order_id=order_id,
+                reason=reason,
+                context=context,
+                dry_run=dry_run,
+            ),
         )

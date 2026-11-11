@@ -37,8 +37,13 @@ STATE_CHANGING = frozenset(
         "payment.refund",
         "fraud.assess",
         "carrier.create_shipment",
+        # Row #21: the order store's writes. No read settles them yet, so only a same-key Ok does.
+        "order.address_on_file",
+        "order.confirm",
+        "order.escalate",
     }
 )
+ORDER_ACTIONS = frozenset({"order.get", "order.address_on_file", "order.confirm", "order.escalate"})
 UNCERTAIN_CODES = frozenset({"timeout", "unexpected_error", "audit_incomplete"})
 PAYMENT_ACTIONS = frozenset({"payment.capture", "payment.void", "payment.refund", "payment.status"})
 
@@ -86,6 +91,8 @@ class OrderRecord:
     scans: int | None = None
     held: str | None = None
     escalated: bool = False
+    order_status: str | None = None
+    escalation_reason: str | None = None
     unknown: tuple[str, ...] = ()
     uncertain: tuple[Uncertain, ...] = ()
     agent_runs: tuple[str, ...] = ()
@@ -193,6 +200,11 @@ def reconstruct_order(events: Sequence[AuditEvent], order_id: str) -> OrderRecor
         elif event.action == "carrier.track":
             if _str(out, "tracking_number") == state.get("tracking_number"):
                 state["scans"] = _int(out, "scans")
+        elif event.action in ORDER_ACTIONS and _str(out, "order_id") == order_id:
+            state["order_status"] = _str(out, "status")
+            if event.action == "order.escalate":
+                state["escalated"] = True
+                state["escalation_reason"] = _str(out, "escalation")
         elif event.action == "order.held":
             state["held"] = _str(event.inputs, "reason")
             state["escalated"] = bool(out.get("escalated"))
