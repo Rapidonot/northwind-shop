@@ -9,9 +9,11 @@ reads nor records the key.
 
 No port takes a card number. Agents see only tokens and payment intents (hard rule 1, PAY-05).
 
-No port carries a confirmation reference. Hard rule 9 needs a portal confirmation for money to
-move, so before the PAY-01 contract suite either this contract gains one or a named layer above it
-enforces that. Nothing reaches these ports yet.
+Hard rule 9 (row #21, decision 0014): `authorize` and `capture` take a required
+`confirmation_ref`, issued by the portal control when the shopper confirms (CHK-02; a test fixture
+until then), and `authorize` has a deterministic per-order limit. It is on the contract, not a layer
+above it, so the PAY-01 contract suite checks it on every adapter. The rule is stated in
+`northwind_backend.confirmations`.
 """
 
 from __future__ import annotations
@@ -101,18 +103,23 @@ class PaymentPort(Protocol):
         payment_token: str,
         amount: Money,
         order_id: str,
+        confirmation_ref: str,
         dry_run: bool = False,
-    ) -> Result[PaymentIntent]: ...
+    ) -> Result[PaymentIntent]:
+        """Needs an unused confirmation for this order, currency and exact amount; uses it up."""
+        ...
 
     def capture(
         self,
         *,
         idempotency_key: str,
         intent_id: str,
+        confirmation_ref: str,
         amount: Money | None = None,
         dry_run: bool = False,
     ) -> Result[PaymentIntent]:
-        """`amount=None` captures the whole authorization."""
+        """`amount=None` captures the whole authorization. Needs the confirmation that authorized
+        this intent, and no other."""
         ...
 
     def void(

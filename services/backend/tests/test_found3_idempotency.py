@@ -18,6 +18,35 @@ from northwind_backend.fakes.payment import (
 )
 from northwind_backend.ports import Money, PaymentStatus
 
+
+def _payment_state(port: Any) -> Any:
+    while not hasattr(port, "state"):
+        port = port._fake
+    return port.state
+
+
+def confirm(port: Any, order_id: Any, amount: Any, key: Any = None) -> str:
+    """The portal confirmation a test's `authorize` presents (row #21, hard rule 9). One per
+    (key, order, amount), so a same-key replay presents the same reference."""
+    state = _payment_state(port)
+
+    def memo() -> str:
+        refs = state.__dict__.setdefault("_test_refs", {})
+        slot = repr((key, order_id, amount))
+        if slot not in refs:
+            refs[slot] = state.confirmations.issue(order_id, amount)
+        return str(refs[slot])
+
+    # Under the state's own lock: concurrent replays must present one reference.
+    return str(state.store.exclusive(memo))
+
+
+def ref_of(port: Any, intent_id: Any) -> str:
+    """The reference that authorized this intent; a well-formed, never-issued one otherwise."""
+    found = _payment_state(port).confirmation_of(intent_id) if isinstance(intent_id, str) else None
+    return found or "cf_ZZZZZZZZZZZZZZZZ"
+
+
 REPLAYS = 10
 USD = "USD"
 
@@ -28,6 +57,7 @@ def _authorize(fake: PaymentFake, key: str = "auth-1", amount: int = 5000) -> st
         payment_token=SANDBOX_APPROVED,
         amount=Money(amount, USD),
         order_id="O000001",
+        confirmation_ref=confirm(fake, "O000001", Money(amount, USD), key),
     )
     assert isinstance(result, Ok)
     return result.value.intent_id
@@ -35,7 +65,12 @@ def _authorize(fake: PaymentFake, key: str = "auth-1", amount: int = 5000) -> st
 
 def _captured(fake: PaymentFake) -> str:
     intent_id = _authorize(fake)
-    assert isinstance(fake.capture(idempotency_key="cap-0", intent_id=intent_id), Ok)
+    assert isinstance(
+        fake.capture(
+            idempotency_key="cap-0", intent_id=intent_id, confirmation_ref=ref_of(fake, intent_id)
+        ),
+        Ok,
+    )
     return intent_id
 
 
@@ -48,10 +83,13 @@ def _payment_case(op: str) -> tuple[PaymentFake, Callable[[], Result[Any]]]:
             payment_token=SANDBOX_APPROVED,
             amount=Money(5000, USD),
             order_id="O000001",
+            confirmation_ref=confirm(fake, "O000001", Money(5000, USD), "k1"),
         )
     if op == "capture":
         intent_id = _authorize(fake)
-        return fake, lambda: fake.capture(idempotency_key="k1", intent_id=intent_id)
+        return fake, lambda: fake.capture(
+            idempotency_key="k1", intent_id=intent_id, confirmation_ref=ref_of(fake, intent_id)
+        )
     if op == "void":
         intent_id = _authorize(fake)
         return fake, lambda: fake.void(idempotency_key="k1", intent_id=intent_id)
@@ -104,6 +142,7 @@ def test_replay_of_a_recorded_soft_decline_returns_the_first_result() -> None:
             payment_token=SANDBOX_SOFT_DECLINE,
             amount=Money(5000, USD),
             order_id="O000001",
+            confirmation_ref=confirm(fake, "O000001", Money(5000, USD), "k1"),
         )
 
     first = call()
@@ -130,9 +169,19 @@ def test_concurrent_replays_from_threads_give_one_effect(op: str) -> None:
 def test_a_different_request_on_a_used_key_is_refused() -> None:
     fake = PaymentFake()
     intent_id = _authorize(fake)
-    first = fake.capture(idempotency_key="k1", intent_id=intent_id, amount=Money(1000, USD))
+    first = fake.capture(
+        idempotency_key="k1",
+        intent_id=intent_id,
+        amount=Money(1000, USD),
+        confirmation_ref=ref_of(fake, intent_id),
+    )
     assert isinstance(first, Ok)
-    other = fake.capture(idempotency_key="k1", intent_id=intent_id, amount=Money(2000, USD))
+    other = fake.capture(
+        idempotency_key="k1",
+        intent_id=intent_id,
+        amount=Money(2000, USD),
+        confirmation_ref=ref_of(fake, intent_id),
+    )
     assert isinstance(other, ToolError)
     assert other.error_category is ErrorCategory.VALIDATION
     assert not other.is_retryable
@@ -164,8 +213,15 @@ def test_a_different_request_on_a_used_key_is_refused() -> None:
 def test_a_second_key_cannot_capture_twice() -> None:
     fake = PaymentFake()
     intent_id = _authorize(fake)
-    assert isinstance(fake.capture(idempotency_key="cap-a", intent_id=intent_id), Ok)
-    second = fake.capture(idempotency_key="cap-b", intent_id=intent_id)
+    assert isinstance(
+        fake.capture(
+            idempotency_key="cap-a", intent_id=intent_id, confirmation_ref=ref_of(fake, intent_id)
+        ),
+        Ok,
+    )
+    second = fake.capture(
+        idempotency_key="cap-b", intent_id=intent_id, confirmation_ref=ref_of(fake, intent_id)
+    )
     assert isinstance(second, ToolError)
     assert second.error_category is ErrorCategory.BUSINESS
     assert [e.operation for e in fake.effects].count("capture") == 1
@@ -177,9 +233,20 @@ def test_a_second_key_cannot_capture_twice() -> None:
     fake2 = PaymentFake()
     intent2 = _authorize(fake2)
     assert isinstance(
-        fake2.capture(idempotency_key="a", intent_id=intent2, amount=Money(1000, USD)), Ok
+        fake2.capture(
+            idempotency_key="a",
+            intent_id=intent2,
+            amount=Money(1000, USD),
+            confirmation_ref=ref_of(fake2, intent2),
+        ),
+        Ok,
     )
-    assert isinstance(fake2.capture(idempotency_key="b", intent_id=intent2), ToolError)
+    assert isinstance(
+        fake2.capture(
+            idempotency_key="b", intent_id=intent2, confirmation_ref=ref_of(fake2, intent2)
+        ),
+        ToolError,
+    )
     assert [e.operation for e in fake2.effects].count("capture") == 1
 
 
@@ -238,9 +305,17 @@ def _dry_call(op: str, fake: Any) -> Any:
             amount=Money(5000, USD),
             order_id="O000001",
             dry_run=True,
+            confirmation_ref=confirm(fake, "O000001", Money(5000, USD), "k1"),
         )
-    if op in ("capture", "void"):
-        return getattr(fake, op)(idempotency_key="k1", intent_id="pi_000001", dry_run=True)
+    if op == "capture":
+        return fake.capture(
+            idempotency_key="k1",
+            intent_id="pi_000001",
+            dry_run=True,
+            confirmation_ref=ref_of(fake, "pi_000001"),
+        )
+    if op == "void":
+        return fake.void(idempotency_key="k1", intent_id="pi_000001", dry_run=True)
     if op == "refund":
         return fake.refund(
             idempotency_key="k1", intent_id="pi_000001", amount=Money(1000, USD), dry_run=True

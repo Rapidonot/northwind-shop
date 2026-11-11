@@ -5,7 +5,9 @@ a transient error, and a number the carrier doesn't know is a validation error. 
 distinct (hard rule 10).
 
 A postal code starting `XX` is well formed but undeliverable, which is how the generated
-address-error orders reach it.
+address-error orders reach it. The rule lives in `northwind_backend.carriers`, shared with the order
+store (row #21). Shipments, tracking and the idempotency store live on a `CarrierState`, which
+several instances can share, so one shipment per order holds across instances (P3).
 """
 
 from __future__ import annotations
@@ -17,6 +19,7 @@ from northwind_backend.carriers import (
     TRACKING_NUMBER,
     carrier_for,
     carrier_for_tracking,
+    is_deliverable,
     tracking_number_for,
 )
 from northwind_backend.errors import Ok, Result, ToolError, business, validation
@@ -24,6 +27,7 @@ from northwind_backend.fakes._base import (
     CARD_DATA_REFUSED,
     Effect,
     FakeService,
+    FakeState,
     card_data_in,
     check_order_id,
     matches,
@@ -33,7 +37,6 @@ from northwind_backend.ports import Shipment, Tracking, TrackingEvent
 CARRIER_SCOPES = frozenset({"create_shipment", "track"})
 REGIONS = frozenset({"US", "CA", "UK", "EU"})
 SERVICES = frozenset({"standard", "express"})
-UNDELIVERABLE_PREFIX = "XX"
 DRY_RUN_SHIPMENT_ID = "sh_dry_run"
 
 _POSTAL_CODE = re.compile(r"[A-Z]{2}-\d{4}", re.ASCII)
@@ -47,16 +50,29 @@ UNDELIVERABLE = business("address_undeliverable", "The carrier cannot deliver to
 ALREADY_SHIPPED = business("already_shipped", "This order already has a shipment.")
 
 
+class CarrierState(FakeState):
+    def __init__(self, *, tracking: Mapping[str, tuple[TrackingEvent, ...]] | None = None) -> None:
+        super().__init__()
+        self.events: dict[str, tuple[TrackingEvent, ...]] = dict(tracking or {})
+        self.shipments: dict[str, Shipment] = {}
+
+
 class CarrierFake(FakeService):
     def __init__(
         self,
         *,
+        state: CarrierState | None = None,
         tracking: Mapping[str, tuple[TrackingEvent, ...]] | None = None,
         scopes: frozenset[str] = CARRIER_SCOPES,
     ) -> None:
-        super().__init__(scopes)
-        self._events = dict(tracking or {})
-        self._shipments: dict[str, Shipment] = {}
+        if state is not None and tracking is not None:
+            raise ValueError("tracking belongs to the state; set it there")
+        if state is None:
+            state = CarrierState(tracking=tracking)
+        super().__init__(scopes, state)
+        self.state = state
+        self._events = state.events
+        self._shipments = state.shipments
 
     def create_shipment(
         self,
@@ -77,7 +93,7 @@ class CarrierFake(FakeService):
             return refused
 
         def effect(dry: bool) -> Result[Shipment]:
-            if postal_code.startswith(UNDELIVERABLE_PREFIX):
+            if not is_deliverable(postal_code):
                 return UNDELIVERABLE
             if order_id in self._shipments:
                 return ALREADY_SHIPPED

@@ -22,6 +22,7 @@ from northwind_backend.ports import PaymentStatus
 from northwind_backend.reconstruct import OrderRecord, reconstruct_order
 from northwind_backend.recovery import RetryPolicy, call_with_recovery
 
+from ._confirm import confirm, ref_of
 from ._driver import (
     Fakes,
     Truth,
@@ -193,6 +194,9 @@ def _captured_order() -> tuple[dict[str, Any], Fakes, InMemoryAuditSink, Views, 
         payment_token=row["payment_token"],
         amount=amount_for(row),
         order_id=row["order_id"],
+        confirmation_ref=confirm(
+            views.payment, row["order_id"], amount_for(row), f"{row['order_id']}:authorize"
+        ),
     )
     assert isinstance(authorized, Ok)
     return row, fakes, sink, views, authorized.value.intent_id
@@ -211,7 +215,11 @@ def test_a_failed_capture_appears_in_its_orders_timeline(fault: str) -> None:
         fakes.payment.outage = True
     else:
         fakes.payment.faults.inject("capture", FaultKind.TIMEOUT_BEFORE)
-    views.payment.capture(idempotency_key="cap-1", intent_id=intent_id)
+    views.payment.capture(
+        idempotency_key="cap-1",
+        intent_id=intent_id,
+        confirmation_ref=ref_of(views.payment, intent_id),
+    )
     views.payment.status(intent_id)
     fakes.payment.outage = False
     record = reconstruct_order(sink.read_all(), row["order_id"])
@@ -258,10 +266,15 @@ def test_an_audit_unavailable_capture_leaves_nothing_and_changes_nothing() -> No
         payment_token=row["payment_token"],
         amount=amount_for(row),
         order_id=row["order_id"],
+        confirmation_ref=confirm(views.payment, row["order_id"], amount_for(row), "auth-1"),
     )
     assert isinstance(authorized, Ok)
     sink.fail_on = {sink.calls}
-    views.payment.capture(idempotency_key="cap-1", intent_id=authorized.value.intent_id)
+    views.payment.capture(
+        idempotency_key="cap-1",
+        intent_id=authorized.value.intent_id,
+        confirmation_ref=ref_of(views.payment, authorized.value.intent_id),
+    )
     record = reconstruct_order(sink.read_all(), row["order_id"])
     assert_reconciles(record, fakes)
     assert record.payment_status == "authorized" and record.uncertain == ()
@@ -274,7 +287,14 @@ def test_an_uncertain_capture_is_never_reported_as_absent(attempts: int) -> None
     uncertain with its amount, never as "authorized, not captured" and never as done."""
     row, fakes, sink, views, intent_id = _captured_order()
     fakes.payment.faults.inject("capture", FaultKind.TIMEOUT_AFTER)
-    _recover(lambda: views.payment.capture(idempotency_key="cap-1", intent_id=intent_id), attempts)
+    _recover(
+        lambda: views.payment.capture(
+            idempotency_key="cap-1",
+            intent_id=intent_id,
+            confirmation_ref=ref_of(views.payment, intent_id),
+        ),
+        attempts,
+    )
     truth = fakes.payment.status(intent_id)
     assert isinstance(truth, Ok) and truth.value.status is PaymentStatus.CAPTURED
     record = reconstruct_order(sink.read_all(), row["order_id"])
@@ -291,7 +311,11 @@ def test_an_uncertain_capture_is_never_reported_as_absent(attempts: int) -> None
 def test_a_later_status_read_settles_an_uncertain_capture() -> None:
     row, fakes, sink, views, intent_id = _captured_order()
     fakes.payment.faults.inject("capture", FaultKind.TIMEOUT_AFTER, times=1)
-    views.payment.capture(idempotency_key="cap-1", intent_id=intent_id)
+    views.payment.capture(
+        idempotency_key="cap-1",
+        intent_id=intent_id,
+        confirmation_ref=ref_of(views.payment, intent_id),
+    )
     views.payment.status(intent_id)
     record = reconstruct_order(sink.read_all(), row["order_id"])
     assert_reconciles(record, fakes)
@@ -303,7 +327,11 @@ def test_a_later_status_read_settles_an_uncertain_capture() -> None:
 def test_a_status_read_that_shows_no_capture_settles_it_as_not_done() -> None:
     row, fakes, sink, views, intent_id = _captured_order()
     fakes.payment.faults.inject("capture", FaultKind.TIMEOUT_BEFORE, times=1)
-    views.payment.capture(idempotency_key="cap-1", intent_id=intent_id)
+    views.payment.capture(
+        idempotency_key="cap-1",
+        intent_id=intent_id,
+        confirmation_ref=ref_of(views.payment, intent_id),
+    )
     views.payment.status(intent_id)
     record = reconstruct_order(sink.read_all(), row["order_id"])
     assert_reconciles(record, fakes)
@@ -315,8 +343,16 @@ def test_a_same_key_ok_settles_it_whatever_the_order_and_counts_once() -> None:
     """S1: settlement is by key. The Ok is written before the timed-out call's outcome here."""
     row, fakes, sink, views, intent_id = _captured_order()
     fakes.payment.faults.inject("capture", FaultKind.TIMEOUT_AFTER, times=1)
-    first = views.payment.capture(idempotency_key="cap-1", intent_id=intent_id)
-    second = views.payment.capture(idempotency_key="cap-1", intent_id=intent_id)
+    first = views.payment.capture(
+        idempotency_key="cap-1",
+        intent_id=intent_id,
+        confirmation_ref=ref_of(views.payment, intent_id),
+    )
+    second = views.payment.capture(
+        idempotency_key="cap-1",
+        intent_id=intent_id,
+        confirmation_ref=ref_of(views.payment, intent_id),
+    )
     assert not isinstance(first, Ok) and isinstance(second, Ok)
     events = list(sink.read_all())
     # Swap the two capture outcomes' positions in what the reader sees: order must not matter.
@@ -342,6 +378,7 @@ def test_other_money_calls_that_time_out_after_effect_are_uncertain(operation: s
             payment_token=row["payment_token"],
             amount=amount_for(row),
             order_id=row["order_id"],
+            confirmation_ref=confirm(views.payment, row["order_id"], amount_for(row), "auth-1"),
         )
         record = reconstruct_order(sink.read_all(), row["order_id"])
         assert_reconciles(record, fakes)
@@ -354,6 +391,7 @@ def test_other_money_calls_that_time_out_after_effect_are_uncertain(operation: s
         payment_token=row["payment_token"],
         amount=amount_for(row),
         order_id=row["order_id"],
+        confirmation_ref=confirm(views.payment, row["order_id"], amount_for(row), "auth-1"),
     )
     assert isinstance(authorized, Ok)
     fakes.payment.faults.inject("void", FaultKind.TIMEOUT_AFTER)
@@ -366,7 +404,14 @@ def test_other_money_calls_that_time_out_after_effect_are_uncertain(operation: s
 
 def test_a_refund_that_times_out_after_effect_is_uncertain() -> None:
     row, fakes, sink, views, intent_id = _captured_order()
-    assert isinstance(views.payment.capture(idempotency_key="cap-1", intent_id=intent_id), Ok)
+    assert isinstance(
+        views.payment.capture(
+            idempotency_key="cap-1",
+            intent_id=intent_id,
+            confirmation_ref=ref_of(views.payment, intent_id),
+        ),
+        Ok,
+    )
     fakes.payment.faults.inject("refund", FaultKind.TIMEOUT_AFTER)
     from northwind_backend.ports import Money
 
@@ -391,16 +436,25 @@ def test_an_audit_incomplete_capture_is_uncertain_until_its_retry() -> None:
         payment_token=row["payment_token"],
         amount=amount_for(row),
         order_id=row["order_id"],
+        confirmation_ref=confirm(views.payment, row["order_id"], amount_for(row), "auth-1"),
     )
     assert isinstance(authorized, Ok)
     sink.fail_on = {sink.calls + 1}
     intent_id = authorized.value.intent_id
-    views.payment.capture(idempotency_key="cap-1", intent_id=intent_id)
+    views.payment.capture(
+        idempotency_key="cap-1",
+        intent_id=intent_id,
+        confirmation_ref=ref_of(views.payment, intent_id),
+    )
     record = reconstruct_order(sink.read_all(), row["order_id"])
     assert_reconciles(record, fakes)
     assert [u.settled for u in record.uncertain] == ["open"]
     assert record.unknown != ()
-    views.payment.capture(idempotency_key="cap-1", intent_id=intent_id)
+    views.payment.capture(
+        idempotency_key="cap-1",
+        intent_id=intent_id,
+        confirmation_ref=ref_of(views.payment, intent_id),
+    )
     record = reconstruct_order(sink.read_all(), row["order_id"])
     assert_reconciles(record, fakes)
     assert [u.settled for u in record.uncertain] == ["done"]

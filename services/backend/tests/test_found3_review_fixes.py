@@ -26,6 +26,35 @@ from northwind_backend.fakes.payment import (
 from northwind_backend.idempotency import IdempotencyStore
 from northwind_backend.ports import FraudDecision, Money, TrackingEvent
 
+
+def _payment_state(port: Any) -> Any:
+    while not hasattr(port, "state"):
+        port = port._fake
+    return port.state
+
+
+def confirm(port: Any, order_id: Any, amount: Any, key: Any = None) -> str:
+    """The portal confirmation a test's `authorize` presents (row #21, hard rule 9). One per
+    (key, order, amount), so a same-key replay presents the same reference."""
+    state = _payment_state(port)
+
+    def memo() -> str:
+        refs = state.__dict__.setdefault("_test_refs", {})
+        slot = repr((key, order_id, amount))
+        if slot not in refs:
+            refs[slot] = state.confirmations.issue(order_id, amount)
+        return str(refs[slot])
+
+    # Under the state's own lock: concurrent replays must present one reference.
+    return str(state.store.exclusive(memo))
+
+
+def ref_of(port: Any, intent_id: Any) -> str:
+    """The reference that authorized this intent; a well-formed, never-issued one otherwise."""
+    found = _payment_state(port).confirmation_of(intent_id) if isinstance(intent_id, str) else None
+    return found or "cf_ZZZZZZZZZZZZZZZZ"
+
+
 USD = Money(5_000, "USD")
 FULLWIDTH_ORDER = "O００００02"  # the same order as O000002 to a reader, not to a dict
 
@@ -37,7 +66,11 @@ def _code(result: Result[Any]) -> str:
 
 def _authorize(fake: PaymentFake, key: str, order_id: str = "O000001") -> Result[Any]:
     return fake.authorize(
-        idempotency_key=key, payment_token=SANDBOX_APPROVED, amount=USD, order_id=order_id
+        idempotency_key=key,
+        payment_token=SANDBOX_APPROVED,
+        amount=USD,
+        order_id=order_id,
+        confirmation_ref=confirm(fake, order_id, USD, key),
     )
 
 
@@ -85,6 +118,7 @@ def test_non_ascii_digits_cannot_ship_an_order_twice() -> None:
                 payment_token=f"{SANDBOX_APPROVED}_００１",
                 amount=USD,
                 order_id="O000001",
+                confirmation_ref="cf_ZZZZZZZZZZZZZZZZ",  # refused on the token first
             ),
             "invalid_token",
         ),
@@ -110,7 +144,14 @@ def test_a_lost_key_cannot_charge_an_order_twice() -> None:
     fake = PaymentFake()
     first = _authorize(fake, "k1")
     assert isinstance(first, Ok)
-    assert isinstance(fake.capture(idempotency_key="c1", intent_id=first.value.intent_id), Ok)
+    assert isinstance(
+        fake.capture(
+            idempotency_key="c1",
+            intent_id=first.value.intent_id,
+            confirmation_ref=ref_of(fake, first.value.intent_id),
+        ),
+        Ok,
+    )
     assert _code(_authorize(fake, "k2")) == "order_already_authorized"
     assert sum(e.amount_minor for e in fake.effects if e.operation == "capture") == USD.amount_minor
 
@@ -125,6 +166,7 @@ def test_a_dry_run_also_reports_an_order_already_authorized() -> None:
         amount=USD,
         order_id="O000001",
         dry_run=True,
+        confirmation_ref=confirm(fake, "O000001", USD, "k2"),
     )
     assert _code(dry) == "order_already_authorized"
 
@@ -146,6 +188,7 @@ def test_a_declined_attempt_does_not_hold_the_order() -> None:
         payment_token=SANDBOX_SOFT_DECLINE,
         amount=USD,
         order_id="O000001",
+        confirmation_ref=confirm(fake, "O000001", USD, "k1"),
     )
     assert _code(declined) == "soft_decline"
     assert isinstance(_authorize(fake, "k2"), Ok)
@@ -160,7 +203,12 @@ def test_the_refund_cap_holds_per_order_across_a_voided_attempt() -> None:
     second = _authorize(fake, "k2")
     assert isinstance(second, Ok)
     intent_id = second.value.intent_id
-    assert isinstance(fake.capture(idempotency_key="c", intent_id=intent_id), Ok)
+    assert isinstance(
+        fake.capture(
+            idempotency_key="c", intent_id=intent_id, confirmation_ref=ref_of(fake, intent_id)
+        ),
+        Ok,
+    )
     assert isinstance(
         fake.refund(idempotency_key="r1", intent_id=intent_id, amount=Money(3_000, "USD")), Ok
     )
@@ -175,7 +223,12 @@ def test_a_new_intent_cannot_reset_the_refund_cap(refunded: int) -> None:
     first = _authorize(fake, "k1")
     assert isinstance(first, Ok)
     intent_id = first.value.intent_id
-    assert isinstance(fake.capture(idempotency_key="c", intent_id=intent_id), Ok)
+    assert isinstance(
+        fake.capture(
+            idempotency_key="c", intent_id=intent_id, confirmation_ref=ref_of(fake, intent_id)
+        ),
+        Ok,
+    )
     assert isinstance(
         fake.refund(idempotency_key="r", intent_id=intent_id, amount=Money(refunded, "USD")), Ok
     )
@@ -188,7 +241,12 @@ def test_a_fully_refunded_order_cannot_be_authorized_again() -> None:
     first = _authorize(fake, "k1")
     assert isinstance(first, Ok)
     intent_id = first.value.intent_id
-    assert isinstance(fake.capture(idempotency_key="c", intent_id=intent_id), Ok)
+    assert isinstance(
+        fake.capture(
+            idempotency_key="c", intent_id=intent_id, confirmation_ref=ref_of(fake, intent_id)
+        ),
+        Ok,
+    )
     assert isinstance(fake.refund(idempotency_key="r", intent_id=intent_id, amount=USD), Ok)
     assert _code(_authorize(fake, "k2")) == "order_already_authorized"
 
@@ -249,6 +307,7 @@ def test_a_fakes_dry_run_waits_for_a_real_call_and_then_sees_its_result() -> Non
                 amount=USD,
                 order_id="O000001",
                 dry_run=True,
+                confirmation_ref=confirm(fake, "O000001", USD, "k2"),
             )
         )
 
@@ -271,7 +330,14 @@ def test_a_refused_second_authorization_does_not_promise_a_void_will_work() -> N
     fake = PaymentFake()
     first = _authorize(fake, "k1")
     assert isinstance(first, Ok)
-    assert isinstance(fake.capture(idempotency_key="c", intent_id=first.value.intent_id), Ok)
+    assert isinstance(
+        fake.capture(
+            idempotency_key="c",
+            intent_id=first.value.intent_id,
+            confirmation_ref=ref_of(fake, first.value.intent_id),
+        ),
+        Ok,
+    )
     refused = _authorize(fake, "k2")
     assert isinstance(refused, ToolError)
     assert "void" not in refused.message.lower()
@@ -280,7 +346,16 @@ def test_a_refused_second_authorization_does_not_promise_a_void_will_work() -> N
 @pytest.mark.req("FOUND-3")
 def test_a_refund_only_payment_credential_cannot_capture_or_void() -> None:
     fake = PaymentFake(scopes=frozenset({"refund"}))
-    assert _code(fake.capture(idempotency_key="c", intent_id="pi_000001")) == "not_permitted"
+    assert (
+        _code(
+            fake.capture(
+                idempotency_key="c",
+                intent_id="pi_000001",
+                confirmation_ref=ref_of(fake, "pi_000001"),
+            )
+        )
+        == "not_permitted"
+    )
     assert _code(fake.void(idempotency_key="v", intent_id="pi_000001")) == "not_permitted"
     assert _code(_authorize(fake, "a")) == "not_permitted"
     assert _code(fake.status("pi_000001")) == "not_permitted"

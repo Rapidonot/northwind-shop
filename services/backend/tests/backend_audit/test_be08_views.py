@@ -33,6 +33,7 @@ from northwind_backend.views import (
     AuditedPaymentPort,
 )
 
+from ._confirm import confirm, ref_of
 from ._driver import FULL_CARRIER, FULL_FRAUD, fixed_clock
 
 pytestmark = [pytest.mark.req("BE-08")]
@@ -63,8 +64,13 @@ def _calls(view: Any) -> dict[str, Callable[[], Any]]:
                 payment_token=SANDBOX_APPROVED,
                 amount=USD,
                 order_id="O000001",
+                confirmation_ref=confirm(view, "O000001", USD, "k-auth"),
             ),
-            "capture": lambda: view.capture(idempotency_key="k-cap", intent_id="pi_000001"),
+            "capture": lambda: view.capture(
+                idempotency_key="k-cap",
+                intent_id="pi_000001",
+                confirmation_ref=ref_of(view, "pi_000001"),
+            ),
             "void": lambda: view.void(idempotency_key="k-void", intent_id="pi_000001"),
             "refund": lambda: view.refund(
                 idempotency_key="k-ref", intent_id="pi_000001", amount=USD
@@ -124,13 +130,24 @@ def test_dry_runs_replays_and_refusals_are_audited_too() -> None:
     fake = PaymentFake()
     view = AuditedPaymentPort(fake, ctx(sink), allowed=PAYMENT_SCOPES)
     kwargs: dict[str, Any] = dict(
-        idempotency_key="k1", payment_token=SANDBOX_APPROVED, amount=USD, order_id="O000001"
+        idempotency_key="k1",
+        payment_token=SANDBOX_APPROVED,
+        amount=USD,
+        order_id="O000001",
+        confirmation_ref=confirm(fake, "O000001", USD, "k1"),
     )
     view.authorize(**kwargs, dry_run=True)
     view.authorize(**kwargs)
     view.authorize(**kwargs)  # an idempotent replay
     view.authorize(**{**kwargs, "idempotency_key": "4111111111111111"})
-    view.authorize(**{**kwargs, "payment_token": SANDBOX_SOFT_DECLINE, "idempotency_key": "k2"})
+    view.authorize(
+        **{
+            **kwargs,
+            "payment_token": SANDBOX_SOFT_DECLINE,
+            "idempotency_key": "k2",
+            "confirmation_ref": confirm(fake, "O000001", USD, "k2"),
+        }
+    )
     events = [e for e in sink.read_all() if e.phase == "outcome"]
     outcomes = [dict(e.outcome or {}) for e in events]
     assert len(outcomes) == 5
@@ -183,15 +200,28 @@ def test_views_share_one_instance_so_the_one_payment_rule_holds_across_callers()
     second = AuditedPaymentPort(fake, ctx(sink, "caller-b"), allowed=PAYMENT_SCOPES)
     reader = AuditedPaymentPort(fake, ctx(sink, "orders-subagent"), allowed=PAYMENT_READ_ONLY)
     made = first.authorize(
-        idempotency_key="a1", payment_token=SANDBOX_APPROVED, amount=USD, order_id="O000001"
+        idempotency_key="a1",
+        payment_token=SANDBOX_APPROVED,
+        amount=USD,
+        order_id="O000001",
+        confirmation_ref=confirm(first, "O000001", USD, "a1"),
     )
     assert isinstance(made, Ok)
     again = second.authorize(
-        idempotency_key="b1", payment_token=SANDBOX_APPROVED, amount=USD, order_id="O000001"
+        idempotency_key="b1",
+        payment_token=SANDBOX_APPROVED,
+        amount=USD,
+        order_id="O000001",
+        confirmation_ref=confirm(second, "O000001", USD, "b1"),
     )
     assert isinstance(again, ToolError) and again.code == "order_already_authorized"
     intent_id = made.value.intent_id
-    assert isinstance(first.capture(idempotency_key="a2", intent_id=intent_id), Ok)
+    assert isinstance(
+        first.capture(
+            idempotency_key="a2", intent_id=intent_id, confirmation_ref=ref_of(first, intent_id)
+        ),
+        Ok,
+    )
     capped = Money(15_000, "USD")
     big = PaymentFake()
     one = AuditedPaymentPort(big, ctx(sink, "caller-a"), allowed=PAYMENT_SCOPES)
@@ -201,9 +231,17 @@ def test_views_share_one_instance_so_the_one_payment_rule_holds_across_callers()
         payment_token=SANDBOX_APPROVED,
         amount=Money(30_000, "USD"),
         order_id="O000002",
+        confirmation_ref=confirm(one, "O000002", Money(30_000, "USD"), "c1"),
     )
     assert isinstance(auth, Ok)
-    assert isinstance(one.capture(idempotency_key="c2", intent_id=auth.value.intent_id), Ok)
+    assert isinstance(
+        one.capture(
+            idempotency_key="c2",
+            intent_id=auth.value.intent_id,
+            confirmation_ref=ref_of(one, auth.value.intent_id),
+        ),
+        Ok,
+    )
     assert isinstance(
         one.refund(idempotency_key="c3", intent_id=auth.value.intent_id, amount=capped), Ok
     )

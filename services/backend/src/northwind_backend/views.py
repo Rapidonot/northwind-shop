@@ -99,6 +99,7 @@ class AuditedPaymentPort(_View):
         payment_token: str,
         amount: Money,
         order_id: str,
+        confirmation_ref: str,
         dry_run: bool = False,
     ) -> Result[PaymentIntent]:
         inputs = {
@@ -106,6 +107,7 @@ class AuditedPaymentPort(_View):
             "order_id": order_id,
             "payment_token": payment_token,
             **_amount(amount),
+            "confirmation_ref": confirmation_ref,  # written as type and length only
             "dry_run": dry_run,
         }
         return self._run(
@@ -117,6 +119,7 @@ class AuditedPaymentPort(_View):
                 payment_token=payment_token,
                 amount=amount,
                 order_id=order_id,
+                confirmation_ref=confirmation_ref,
                 dry_run=dry_run,
             ),
         )
@@ -126,6 +129,7 @@ class AuditedPaymentPort(_View):
         *,
         idempotency_key: str,
         intent_id: str,
+        confirmation_ref: str,
         amount: Money | None = None,
         dry_run: bool = False,
     ) -> Result[PaymentIntent]:
@@ -133,6 +137,7 @@ class AuditedPaymentPort(_View):
             "idempotency_key": idempotency_key,
             "intent_id": intent_id,
             **_amount(amount),
+            "confirmation_ref": confirmation_ref,
             "dry_run": dry_run,
         }
         return self._run(
@@ -140,7 +145,11 @@ class AuditedPaymentPort(_View):
             "payment.capture",
             inputs,
             lambda: self._fake.capture(
-                idempotency_key=idempotency_key, intent_id=intent_id, amount=amount, dry_run=dry_run
+                idempotency_key=idempotency_key,
+                intent_id=intent_id,
+                confirmation_ref=confirmation_ref,
+                amount=amount,
+                dry_run=dry_run,
             ),
         )
 

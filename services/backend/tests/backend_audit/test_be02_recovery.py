@@ -43,6 +43,7 @@ from northwind_backend.recovery import (
     with_deadline,
 )
 
+from ._confirm import confirm, ref_of
 from ._driver import Fakes, Views, amount_for, context, first_of, orders
 from ._reconcile import assert_reconciles
 
@@ -207,6 +208,7 @@ def order_setup() -> Iterator[tuple[dict[str, Any], Fakes, InMemoryAuditSink, Vi
         payment_token=row["payment_token"],
         amount=amount_for(row),
         order_id=row["order_id"],
+        confirmation_ref=confirm(views.payment, row["order_id"], amount_for(row), "auth-1"),
     )
     assert isinstance(authorized, Ok)
     yield row, fakes, sink, views, authorized.value.intent_id
@@ -214,7 +216,9 @@ def order_setup() -> Iterator[tuple[dict[str, Any], Fakes, InMemoryAuditSink, Vi
 
 
 def _capture(views: Views, intent_id: str, key: str = "cap-1") -> Any:
-    return lambda: views.payment.capture(idempotency_key=key, intent_id=intent_id)
+    return lambda: views.payment.capture(
+        idempotency_key=key, intent_id=intent_id, confirmation_ref=ref_of(views.payment, intent_id)
+    )
 
 
 def _effects(fakes: Fakes, operation: str = "capture") -> int:

@@ -27,8 +27,7 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
-from northwind_backend.carriers import carrier_for, tracking_number_for
-from northwind_backend.fakes.carrier import UNDELIVERABLE_PREFIX
+from northwind_backend.carriers import UNDELIVERABLE_PREFIX, carrier_for, tracking_number_for
 from northwind_backend.fakes.payment import SANDBOX_APPROVED, SANDBOX_SOFT_DECLINE
 
 # Bump when the output changes. Separate from FOUND-1's DATA_VERSION: nothing here is ingested.
