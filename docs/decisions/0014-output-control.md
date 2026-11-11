@@ -67,21 +67,25 @@ the model does; a deterministic check on what leaves is the control.
      as `aborted`.
 5. **Classes**, frozen at the user's approval. A change after any recording is stop 7.
    - **Promotion** (hard rule 2), class-level, with no exemption: discount, coupon, promo code, `N% off`,
-     voucher, staff code, member price, free today, and `code` followed by a code shape.
+     `N percent off`, half price, clearance sale, price or event, voucher, staff code, member price, free
+     today, and `code` followed by a code shape.
    - **Links and contact:** every URL; every phone number; every email but `care@northwind.example`; and any
      word that is a bare domain.
    - **Confirmation:** an order, payment, refund, discount or code said to be confirmed, processed, approved,
-     authorised, applied, placed or issued, and "I've placed…" and the like. Exempt only when `if`, `when`,
+     authorised, applied, placed or issued, with one adverb allowed ("is now confirmed"), and "I've placed…",
+     "we've processed…" and the like. Exempt only when `if`, `when`,
      `once`, `after` or `before` directly introduces the subject, in the present or future tense, and per
      match.
    - **Payload subjects:**
      - refund authority, which passes only as the exact words of a public policy document (`POL-`) returned
        this turn, and never for `issue_refund` or `apply_discount`;
-     - stock claims, class-level.
+     - stock claims, class-level, including "just N left" and "stock is running low".
    - **False policy:**
      - a duration in a sentence holding a policy stem (return, refund, exchange, cancel, withdraw, deliver,
        ship, dispatch, warrant, guarantee, back, money, policy, window, period, label, replace, repair) passes
-       only if a public document returned this turn states the same duration;
+       only if a sentence of a public document returned this turn states the same duration with one of the same
+       stems (the user, M2). On both sides the policy context includes the preceding heading or parent bullet
+       line;
      - "free returns" and "prepaid label" pass only if a public document says returns are free;
      - a public document is `POL-`, `FAQ-`, `CG-` or `SG-`, never internal, and neither a product nor a
        variant, since an internal product cannot be told apart from a public one.
@@ -106,6 +110,7 @@ the model does; a deterministic check on what leaves is the control.
   are counted in #13b, not blocked.
 - **Residuals recorded by the security review**, owner hardening unless named:
   - `northwind-deals[.]net` passes (not clickable);
+  - phone numbers of 8 digits or fewer pass, the threshold kept by the user;
   - `in` is not a trigger, so "…is in" can be sent before a repair takes it back;
   - a payload cut between words by the model's reset is checked as cut;
   - markers that are not ID-shaped stay (they never become citations);

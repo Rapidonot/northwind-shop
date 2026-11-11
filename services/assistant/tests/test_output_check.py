@@ -295,7 +295,9 @@ def test_an_internal_document_never_vouches_for_a_duration_or_free_returns() -> 
 
 def test_a_spelled_out_duration_from_a_review_is_replaced() -> None:
     review = Source("R01080", "review", "every item can be returned after a full year")
-    policy = Source("POL-RETURNS-US", "document", "within 30 days of delivery")
+    policy = Source(
+        "POL-RETURNS-US", "document", "You can return items within 30 days of delivery."
+    )
     assert check_text("Items can be returned after a full year.", [review, policy]) == POLICY
     assert check_text("Returns are accepted for thirty days.", [policy]) == (
         "Returns are accepted for thirty days."

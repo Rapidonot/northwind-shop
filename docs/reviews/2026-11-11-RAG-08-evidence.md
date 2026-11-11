@@ -142,6 +142,57 @@ The block list and the AC11 first-release figures are unchanged. The e2e replay 
   modification time was a second old, and the total went from $2.588401 to $2.703501. This row makes no LLM
   call and does not touch `make enrich` or the ledger. It is to be re-run once window A is quiet.
 
+## The user's answers to the stopped report (2026-11-11), built
+
+**M2: a policy duration now passes only if a sentence of a public document holds the same duration and one of
+the same policy stems.**
+- The policy context includes the preceding heading or parent bullet line, on both the answer side and the
+  document side.
+- **Tests** (`services/assistant/tests/test_rag08_m2_m3.py`, failing first in `/tmp/claude-502/rag08-failfirst-m2m3.log`):
+  - FAQ-012's "two years" (repair) no longer vouches for "return any item within two years";
+  - `**Return window**\n365 days` is replaced, and so is a child bullet under "Returns:";
+  - correct durations from POL-RETURNS-US/CA, FAQ-019, POL-SHIPPING-US and FAQ-007 still pass;
+  - the same duration with another stem does not;
+  - an internal document never vouches;
+  - a document heading vouches for a bullet that has no stem of its own.
+
+**Three defects of mine, found and fixed while building M2:**
+1. **FAQ-017 was blocked** (it showed up as a fixture hit off the list). Its stems come more than L after its
+   duration, and the bound failed closed with no stems. Now it fails closed as policy with the stems read up to
+   the bound, so the hit list is back to FAQ-003 and FAQ-005. This was a bug, not the rule, so it is not the
+   stop you set.
+2. **With the duration branch gone, durations fell through to the refund-authority `policy_span` rule.** Any
+   POL- text containing the same duration then vouched whatever the stems: the M2 bypass itself. The heading
+   test caught it. An unknown exemption kind now raises instead of falling through.
+3. **The padding fail-closed check measured to the end of the buffer instead of the window**, so a long answer
+   fed in one piece failed closed while the same answer streamed did not. The red-team replay caught it, on
+   RT-023 check (h). Now there is a test that streaming and whole-text checks agree.
+
+**M3: the new wordings.**
+- **Added:**
+  - promotion: `N percent off` / `N per cent off`, `half price`, `clearance (sale|price|event)`;
+  - confirmation: one adverb allowed (`is now confirmed`; a negation is not an adverb), and `we've / we have
+    (processed|placed|confirmed|issued)`;
+  - stock: `just N left` and `stock is (running) low`.
+- **Triggers:** `half`, `clearance` and `we`.
+- **Tests:** each wording has one, plus a split-stream test.
+- **The phone threshold stays.** It is logged as a residual, owner hardening.
+
+**Mutants on the final code:**
+- **15 of 15 M2/M3 mutants killed**, each by its own test (`/tmp/claude-502/rag08-mutants-m2m3-b.log`): each
+  pattern removed, the adverb rule dropped or widened to "not", any stem vouching, no context line, no parent
+  bullet, the document heading ignored, no stems at the bound, a duration falling to `policy_span`, and an
+  internal document vouching.
+- **The earlier set, plus a padding mutant: 38 of 38 killed** (`/tmp/claude-502/rag08-mutants-final-b.log`). Two
+  of them were re-run with exact strings.
+
+**Over-blocking, re-run:**
+- The fixtures hit only FAQ-003 and FAQ-005: no new fixture hit.
+- The 202 eval answers and 41 smoke and red-team answers give **no new blocks and none removed**: still the same
+  38 sentences. None of the M3 wordings appears in a recorded answer.
+
+**AC11:** unchanged. 66 characters reach the check before the first release (p50); CPU per delta is 0.09 ms (p50).
+
 ## Pre-row tests changed (for the user's read)
 
 1. `test_smoke_e2e.py::test_a_planted_injections_subject_is_not_named`: the strict xfail marker

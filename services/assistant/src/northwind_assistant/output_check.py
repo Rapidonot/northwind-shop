@@ -124,6 +124,9 @@ _S = r"\s{1,3}"
 _GAP = r"[\s,]{1,2}"
 _WORDS = rf"(?:[^\W\d_]{{1,10}}{_GAP}){{0,3}}"  # at most three short words in between
 _SUBJECT = r"(?:order|payment|refund|discount|code)"
+# One adverb may sit between the verb and its participle ("is now confirmed", M3). A negation is not
+# one of them, so "is not confirmed" still passes.
+_ADVERB = r"(?:(?:now|already|just|also|since|[a-z]{2,10}ly)\s{1,3})?"
 _NUMBER_WORDS = {
     "a": 1, "an": 1, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7,
     "eight": 8, "nine": 9, "ten": 10, "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14,
@@ -169,6 +172,9 @@ PATTERNS: tuple[Pattern, ...] = (
     _p("promotion", rf"staff{_S}codes?"),
     _p("promotion", rf"member{_S}prices?"),
     _p("promotion", rf"free{_S}today"),
+    _p("promotion", rf"\d{{1,3}}\s?(?:percent|per{_S}cent){_S}off\b"),  # M3, the user's list
+    _p("promotion", rf"\bhalf{_S}price"),
+    _p("promotion", rf"\bclearance{_S}(?:sale|price|event)s?\b"),
     _p("promotion", rf"\b[Cc]ode{_S}[A-Z0-9]{{4,12}}\b", exact=True),
     # 2. Links and contact details. Bare domains and emails are the word check, below.
     _p("link", r"https?://"),
@@ -179,7 +185,7 @@ PATTERNS: tuple[Pattern, ...] = (
     # 3. Order or payment state, said as done.
     _p(
         "confirmation",
-        rf"\b{_SUBJECT}{_S}(?P<cop>is|has{_S}been|was){_S}"
+        rf"\b{_SUBJECT}{_S}(?P<cop>is|has{_S}been|was){_S}{_ADVERB}"
         r"(?:confirmed|processed|approved|authori[sz]ed|applied|placed|issued)\b",
         "conditional",
     ),
@@ -188,6 +194,7 @@ PATTERNS: tuple[Pattern, ...] = (
         rf"\bi(?:['’]ve|{_S}have){_S}(?:confirmed|processed|applied|placed|issued|authori[sz]ed)\b",
     ),
     _p("confirmation", rf"\border{_S}confirmed\b"),
+    _p("confirmation", rf"\bwe(?:['’]ve|{_S}have){_S}(?:processed|placed|confirmed|issued)\b"),
     # 4. Payload subjects: refund authority (passes only as a public policy's own words) and stock.
     _p("refund_authority", rf"\bauthori[sz]\w{{0,6}}{_GAP}{_WORDS}refunds?\b", "policy_span"),
     _p("refund_authority", rf"\brefunds?{_GAP}{_WORDS}(?:authori[sz]ed|approved)\b", "policy_span"),
@@ -198,6 +205,8 @@ PATTERNS: tuple[Pattern, ...] = (
     _p("stock", rf"\bin{_S}stock\b"),
     _p("stock", rf"\bonly{_S}\d{{1,4}}{_S}left\b"),
     _p("stock", rf"\blow{_S}stock\b"),
+    _p("stock", rf"\bjust{_S}\d{{1,4}}{_S}left\b"),
+    _p("stock", rf"\bstock{_S}is{_S}(?:running{_S})?low\b"),
     # 5. False policy: a duration in a policy sentence, or a free-returns term, that no public
     #    document returned this turn states.
     Pattern("false_policy", DURATION, "duration"),
@@ -221,14 +230,19 @@ _SPELLED = "|".join(sorted((w for w in _NUMBER_WORDS if len(w) > 2), key=len, re
 TRIGGER = re.compile(
     r"disc|coupon|promo|vouch|staff|member|free|prepaid|%|http|www|authori|approv|refund|order|"
     r"payment|confirm|process|appl|placed|issued|stock|sold|issue_|hour|day|week|month|year|"
-    rf"code|\d|\bi['’\s]|\[|\+|\(|\b(?:{_SPELLED}|out|only|low)\b"
+    rf"code|\d|\bi['’\s]|\bwe['’\s]|\[|\+|\(|\b(?:{_SPELLED}|out|only|low|half|clearance)\b"
 )
 # A duration is a policy term only in a sentence that holds one of these stems (the user's list,
 # row #13): a reviewer's "after an hour of steady rain" is an experience, not a policy.
 POLICY_STEMS = re.compile(
-    r"\b(?:return|refund|exchange|cancel|withdraw|deliver|ship|dispatch|warrant|guarantee|back|"
+    r"\b(return|refund|exchange|cancel|withdraw|deliver|ship|dispatch|warrant|guarantee|back|"
     r"money|policy|window|period|label|replace|repair)"
 )
+# A line that heads what follows it: a markdown heading, a wholly bold line, or one ending in ":".
+_HEADING = re.compile(r"\s*(?:#{1,6}\s.*|\*\*[^*\n]{1,80}\*\*:?|[^\n]{1,80}:)\s*")
+_LIST_ITEM = re.compile(r"(\s*)(?:[-*+]|\d{1,3}[.)])\s+")
+# Stems that can never match: a policy sentence whose stems could not be read (fail closed).
+UNREAD = frozenset({"?"})
 # Present and future only (the user's decision): "If your order is placed" passes, "After your
 # refund was approved" does not. Of these, the confirmation pattern can only match `is`.
 PRESENT_COPULAS = frozenset({"is", "are", "gets", "will be"})
@@ -280,6 +294,57 @@ class Source:
     def public_policy(self) -> bool:
         """For refund authority only: a public policy document (POL-), as approved."""
         return self.source_type == "document" and self.source_id.startswith("POL-")
+
+
+def stems_of(text: str) -> frozenset[str]:
+    return frozenset(POLICY_STEMS.findall(normal(text)))
+
+
+def context_line(text: str, line_start: int) -> str:
+    """The line that heads the line starting at `line_start` (M2, the user's decision): for a list
+    item, its parent (the nearest earlier line that is not a list item at its depth or deeper);
+    otherwise the line before it, if that line is a heading. At most 4L characters back."""
+    lines = [
+        line for line in text[max(0, line_start - 4 * L) : line_start].split("\n") if line.strip()
+    ]
+    if not lines:
+        return ""
+    end = text.find("\n", line_start)
+    here = text[line_start : len(text) if end < 0 else end]
+    item = _LIST_ITEM.match(here)
+    if item:
+        depth = len(item.group(1))
+        for line in reversed(lines):
+            above = _LIST_ITEM.match(line)
+            if above is None or len(above.group(1)) < depth:
+                return line
+        return ""
+    return lines[-1] if _HEADING.fullmatch(lines[-1]) else ""
+
+
+@lru_cache(maxsize=512)
+def policy_durations(text: str) -> frozenset[tuple[int, str, str]]:
+    """(value, unit, stem) for every duration in a sentence of a document, with every policy stem
+    of that sentence and of the heading or parent line above it (M2, the user's decision)."""
+    found: set[tuple[int, str, str]] = set()
+    heading = ""
+    for paragraph in re.split(r"\n\s*\n", text):
+        lines = [line for line in paragraph.split("\n") if line.strip()]
+        if lines and lines[0].lstrip().startswith("#"):
+            heading, lines = lines[0], lines[1:]
+        parent, prose, units = heading, [], []
+        for line in lines:
+            if _LIST_ITEM.match(line):
+                units.append((parent, line))
+            else:
+                prose.append(line)
+                parent = line
+        units += [(heading, s) for s in re.split(r"(?<=[.!?])\s+", " ".join(prose)) if s]
+        for above, sentence in units:
+            stems = stems_of(f"{heading} {above} {sentence}")
+            for value, unit in durations(sentence):
+                found.update((value, unit, stem) for stem in stems)
+    return frozenset(found)
 
 
 @lru_cache(maxsize=512)
@@ -478,21 +543,31 @@ class OutputCheck:
             copula = re.sub(r"\s+", " ", found["cop"]) if "cop" in found.groupdict() else ""
             introduced = _CONDITIONAL.search(view.text[max(0, start - 40) : start])
             return bool(introduced) and copula in PRESENT_COPULAS
+        if pattern.exempt == "duration":
+            return False  # decided in `_first_match`, by policy stems (`_vouched`, M2)
         span = re.sub(r"\s+", " ", view.text[start:end])
         if pattern.exempt == "free_terms":
             return any(
                 s.public_document and FREE_TERMS.search(normal(s.text)) for s in self.sources
             )
-        if pattern.exempt == "duration":
-            wanted = durations(view.text[start:end])
-            have: set[tuple[int, str]] = set()
-            for source in self.sources:
-                if source.public_document:
-                    have |= durations(source.text)
-            return bool(wanted) and wanted <= have
-        return any(s.public_policy and span in normal(s.text) for s in self.sources)
+        if pattern.exempt == "policy_span":
+            return any(s.public_policy and span in normal(s.text) for s in self.sources)
+        raise ValueError(f"unknown exemption: {pattern.exempt}")  # fail closed on a new kind
 
-    def _policy_context(self, start: int, end: int, final: bool) -> bool | None:
+    def _vouched(self, text: str, stems: frozenset[str]) -> bool:
+        """A policy duration passes only if a sentence of a public document returned this turn
+        states the same duration with one of the same policy stems (M2): FAQ-012's repair
+        warranty of two years does not vouch for a returns window of two years."""
+        wanted = durations(text)
+        have: set[tuple[int, str, str]] = set()
+        for source in self.sources:
+            if source.public_document:
+                have |= policy_durations(source.text)
+        return bool(wanted) and all(
+            any((value, unit, stem) in have for stem in stems) for value, unit in wanted
+        )
+
+    def _policy_context(self, start: int, end: int, final: bool) -> frozenset[str] | None:
         """Whether the sentence holding a duration is about policy; None while it cannot be told.
         The stem may come after the duration, so this waits for the sentence's end, but at most L
         view characters past the duration: a sentence still open there counts as policy (fail
@@ -500,19 +575,29 @@ class OutputCheck:
         than 16L raw characters, so the region looked at stays bounded."""
         sentence = self._sentence_start(start)
         if self._wide(sentence, start) > 4 * L or start - sentence > 16 * L:
-            return True
+            return UNREAD
         found = _BOUNDARY.search(self._raw, end)
         # At the end of the stream the text's own end closes the sentence.
         boundary = found.start() if found else (len(self._raw) if final else None)
         if boundary is not None and self._wide(end, boundary) <= L:
             if boundary - end > 16 * L:
-                return True
+                return UNREAD
             region = self._view(sentence, boundary).text
-        elif self._wide(end, len(self._raw)) > L + 1 or len(self._raw) - end > 16 * L:
-            return True  # a boundary at L needs the next character to show
+        elif self._wide(end, len(self._raw)) > L + 1:  # a boundary at L needs the next character
+            # Still open L past the duration: policy (fail closed), with the stems read so far.
+            cut = bisect_right(self._vlen, self._vlen[end] + L) - 1
+            if cut - end > 16 * L:
+                return UNREAD  # the window itself is padded with invisible characters
+            region = self._view(sentence, max(end, cut)).text
+        elif len(self._raw) - end > 16 * L:
+            return UNREAD  # still undecided after this much padding
         else:
             return None
-        return bool(POLICY_STEMS.search(region))
+        line_start = self._raw.rfind("\n", 0, sentence) + 1
+        stems = frozenset(POLICY_STEMS.findall(region)) | stems_of(
+            context_line(self._raw, line_start)
+        )
+        return stems if boundary is not None and self._wide(end, boundary) <= L else stems or UNREAD
 
     def _clean_markers(self, final: bool) -> None:
         """An invented citation marker comes out of the held text before anything is matched, so
@@ -565,12 +650,12 @@ class OutputCheck:
                 if end >= len(self._raw) and not final:
                     continue  # it may go on: it is held, and is checked when it ends
                 if pattern.exempt == "duration":
-                    policy = self._policy_context(start, end, final)
-                    if policy is None:  # hold it until its sentence shows whether it is policy
+                    stems = self._policy_context(start, end, final)
+                    if stems is None:  # hold it until its sentence shows whether it is policy
                         if self._undecided is None or start < self._undecided:
                             self._undecided = start
                         continue
-                    if not policy:
+                    if not stems or self._vouched(view.text[found.start() : found.end()], stems):
                         continue
                 if self._exempt(pattern, view, found, self._raw[start:end]):
                     continue
