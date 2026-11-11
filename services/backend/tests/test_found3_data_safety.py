@@ -23,7 +23,13 @@ from northwind_llm_replay.scan import scan_text
 ROOT = Path(__file__).resolve().parents[3]
 FIXTURES = ROOT / "data" / "fixtures"
 BACKEND = ROOT / "data" / "backend"
-FILES = ("orders.jsonl", "shoppers.jsonl", "tracking.jsonl", "manifest.json")
+FILES = (
+    "orders.jsonl",
+    "replay_labels.jsonl",
+    "shoppers.jsonl",
+    "tracking.jsonl",
+    "manifest.json",
+)
 REAL_CARRIERS = (
     "UPS", "FedEx", "Federal Express", "DHL", "USPS", "Royal Mail", "Canada Post", "Purolator",
     "Canpar", "Parcelforce", "Evri", "Hermes", "Yodel", "DPD", "GLS", "TNT", "OnTrac",

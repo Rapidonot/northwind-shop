@@ -60,7 +60,13 @@ def ref_of(port: Any, intent_id: Any) -> str:
 ROOT = Path(__file__).resolve().parents[3]
 FIXTURES = ROOT / "data" / "fixtures"
 BACKEND = ROOT / "data" / "backend"
-OUTPUT_FILES = {"orders.jsonl", "shoppers.jsonl", "tracking.jsonl", "manifest.json"}
+OUTPUT_FILES = {
+    "orders.jsonl",
+    "replay_labels.jsonl",
+    "shoppers.jsonl",
+    "tracking.jsonl",
+    "manifest.json",
+}
 
 
 def _jsonl(body: bytes) -> list[dict[str, Any]]:

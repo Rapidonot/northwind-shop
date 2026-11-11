@@ -31,7 +31,8 @@ from northwind_backend.carriers import UNDELIVERABLE_PREFIX, carrier_for, tracki
 from northwind_backend.fakes.payment import SANDBOX_APPROVED, SANDBOX_SOFT_DECLINE
 
 # Bump when the output changes. Separate from FOUND-1's DATA_VERSION: nothing here is ingested.
-BACKEND_DATA_VERSION = 1
+# 2 (row #21): adds replay_labels.jsonl; the other three files are byte-identical to version 1.
+BACKEND_DATA_VERSION = 2
 DEFAULT_SEED = 20261105
 SHOPPER_COUNT = 200
 ORDER_COUNT = 1000
@@ -204,6 +205,30 @@ def _tracking(seed: int, order: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+# The backend replay set's labels (PRD §10: expected outcome and escalation flag; row #21). They
+# follow from the exception kind by a fixed rule, so they say `labelled_by: rule`, not a review.
+_LABELS: dict[str | None, tuple[str, str | None, str | None]] = {
+    None: ("placed", None, None),
+    "address_error": ("placed", None, "address_on_file"),
+    "soft_decline": ("placed", None, "soft_decline_retry"),
+    "stock_out": ("escalated", "out_of_stock", None),
+    "fraud_flag": ("escalated", "fraud_review", None),
+}
+
+
+def _label(order: dict[str, Any]) -> dict[str, Any]:
+    outcome, reason, resolution = _LABELS[order["exception"]]
+    return {
+        "escalation": outcome == "escalated",
+        "exception": order["exception"],
+        "expected_outcome": outcome,
+        "expected_reason": reason,
+        "labelled_by": "rule",
+        "order_id": order["order_id"],
+        "resolution": resolution,
+    }
+
+
 def fraud_flagged_order_ids(orders: Iterable[dict[str, Any]]) -> frozenset[str]:
     return frozenset(o["order_id"] for o in orders if o["exception"] == "fraud_flag")
 
@@ -223,12 +248,18 @@ def build(fixtures: Path, seed: int = DEFAULT_SEED) -> dict[str, bytes]:
 
     files = {
         "orders.jsonl": _jsonl(orders),
+        "replay_labels.jsonl": _jsonl(_label(o) for o in orders),
         "shoppers.jsonl": _jsonl(shoppers),
         "tracking.jsonl": _jsonl(tracking),
     }
     manifest = {
         "backend_data_version": BACKEND_DATA_VERSION,
-        "counts": {"orders": len(orders), "shoppers": len(shoppers), "tracking": len(tracking)},
+        "counts": {
+            "orders": len(orders),
+            "replay_labels": len(orders),
+            "shoppers": len(shoppers),
+            "tracking": len(tracking),
+        },
         "files": {name: hashlib.sha256(body).hexdigest() for name, body in sorted(files.items())},
         "generator": "northwind_backend",
         "seed": seed,
