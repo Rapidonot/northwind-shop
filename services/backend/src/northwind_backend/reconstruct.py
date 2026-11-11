@@ -37,6 +37,21 @@ STATE_CHANGING = frozenset(
         "payment.refund",
         "fraud.assess",
         "carrier.create_shipment",
+        # Row #21: the order store's writes. No read settles them yet, so only a same-key Ok does.
+        "order.address_on_file",
+        "order.confirm",
+        "order.escalate",
+        # The payment claim (F1): no key, so each call stands alone by action ID (C3).
+        "order.claim_payment",
+    }
+)
+ORDER_ACTIONS = frozenset(
+    {
+        "order.get",
+        "order.address_on_file",
+        "order.confirm",
+        "order.escalate",
+        "order.claim_payment",
     }
 )
 UNCERTAIN_CODES = frozenset({"timeout", "unexpected_error", "audit_incomplete"})
@@ -86,6 +101,8 @@ class OrderRecord:
     scans: int | None = None
     held: str | None = None
     escalated: bool = False
+    order_status: str | None = None
+    escalation_reason: str | None = None
     unknown: tuple[str, ...] = ()
     uncertain: tuple[Uncertain, ...] = ()
     agent_runs: tuple[str, ...] = ()
@@ -193,6 +210,11 @@ def reconstruct_order(events: Sequence[AuditEvent], order_id: str) -> OrderRecor
         elif event.action == "carrier.track":
             if _str(out, "tracking_number") == state.get("tracking_number"):
                 state["scans"] = _int(out, "scans")
+        elif event.action in ORDER_ACTIONS and _str(out, "order_id") == order_id:
+            state["order_status"] = _str(out, "status")
+            if event.action == "order.escalate":
+                state["escalated"] = True
+                state["escalation_reason"] = _str(out, "escalation")
         elif event.action == "order.held":
             state["held"] = _str(event.inputs, "reason")
             state["escalated"] = bool(out.get("escalated"))
@@ -293,7 +315,8 @@ def _settle_by_read(
 
     A refund total can also grow from another key's refund, so a doubtful refund is left `open`
     when any other refund on the same intent succeeded or was doubtful after `first`: a later
-    read can't tell whose refund it shows (re-review L1)."""
+    read can't tell whose refund it shows (re-review L1). With an unreadable key, "another" is
+    told apart by action ID, since two unreadable keys compare equal (#20 advisor re-review N1)."""
     event = first
     later = [e for e in mine if e.seq > last.seq and _is_ok(e)]
     if action in ("payment.capture", "payment.void", "payment.refund"):
@@ -317,7 +340,11 @@ def _settle_by_read(
             and e.seq > first.seq
             and _str(e.inputs, "intent_id") == intent
             and e.inputs.get("dry_run") is not True
-            and _str(e.inputs, "idempotency_key") != key
+            and (
+                _str(e.inputs, "idempotency_key") != key
+                if key is not None
+                else e.action_id != first.action_id
+            )
         ]
         if others:
             return "open"

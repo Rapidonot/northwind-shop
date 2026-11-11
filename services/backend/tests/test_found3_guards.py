@@ -23,6 +23,35 @@ from northwind_backend.generate import load_catalog
 from northwind_backend.idempotency import IdempotencyStore
 from northwind_backend.ports import Money
 
+
+def _payment_state(port: Any) -> Any:
+    while not hasattr(port, "state"):
+        port = port._fake
+    return port.state
+
+
+def confirm(port: Any, order_id: Any, amount: Any, key: Any = None) -> str:
+    """The portal confirmation a test's `authorize` presents (row #21, hard rule 9). One per
+    (key, order, amount), so a same-key replay presents the same reference."""
+    state = _payment_state(port)
+
+    def memo() -> str:
+        refs = state.__dict__.setdefault("_test_refs", {})
+        slot = repr((key, order_id, amount))
+        if slot not in refs:
+            refs[slot] = state.confirmations.issue(order_id, amount)
+        return str(refs[slot])
+
+    # Under the state's own lock: concurrent replays must present one reference.
+    return str(state.store.exclusive(memo))
+
+
+def ref_of(port: Any, intent_id: Any) -> str:
+    """The reference that authorized this intent; a well-formed, never-issued one otherwise."""
+    found = _payment_state(port).confirmation_of(intent_id) if isinstance(intent_id, str) else None
+    return found or "cf_ZZZZZZZZZZZZZZZZ"
+
+
 USD = Money(5_000, "USD")
 # Not Luhn-valid in any 13 to 16 digit window, so only the long-digit check can refuse it.
 LONG_NON_LUHN = "1000000000000100"
@@ -41,6 +70,7 @@ def _authorized(fake: PaymentFake, key: str = "a") -> str:
         payment_token=SANDBOX_APPROVED,
         amount=USD,
         order_id="O000001",
+        confirmation_ref=confirm(fake, "O000001", USD, f"auth-{key}"),
     )
     assert isinstance(result, Ok)
     return result.value.intent_id
@@ -48,7 +78,12 @@ def _authorized(fake: PaymentFake, key: str = "a") -> str:
 
 def _captured(fake: PaymentFake) -> str:
     intent_id = _authorized(fake)
-    assert isinstance(fake.capture(idempotency_key="cap", intent_id=intent_id), Ok)
+    assert isinstance(
+        fake.capture(
+            idempotency_key="cap", intent_id=intent_id, confirmation_ref=ref_of(fake, intent_id)
+        ),
+        Ok,
+    )
     return intent_id
 
 
@@ -65,7 +100,12 @@ def _authorize_with(fake: PaymentFake, **overrides: Any) -> Result[Any]:
         "amount": USD,
         "order_id": "O000001",
     }
-    return fake.authorize(**(args | overrides))
+    args = args | overrides
+    if "confirmation_ref" not in overrides:
+        args["confirmation_ref"] = confirm(
+            fake, args["order_id"], args["amount"], args["idempotency_key"]
+        )
+    return fake.authorize(**args)
 
 
 @pytest.mark.req("FOUND-3")
@@ -163,17 +203,40 @@ def test_a_malformed_intent_is_not_reported_as_an_unknown_one() -> None:
 @pytest.mark.req("FOUND-3")
 def test_capture_names_why_it_refuses() -> None:
     fake = PaymentFake()
-    assert _code(fake.capture(idempotency_key="c", intent_id=_voided(fake))) == "intent_voided"
+    assert (
+        _code(
+            fake.capture(
+                idempotency_key="c",
+                intent_id=_voided(fake),
+                confirmation_ref=ref_of(fake, _voided(fake)),
+            )
+        )
+        == "intent_voided"
+    )
 
     fake = PaymentFake()
     intent_id = _authorized(fake)
     over = Money(USD.amount_minor + 1, "USD")
     assert (
-        _code(fake.capture(idempotency_key="c1", intent_id=intent_id, amount=over))
+        _code(
+            fake.capture(
+                idempotency_key="c1",
+                intent_id=intent_id,
+                amount=over,
+                confirmation_ref=ref_of(fake, intent_id),
+            )
+        )
         == "over_authorized"
     )
     assert (
-        _code(fake.capture(idempotency_key="c2", intent_id=intent_id, amount=Money(100, "EUR")))
+        _code(
+            fake.capture(
+                idempotency_key="c2",
+                intent_id=intent_id,
+                amount=Money(100, "EUR"),
+                confirmation_ref=ref_of(fake, intent_id),
+            )
+        )
         == "currency_mismatch"
     )
 

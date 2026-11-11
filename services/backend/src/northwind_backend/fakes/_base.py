@@ -1,5 +1,5 @@
 """What every fake shares: scopes, a settable outage, idempotency, input checks, and injected faults
-(BE-02, row #20).
+(BE-02, row #20), and a `FakeState` that several instances can share (row #21, P3).
 
 A `FaultPlan` injects, per operation, n times or always:
   outage                 a transient outage before anything runs;
@@ -126,11 +126,26 @@ class FaultPlan:
         return TIMEOUT
 
 
+class FakeState:
+    """What a service holds, as opposed to what one credential may do with it (row #21, P3).
+
+    Every fake instance built on one state shares its idempotency store (and so its lock), its
+    effects and its domain records, so the one-payment rule, the refund cap, one assessment and
+    one shipment per order hold across instances, not per instance. Scopes, the outage switch and
+    injected faults stay per instance: they belong to a credential and its network path."""
+
+    def __init__(self) -> None:
+        self.store = IdempotencyStore()
+        self.effects: list[Effect] = []
+
+
 class FakeService:
-    def __init__(self, scopes: frozenset[str]) -> None:
+    def __init__(self, scopes: frozenset[str], state: FakeState) -> None:
         self._scopes = scopes
-        self._store = IdempotencyStore()
-        self._effects: list[Effect] = []
+        self._state = state
+        # Aliases of the shared objects, never copies.
+        self._store = state.store
+        self._effects = state.effects
         self.outage = False
         self.faults = FaultPlan()
 

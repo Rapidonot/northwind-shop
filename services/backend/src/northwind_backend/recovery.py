@@ -4,6 +4,13 @@
 idempotency key), at most `max_attempts` times. Validation, business and permission errors are tried
 once. The view inside `call` audits each attempt, so a retry is visible as its own attempt.
 
+A policy can narrow that to `retry_codes` (row #21). `WRITE_POLICY`, for every state-changing call
+an agent makes, retries only the two codes that mean nothing ran: `service_unavailable` (refused
+before anything) and `audit_unavailable` (the attempt wasn't written, so the call wasn't run). A
+`timeout`, `unexpected_error` or `audit_incomplete` on a write may have taken effect, so it never
+leads to a second call: the caller records the action as uncertain, and it is settled as BE-08
+settles it.
+
 `with_deadline` runs a synchronous call in a worker thread, so the event loop is never blocked and
 the deadline really fires. On expiry it sets the call's `CANCEL` event and then waits for the worker
 to return, so the call's one outcome is written before the caller moves on: there is no late
@@ -39,6 +46,13 @@ class RetryPolicy:
     deadline_seconds: float | None = 5.0
     # The wait before attempt 2, 3, ...; a missing entry means no wait.
     backoff_seconds: tuple[float, ...] = (0.05, 0.2)
+    # None retries every transient, retryable error; a set retries only those codes.
+    retry_codes: frozenset[str] | None = None
+
+
+# Nothing ran under either code, so the same call with the same key is a first attempt again.
+NOTHING_RAN = frozenset({"service_unavailable", "audit_unavailable"})
+WRITE_POLICY = RetryPolicy(retry_codes=NOTHING_RAN)
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,11 +61,12 @@ class Recovered[T]:
     attempts: int
 
 
-def retryable(result: Result[object]) -> bool:
+def retryable(result: Result[object], codes: frozenset[str] | None = None) -> bool:
     return (
         isinstance(result, ToolError)
         and result.error_category is ErrorCategory.TRANSIENT
         and result.is_retryable
+        and (codes is None or result.code in codes)
     )
 
 
@@ -99,6 +114,6 @@ async def call_with_recovery[T](
             result = _guarded(call)()
         else:
             result = await with_deadline(call, policy.deadline_seconds)
-        if not retryable(result):
+        if not retryable(result, policy.retry_codes):
             return Recovered(result, attempt)
     return Recovered(result, policy.max_attempts)

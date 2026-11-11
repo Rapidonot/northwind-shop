@@ -11,6 +11,7 @@ from northwind_backend.fakes._base import FaultKind
 from northwind_backend.ports import Money
 from northwind_backend.reconstruct import reconstruct_order
 
+from ._confirm import confirm, ref_of
 from ._driver import Fakes, Views, amount_for, context, first_of, orders
 from ._reconcile import assert_reconciles
 
@@ -27,11 +28,17 @@ def _authorized(capture: bool = False) -> tuple[dict, Fakes, InMemoryAuditSink, 
         payment_token=row["payment_token"],
         amount=amount_for(row),
         order_id=row["order_id"],
+        confirmation_ref=confirm(views.payment, row["order_id"], amount_for(row), "auth-1"),
     )
     assert isinstance(made, Ok)
     if capture:
         assert isinstance(
-            views.payment.capture(idempotency_key="cap-0", intent_id=made.value.intent_id), Ok
+            views.payment.capture(
+                idempotency_key="cap-0",
+                intent_id=made.value.intent_id,
+                confirmation_ref=ref_of(views.payment, made.value.intent_id),
+            ),
+            Ok,
         )
     return row, fakes, sink, views, made.value.intent_id
 
@@ -49,7 +56,11 @@ def test_a_read_before_a_later_timed_out_attempt_does_not_settle_it(operation: s
 
     def call() -> object:
         if operation == "capture":
-            return views.payment.capture(idempotency_key="k-1", intent_id=intent_id)
+            return views.payment.capture(
+                idempotency_key="k-1",
+                intent_id=intent_id,
+                confirmation_ref=ref_of(views.payment, intent_id),
+            )
         if operation == "void":
             return views.payment.void(idempotency_key="k-1", intent_id=intent_id)
         return views.payment.refund(idempotency_key="k-1", intent_id=intent_id, amount=refund)
@@ -70,10 +81,18 @@ def test_a_read_before_a_later_timed_out_attempt_does_not_settle_it(operation: s
 def test_a_read_after_the_last_attempt_still_settles_it() -> None:
     row, fakes, sink, views, intent_id = _authorized()
     fakes.payment.faults.inject("capture", FaultKind.TIMEOUT_BEFORE, times=1)
-    views.payment.capture(idempotency_key="k-1", intent_id=intent_id)
+    views.payment.capture(
+        idempotency_key="k-1",
+        intent_id=intent_id,
+        confirmation_ref=ref_of(views.payment, intent_id),
+    )
     views.payment.status(intent_id)
     fakes.payment.faults.inject("capture", FaultKind.TIMEOUT_AFTER, times=1)
-    views.payment.capture(idempotency_key="k-1", intent_id=intent_id)
+    views.payment.capture(
+        idempotency_key="k-1",
+        intent_id=intent_id,
+        confirmation_ref=ref_of(views.payment, intent_id),
+    )
     views.payment.status(intent_id)  # after the last doubtful attempt
     record = reconstruct_order(sink.read_all(), row["order_id"])
     assert [u.settled for u in record.uncertain] == ["done"]
@@ -87,8 +106,20 @@ def test_a_read_after_the_last_attempt_still_settles_it() -> None:
 def test_a_same_key_dry_run_never_settles_a_timed_out_call() -> None:
     row, fakes, sink, views, intent_id = _authorized()
     fakes.payment.faults.inject("capture", FaultKind.TIMEOUT_BEFORE, times=1)
-    assert views.payment.capture(idempotency_key="k-1", intent_id=intent_id) is TIMEOUT
-    preview = views.payment.capture(idempotency_key="k-1", intent_id=intent_id, dry_run=True)
+    assert (
+        views.payment.capture(
+            idempotency_key="k-1",
+            intent_id=intent_id,
+            confirmation_ref=ref_of(views.payment, intent_id),
+        )
+        is TIMEOUT
+    )
+    preview = views.payment.capture(
+        idempotency_key="k-1",
+        intent_id=intent_id,
+        dry_run=True,
+        confirmation_ref=ref_of(views.payment, intent_id),
+    )
     assert isinstance(preview, Ok) and preview.value.dry_run
     record = reconstruct_order(sink.read_all(), row["order_id"])
     assert [(u.action, u.settled) for u in record.uncertain] == [("payment.capture", "open")]
@@ -126,7 +157,11 @@ def test_calls_whose_keys_are_unreadable_are_never_one_group() -> None:
         {"idempotency_key": "bad key one", "intent_id": intent_id},
         outcome_ref(TIMEOUT),
     )
-    captured = fakes.payment.capture(idempotency_key="cap-ok", intent_id=intent_id)
+    captured = fakes.payment.capture(
+        idempotency_key="cap-ok",
+        intent_id=intent_id,
+        confirmation_ref=ref_of(fakes.payment, intent_id),
+    )
     assert isinstance(captured, Ok)
     audit.record(
         "payment.capture",

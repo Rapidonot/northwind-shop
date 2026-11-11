@@ -48,6 +48,7 @@ from northwind_backend.views import AuditedFraudPort, AuditedPaymentPort
 from northwind_common.llm import agent_runtime
 from northwind_llm_replay.scripted import ScriptedLLM
 
+from ._confirm import confirm, ref_of
 from ._driver import (
     Fakes,
     Views,
@@ -75,6 +76,7 @@ def _authorize(views: Views, row: Mapping[str, Any], key: str = "auth-1") -> str
         payment_token=row["payment_token"],
         amount=amount_for(row),
         order_id=row["order_id"],
+        confirmation_ref=confirm(views.payment, row["order_id"], amount_for(row), key),
     )
     assert isinstance(done, Ok), done
     return done.value.intent_id
@@ -113,12 +115,20 @@ def test_events_on_every_fault_path_carry_the_five_fields() -> None:
     fakes.payment.faults.inject("capture", FaultKind.HANG, times=1)
     asyncio.run(
         call_with_recovery(
-            lambda: views.payment.capture(idempotency_key="cap-1", intent_id=intent_id),
+            lambda: views.payment.capture(
+                idempotency_key="cap-1",
+                intent_id=intent_id,
+                confirmation_ref=ref_of(views.payment, intent_id),
+            ),
             _policy(attempts=1),
         )
     )
     fakes.payment.faults.inject("capture", FaultKind.TIMEOUT_AFTER, times=1)
-    views.payment.capture(idempotency_key="cap-2", intent_id=intent_id)
+    views.payment.capture(
+        idempotency_key="cap-2",
+        intent_id=intent_id,
+        confirmation_ref=ref_of(views.payment, intent_id),
+    )
     read_only = AuditedFraudPort(fakes.fraud, audit, allowed=frozenset({"read"}))
     refused = read_only.assess(
         idempotency_key="as-1", order_id=row["order_id"], shopper_id=row["shopper_id"]
@@ -152,7 +162,11 @@ def test_a_faulted_order_rebuilds_from_a_reloaded_jsonl_file_alone(tmp_path: Pat
     fakes.payment.faults.inject("capture", FaultKind.TIMEOUT_AFTER)
     asyncio.run(
         call_with_recovery(
-            lambda: views.payment.capture(idempotency_key="cap-1", intent_id=intent_id),
+            lambda: views.payment.capture(
+                idempotency_key="cap-1",
+                intent_id=intent_id,
+                confirmation_ref=ref_of(views.payment, intent_id),
+            ),
             _policy(attempts=2),
         )
     )
@@ -189,7 +203,12 @@ def test_dry_runs_never_change_the_reconstructed_order() -> None:
     views = Views.full(fakes, context(sink, row["order_id"]))
     intent_id = _authorize(views, row)
     for done in (
-        views.payment.capture(idempotency_key="dry-cap", intent_id=intent_id, dry_run=True),
+        views.payment.capture(
+            idempotency_key="dry-cap",
+            intent_id=intent_id,
+            dry_run=True,
+            confirmation_ref=ref_of(views.payment, intent_id),
+        ),
         views.payment.void(idempotency_key="dry-void", intent_id=intent_id, dry_run=True),
     ):
         assert isinstance(done, Ok)
@@ -215,8 +234,19 @@ def test_one_orders_fault_never_appears_in_another_orders_record() -> None:
     intent_a = _authorize(views_a, first, "auth-a")
     intent_b = _authorize(views_b, second, "auth-b")
     fakes.payment.faults.inject("capture", FaultKind.TIMEOUT_AFTER, times=1)
-    views_a.payment.capture(idempotency_key="cap-a", intent_id=intent_a)
-    assert isinstance(views_b.payment.capture(idempotency_key="cap-b", intent_id=intent_b), Ok)
+    views_a.payment.capture(
+        idempotency_key="cap-a",
+        intent_id=intent_a,
+        confirmation_ref=ref_of(views_a.payment, intent_a),
+    )
+    assert isinstance(
+        views_b.payment.capture(
+            idempotency_key="cap-b",
+            intent_id=intent_b,
+            confirmation_ref=ref_of(views_b.payment, intent_b),
+        ),
+        Ok,
+    )
 
     record_a = reconstruct_order(sink.read_all(), first["order_id"])
     assert_reconciles(record_a, fakes)
@@ -239,7 +269,11 @@ def test_fail_closed_survives_recovery_a_refused_attempt_never_runs_the_action()
     intent_id = _authorize(views, row)
     done = asyncio.run(
         call_with_recovery(
-            lambda: views.payment.capture(idempotency_key="cap-1", intent_id=intent_id),
+            lambda: views.payment.capture(
+                idempotency_key="cap-1",
+                intent_id=intent_id,
+                confirmation_ref=ref_of(views.payment, intent_id),
+            ),
             _policy(attempts=3),
         )
     )
@@ -274,7 +308,11 @@ def test_a_lost_outcome_write_is_recovered_locally_with_one_effect() -> None:
     intent_id = _authorize(views, row)
     done = asyncio.run(
         call_with_recovery(
-            lambda: views.payment.capture(idempotency_key="cap-1", intent_id=intent_id),
+            lambda: views.payment.capture(
+                idempotency_key="cap-1",
+                intent_id=intent_id,
+                confirmation_ref=ref_of(views.payment, intent_id),
+            ),
             _policy(attempts=3),
         )
     )
@@ -303,6 +341,7 @@ def test_a_timeout_after_the_effect_is_retried_to_exactly_one_effect(operation: 
             payment_token=row["payment_token"],
             amount=money,
             order_id=order_id,
+            confirmation_ref=confirm(views.payment, order_id, money, "k-1"),
         ),
         "assess": lambda: views.fraud.assess(
             idempotency_key="k-1", order_id=order_id, shopper_id=row["shopper_id"]
@@ -318,7 +357,12 @@ def test_a_timeout_after_the_effect_is_retried_to_exactly_one_effect(operation: 
         intent_id = _authorize(views, row)
         if operation == "refund":
             assert isinstance(
-                views.payment.capture(idempotency_key="cap-1", intent_id=intent_id), Ok
+                views.payment.capture(
+                    idempotency_key="cap-1",
+                    intent_id=intent_id,
+                    confirmation_ref=ref_of(views.payment, intent_id),
+                ),
+                Ok,
             )
             calls[operation] = lambda: views.payment.refund(
                 idempotency_key="k-1", intent_id=intent_id, amount=Money(100, money.currency)

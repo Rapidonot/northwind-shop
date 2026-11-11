@@ -33,6 +33,7 @@ from northwind_backend.views import (
     AuditedPaymentPort,
 )
 
+from ._confirm import confirm, ref_of
 from ._driver import FULL_CARRIER, FULL_FRAUD, fixed_clock
 
 pytestmark = [pytest.mark.req("BE-08")]
@@ -63,8 +64,13 @@ def _calls(view: Any) -> dict[str, Callable[[], Any]]:
                 payment_token=SANDBOX_APPROVED,
                 amount=USD,
                 order_id="O000001",
+                confirmation_ref=confirm(view, "O000001", USD, "k-auth"),
             ),
-            "capture": lambda: view.capture(idempotency_key="k-cap", intent_id="pi_000001"),
+            "capture": lambda: view.capture(
+                idempotency_key="k-cap",
+                intent_id="pi_000001",
+                confirmation_ref=ref_of(view, "pi_000001"),
+            ),
             "void": lambda: view.void(idempotency_key="k-void", intent_id="pi_000001"),
             "refund": lambda: view.refund(
                 idempotency_key="k-ref", intent_id="pi_000001", amount=USD
@@ -124,13 +130,24 @@ def test_dry_runs_replays_and_refusals_are_audited_too() -> None:
     fake = PaymentFake()
     view = AuditedPaymentPort(fake, ctx(sink), allowed=PAYMENT_SCOPES)
     kwargs: dict[str, Any] = dict(
-        idempotency_key="k1", payment_token=SANDBOX_APPROVED, amount=USD, order_id="O000001"
+        idempotency_key="k1",
+        payment_token=SANDBOX_APPROVED,
+        amount=USD,
+        order_id="O000001",
+        confirmation_ref=confirm(fake, "O000001", USD, "k1"),
     )
     view.authorize(**kwargs, dry_run=True)
     view.authorize(**kwargs)
     view.authorize(**kwargs)  # an idempotent replay
     view.authorize(**{**kwargs, "idempotency_key": "4111111111111111"})
-    view.authorize(**{**kwargs, "payment_token": SANDBOX_SOFT_DECLINE, "idempotency_key": "k2"})
+    view.authorize(
+        **{
+            **kwargs,
+            "payment_token": SANDBOX_SOFT_DECLINE,
+            "idempotency_key": "k2",
+            "confirmation_ref": confirm(fake, "O000001", USD, "k2"),
+        }
+    )
     events = [e for e in sink.read_all() if e.phase == "outcome"]
     outcomes = [dict(e.outcome or {}) for e in events]
     assert len(outcomes) == 5
@@ -169,6 +186,18 @@ def test_a_read_only_view_refuses_every_other_operation_and_audits_it(
     assert all(o["errorCategory"] == ErrorCategory.PERMISSION.value for o in outcomes)
 
 
+@pytest.mark.req("BE-05")
+def test_the_placement_sets_are_exactly_these() -> None:
+    """Row #21: no void, no refund, no carrier, no catalog write (hard rule 8, PRD §7)."""
+    from northwind_backend.views import CATALOG_READ, FRAUD_PLACE, ORDERS_PLACE, PAYMENT_PLACE
+
+    # Narrowed to what the code calls (F6) and the claim added (F1); both approved by the user.
+    assert PAYMENT_PLACE == {"authorize", "capture"}
+    assert FRAUD_PLACE == {"assess"}
+    assert CATALOG_READ == {"price", "stock"}
+    assert ORDERS_PLACE == {"get", "use_address_on_file", "confirm", "escalate", "claim_payment"}
+
+
 def test_the_read_only_sets_are_reads() -> None:
     assert PAYMENT_READ_ONLY == {"status"}
     assert FRAUD_READ_ONLY == {"read"}
@@ -183,15 +212,28 @@ def test_views_share_one_instance_so_the_one_payment_rule_holds_across_callers()
     second = AuditedPaymentPort(fake, ctx(sink, "caller-b"), allowed=PAYMENT_SCOPES)
     reader = AuditedPaymentPort(fake, ctx(sink, "orders-subagent"), allowed=PAYMENT_READ_ONLY)
     made = first.authorize(
-        idempotency_key="a1", payment_token=SANDBOX_APPROVED, amount=USD, order_id="O000001"
+        idempotency_key="a1",
+        payment_token=SANDBOX_APPROVED,
+        amount=USD,
+        order_id="O000001",
+        confirmation_ref=confirm(first, "O000001", USD, "a1"),
     )
     assert isinstance(made, Ok)
     again = second.authorize(
-        idempotency_key="b1", payment_token=SANDBOX_APPROVED, amount=USD, order_id="O000001"
+        idempotency_key="b1",
+        payment_token=SANDBOX_APPROVED,
+        amount=USD,
+        order_id="O000001",
+        confirmation_ref=confirm(second, "O000001", USD, "b1"),
     )
     assert isinstance(again, ToolError) and again.code == "order_already_authorized"
     intent_id = made.value.intent_id
-    assert isinstance(first.capture(idempotency_key="a2", intent_id=intent_id), Ok)
+    assert isinstance(
+        first.capture(
+            idempotency_key="a2", intent_id=intent_id, confirmation_ref=ref_of(first, intent_id)
+        ),
+        Ok,
+    )
     capped = Money(15_000, "USD")
     big = PaymentFake()
     one = AuditedPaymentPort(big, ctx(sink, "caller-a"), allowed=PAYMENT_SCOPES)
@@ -201,9 +243,17 @@ def test_views_share_one_instance_so_the_one_payment_rule_holds_across_callers()
         payment_token=SANDBOX_APPROVED,
         amount=Money(30_000, "USD"),
         order_id="O000002",
+        confirmation_ref=confirm(one, "O000002", Money(30_000, "USD"), "c1"),
     )
     assert isinstance(auth, Ok)
-    assert isinstance(one.capture(idempotency_key="c2", intent_id=auth.value.intent_id), Ok)
+    assert isinstance(
+        one.capture(
+            idempotency_key="c2",
+            intent_id=auth.value.intent_id,
+            confirmation_ref=ref_of(one, auth.value.intent_id),
+        ),
+        Ok,
+    )
     assert isinstance(
         one.refund(idempotency_key="c3", intent_id=auth.value.intent_id, amount=capped), Ok
     )
@@ -264,15 +314,45 @@ def money_routes(tree: ast.AST) -> list[str]:
     return found
 
 
+# Row #21 (the user's approval of its plan, stop 5): the Orders agent's placement task may reach
+# `authorize` and `capture`, as attributes of its payment view, and nothing else on the money list.
+PLACEMENT_MODULE = "agents/orders_place.py"
+PLACEMENT_ROUTES = frozenset({"attribute authorize", "attribute capture"})
+
+
 @pytest.mark.req("BE-02")
+@pytest.mark.req("BE-05")
 def test_nothing_under_src_but_fakes_and_views_reaches_a_money_call() -> None:
     offenders = {
         _rel(path): routes
         for path in _src_modules()
         if not _exempt(path)
         and (routes := money_routes(ast.parse(path.read_text(encoding="utf-8"))))
+        and not (_rel(path) == PLACEMENT_MODULE and set(routes) <= PLACEMENT_ROUTES)
     }
     assert offenders == {}
+
+
+@pytest.mark.req("BE-05")
+def test_the_placement_module_reaches_only_authorize_and_capture() -> None:
+    """The one exception above, pinned exactly: both routes are used, and `void` and `refund`
+    stay out of it (hard rule 8, PRD §7)."""
+    path = SRC / PLACEMENT_MODULE
+    routes = set(money_routes(ast.parse(path.read_text(encoding="utf-8"))))
+    assert routes == PLACEMENT_ROUTES
+
+
+@pytest.mark.req("BE-05")
+@pytest.mark.parametrize(
+    "source",
+    [
+        "self.payment.void(idempotency_key='k', intent_id='pi_000001')",
+        "self.payment.refund(idempotency_key='k', intent_id='pi_000001', amount=m)",
+        "getattr(self.payment, 'capture')()",
+    ],
+)
+def test_the_placement_exception_admits_no_other_route(source: str) -> None:
+    assert not set(money_routes(ast.parse(source))) <= PLACEMENT_ROUTES
 
 
 @pytest.mark.parametrize(
@@ -299,8 +379,17 @@ def test_every_view_built_under_src_uses_a_read_only_constant() -> None:
     """Known limits (re-review N4): a view class renamed on import, passed to `partial`, or bound
     to another name and called is not checked here. The money-name pin above still catches any
     money call outside `views.py`, and each view refuses what its allow-list lacks at runtime."""
-    view_names = {"AuditedPaymentPort", "AuditedFraudPort", "AuditedCarrierPort"}
-    constants = {"PAYMENT_READ_ONLY", "FRAUD_READ_ONLY", "CARRIER_READ_ONLY"}
+    view_names = {
+        "AuditedPaymentPort",
+        "AuditedFraudPort",
+        "AuditedCarrierPort",
+        "AuditedCatalogPort",
+        "AuditedOrderStore",
+    }
+    # Advisor finding 8: CATALOG_READ is admitted in the placement module only, as approved.
+    read_only = {"PAYMENT_READ_ONLY", "FRAUD_READ_ONLY", "CARRIER_READ_ONLY"}
+    # Row #21 (stop 5, approved): the placement sets, in the placement module only.
+    placement = {"PAYMENT_PLACE", "FRAUD_PLACE", "CATALOG_READ", "ORDERS_PLACE"}
     built = 0
     for path in _src_modules():
         if _rel(path) == "views.py":
@@ -319,6 +408,7 @@ def test_every_view_built_under_src_uses_a_read_only_constant() -> None:
                 built += 1
                 allowed = [k.value for k in node.keywords if k.arg == "allowed"]
                 assert allowed and isinstance(allowed[0], ast.Name), path
+                constants = placement if _rel(path) == PLACEMENT_MODULE else read_only
                 assert allowed[0].id in constants, (path, allowed[0].id)
     assert built >= 2  # the Orders subagent's payment and fraud views
 

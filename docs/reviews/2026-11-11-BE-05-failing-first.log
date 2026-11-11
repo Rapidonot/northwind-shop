@@ -1,0 +1,94 @@
+## N1 failing first (fix stashed), 2026-11-11T01:59:12Z
+=========================== short test summary info ============================
+FAILED services/backend/tests/backend_audit/test_be08_reconstruct.py::test_two_unreadable_key_refunds_never_settle_each_other
+1 failed, 1 passed, 22 deselected in 0.10s
+## N1 with fix
+2 passed, 22 deselected in 0.07s
+## P1-P3 tests against the base src (dd8a16f), 2026-11-11T02:08:29Z
+ERROR services/backend/tests/test_be05_prerequisites.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in 0.10s
+## test-writer escalate-first bug, before the fix, 2026-11-11T02:37:45Z
+E       AssertionError: money moved on an escalated order
+E       AssertionError: money moved after an escalation
+FAILED services/backend/tests/orders_place/test_be05_criteria.py::test_after_an_escalation_no_money_moves
+FAILED services/backend/tests/orders_place/test_be05_criteria.py::test_a_model_that_escalates_first_then_tries_everything_moves_no_money
+2 failed, 70 deselected in 1.26s
+## security F1-F4 regressions against the pre-fix src (2e2e22f), 2026-11-11T02:49:21Z
+FAILED services/backend/tests/orders_place/test_be05_security_fixes.py::test_a_later_run_moves_no_money_on_an_order_an_earlier_run_escalated[first0]
+FAILED services/backend/tests/orders_place/test_be05_security_fixes.py::test_a_later_run_moves_no_money_on_an_order_an_earlier_run_escalated[first1]
+FAILED services/backend/tests/orders_place/test_be05_security_fixes.py::test_a_duplicate_with_a_fresh_confirmation_moves_no_money_after_an_escalation
+FAILED services/backend/tests/orders_place/test_be05_security_fixes.py::test_a_rerun_after_a_doubtful_write_moves_no_more_money[assess]
+FAILED services/backend/tests/orders_place/test_be05_security_fixes.py::test_a_rerun_after_a_doubtful_write_moves_no_more_money[authorize]
+FAILED services/backend/tests/orders_place/test_be05_security_fixes.py::test_a_rerun_of_a_placed_order_writes_nothing_and_reports_placed
+FAILED services/backend/tests/orders_place/test_be05_security_fixes.py::test_a_doubtful_escalation_is_never_written_again
+FAILED services/backend/tests/orders_place/test_be05_security_fixes.py::test_capture_follows_a_later_validation_that_found_an_issue
+FAILED services/backend/tests/orders_place/test_be05_security_fixes.py::test_no_repr_shows_a_confirmation_reference
+9 failed in 0.61s
+## F1 claim tests against the pre-fix src (d6a5d7e), 2026-11-11T03:37:20Z
+FAILED services/backend/tests/orders_place/test_be05_security_fixes.py::test_a_concurrent_duplicates_hold_is_reported_in_the_escalation
+FAILED services/backend/tests/orders_place/test_be05_security_fixes.py::test_a_run_identity_never_looks_like_card_data
+FAILED services/backend/tests/orders_place/test_chk05_idempotent_placement.py::test_two_duplicates_with_the_same_keys_never_both_get_the_claim
+FAILED services/backend/tests/orders_place/test_chk05_idempotent_placement.py::test_concurrent_claims_from_ten_runs_give_exactly_one_owner
+FAILED services/backend/tests/orders_place/test_chk05_idempotent_placement.py::test_a_rerun_after_a_crash_finds_the_claim_and_escalates
+FAILED services/backend/tests/backend_audit/test_be08_views.py::test_the_placement_sets_are_exactly_these
+6 failed, 51 deselected in 0.52s
+## claim-fix review C1-C4 regressions against 8ed9890 src, 2026-11-11T04:05:18Z
+FAILED services/backend/tests/orders_place/test_be05_security_fixes.py::test_a_failed_capture_report_never_hides_the_capture_in_the_escalation
+FAILED services/backend/tests/orders_place/test_be05_security_fixes.py::test_a_stale_escalation_view_never_replaces_a_fresher_claim_view
+FAILED services/backend/tests/orders_place/test_be05_security_fixes.py::test_a_crashed_owners_order_is_escalated_by_a_rerun_that_stops_short
+FAILED services/backend/tests/orders_place/test_be05_security_fixes.py::test_a_doubtful_claim_is_uncertain_in_the_reconstruction
+FAILED services/backend/tests/orders_place/test_be05_security_fixes.py::test_a_duplicate_is_told_escalated_only_when_the_escalation_was_written
+5 failed, 16 deselected in 0.52s
+
+## Advisor finding 1: d6a5d7e's fixes (N1-N4, F3 price variant) against f11f5e3's src, 2026-11-11T05:44:32Z
+FAILED services/backend/tests/orders_place/test_zz_ff_security.py::test_a_failed_escalation_still_reports_context
+FAILED services/backend/tests/orders_place/test_zz_ff_security.py::test_a_failed_store_read_does_not_stop_the_code_escalation
+FAILED services/backend/tests/orders_place/test_zz_ff_security.py::test_no_repr_of_an_order_shows_its_token_or_postal_code
+FAILED services/backend/tests/orders_place/test_zz_ff_security.py::test_after_a_doubtful_escalation_the_model_is_told_to_stop_not_to_escalate
+FAILED services/backend/tests/orders_place/test_zz_ff_security.py::test_capture_follows_a_later_validation_that_moved_the_total
+5 failed, 10 deselected in 0.76s
+(N4: the hidden-values test, d6a5d7e's version, against f11f5e3)
+6 passed, 24 deselected in 5.39s
+
+## Advisor finding 1: 7d4d085's fixes (claim re-review N1, N3) against 6653c32's src
+FAILED services/backend/tests/orders_place/test_be05_security_fixes.py::test_a_claim_view_says_it_is_what_the_owner_last_reported
+FAILED services/backend/tests/orders_place/test_be05_security_fixes.py::test_the_store_labels_an_unlabelled_claim_view_unreported
+2 failed, 21 deselected in 0.47s
+
+## Advisor finding 1: with the fix in place (HEAD src)
+7 passed, 16 deselected in 0.80s
+(N4 strengthened a test, it fixed no behaviour: it passes on f11f5e3 as it should.)
+
+## Advisor finding 1: P1-P3, U2, U3 seen failing on their own assertions, by mutation (2026-11-11T05:45:05Z). Each mutant breaks one rule; the tests for it must fail.
+
+## Mutation: P1 authorize ignores the confirmation
+9 failed, 27 passed in 0.18s
+
+## Mutation: P1 capture accepts any reference
+3 failed, 33 passed in 0.12s
+
+## Mutation: P2 no per-order limit
+4 failed, 32 passed in 0.11s
+
+## Mutation: P3 every payment instance gets its own state
+6 failed, 30 passed in 0.11s
+
+## Mutation: P3 every fraud instance gets its own state
+1 failed, 35 passed in 0.12s
+
+## Mutation: U2 writes retry like reads
+14 passed, 137 deselected in 4.08s
+
+## Mutation: U3 the model reads the port's own timeout text
+8 failed, 176 deselected in 1.40s
+
+## Mutation: U2 writes retry like reads, again, with the tests on the production policy added
+3 failed, 14 passed, 137 deselected in 4.50s
+## With the production policy restored
+3 passed, 151 deselected in 0.44s
+
+## Cassette read L1 (summary from the store) against the src before the fix
+FAILED services/backend/tests/orders_place/test_be05_scripted_summary.py::test_the_summary_is_the_stores_outcome_not_the_models_words[clean-tools0-The order was escalated, not placed.-is placed.]
+FAILED services/backend/tests/orders_place/test_be05_scripted_summary.py::test_the_summary_is_the_stores_outcome_not_the_models_words[stock_out-tools1-The order was placed and paid.-is escalated (out_of_stock).]
+2 failed in 1.89s

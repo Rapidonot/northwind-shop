@@ -43,6 +43,7 @@ from northwind_backend.recovery import (
     with_deadline,
 )
 
+from ._confirm import confirm, ref_of
 from ._driver import Fakes, Views, amount_for, context, first_of, orders
 from ._reconcile import assert_reconciles
 
@@ -77,10 +78,13 @@ def test_the_new_constants_are_fixed_transient_and_retryable() -> None:
         assert error.error_category is ErrorCategory.TRANSIENT
         assert error.is_retryable is True
         assert error.code == code
+    # Row #21 (U2, #20 cassette read C2): neither promises a safe retry any more, since a write is
+    # never repeated after either.
     assert (
         UNEXPECTED.message
-        == "An unexpected error stopped the call. A retry with the same key is safe."
+        == "An unexpected error stopped the call. It may or may not have taken effect."
     )
+    assert "safe" not in UNEXPECTED.message and "safe" not in TIMEOUT.message
     assert "may or may not have taken effect" in TIMEOUT.message
     assert "nothing was changed" not in AUDIT_INCOMPLETE.message.lower()
 
@@ -207,6 +211,7 @@ def order_setup() -> Iterator[tuple[dict[str, Any], Fakes, InMemoryAuditSink, Vi
         payment_token=row["payment_token"],
         amount=amount_for(row),
         order_id=row["order_id"],
+        confirmation_ref=confirm(views.payment, row["order_id"], amount_for(row), "auth-1"),
     )
     assert isinstance(authorized, Ok)
     yield row, fakes, sink, views, authorized.value.intent_id
@@ -214,7 +219,9 @@ def order_setup() -> Iterator[tuple[dict[str, Any], Fakes, InMemoryAuditSink, Vi
 
 
 def _capture(views: Views, intent_id: str, key: str = "cap-1") -> Any:
-    return lambda: views.payment.capture(idempotency_key=key, intent_id=intent_id)
+    return lambda: views.payment.capture(
+        idempotency_key=key, intent_id=intent_id, confirmation_ref=ref_of(views.payment, intent_id)
+    )
 
 
 def _effects(fakes: Fakes, operation: str = "capture") -> int:
@@ -412,3 +419,23 @@ def test_with_deadline_turns_an_exception_into_unexpected() -> None:
         raise ValueError("4111111111111111")
 
     assert asyncio.run(with_deadline(boom, 1.0)) is UNEXPECTED
+
+
+@pytest.mark.req("BE-02")
+def test_the_orders_checks_read_timeout_text_is_tool_specific() -> None:
+    """Row #21, U3 (#20 cassette read C2): the model reads tool-specific text after a read timeout,
+    never "a retry with the same key is safe", and the envelope keeps its code and category."""
+    from northwind_backend.agents.messages import model_envelope
+
+    for tool, name in (
+        ("get_fraud_assessments", "fraud lookup"),
+        ("get_payment_status", "payment status lookup"),
+    ):
+        envelope = model_envelope(tool, TIMEOUT)
+        assert envelope["code"] == "timeout" and envelope["errorCategory"] == "transient"
+        assert envelope["message"].startswith(f"The {name} did not finish in time, after retries.")
+        assert (
+            "do not call it again" in envelope["message"] and "same key" not in envelope["message"]
+        )
+    # Any other error keeps the port's own envelope exactly.
+    assert model_envelope("get_fraud_assessments", UNEXPECTED) == UNEXPECTED.to_envelope()

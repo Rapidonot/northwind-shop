@@ -20,6 +20,7 @@ from typing import Any
 
 from claude_agent_sdk import SdkMcpTool, tool
 
+from northwind_backend.agents.messages import model_envelope
 from northwind_backend.agents.runtime import RunState, Step, SubagentSpec, run_subagent
 from northwind_backend.audit import AuditContext, AuditWriteError, card_data, outcome_ref
 from northwind_backend.errors import AUDIT_UNAVAILABLE, AgentResult, Ok, Result
@@ -136,13 +137,13 @@ def _plain(value: Any, names: tuple[str, ...]) -> dict[str, Any]:
     return out
 
 
-def _payload(result: Result[Any], value: Any) -> dict[str, Any]:
+def _payload(tool: str, result: Result[Any], value: Any) -> dict[str, Any]:
     if isinstance(result, Ok):
         body: dict[str, Any] = {"isError": False, "value": value}
         if value == []:
             body["note"] = "No assessment exists for this order yet."
         return {"content": [{"type": "text", "text": json.dumps(body)}]}
-    envelope = result.to_envelope()
+    envelope = model_envelope(tool, result)
     return {"content": [{"type": "text", "text": json.dumps(envelope)}], "is_error": True}
 
 
@@ -175,7 +176,7 @@ def _tools(
         if order_id != task.order_id:
             refused = _refuse(audit, "fraud.read", {"order_id": order_id})
             state.record(FRAUD_STEP, order_id, refused, {"order_id": order_id})
-            return _payload(refused.result, None)
+            return _payload(FRAUD_TOOL, refused.result, None)
         done = await call_with_recovery(lambda: fraud.assessments_for(order_id), policy)
         value: Any = None
         empty = False
@@ -184,7 +185,7 @@ def _tools(
             value = [_plain(a, _ASSESSMENT_FIELDS) for a in items]
             empty = not items
         state.record(FRAUD_STEP, order_id, done, {"order_id": order_id}, value, empty)
-        return _payload(done.result, value)
+        return _payload(FRAUD_TOOL, done.result, value)
 
     @tool(PAYMENT_TOOL, PAYMENT_DESCRIPTION, PAYMENT_SCHEMA)
     async def get_payment_status(args: dict[str, Any]) -> dict[str, Any]:
@@ -192,14 +193,14 @@ def _tools(
         if intent_id != task.intent_id:
             refused = _refuse(audit, "payment.status", {"intent_id": intent_id})
             state.record(PAYMENT_STEP, intent_id, refused, {"intent_id": intent_id})
-            return _payload(refused.result, None)
+            return _payload(PAYMENT_TOOL, refused.result, None)
         done = await call_with_recovery(lambda: payment.status(intent_id), policy)
         value: Any = None
         if isinstance(done.result, Ok):
             intent: PaymentIntent = done.result.value
             value = _plain(intent, _INTENT_FIELDS)
         state.record(PAYMENT_STEP, intent_id, done, {"intent_id": intent_id}, value)
-        return _payload(done.result, value)
+        return _payload(PAYMENT_TOOL, done.result, value)
 
     return [get_fraud_assessments, get_payment_status]
 

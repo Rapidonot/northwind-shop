@@ -9,16 +9,19 @@ reads nor records the key.
 
 No port takes a card number. Agents see only tokens and payment intents (hard rule 1, PAY-05).
 
-No port carries a confirmation reference. Hard rule 9 needs a portal confirmation for money to
-move, so before the PAY-01 contract suite either this contract gains one or a named layer above it
-enforces that. Nothing reaches these ports yet.
+Hard rule 9 (row #21, decision 0014): `authorize` and `capture` take a required
+`confirmation_ref`, issued by the portal control when the shopper confirms (CHK-02; a test fixture
+until then), and `authorize` has a deterministic per-order limit. It is on the contract, not a layer
+above it, so the PAY-01 contract suite checks it on every adapter. The rule is stated in
+`northwind_backend.confirmations`.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 from northwind_backend.errors import Result
 
@@ -101,18 +104,23 @@ class PaymentPort(Protocol):
         payment_token: str,
         amount: Money,
         order_id: str,
+        confirmation_ref: str,
         dry_run: bool = False,
-    ) -> Result[PaymentIntent]: ...
+    ) -> Result[PaymentIntent]:
+        """Needs an unused confirmation for this order, currency and exact amount; uses it up."""
+        ...
 
     def capture(
         self,
         *,
         idempotency_key: str,
         intent_id: str,
+        confirmation_ref: str,
         amount: Money | None = None,
         dry_run: bool = False,
     ) -> Result[PaymentIntent]:
-        """`amount=None` captures the whole authorization."""
+        """`amount=None` captures the whole authorization. Needs the confirmation that authorized
+        this intent, and no other."""
         ...
 
     def void(
@@ -151,3 +159,169 @@ class CarrierPort(Protocol):
     ) -> Result[Shipment]: ...
 
     def track(self, tracking_number: str) -> Result[Tracking]: ...
+
+
+# Row #21: the order store and the catalog's live tables, as stubs behind interfaces. `mcp-orders`
+# (FOUND-3 rest) and `mcp-catalog` (#10b) replace the fakes later; the Orders agent sees only
+# these protocols, through audited views.
+
+
+class OrderStatus(StrEnum):
+    PENDING = "pending"
+    PAYING = "paying"  # claimed by one run for payment (row #21, F1)
+    CONFIRMED = "confirmed"
+    ESCALATED = "escalated"
+
+
+@dataclass(frozen=True, slots=True)
+class OrderLine:
+    product_id: str
+    variant_id: str
+    quantity: int
+
+
+@dataclass(frozen=True, slots=True)
+class Order:
+    """One order as the store holds it. `payment_token` and `shipping_postal_code` never reach a
+    model or the audit: the audit writes only the allow-listed fields of an `Order`."""
+
+    order_id: str
+    shopper_id: str
+    region: str
+    lines: tuple[OrderLine, ...]
+    payment_token: str = field(repr=False)  # re-review N2: never in a repr or a log
+    shipping_postal_code: str = field(repr=False)
+    status: OrderStatus = OrderStatus.PENDING
+    intent_id: str | None = None
+    amount_minor: int = 0
+    currency: str | None = None
+    escalation: str | None = None
+    address_on_file: bool = False
+    dry_run: bool = False
+    # The run that holds the payment claim: a code-only identity, never in model input or the
+    # audit's allow-list (F1, the user's Option 1).
+    claimed_by: str | None = field(default=None, repr=False)
+    # What the claim owner last reported of its intent (F1): status and captured minor units.
+    payment_status: str | None = None
+    captured_minor: int = 0
+
+
+def claim_payment_view(order: Order, claim: str) -> dict[str, Any]:
+    """The claim and any payment on it, as an escalation context shows them (F1)."""
+    return {
+        # What the claim owner last reported, not the payment port's state (re-review N1).
+        "source": "claim_report",
+        "status": order.payment_status or "payment_claimed",
+        "claim": claim,
+        "intent_id": order.intent_id,
+        "authorized_minor": order.amount_minor if order.intent_id else None,
+        "captured_minor": order.captured_minor,
+        "currency": order.currency,
+    }
+
+
+_STAGE = {
+    "payment_claimed": 0,
+    "authorized": 1,
+    "voided": 1,
+    "captured": 2,
+    "partially_refunded": 3,
+    "refunded": 3,
+}
+
+
+def further_along(
+    first: Mapping[str, Any] | None, second: Mapping[str, Any] | None
+) -> dict[str, Any] | None:
+    """Of two views of one claim's payment, the one that shows more money moved (claim-fix review
+    C1): a stale view never replaces a fresher one, whoever wrote it."""
+
+    def rank(view: Mapping[str, Any] | None) -> tuple[int, int, int]:
+        if view is None:
+            return (-1, -1, -1)
+        captured = view.get("captured_minor")
+        return (
+            captured if isinstance(captured, int) else 0,
+            _STAGE.get(str(view.get("status")), 0),
+            1 if view.get("intent_id") else 0,
+        )
+
+    best = first if rank(first) >= rank(second) else second
+    return None if best is None else dict(best)
+
+
+@dataclass(frozen=True, slots=True)
+class PriceQuote:
+    variant_id: str
+    region: str
+    amount_minor: int
+    currency: str
+
+
+@dataclass(frozen=True, slots=True)
+class StockLevel:
+    variant_id: str
+    region: str
+    on_hand: int
+
+
+@runtime_checkable
+class CatalogPort(Protocol):
+    """Live price and stock, never the index (hard rule 2)."""
+
+    def price(self, variant_id: str, region: str) -> Result[PriceQuote]: ...
+
+    def stock(self, variant_id: str, region: str) -> Result[StockLevel]: ...
+
+
+@runtime_checkable
+class OrderStorePort(Protocol):
+    def get(self, order_id: str) -> Result[Order]: ...
+
+    def use_address_on_file(
+        self, *, idempotency_key: str, order_id: str, dry_run: bool = False
+    ) -> Result[Order]:
+        """Replaces an undeliverable delivery address with the shopper's address on file, if that
+        one is in the order's region and deliverable."""
+        ...
+
+    def confirm(
+        self,
+        *,
+        idempotency_key: str,
+        order_id: str,
+        intent_id: str,
+        amount: Money,
+        dry_run: bool = False,
+    ) -> Result[Order]:
+        """One confirmed order per order ID, whatever the key (CHK-05)."""
+        ...
+
+    def claim_payment(
+        self,
+        *,
+        order_id: str,
+        run_id: str,
+        payment: PaymentIntent | None = None,
+        dry_run: bool = False,
+    ) -> Result[Order]:
+        """A compare-and-set on the order's state, never resolved through the idempotency store:
+        duplicates share the order-ID keys, so a replay would hand the claim to both. With no
+        intent, it claims: pending becomes paying, owned by `run_id`; the owner claiming again gets
+        `Ok`; anyone else gets `claimed_by_another_run`. With a payment, the owner reports its
+        intent's state on the claim (after authorize and after capture), which an escalation of the
+        order then shows."""
+        ...
+
+    def escalate(
+        self,
+        *,
+        idempotency_key: str,
+        order_id: str,
+        reason: str,
+        context: Mapping[str, Any],
+        dry_run: bool = False,
+    ) -> Result[Order]:
+        """Queues the order for a person with its context. `context` is kept, not hashed: a
+        same-key replay with the same reason returns the first result."""
+        ...

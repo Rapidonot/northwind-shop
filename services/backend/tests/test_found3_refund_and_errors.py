@@ -13,12 +13,43 @@ from northwind_backend.errors import ErrorCategory, Ok, Result, ToolError
 from northwind_backend.fakes.carrier import CarrierFake
 from northwind_backend.fakes.fraud import FraudFake
 from northwind_backend.fakes.payment import (
+    DEFAULT_ORDER_LIMITS,
     DEFAULT_REFUND_CAPS,
     SANDBOX_APPROVED,
     SANDBOX_SOFT_DECLINE,
     PaymentFake,
+    PaymentState,
 )
 from northwind_backend.ports import CarrierPort, FraudPort, Money, PaymentPort
+
+
+def _payment_state(port: Any) -> Any:
+    while not hasattr(port, "state"):
+        port = port._fake
+    return port.state
+
+
+def confirm(port: Any, order_id: Any, amount: Any, key: Any = None) -> str:
+    """The portal confirmation a test's `authorize` presents (row #21, hard rule 9). One per
+    (key, order, amount), so a same-key replay presents the same reference."""
+    state = _payment_state(port)
+
+    def memo() -> str:
+        refs = state.__dict__.setdefault("_test_refs", {})
+        slot = repr((key, order_id, amount))
+        if slot not in refs:
+            refs[slot] = state.confirmations.issue(order_id, amount)
+        return str(refs[slot])
+
+    # Under the state's own lock: concurrent replays must present one reference.
+    return str(state.store.exclusive(memo))
+
+
+def ref_of(port: Any, intent_id: Any) -> str:
+    """The reference that authorized this intent; a well-formed, never-issued one otherwise."""
+    found = _payment_state(port).confirmation_of(intent_id) if isinstance(intent_id, str) else None
+    return found or "cf_ZZZZZZZZZZZZZZZZ"
+
 
 ENVELOPE_KEYS = {"isError", "errorCategory", "isRetryable", "message"}
 
@@ -31,11 +62,17 @@ def _intent(fake: PaymentFake, currency: str, captured: int, authorized: int | N
         payment_token=SANDBOX_APPROVED,
         amount=Money(authorized or captured, currency),
         order_id=f"O{n + 1:06d}",
+        confirmation_ref=confirm(
+            fake, f"O{n + 1:06d}", Money(authorized or captured, currency), f"auth-{n}"
+        ),
     )
     assert isinstance(auth, Ok)
     intent_id = auth.value.intent_id
     cap = fake.capture(
-        idempotency_key=f"cap-{n}", intent_id=intent_id, amount=Money(captured, currency)
+        idempotency_key=f"cap-{n}",
+        intent_id=intent_id,
+        amount=Money(captured, currency),
+        confirmation_ref=ref_of(fake, intent_id),
     )
     assert isinstance(cap, Ok)
     return intent_id
@@ -103,7 +140,8 @@ def test_the_cap_is_set_per_currency_and_can_be_configured() -> None:
 
 @pytest.mark.req("FOUND-3")
 def test_a_currency_with_no_cap_is_refused() -> None:
-    fake = PaymentFake()
+    # JPY needs an order limit to be authorized at all (row #21), so the refund is what's refused.
+    fake = PaymentFake(state=PaymentState(order_limits={**DEFAULT_ORDER_LIMITS, "JPY": 100_000}))
     assert "JPY" not in DEFAULT_REFUND_CAPS
     intent_id = _intent(fake, "JPY", 1000)
     effects = len(fake.effects)
@@ -136,6 +174,7 @@ def test_refund_of_an_uncaptured_payment_is_refused() -> None:
         payment_token=SANDBOX_APPROVED,
         amount=Money(1000, "USD"),
         order_id="O000001",
+        confirmation_ref=confirm(fake, "O000001", Money(1000, "USD"), "a"),
     )
     assert isinstance(auth, Ok)
     assert isinstance(_refund(fake, auth.value.intent_id, "r", 100, "USD"), ToolError)
@@ -156,6 +195,7 @@ def _payment_trigger(category: str) -> Callable[[], Result[Any]]:
             payment_token="not a token",  # noqa: S106
             amount=Money(100, "USD"),
             order_id="O000001",
+            confirmation_ref=confirm(fake, "O000001", Money(100, "USD"), "k"),
         )
     if category == "business":
         fake = PaymentFake()
@@ -164,6 +204,7 @@ def _payment_trigger(category: str) -> Callable[[], Result[Any]]:
             payment_token=SANDBOX_SOFT_DECLINE,
             amount=Money(100, "USD"),
             order_id="O000001",
+            confirmation_ref=confirm(fake, "O000001", Money(100, "USD"), "k"),
         )
     fake = PaymentFake(scopes=frozenset())
     return lambda: fake.status("pi_000001")
