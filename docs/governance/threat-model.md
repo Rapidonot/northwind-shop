@@ -69,7 +69,7 @@ Built: `/api/chat` to the assistant, one message at a time, no sessions.
 | Spoofing | Caller claims another region or staff audience | LLM03 | Region and audience come from server config, never the request: `services/gateway/tests/test_chat.py::test_the_region_comes_from_server_config_not_the_request`. **Open:** no shopper identity, `current_caller` is a stub, #19 |
 | Tampering | Prompt injection in the shopper's message | LLM01 | Message escaped inside its own block: `services/assistant/tests/test_first_request.py::test_hostile_source_and_shopper_text_stay_inside_their_own_blocks`. No state-changing tool exists to abuse: `docs/governance/tool-register.md`. Deterministic output check: **open**, #13 |
 | Tampering | Attached file or slash command in a message | LLM01 | `services/assistant/tests/test_tool_loop.py::test_a_shopper_cannot_attach_a_file_with_an_at_path`, `services/assistant/tests/test_tool_loop.py::test_a_slash_command_stays_shopper_text` |
-| Repudiation | No record of who asked what | LLM03 | **Open:** no audit log by design at this stage, #20 (BE-08, NFR-10) |
+| Repudiation | No record of who asked what | LLM03 | **Open:** nothing on the shopper path is audited yet. #20 audits backend port calls and the Orders subagent only; this boundary is NFR-10's (Window B P6) |
 | Information disclosure | Card data enters the model | LLM02 | Refused before any model call: `services/gateway/tests/test_chat.py::test_a_rejected_body_is_never_echoed_or_logged_and_reaches_no_model`. Accepted limit: digits spelled out or touching letters pass; hosted fields are the real control, Window B PAY-05 (SA-02 review, first-pass 3, second-pass 4). Check on model output: **open**, Window B PAY-05 (SA-02 review, finding 4) |
 | Information disclosure | System prompt or tool schema extracted | LLM08 | Treated as discoverable: the prompt holds no secret (`services/assistant/src/northwind_assistant/prompt.py`). Red-team items RT-025 and RT-026 (`evals/adversarial/rag11_red_team.jsonl`) check for a run of more than 8 words from the system prompt and for tool schema JSON: `services/assistant/tests/test_red_team_e2e.py::test_a_red_team_query_surfaces_nothing_internal` (g). Recorded answers: `cassettes/assistant-redteam`, all checks passing; the user read all 28 answers (#9) |
 | Denial of service | Flooding `/api/chat` to burn credit or block others | LLM06 | Message cap (`services/gateway/tests/test_chat_edges.py::test_the_length_limit_is_exact`), 3 searches (`services/assistant/tests/test_first_request.py::test_the_cap_is_three_searches`), 4 turns (`services/assistant/tests/test_tool_loop.py::test_a_fifth_turn_never_happens`); budget caps hold. Rate, concurrency and wall-clock limits: **open**, Window B NFR-14 (SA-02 review, finding 7) |
@@ -101,7 +101,7 @@ A network boundary since #10: `mcp-rag` serves `retrieve_context` over streamabl
 |---|---|---|---|
 | Spoofing | Stolen or replayed tool token | LLM03 | A missing, malformed, forged, expired or wrong-audience token gets a bare 401 before any tool runs: `services/mcp-rag/tests/test_server.py::test_a_bad_token_gets_a_bare_401_before_any_tool_runs`, `services/common/tests/test_mcp_token.py::test_a_signed_token_with_bad_claims_is_refused`. A stolen token buys at most its turn's remaining searches, shopper scope, read-only, for at most 120 s; it rides in the CLI's argv. A bad token at CLI start makes the CLI drop the server silently (S0 6b); the first search, with the same token, fails closed before any model call (Q6). Per-user tokens with sessions: **open**, #19 |
 | Tampering | Model-supplied arguments widen a query | LLM03 | Schema offers only `query`: `services/assistant/tests/test_tool_loop.py::test_model_supplied_audience_and_region_change_nothing_through_the_cli`. On `mcp-rag`: `services/mcp-rag/tests/test_retrieve.py::test_an_audience_or_region_in_the_arguments_changes_nothing` (SA-02 review, second-pass 5) |
-| Repudiation | Tool calls not attributable | LLM03 | **Open:** #20 |
+| Repudiation | Tool calls not attributable | LLM03 | **Open:** the assistant's tool calls, served by `mcp-rag` since #10, write no audit event. #20's backend audit log (`services/backend/src/northwind_backend/audit.py`) is groundwork only, since it audits no assistant tool call; owned by NFR-10 (Window B P6) |
 | Information disclosure | Tool error leaks a connection string | LLM02 | Fixed text only: `services/assistant/tests/test_tool_loop.py::test_a_retrieval_failure_tells_the_model_nothing_about_why`, `services/mcp-rag/tests/test_retrieve.py::test_a_failed_search_is_transient_and_says_nothing_of_why`. The MCP client logs request arguments at DEBUG; the assistant holds its loggers at WARNING: `services/assistant/tests/test_rag_client.py::test_a_whole_turn_logs_no_shopper_message_and_no_card_digits` |
 | Denial of service | A tool loop runs without end | LLM06 | `services/assistant/tests/test_first_request.py::test_a_model_that_always_searches_gets_three_real_searches_in_all`, `services/assistant/tests/test_tool_loop.py::test_a_fifth_turn_never_happens`, `services/mcp-rag/tests/test_retrieve.py::test_concurrent_calls_on_one_turn_never_exceed_three_searches` |
 | Elevation of privilege | Over-broad database role | LLM03 | The app connects as the image's superuser, so `COPY … TO PROGRAM` may run code in the container: **open**, medium candidate, #9a (decision 0005, "Open") |
@@ -115,7 +115,7 @@ Not built. All threats **open**, Window B P4 and P5, except where noted. Designs
 |---|---|---|---|
 | Spoofing | Spoofed agent or tampered card | LLM04 | **Open:** A2A-01, A2A-06 |
 | Tampering | Forged push callback | LLM01 | **Open:** A2A-08 |
-| Repudiation | Disputed payment outcome | LLM03 | **Open:** #20, A2A-07 |
+| Repudiation | Disputed payment outcome | LLM03 | **Partly closed, for the fakes only (#20, BE-08):** every payment call through an audited view writes an attempt and one outcome, and `reconstruct_order` rebuilds the payment from events alone (`services/backend/tests/backend_audit/test_be08_reconstruct.py::test_all_1000_orders_rebuild_from_reloaded_events_alone`). **Limits:** an outcome of `TIMEOUT`, `unknown` or `audit_incomplete` on a money call leaves it `uncertain` until a later event settles it, so the log shows the uncertainty but doesn't resolve it (`test_an_uncertain_capture_is_never_reported_as_absent`); and the chain limits: with no outside anchor, `verify_chain` can't find a truncated tail or a full recompute by anyone who can write the file (both pinned as known limits in `services/backend/tests/backend_audit/test_be08_audit_log.py`; the anchor is NFR-10). **Open:** real adapters, A2A-07 |
 | Information disclosure | More data than needed sent to a peer | LLM02 | **Open:** A2A-06, NFR-05 |
 | Denial of service | Hung task blocks checkout | LLM06 | **Open:** A2A-07, NFR-14 |
 | Elevation of privilege | A peer's reply treated as an instruction | LLM01, LLM03 | **Open:** NFR-03 rest. Fakes first at #19, #21 |
@@ -129,7 +129,7 @@ scope checks, not the model (decision 0002).
 |---|---|---|---|
 | Spoofing | A partner without a valid token | LLM03 | **Open:** A2A-05, A2A-06 |
 | Tampering | Injection in a partner message | LLM01 | **Open:** A2A-05, NFR-03 |
-| Repudiation | No per-partner trail | LLM03 | **Open:** #20, NFR-10 |
+| Repudiation | No per-partner trail | LLM03 | **Open:** no partner call exists yet; A2A correlation is NFR-10's (Window B P6), and A2A-05 |
 | Information disclosure | Partner reads other shoppers' data | LLM02 | **Open:** A2A-05 |
 | Denial of service | Partner floods the assistant | LLM06 | **Open:** NFR-14 |
 | Elevation of privilege | Order over the ceiling | LLM03 | **Open:** A2A-05, ceiling value `unconfirmed` (`docs/governance/tool-register.md`) |
@@ -258,5 +258,5 @@ user decided them, and the Why gives the date and the decision (decision 0011).
 | Item | Owner |
 |---|---|
 | Mapping to the OWASP Top 10 for Agentic Applications 2026 | P3, P5 |
-| Kill switches (NFR-12), audit log (NFR-10), prompt versioning and rollback drill (NFR-11) | Window B P6; #20 for the audit log |
+| Kill switches (NFR-12), audit log (NFR-10), prompt versioning and rollback drill (NFR-11). The backend audit log landed at #20 (BE-08 partial); MCP, A2A and assistant spans, the chain's outside anchor and storage remain | Window B P6, NFR-10 |
 | PRD §10 says "written and reviewed": this model has not had the user's review | The user |

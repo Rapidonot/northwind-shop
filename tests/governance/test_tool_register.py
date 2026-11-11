@@ -207,9 +207,14 @@ def test_every_makefile_target_has_a_register_row() -> None:
 
 
 def test_the_tool_the_assistant_really_offers_has_a_register_row() -> None:
-    """Compares with the code (CC-10, rewritten in the row #10 plan before implementation): every
-    tool an MCP server's registry holds, and every tool an agent is scoped to, needs a row in
-    today's table. No in-process `@tool(` may remain: since #10 every agent tool is served."""
+    """Compares with the code (CC-10, then row #20): every tool an MCP server's registry holds,
+    every tool an agent is scoped to, and every in-process tool constant needs a row in today's
+    table.
+
+    The assistant may hold no in-process `@tool(`: since #10 its tools are served by `mcp-rag`.
+    That check is narrowed to `services/assistant/src` by the user's decision under stop 5
+    (2026-11-10, row #20), because the Orders subagent's two read-only tools (#20) are in-process
+    SDK tools until `mcp-orders` lands. Each `@tool(` under `services/` must use a tool constant."""
     from northwind_common.tool_scopes import AGENT_TOOLS
     from northwind_mcp_rag.retrieve import TOOLS as RAG_TOOLS
 
@@ -217,12 +222,19 @@ def test_the_tool_the_assistant_really_offers_has_a_register_row() -> None:
     scoped = {name for row in AGENT_TOOLS.values() for names in row.values() for name in names}
     assert served, "the tool scan found nothing"
     assert scoped <= served, "an agent is scoped to a tool no server offers"
+    assistant = [path.read_text() for path in (REPO / "services/assistant/src").rglob("*.py")]
+    assert assistant, "the assistant scan found nothing"
+    assert sum(text.count("@tool(") for text in assistant) == 0, "an in-process tool came back"
     code = [path.read_text() for path in (REPO / "services").glob("*/src/**/*.py")]
-    assert sum(text.count("@tool(") for text in code) == 0, "an in-process tool came back"
+    in_process = {
+        name for text in code for name in re.findall(r'^[A-Z_]*TOOL = "([^"]+)"$', text, re.M)
+    }
+    assert {"get_fraud_assessments", "get_payment_status"} <= in_process
+    assert sum(text.count("@tool(") for text in code) == len(in_process), "a tool has another name"
     # Only this table counts: a planned row naming the same tool says nothing about today.
     today = REGISTER.read_text().partition("## Agent tools today")[2].partition("\n## ")[0]
     registered = {name for row in register_rows(today)[0] for name in row.names}
-    assert (served | scoped) - registered == set()
+    assert (served | scoped | in_process) - registered == set()
 
 
 def test_a_target_scan_sees_rules_and_skips_assignments() -> None:
