@@ -76,10 +76,11 @@ def permission(code: str, message: str) -> ToolError:
 # is fixed text, so nothing an argument or an exception carried can reach a log or a model through
 # one.
 
+# Neither message says a retry is safe: for a write, whether it is depends on the call, and row
+# #21's `WRITE_POLICY` never repeats one after either. What a model reads is tool-specific text from
+# `agents/messages.py` (#20 cassette read C2).
 TIMEOUT = transient(
-    "timeout",
-    "The call did not finish in time. It may or may not have taken effect; a retry with the same "
-    "key is safe.",
+    "timeout", "The call did not finish in time. It may or may not have taken effect."
 )
 AUDIT_UNAVAILABLE = transient(
     "audit_unavailable", "The action could not be recorded, so it was not run."
@@ -88,13 +89,13 @@ AUDIT_INCOMPLETE = transient(
     "audit_incomplete",
     "The action may have taken effect but its result was not recorded. Retry with the same key.",
 )
-# Transient and retryable, as in row #10's plan (the user's decision, N7), bounded by
+# Transient and retryable for reads, as in row #10's plan (the user's decision, N7), bounded by
 # `max_attempts` with the same idempotency key. The store records nothing for an exception, so a
-# retry runs the call again: harmless for calls that change nothing, which is all an agent gets in
-# this row. Before any agent gets a state-changing tool, an exception after the effect must not lead
-# to a second call (#21).
+# retry runs the call again: harmless for a read. A write never gets a second call after one
+# (row #21, `recovery.WRITE_POLICY`): the action is uncertain and is settled as BE-08 settles it.
 UNEXPECTED = transient(
-    "unexpected_error", "An unexpected error stopped the call. A retry with the same key is safe."
+    "unexpected_error",
+    "An unexpected error stopped the call. It may or may not have taken effect.",
 )
 
 

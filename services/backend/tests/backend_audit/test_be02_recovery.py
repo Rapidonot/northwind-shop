@@ -78,10 +78,13 @@ def test_the_new_constants_are_fixed_transient_and_retryable() -> None:
         assert error.error_category is ErrorCategory.TRANSIENT
         assert error.is_retryable is True
         assert error.code == code
+    # Row #21 (U2, #20 cassette read C2): neither promises a safe retry any more, since a write is
+    # never repeated after either.
     assert (
         UNEXPECTED.message
-        == "An unexpected error stopped the call. A retry with the same key is safe."
+        == "An unexpected error stopped the call. It may or may not have taken effect."
     )
+    assert "safe" not in UNEXPECTED.message and "safe" not in TIMEOUT.message
     assert "may or may not have taken effect" in TIMEOUT.message
     assert "nothing was changed" not in AUDIT_INCOMPLETE.message.lower()
 
