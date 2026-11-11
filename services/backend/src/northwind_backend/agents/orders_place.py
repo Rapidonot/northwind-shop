@@ -32,7 +32,7 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from functools import partial
 from typing import Any, Literal
@@ -91,14 +91,23 @@ MAX_AUTHORIZE_ATTEMPTS = 2
 READ_POLICY = RetryPolicy()
 _ORDER_ID = re.compile(r"O\d{6}", re.ASCII)
 
+# One constant per tool, so `tests/governance/test_tool_register.py` finds each decorated tool and its
+# register row.
+VALIDATE_TOOL = "validate_order"
+ADDRESS_TOOL = "use_address_on_file"
+FRAUD_TOOL = "assess_fraud"
+AUTHORIZE_TOOL = "authorize_payment"
+CAPTURE_TOOL = "capture_payment"
+CONFIRM_TOOL = "confirm_order"
+ESCALATE_TOOL = "escalate_order"
 VALIDATE, ADDRESS, FRAUD, AUTHORIZE, CAPTURE, CONFIRM, ESCALATE = (
-    "validate_order",
-    "use_address_on_file",
-    "assess_fraud",
-    "authorize_payment",
-    "capture_payment",
-    "confirm_order",
-    "escalate_order",
+    VALIDATE_TOOL,
+    ADDRESS_TOOL,
+    FRAUD_TOOL,
+    AUTHORIZE_TOOL,
+    CAPTURE_TOOL,
+    CONFIRM_TOOL,
+    ESCALATE_TOOL,
 )
 TOOLS = (VALIDATE, ADDRESS, FRAUD, AUTHORIZE, CAPTURE, CONFIRM, ESCALATE)
 TOOL_NAMES = tuple(f"mcp__{SERVER_NAME}__{name}" for name in TOOLS)
@@ -673,25 +682,43 @@ class _Handlers:
         }
 
     def tools(self) -> list[SdkMcpTool[Any]]:
-        bodies: dict[str, Callable[[Mapping[str, Any]], Awaitable[dict[str, Any]]]] = {
-            VALIDATE: self.validate_order,
-            ADDRESS: self.use_address_on_file,
-            FRAUD: self.assess_fraud,
-            AUTHORIZE: self.authorize_payment,
-            CAPTURE: self.capture_payment,
-            CONFIRM: self.confirm_order,
-            ESCALATE: self.escalate_order,
-        }
-        made: list[SdkMcpTool[Any]] = []
-        for name in TOOLS:
-            body = bodies[name]
+        @tool(VALIDATE_TOOL, DESCRIPTIONS[VALIDATE_TOOL], SCHEMA)
+        async def validate_order(args: dict[str, Any]) -> dict[str, Any]:
+            return await self.validate_order(args)
 
-            async def handler(args: dict[str, Any], body: Any = body) -> dict[str, Any]:
-                result: dict[str, Any] = await body(args)
-                return result
+        @tool(ADDRESS_TOOL, DESCRIPTIONS[ADDRESS_TOOL], SCHEMA)
+        async def use_address_on_file(args: dict[str, Any]) -> dict[str, Any]:
+            return await self.use_address_on_file(args)
 
-            made.append(tool(name, DESCRIPTIONS[name], SCHEMA)(handler))
-        return made
+        @tool(FRAUD_TOOL, DESCRIPTIONS[FRAUD_TOOL], SCHEMA)
+        async def assess_fraud(args: dict[str, Any]) -> dict[str, Any]:
+            return await self.assess_fraud(args)
+
+        @tool(AUTHORIZE_TOOL, DESCRIPTIONS[AUTHORIZE_TOOL], SCHEMA)
+        async def authorize_payment(args: dict[str, Any]) -> dict[str, Any]:
+            return await self.authorize_payment(args)
+
+        @tool(CAPTURE_TOOL, DESCRIPTIONS[CAPTURE_TOOL], SCHEMA)
+        async def capture_payment(args: dict[str, Any]) -> dict[str, Any]:
+            return await self.capture_payment(args)
+
+        @tool(CONFIRM_TOOL, DESCRIPTIONS[CONFIRM_TOOL], SCHEMA)
+        async def confirm_order(args: dict[str, Any]) -> dict[str, Any]:
+            return await self.confirm_order(args)
+
+        @tool(ESCALATE_TOOL, DESCRIPTIONS[ESCALATE_TOOL], SCHEMA)
+        async def escalate_order(args: dict[str, Any]) -> dict[str, Any]:
+            return await self.escalate_order(args)
+
+        return [
+            validate_order,
+            use_address_on_file,
+            assess_fraud,
+            authorize_payment,
+            capture_payment,
+            confirm_order,
+            escalate_order,
+        ]
 
 
 def _money(intent: PaymentIntent) -> dict[str, Any]:
