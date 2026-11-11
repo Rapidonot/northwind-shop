@@ -1,4 +1,4 @@
-"""The output check, unit by unit (NFR-03, RAG-08; row #13, decision 0014). No model, no index."""
+"""The output check, unit by unit (NFR-03, RAG-08; row #13, decision 0015). No model, no index."""
 
 from __future__ import annotations
 

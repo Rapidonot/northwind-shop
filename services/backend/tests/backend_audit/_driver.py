@@ -27,6 +27,8 @@ from northwind_backend.generate import fraud_flagged_order_ids
 from northwind_backend.ports import FraudDecision, Money, PaymentIntent, TrackingEvent
 from northwind_backend.views import AuditedCarrierPort, AuditedFraudPort, AuditedPaymentPort
 
+from ._confirm import confirm, ref_of
+
 ACTOR = "test-order-driver"
 DATA = Path(__file__).resolve().parents[4] / "data" / "backend"
 CURRENCY = {"US": "USD", "CA": "CAD", "UK": "GBP", "EU": "EUR"}
@@ -143,6 +145,9 @@ def run_order(order: Mapping[str, Any], fakes: Fakes, sink: AuditSink) -> Truth:
         payment_token=order["payment_token"],
         amount=amount_for(order),
         order_id=order_id,
+        confirmation_ref=confirm(
+            views.payment, order_id, amount_for(order), f"{order_id}:authorize"
+        ),
     )
     step("payment.authorize")
     if isinstance(authorized, ToolError):
@@ -171,7 +176,11 @@ def run_order(order: Mapping[str, Any], fakes: Fakes, sink: AuditSink) -> Truth:
     truth.shipment_id = shipped.value.shipment_id
     truth.tracking_number = shipped.value.tracking_number
 
-    captured = views.payment.capture(idempotency_key=f"{order_id}:capture", intent_id=intent_id)
+    captured = views.payment.capture(
+        idempotency_key=f"{order_id}:capture",
+        intent_id=intent_id,
+        confirmation_ref=ref_of(views.payment, intent_id),
+    )
     step("payment.capture")
     assert isinstance(captured, Ok), captured
 
@@ -223,11 +232,18 @@ def setup_captured(order: Mapping[str, Any], fakes: Fakes, sink: AuditSink, *, a
         payment_token=order["payment_token"],
         amount=amount_for(order),
         order_id=order_id,
+        confirmation_ref=confirm(
+            views.payment, order_id, amount_for(order), f"{order_id}:authorize"
+        ),
     )
     assert isinstance(authorized, Ok), authorized
     intent: PaymentIntent = authorized.value
     assert isinstance(
-        views.payment.capture(idempotency_key=f"{order_id}:capture", intent_id=intent.intent_id),
+        views.payment.capture(
+            idempotency_key=f"{order_id}:capture",
+            intent_id=intent.intent_id,
+            confirmation_ref=ref_of(views.payment, intent.intent_id),
+        ),
         Ok,
     )
     return intent.intent_id

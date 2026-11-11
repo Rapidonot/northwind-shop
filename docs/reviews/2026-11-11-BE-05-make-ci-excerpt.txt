@@ -1,0 +1,17 @@
+All checks passed!
+Success: no issues found in 251 source files
+scan clean: 0 finding(s) in evals/contexts, evals/fixtures, evals/baselines, docs/reviews/RAG-12-eval-review.md, data/enrichment, data/embeddings, cassettes, /Users/rapido/.northwind/ledger.jsonl, .llm-proxy-log [regex only (no readable key file), 7 canaries]
+========= 4694 passed, 977 deselected, 22 xfailed in 733.36s (0:12:13) =========
+ Test Files  5 passed (5)
+      Tests  54 passed (54)
+=============== 282 passed, 5411 deselected in 891.96s (0:14:51) ===============
+eval-integrity passed against origin/main
+  ok   recall@5      baseline 0.954  current 0.954
+  ok   mrr           baseline 0.881  current 0.881
+  ok   groundedness  baseline 0.981  current 0.981
+  ok   relevance     baseline 0.935  current 0.935
+  ok   false_refusal baseline 0.016  current 0.016
+  ok   behaviour_ok  baseline 0.980  current 0.980
+  ok   citation_ok   baseline 0.960  current 0.960
+  answers replayed 100/100, stale 0
+eval-gate passed

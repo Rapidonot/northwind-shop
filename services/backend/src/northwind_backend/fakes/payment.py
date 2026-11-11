@@ -11,14 +11,18 @@ refund cap a per-order cap: a refund split into small parts can't pass it. The c
 and a currency with no cap can't be refunded. It is the fake's own deterministic limit: the PAY-06
 hook and its approval route are later work.
 
-Hard rule 9's portal confirmation is not enforced here, and `authorize` and `capture` have no limit
-beyond `MAX_AMOUNT_MINOR`. Whether that belongs on the port or on a named layer above it is open,
-and has to be decided before the PAY-01 contract suite locks the behaviour in.
+Hard rule 9 (row #21, decision 0014): `authorize` and `capture` need a confirmation reference from
+the portal control (`northwind_backend.confirmations`, whose rule is stated there), and
+`authorize` has a deterministic per-order limit per currency (`DEFAULT_ORDER_LIMITS`, placeholders
+accepted by the user). Both are checked inside the idempotent effect.
 
-Scopes belong to the instance, and each instance has its own intents, so this can't yet give two
-agents narrow views of one payment. The row that first wires an agent needs per-caller views, which
-must share the intents, the idempotency store and the caps: the one-intent-per-order rule and the
-refund cap hold only within one instance.
+Scopes belong to the instance; everything else lives on a `PaymentState`, which several instances
+can share (P3): the intents, the idempotency store and its lock, the effects, the caps, the limits
+and the confirmation book. `PaymentFake()` makes a private state.
+
+Soft declines: by default a soft-decline token declines every attempt. With
+`soft_decline_retry_approves`, the issuer approves the next attempt for the same order under a new
+key, which is how the Orders agent's routine retry succeeds on the fakes (row #21, Q1).
 """
 
 from __future__ import annotations
@@ -28,11 +32,13 @@ from collections.abc import Mapping
 from dataclasses import replace
 from types import MappingProxyType
 
+from northwind_backend.confirmations import ConfirmationBook, check_reference
 from northwind_backend.errors import Ok, Result, ToolError, business, validation
 from northwind_backend.fakes._base import (
     CARD_DATA_REFUSED,
     Effect,
     FakeService,
+    FakeState,
     card_data_in,
     check_money,
     check_order_id,
@@ -43,6 +49,10 @@ from northwind_backend.ports import Money, PaymentIntent, PaymentStatus
 PAYMENT_SCOPES = frozenset({"authorize", "capture", "void", "refund", "status"})
 DEFAULT_REFUND_CAPS: Mapping[str, int] = MappingProxyType(
     {"USD": 15_000, "CAD": 20_000, "GBP": 12_000, "EUR": 14_000}
+)
+# Above every generated order's live-price total (row #21 plan, Q2): placeholders, not final values.
+DEFAULT_ORDER_LIMITS: Mapping[str, int] = MappingProxyType(
+    {"USD": 200_000, "CAD": 270_000, "GBP": 160_000, "EUR": 210_000}
 )
 
 SANDBOX_APPROVED = "tok_sandbox_ok"
@@ -70,18 +80,52 @@ ORDER_ALREADY_AUTHORIZED = business(
 )
 OVER_CAP = business("refund_over_cap", "The refund is over the automatic cap and needs approval.")
 NO_CAP = business("no_refund_cap", "No refund cap is set for this currency.")
+OVER_ORDER_LIMIT = business(
+    "over_order_limit", "The amount is over the per-order limit and needs a person to approve it."
+)
+NO_ORDER_LIMIT = business("no_order_limit", "No per-order limit is set for this currency.")
+
+
+class PaymentState(FakeState):
+    """The provider's side of the sandbox, shared by every `PaymentFake` built on it."""
+
+    def __init__(
+        self,
+        *,
+        refund_caps: Mapping[str, int] = DEFAULT_REFUND_CAPS,
+        order_limits: Mapping[str, int] = DEFAULT_ORDER_LIMITS,
+        soft_decline_retry_approves: bool = False,
+    ) -> None:
+        super().__init__()
+        self.caps = MappingProxyType(dict(refund_caps))
+        self.order_limits = MappingProxyType(dict(order_limits))
+        self.soft_decline_retry_approves = soft_decline_retry_approves
+        self.intents: dict[str, PaymentIntent] = {}
+        self.confirmations = ConfirmationBook()
+        self.authorized_with: dict[str, str] = {}  # intent ID -> the reference that authorized it
+        self.soft_declined: set[str] = set()  # order IDs with a recorded soft decline
+
+    def confirmation_of(self, intent_id: str) -> str | None:
+        """The issuer's side and tests only; never handed to an agent or a model."""
+        return self.authorized_with.get(intent_id)
 
 
 class PaymentFake(FakeService):
     def __init__(
         self,
         *,
-        refund_caps: Mapping[str, int] = DEFAULT_REFUND_CAPS,
+        state: PaymentState | None = None,
+        refund_caps: Mapping[str, int] | None = None,
         scopes: frozenset[str] = PAYMENT_SCOPES,
     ) -> None:
-        super().__init__(scopes)
-        self._caps = MappingProxyType(dict(refund_caps))
-        self._intents: dict[str, PaymentIntent] = {}
+        if state is not None and refund_caps is not None:
+            raise ValueError("refund caps belong to the state; set them there")
+        if state is None:
+            state = PaymentState(refund_caps=refund_caps or DEFAULT_REFUND_CAPS)
+        super().__init__(scopes, state)
+        self.state = state
+        self._caps = state.caps
+        self._intents = state.intents
 
     def authorize(
         self,
@@ -90,19 +134,31 @@ class PaymentFake(FakeService):
         payment_token: str,
         amount: Money,
         order_id: str,
+        confirmation_ref: str,
         dry_run: bool = False,
     ) -> Result[PaymentIntent]:
         refused = (
-            self._admit("authorize", idempotency_key, payment_token, order_id)
+            self._admit("authorize", idempotency_key, payment_token, order_id, confirmation_ref)
             or _check_token(payment_token)
             or check_order_id(order_id)
             or check_money(amount)
+            or check_reference(confirmation_ref)
         )
         if refused is not None:
             return refused
 
         def effect(dry: bool) -> Result[PaymentIntent]:
-            declined = _decline_for(payment_token)
+            limit = self.state.order_limits.get(amount.currency)
+            if limit is None:
+                return NO_ORDER_LIMIT
+            if amount.amount_minor > limit:
+                return OVER_ORDER_LIMIT
+            unconfirmed = self.state.confirmations.check_authorize(
+                confirmation_ref, order_id, amount
+            )
+            if unconfirmed is not None:
+                return unconfirmed
+            declined = self._decline(payment_token, order_id, dry)
             if declined is not None:
                 return declined
             if self._has_live_intent(order_id):
@@ -118,6 +174,8 @@ class PaymentFake(FakeService):
             )
             if dry:
                 return Ok(intent)
+            self.state.confirmations.use(confirmation_ref)
+            self.state.authorized_with[intent_id] = confirmation_ref
             return self._save("authorize", intent, amount.amount_minor)
 
         request = {
@@ -125,6 +183,7 @@ class PaymentFake(FakeService):
             "order_id": order_id,
             "amount_minor": amount.amount_minor,
             "currency": amount.currency,
+            "confirmation_ref": confirmation_ref,
         }
         return self._commit("authorize", idempotency_key, request, dry_run, effect)
 
@@ -133,13 +192,15 @@ class PaymentFake(FakeService):
         *,
         idempotency_key: str,
         intent_id: str,
+        confirmation_ref: str,
         amount: Money | None = None,
         dry_run: bool = False,
     ) -> Result[PaymentIntent]:
         refused = (
-            self._admit("capture", idempotency_key, intent_id)
+            self._admit("capture", idempotency_key, intent_id, confirmation_ref)
             or _check_intent(intent_id)
             or (None if amount is None else check_money(amount))
+            or check_reference(confirmation_ref)
         )
         if refused is not None:
             return refused
@@ -158,6 +219,14 @@ class PaymentFake(FakeService):
                 return CURRENCY_MISMATCH
             if captured > intent.authorized_minor:
                 return OVER_AUTHORIZED
+            unconfirmed = self.state.confirmations.check_capture(
+                confirmation_ref,
+                self.state.authorized_with.get(intent_id),
+                captured,
+                intent.currency,
+            )
+            if unconfirmed is not None:
+                return unconfirmed
             updated = replace(intent, status=PaymentStatus.CAPTURED, captured_minor=captured)
             return self._apply("capture", updated, captured, dry)
 
@@ -165,6 +234,7 @@ class PaymentFake(FakeService):
             "intent_id": intent_id,
             "amount_minor": None if amount is None else amount.amount_minor,
             "currency": None if amount is None else amount.currency,
+            "confirmation_ref": confirmation_ref,
         }
         return self._commit("capture", idempotency_key, request, dry_run, effect)
 
@@ -240,6 +310,17 @@ class PaymentFake(FakeService):
             return bad
         intent = self._intents.get(intent_id)
         return UNKNOWN_INTENT if intent is None else Ok(intent)
+
+    def _decline(self, token: str, order_id: str, dry: bool) -> ToolError | None:
+        declined = _decline_for(token)
+        if declined is not SOFT_DECLINE:
+            return declined
+        # A new key reached the effect, so this is a new attempt, not a replay.
+        if self.state.soft_decline_retry_approves and order_id in self.state.soft_declined:
+            return None
+        if not dry:
+            self.state.soft_declined.add(order_id)
+        return declined
 
     def _has_live_intent(self, order_id: str) -> bool:
         return any(

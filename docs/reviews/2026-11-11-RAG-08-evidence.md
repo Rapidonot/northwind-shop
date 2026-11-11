@@ -125,7 +125,7 @@ Raw, verbatim, appended to `docs/reviews/2026-11-11-RAG-08-security-review.md`.
 - **N3:** positions now hold when a rewritten marker is longer than the original.
 - **N4:** a marker formed by a cut is rescanned.
 - **L6:** the pin also catches `claude_agent_sdk.query`, `ClaudeSDKClient` and submodule imports.
-- **N5:** decision 0014 and threat-model row 194 now describe the current fold and the view-width windows, and
+- **N5:** decision 0015 and threat-model row 194 now describe the current fold and the view-width windows, and
   record the residuals.
 
 **Final mutants: 37 of 37 killed on the final code**
@@ -266,7 +266,7 @@ Raw, verbatim, appended to `docs/reviews/2026-11-11-RAG-08-security-review.md`, 
 
 - **P3-4: class 5's vouching is simplified.** A policy duration passes if the same duration appears in any
   public, non-internal document returned this turn. The document-side stem and heading matching is gone, and
-  the answer-side policy-word gate stays. Decision 0014 now says class 5 stops relayed or injected numbers, and
+  the answer-side policy-word gate stays. Decision 0015 now says class 5 stops relayed or injected numbers, and
   that a real number on the wrong term is #13b's judge's.
 - **P3-3(c)/(d):** on the answer side, the nearest heading above (tracked as lines complete) and the previous
   sentence in the same paragraph count as policy context. A previous sentence longer than 16L fails closed.
@@ -348,7 +348,7 @@ before producing anything; the retry is the pass.
 **Over-blocking, as a whole-answer diff against `9fc63c9`:** no change in any of the 243 recorded answers or any
 trusted fixture field.
 
-**Logged as residuals,** in decision 0014 and PROGRESS (owner hardening unless named):
+**Logged as residuals,** in decision 0015 and PROGRESS (owner hardening unless named):
 - P4-4's wording forms (`365days`, `2 yrs`, `48 hrs`, U+2010/U+2011 hyphens);
 - P4-6(b) (`'s` used for "is");
 - P4-7 (the portal collapses newlines, so the shopper does not see the paragraph lines the check uses; the rule
@@ -428,6 +428,15 @@ rule).**
 **`make check` at the P5-1 fix:** 1,548 passed, 0 failed. The e2e replay gives 43 passed.
 
 **AC11:** 66 characters reach the check before the first release (p50); CPU per delta is 0.10 ms (p50).
+
+## The user's decision after pass 5 (2026-11-11)
+
+**(A): keep `27ca160` with no further security pass.**
+- The PR body, `advisor-reviewer`'s input and the gate report all say that P5-1's fix is not security-reviewed.
+- Residuals P5-2 to P5-7 and P5-9 go to `advisor-reviewer`.
+- #21 merges first. This row then merges `origin/main` (no rebase), renumbers its decision 0014 to 0015, and resolves
+  `PROGRESS.md`, `docs/governance/*` and `tests/governance/*`. It stops to show the resolution before committing
+  the merge.
 
 ## Pre-row tests changed (for the user's read)
 

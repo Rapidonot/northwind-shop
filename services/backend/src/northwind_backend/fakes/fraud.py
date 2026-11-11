@@ -1,7 +1,9 @@
 """FraudPort fake. Scores come from a hash of the IDs, so the same order always scores the same.
 
 Orders in `flagged_order_ids` are sent to review, which is how the generated fraud-flag orders reach
-it. An order is assessed once: a second key for it is a business error.
+it. An order is assessed once: a second key for it is a business error. The assessments, the
+flagged set and the idempotency store live on a `FraudState`, which several instances can share, so
+"assessed once" holds across instances (row #21, P3).
 """
 
 from __future__ import annotations
@@ -15,6 +17,7 @@ from northwind_backend.fakes._base import (
     CARD_DATA_REFUSED,
     Effect,
     FakeService,
+    FakeState,
     card_data_in,
     check_order_id,
     matches,
@@ -31,16 +34,29 @@ BAD_SHOPPER = validation("invalid_shopper_id", "The shopper ID is malformed.")
 ALREADY_ASSESSED = business("already_assessed", "This order has already been assessed.")
 
 
+class FraudState(FakeState):
+    def __init__(self, *, flagged_order_ids: Iterable[str] = ()) -> None:
+        super().__init__()
+        self.flagged = frozenset(flagged_order_ids)
+        self.assessments: dict[str, FraudAssessment] = {}
+
+
 class FraudFake(FakeService):
     def __init__(
         self,
         *,
-        flagged_order_ids: Iterable[str] = (),
+        state: FraudState | None = None,
+        flagged_order_ids: Iterable[str] | None = None,
         scopes: frozenset[str] = FRAUD_SCOPES,
     ) -> None:
-        super().__init__(scopes)
-        self._flagged = frozenset(flagged_order_ids)
-        self._assessments: dict[str, FraudAssessment] = {}
+        if state is not None and flagged_order_ids is not None:
+            raise ValueError("flagged orders belong to the state; set them there")
+        if state is None:
+            state = FraudState(flagged_order_ids=flagged_order_ids or ())
+        super().__init__(scopes, state)
+        self.state = state
+        self._flagged = state.flagged
+        self._assessments = state.assessments
 
     def assess(
         self, *, idempotency_key: str, order_id: str, shopper_id: str, dry_run: bool = False

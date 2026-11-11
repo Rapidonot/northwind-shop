@@ -1,5 +1,5 @@
 """The output check: what the model writes is checked before any of it reaches the shopper
-(NFR-03, RAG-08; decision 0014).
+(NFR-03, RAG-08; decision 0015).
 
 Retrieved text can carry an attacker's words to every shopper who asks about a product, and a prompt
 rule only shapes what the model does. This check is the control: it blocks by payload class,
@@ -238,7 +238,7 @@ def _p(cls: str, pattern: str, exempt: str | None = None, *, exact: bool = False
     return Pattern(cls, re.compile(pattern), exempt, exact)
 
 
-# Fixed with the row #13 plan before any recording; a change after one is stop 7 (decision 0014).
+# Fixed with the row #13 plan before any recording; a change after one is stop 7 (decision 0015).
 PATTERNS: tuple[Pattern, ...] = (
     # 1. Promotions come only from live tools (hard rule 2): class-level, no exemption.
     _p("promotion", r"discount"),

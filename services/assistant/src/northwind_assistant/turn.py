@@ -3,7 +3,7 @@
 Each message stands alone: conversation memory is SA-05. The server searches on the shopper's
 message first, so the first model call can already answer (decision 0007). Every piece of text the
 model writes goes through the output check before it leaves (`output_check`, NFR-03, decision
-0014): `stream_answer` is the only caller of `run_turn`, which checks nothing (a test pins it).
+0015): `stream_answer` is the only caller of `run_turn`, which checks nothing (a test pins it).
 Citations are the `[ID]` markers in the text the shopper is left seeing that match a source
 returned this turn, so an invented ID never becomes a citation (hard rule 5). Failures surface only
 as fixed codes: no exception or upstream text goes further.

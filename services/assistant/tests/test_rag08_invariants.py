@@ -1,5 +1,5 @@
 """RAG-08 and NFR-03 (row #13): invariants and exemption rules of the output check, from the
-criteria and decision 0014. Pure functions; no model, no index, no recording."""
+criteria and decision 0015. Pure functions; no model, no index, no recording."""
 
 from __future__ import annotations
 
@@ -110,7 +110,7 @@ def test_removing_an_invented_marker_leaves_the_same_text_however_it_is_split(si
 def test_a_phone_number_is_blocked_wherever_it_falls_in_the_sentence(
     number: str, tail: str
 ) -> None:
-    """Class 2: every phone number is blocked (decision 0014), even one ending a sentence."""
+    """Class 2: every phone number is blocked (decision 0015), even one ending a sentence."""
     text = f"Call {number}{tail}"
     assert FIXED_SENTENCES["link"] in check_text(text)
     assert number not in check_text(text)

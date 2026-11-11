@@ -40,7 +40,15 @@ from typing import Any, Literal, Protocol
 
 from northwind_backend.carriers import CARRIERS, TRACKING_NUMBER
 from northwind_backend.errors import Ok, ToolError
-from northwind_backend.ports import FraudAssessment, PaymentIntent, Shipment, Tracking
+from northwind_backend.ports import (
+    FraudAssessment,
+    Order,
+    PaymentIntent,
+    PriceQuote,
+    Shipment,
+    StockLevel,
+    Tracking,
+)
 from northwind_common.cards import contains_cvv, contains_pan
 
 GENESIS = "0" * 64
@@ -66,14 +74,31 @@ _ID_PATTERNS: dict[str, re.Pattern[str]] = {
     "code": _CODE,
     "errorCategory": _CODE,
     "last_status": _CODE,
+    "escalation": _CODE,
+    "variant_id": re.compile(r"P\d{4}(?:-[A-Z0-9]{1,16}){1,4}", re.ASCII),
 }
 _MINOR_FIELDS = frozenset({"amount_minor", "authorized_minor", "captured_minor", "refunded_minor"})
-_COUNT_FIELDS = frozenset({"score", "scans", "attempts", "steps_ok", "extra_args"})
+_COUNT_FIELDS = frozenset(
+    {"score", "scans", "attempts", "steps_ok", "extra_args", "on_hand", "lines"}
+)
 # A field name is written only if it is a short code-style name (security review M1).
 _FIELD_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,47}", re.ASCII)
 # Actors and correlation IDs are code-chosen labels, never request text (security review L3).
 _LABEL = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,95}", re.ASCII)
-_BOOL_FIELDS = frozenset({"dry_run", "ok", "empty", "escalated", "isRetryable"})
+_BOOL_FIELDS = frozenset({"dry_run", "ok", "empty", "escalated", "isRetryable", "address_on_file"})
+# An order is written by these fields only: never its token, delivery address or lines (row #21).
+_ORDER_FIELDS = (
+    "order_id",
+    "shopper_id",
+    "region",
+    "status",
+    "intent_id",
+    "amount_minor",
+    "currency",
+    "escalation",
+    "address_on_file",
+    "dry_run",
+)
 
 
 def card_data(value: object) -> bool:
@@ -140,7 +165,12 @@ def input_refs(inputs: Mapping[str, object]) -> dict[str, Any]:
 
 
 def _value_ref(value: object) -> dict[str, Any]:
-    if isinstance(value, PaymentIntent | Shipment | FraudAssessment):
+    if isinstance(value, Order):
+        return {
+            **{name: _ref(name, getattr(value, name)) for name in _ORDER_FIELDS},
+            "lines": len(value.lines),
+        }
+    if isinstance(value, PaymentIntent | Shipment | FraudAssessment | PriceQuote | StockLevel):
         return {f.name: _ref(f.name, getattr(value, f.name)) for f in fields(value)}
     if isinstance(value, Tracking):
         last = value.events[-1].status if value.events else None

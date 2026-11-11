@@ -34,7 +34,7 @@ for anything in the repo; see the build-time row.
 | Ledger | No | No | No | No |
 | Eval items | Window, through `make eval-live` | Yes | Yes, the query | Query vector only, not stored |
 | Answer key | No | Yes, in fixtures | No | No |
-| Synthetic shopper data | **Window, since #20:** order, intent, assessment and shopper IDs, intent status, currency and minor amounts, and fraud decisions, scores and reasons, through the Orders subagent's two read-only tools. No names, emails, addresses or tokens | Yes, in `data/backend/`, and in the `backend-audit` cassette suite once recorded | No | No |
+| Synthetic shopper data | **Window, since #20:** order, intent, assessment and shopper IDs, intent status, currency and minor amounts, and fraud decisions, scores and reasons, through the Orders subagent's two read-only tools. **Since #21, placement:** the order ID, validation issue codes and line count, fraud decisions, scores and reasons, and payment, order and escalation statuses and reason codes, through its seven placement tools; no amount, intent, assessment or shopper ID, token, address, confirmation reference or correlation ID (`services/backend/tests/orders_place/test_be05_place_scripted.py::test_the_model_sees_no_amount_id_token_address_or_reference`). No names, emails, addresses or tokens | Yes, in `data/backend/`, in the `backend-audit` cassette suite (12 cassettes, recorded in #20, PR #35), and in the `backend-replay` suite (5,959 cassettes, recorded in #21) | No | No |
 | Audit events | No | No: written in memory or to a caller's JSONL path in tests | No | No |
 | Build-time session context | **Yes, through Claude Code, on the Max subscription** | Not applicable | No | Not applicable |
 

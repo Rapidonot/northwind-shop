@@ -28,6 +28,7 @@ from northwind_backend.fakes.payment import PAYMENT_SCOPES, SANDBOX_APPROVED, Pa
 from northwind_backend.ports import Money
 from northwind_backend.views import AuditedPaymentPort
 
+from ._confirm import confirm
 from ._driver import fixed_clock, run_all
 
 pytestmark = pytest.mark.req("BE-08")
@@ -135,7 +136,11 @@ def test_a_planted_pan_in_a_view_argument_never_reaches_the_log() -> None:
     sink = InMemoryAuditSink()
     view = AuditedPaymentPort(PaymentFake(), ctx(sink), allowed=PAYMENT_SCOPES)
     view.authorize(
-        idempotency_key=PAN, payment_token=PAN, amount=Money(int(PAN), "USD"), order_id=PAN
+        idempotency_key=PAN,
+        payment_token=PAN,
+        amount=Money(int(PAN), "USD"),
+        order_id=PAN,
+        confirmation_ref=confirm(view, PAN, Money(int(PAN), "USD"), PAN),
     )
     text = "\n".join(json.dumps(e.to_dict()) for e in sink.read_all())
     assert PAN not in text
@@ -297,6 +302,7 @@ def _authorize(view: AuditedPaymentPort, key: str = "O000001:authorize") -> Any:
         payment_token=SANDBOX_APPROVED,
         amount=Money(5000, "USD"),
         order_id="O000001",
+        confirmation_ref=confirm(view, "O000001", Money(5000, "USD"), key),
     )
 
 

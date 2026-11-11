@@ -1,5 +1,9 @@
 # RAG-08 security review, pass 1 (raw, verbatim), 2026-11-11
 
+**Renumbering note (2026-11-11):** after row #21 merged first with its own decision 0014, this row's decision was
+renumbered to 0015 (the user). Every "0014" that referred to this row's decision in the reports below now reads
+"0015"; that is the only change made to the reports' text.
+
 Reviewer: `security-reviewer`. Input: `/tmp/claude-502/northwind-security-RAG-08.diff` (working tree, base
 `201c97a`, 23 files). The report as returned:
 
@@ -36,7 +40,7 @@ I'm read-only and could not run anything. Every trace below was done by hand aga
 
 ### H3. Invisible combining characters are not removed from the matching view
 - **Where:** OC:65-69 (`_fold_char` drops only category `Cf`).
-- **Rule:** hard rule 6 / NFR-03. Decision 0014 §2 says "format characters (U+200B and the like) removed".
+- **Rule:** hard rule 6 / NFR-03. Decision 0015 §2 says "format characters (U+200B and the like) removed".
 - **What is wrong:** variation selectors U+FE00–FE0F and U+E0100–E01EF, the combining grapheme joiner U+034F, and the Mongolian free variation selectors U+180B–180D are category `Mn`. NFKC keeps them, so the fold leaves them in. Browsers render them as nothing.
 - **How it fails:** `"d️iscount"` and `"northwind-deals️.net"` match no pattern, no trigger and no `_DOMAIN`. They are released whole, and the shopper sees "discount" or the domain. mcp-rag's NFKC keeps these characters in review text too, so a planted review can carry them.
 - **Confirmed vs unconfirmed:** the gap in the code is confirmed. Whether the model copies these characters is not.
@@ -97,7 +101,7 @@ I'm read-only and could not run anything. Every trace below was done by hand aga
 - **Where:** OC:52-62, OC:221.
 - **Not folded:** dotless ı (U+0131), İ (which casefolds to i plus U+0307), Latin ɑ, and Armenian օ, so "dıscount" passes.
 - **Domains:** `northwind-deals。net` uses U+3002, which IDNA treats as a dot, and halfwidth U+FF61 normalises to it. Neither matches `_DOMAIN`. `northwind-deals[.]net` passes too.
-- **Status:** within the decided fold scope, but the residual risk is not recorded in decision 0014 or the threat model.
+- **Status:** within the decided fold scope, but the residual risk is not recorded in decision 0015 or the threat model.
 
 ### L5. Some invented markers are not removed (hard rule 5)
 - **Not removed:**
@@ -268,7 +272,7 @@ I am read-only and could not run anything, so every trace below was done by hand
 ## New findings
 
 ### N1. High: the M4 lookback counts raw characters, but patterns are bounded in folded-view characters
-- **Where:** OC:461 (`self._consumed - 2 * L`), together with OC:504 (the trigger window, also counted in raw characters, already there before this row). Decision 0014 §3 (lines 32-33) bounds pattern width in view characters.
+- **Where:** OC:461 (`self._consumed - 2 * L`), together with OC:504 (the trigger window, also counted in raw characters, already there before this row). Decision 0015 §3 (lines 32-33) bounds pattern width in view characters.
 - **Rule:** hard rules 2 and 6, NFR-03.
 - **What is wrong:** default-ignorables, and now also Mn marks, fold to zero characters. A match only a few view characters wide can therefore span more than 2L raw characters.
 - **How it fails** (traced): `"Use code" + "​"*130 + " SAVE20 today."`, in 4-character deltas.
@@ -295,7 +299,7 @@ I am read-only and could not run anything, so every trace below was done by hand
 - **Fix:** resume the scan from `raw.rfind("[", self._consumed, start)` when that finds a `[`, otherwise from `start`.
 
 ### N5. Low, documentation
-- Decision 0014 §2 (/Users/rapido/Projects/northwind-shop-b/docs/decisions/0014-output-control.md:27-28) still describes the old fold: NFKC, then Cf only, then Cyrillic and Greek.
+- Decision 0015 §2 (/Users/rapido/Projects/northwind-shop-b/docs/decisions/0015-output-control.md:27-28) still describes the old fold: NFKC, then Cf only, then Cyrillic and Greek.
 - So does /Users/rapido/Projects/northwind-shop-b/docs/governance/threat-model.md:194.
 - The L4 residual (`[.]`) and the N1 view-versus-raw width assumption are not recorded in either.
 
@@ -331,13 +335,13 @@ report as returned:
 
 ## RAG-08 security re-review, pass 3 (scoped), head 1876ce1
 
-Scope: the diff at /tmp/claude-502/northwind-security-RAG-08-pass3.diff, plus the current files /Users/rapido/Projects/northwind-shop-b/services/assistant/src/northwind_assistant/output_check.py (OC) and turn.py. Before reviewing I re-read the CLAUDE.md hard rules, decision 0001, decision 0014, pass 1's M2 and M3, pass 2's N1, M4, N3, N4, N5 and L6, and the user's answers in the evidence file. I could not run anything, so every trace below was done by hand from the code.
+Scope: the diff at /tmp/claude-502/northwind-security-RAG-08-pass3.diff, plus the current files /Users/rapido/Projects/northwind-shop-b/services/assistant/src/northwind_assistant/output_check.py (OC) and turn.py. Before reviewing I re-read the CLAUDE.md hard rules, decision 0001, decision 0015, pass 1's M2 and M3, pass 2's N1, M4, N3, N4, N5 and L6, and the user's answers in the evidence file. I could not run anything, so every trace below was done by hand from the code.
 
 ### Findings, most severe first
 
 **P3-1. High. A word is not checked whole after a cut inside it, so a bare domain or email gets through. This is a regression from the `_words_to` change.**
 - **Where:** OC:530 (`self._words_to = min(self._words_to, start)`) together with OC:665-675, where the word loop starts at `max(_consumed, _words_to)`.
-- **Rule:** hard rule 6 / NFR-03, link class (decision 0014 §5: "any word that is a bare domain").
+- **Rule:** hard rule 6 / NFR-03, link class (decision 0015 §5: "any word that is a bare domain").
 - **What is wrong:** a marker may contain whitespace (`[ X1]`, `[X1, Y2]`), so the word in front of it can be complete and checked before the marker closes. When the marker is cut, `_words_to` moves back only to the cut start, which is in the middle of the word. Only the tail of the joined word is ever checked.
 - **Trace,** two deltas: `"Visit northwind-deals[ X"` then `"1].net now."`.
   1. Delta 1 checks `northwind-deals[`. It is not a link, so `_words_to` becomes 22. Nothing is released yet, so `_consumed` is 0.
@@ -443,7 +447,7 @@ Scope: the diff at /tmp/claude-502/northwind-security-RAG-08-pass3.diff, plus th
    - **N3: closed.** `moved()` is correct for a longer rewrite and the deltas stay contiguous.
    - **N4: closed.** The rescan from `rfind("[")` terminates.
    - **L6: mostly closed** (P3-8).
-   - **N5:** decision 0014 §2 and threat-model.md:194 now describe the new fold.
+   - **N5:** decision 0015 §2 and threat-model.md:194 now describe the new fold.
 
 ### Checked, no findings
 - Hard rule 1: not applicable to this change.
@@ -478,7 +482,7 @@ ended on a network error before producing anything; this is the report of the re
 
 **Scope.** I read the diff at /tmp/claude-502/northwind-security-RAG-08-pass4.diff (`1876ce1..9fc63c9 -- services/`) and the whole current /Users/rapido/Projects/northwind-shop-b/services/assistant/src/northwind_assistant/output_check.py (OC below). Before reviewing I re-read:
 - the CLAUDE.md hard rules and decision 0001;
-- decision 0014 §3 and §5;
+- decision 0015 §3 and §5;
 - pass 3 in full, and the two evidence sections you named.
 
 I also read tools.py:84-93 and mcp-rag render.py:23,42 (how sources are parsed), apps/portal/src/Chat.tsx:68-70 (how answers are rendered) and data/fixtures/documents.jsonl and reviews.jsonl (as data). I am read-only and could not run anything, so every trace below was done by hand.
@@ -491,7 +495,7 @@ I also read tools.py:84-93 and mcp-rag render.py:23,42 (how sources are parsed),
 
 **P4-1. High. Class 5 vouches for a number that no document states: only the last word of a spelled compound number is read.**
 - **Where:** OC:138-141 (`DURATION`), OC:303-310 (`durations`), OC:544-555 (`_vouched`).
-- **Rule:** hard rule 6 / RAG-08. Decision 0014 §5: the duration passes only "if the same duration appears" in a public document.
+- **Rule:** hard rule 6 / RAG-08. Decision 0015 §5: the duration passes only "if the same duration appears" in a public document.
 - **What is wrong:** in `sixty-five days`, the regex fails at `sixty` (the next thing is a word, not a unit). It then matches at `five`, because there is a `\b` after the hyphen. So the answer's duration is read as (5, day).
 - **How it fails** (traced): "You can return any item within sixty-five days."
   - The sentence has the stem "return", so it is policy.
@@ -554,7 +558,7 @@ I also read tools.py:84-93 and mcp-rag render.py:23,42 (how sources are parsed),
   - Each cut walks back about 8,000 characters twice, then refolds the 8,000-character word.
   - That is about 8M `_fold_char` calls. I estimate more than 10 s of blocked event loop, and it fits in max_tokens 8192.
   - `test_p3_2c` uses a one-character prefix, so it does not cover this.
-- **Under your rules:** a bug in the code as decided. Decision 0014 §3 says each delta costs time in proportion to its own length. This is a regression from 7fd8fea.
+- **Under your rules:** a bug in the code as decided. Decision 0015 §3 says each delta costs time in proportion to its own length. This is a regression from 7fd8fea.
 - **Fix:** keep the start of the word that holds `_consumed` as `_consumed` moves, instead of walking back. Re-check only a bounded window around the join: `_DOMAIN` is at most 15 characters wide, and the care-address exception only applies to a word that short.
 
 **P4-6. Medium. Confirmation wordings next to the ones just added still pass.**
@@ -563,7 +567,7 @@ I also read tools.py:84-93 and mcp-rag render.py:23,42 (how sources are parsed),
   - "Your order has now been placed."
   - "Your refund has just been issued."
   - "has finally / also / successfully been …"
-  - **Under your rules:** a bug in the code as decided if "one adverb from a fixed list" (0014 §5) also covers the slot inside "has … been". That is how I read it. If you meant only "already" there, it is a residual.
+  - **Under your rules:** a bug in the code as decided if "one adverb from a fixed list" (0015 §5) also covers the slot inside "has … been". That is how I read it. If you meant only "already" there, it is a residual.
   - **Width if fixed:** at most 63 (≤ 64).
 - **(b) `'s` used for "is":** "Your order's confirmed", "Your payment's processed" and "Your refund's approved" match no pattern. `refund_authority` needs whitespace after "refund".
   - **Under your rules:** a residual (not on your list).
@@ -669,7 +673,7 @@ services/`). The report as returned:
 - turn.py:225-261, to see how deltas reach the check;
 - the pass-4 raw report;
 - the two evidence sections you named;
-- decision 0014 §5.
+- decision 0015 §5.
 
 Before reviewing I re-read the CLAUDE.md hard rules and decision 0001. I am read-only, so every trace below was done by hand.
 
@@ -688,7 +692,7 @@ Before reviewing I re-read the CLAUDE.md hard rules and decision 0001. I am read
   - OC:183-185 (`_CORE`);
   - OC:829 (only tokens `_CORE` matches are seen);
   - OC:841 (`core.startswith("[")` means "citation, skip").
-- **Rule:** hard rule 6 / RAG-08; decision 0014 §5, "fail closed on numbers".
+- **Rule:** hard rule 6 / RAG-08; decision 0015 §5, "fail closed on numbers".
 - **What is wrong:**
   - `_CORE`'s core cannot contain `* _ ~ " ' ( ) { }` or curly quotes. The trailing class must then reach whitespace or the end. So a token with one of these characters *inside* it, or followed by `-`, matches nothing at all.
   - `(?<!\S)` also stops a match from starting later inside that token.

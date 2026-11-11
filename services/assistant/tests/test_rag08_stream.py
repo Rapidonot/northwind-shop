@@ -1,7 +1,7 @@
 """RAG-08 and NFR-03 (row #13): the output check through `stream_answer` and `/api/chat`, with a
 scripted model. No cassette, no spend. A payload split across many deltas never reaches the
 shopper, a reset leaves no payload from either attempt, a failed turn never releases held text,
-and citations come from the text left on screen (decision 0014)."""
+and citations come from the text left on screen (decision 0015)."""
 
 from __future__ import annotations
 
