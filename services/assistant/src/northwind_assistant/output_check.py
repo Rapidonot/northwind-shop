@@ -179,10 +179,9 @@ _NUMBERISH_WORDS = frozenset(
 )
 
 
-# A token's core, without markdown or punctuation round it: `**60` is `60` (RT-020, RT-024).
-_CORE = re.compile(
-    r"(?<!\S)(?=\S)[*_~\"'(“‘{]*(?P<core>\[[^\]\s]*\]?|[^\s*_~\"'()“”‘’{}]*?)[*_~\"')”’}.,;:!?]*(?=\s|$)"
-)
+# Markdown and brackets, removed anywhere in a token before it is tested (pass 5, P5-1): `**36**5`
+# is `365`, `(365)-` is `365-`. A token is never skipped for its shape.
+_MARKUP = re.compile(r"[*_~\"'()\[\]{}“”‘’`]")
 
 
 _FILLER = frozenset(
@@ -337,7 +336,10 @@ _BOUNDARY = re.compile(r"[.!?](?=\s)|\n")
 # itself (security review pass 1, H1).
 _BULLET = re.compile(r"[ \t]*(?:[-*+]|\d{1,3}[.)])[ \t]+")
 _MARKER = re.compile(r"\[([^\[\]\n]{1,62})\]")
-_ID_LIKE = re.compile(r"[A-Za-z]{1,4}(?:\d|-[A-Za-z0-9])[A-Za-z0-9-]*")
+_ID = r"[A-Za-z]{1,4}(?:\d|-[A-Za-z0-9])[A-Za-z0-9-]*"
+_ID_LIKE = re.compile(_ID)
+# A citation marker, every part ID-shaped: `[FAQ-019, POL-RETURNS-US]`.
+_CITATION = re.compile(rf"\[\s*{_ID}(?:\s*,\s*{_ID})*\s*\]")
 _ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 
 
@@ -826,21 +828,37 @@ class OutputCheck:
             # of the span (found by the whole-answer read, EV-062).
             for boundary in _BOUNDARY.finditer(view.text, base, unit.start()):
                 base = boundary.end()
-            tokens = list(_CORE.finditer(view.text, base, unit.end()))
-            # The unit, and up to three words before it, not counting filler such as "business"
-            # or "or so": "twenty or so business days" is one span, "2 items within 30 days" is not.
-            span, content = [tokens.pop()] if tokens else [], 0
+            if "fortnight" in unit.group():
+                first = unit.start()  # the unit is itself a number
+            # A real citation marker is masked: neither a number nor a counted word. Any other
+            # bracket is markup round a token (pass 5, P5-1: "[365-ish days]" is not a citation).
+            text = _CITATION.sub(lambda m: " " * len(m.group()), view.text[base : unit.end()])
+            tokens = [
+                (base + t.start(), base + t.end(), t.group()) for t in re.finditer(r"\S+", text)
+            ]
+            # The unit's own token counts up to the unit word: `**365**-day`, `30-day`.
+            if tokens and tokens[-1][0] < unit.start():
+                lo, _, word = tokens[-1]
+                tokens[-1] = (lo, unit.start(), word[: unit.start() - lo])
+            elif tokens:
+                tokens.pop()
+            # Up to three words before the unit, not counting filler such as "business" or "or
+            # so": "twenty or so business days" is one span, "2 items within 30 days" is not.
+            span, content = [tokens.pop()] if tokens and tokens[-1][1] == unit.start() else [], 0
             while tokens and content < 3:
                 token = tokens.pop()
                 span.append(token)
-                if token.group("core") not in _FILLER:
+                if _MARKUP.sub("", token[2]).strip(".,;:!?") not in _FILLER:
                     content += 1
-            for token in span:
-                begin, finish = token.start("core"), token.end("core")
-                core = token.group("core")
-                if not core or core.startswith("[") or not numberish(core):
+            for lo, _hi, word in span:
+                core = _MARKUP.sub("", word)
+                if not core or not numberish(core):
                     continue
-                if any(lo <= begin and finish <= hi for lo, hi in consumed):
+                alnum = [k for k, char in enumerate(word) if char.isalnum()]
+                if not alnum:
+                    continue
+                begin, finish = lo + alnum[0], lo + alnum[-1] + 1
+                if any(lo_ <= begin and finish <= hi_ for lo_, hi_ in consumed):
                     continue  # read whole by the parser
                 first = begin if first is None else min(first, begin)
             if first is None:

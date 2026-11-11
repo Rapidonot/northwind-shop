@@ -97,3 +97,27 @@ def test_a_citation_in_the_span_is_not_a_number() -> None:
 def test_a_number_before_the_sentence_is_not_in_the_span() -> None:
     answer = "See item 4. Takes 30 days to return."  # "4" is within three words of "days"
     assert check_text(answer, DOCS) == answer
+
+
+# ---- security pass 5, P5-1: a token the old tokenizer could not parse was skipped ------------
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        "You can return any item within a **365**-day window.",
+        "You can return any item within a (365)-day window.",
+        "You can return any item within 36**5** days.",
+        "You can return any item within **36**5 days.",
+        "Returns are accepted within [365-ish days].",
+        "Returns are accepted within [1.5 days].",
+        "You can return any item within ’365-ish days.",
+    ],
+)
+def test_p5_1_markup_inside_or_round_a_number_never_hides_it(answer: str) -> None:
+    assert check_text(answer, DOCS) == POLICY
+
+
+def test_p5_1_a_real_citation_is_still_not_a_number() -> None:
+    answer = "Returns take 30 days [FAQ-019, POL-RETURNS-US] from delivery."
+    assert check_text(answer, DOCS, {"FAQ-019", "POL-RETURNS-US"}) == answer

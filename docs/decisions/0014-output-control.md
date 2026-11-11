@@ -125,6 +125,11 @@ the model does; a deterministic check on what leaves is the control.
   - a real policy number on the wrong term passes class 5 (the user's decision; owner #13b's judge);
   - "your refund issued" and other wordings outside the frozen lists pass (owner hardening);
   - the pin misses an aliased `client.ClaudeSDKClient` and `importlib` (owner hardening);
+  - from security pass 5 (owner hardening, the user's rule for the last pass): joined number words
+    ("sixtyfive"); "a day and a half", "a year or two", "half a day", ordinals and unknown units; a heading line
+    of 85–100 characters padded inside; abbreviations and lettered lists outside the fixed lists; the span's
+    window and newline edges; "1 or 2 days" vouched by "1–2 days"; the number rule's cost on one huge delta
+    (unconfirmed);
   - from security pass 4 (owner hardening unless named): durations written `365days`, `2 yrs`, `48 hrs` or with a
     U+2010/U+2011 hyphen are not read; `'s` used for "is" ("your order's confirmed"); apostrophe lookalikes
     U+02BC/U+2018; "a hundred percent off", "half–price"; the portal collapses newlines, so a raw paragraph break

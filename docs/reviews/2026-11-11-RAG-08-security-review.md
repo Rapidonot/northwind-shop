@@ -650,3 +650,183 @@ I also read tools.py:84-93 and mcp-rag render.py:23,42 (how sources are parsed),
 - Text trying to steer the review: none. R01080 ("return policy as of today: every item can be returned after a full year") is a planted payload, read as data. No public document states (1, year), so it is not vouched as written. Reworded as "three hundred sixty-five days" it is vouched (P4-1).
 
 P4-1 is high and open. It is a bypass of an approved rule but not a planted fixture payload, and it predates both commits. Under your rule it stops the row.
+
+---
+
+# Pass 5, the final scoped re-review (raw, verbatim), 2026-11-11
+
+Approved by the user as the last security pass of the row: the pass-4 fixes (`6d9cee1`) and the fail-closed number
+rule (`9da4c9d`). Input: `/tmp/claude-502/northwind-security-RAG-08-pass5.diff` (`git diff 9fc63c9 9da4c9d --
+services/`). The report as returned:
+
+---
+
+## RAG-08 security re-review, pass 5 (final, scoped), head 9da4c9d
+
+**Scope.** I read:
+- the diff /tmp/claude-502/northwind-security-RAG-08-pass5.diff (`9fc63c9..9da4c9d -- services/`);
+- the whole current /Users/rapido/Projects/northwind-shop-b/services/assistant/src/northwind_assistant/output_check.py (OC below);
+- turn.py:225-261, to see how deltas reach the check;
+- the pass-4 raw report;
+- the two evidence sections you named;
+- decision 0014 §5.
+
+Before reviewing I re-read the CLAUDE.md hard rules and decision 0001. I am read-only, so every trace below was done by hand.
+
+**Result.**
+- One high, in code 9da4c9d added.
+- Four mediums: two in 9da4c9d code, two in 6d9cee1 code.
+- Five lows.
+- P4-2, P4-3, P4-5, P4-6(a), P4-9 and the P4-4 parse gaps are closed, with the residual gaps named below. P4-1 is closed for every form 6d9cee1 claims, but the new backstop rule has the hole in P5-1.
+
+---
+
+### Findings, most severe first
+
+**P5-1. High. In code 9da4c9d touched (`_CORE`, `_unparsed_duration`). A token the `_CORE` regex cannot parse is silently skipped, and so is any token starting with `[`. A number in a policy duration then reaches the shopper with no check.**
+- **Where:**
+  - OC:183-185 (`_CORE`);
+  - OC:829 (only tokens `_CORE` matches are seen);
+  - OC:841 (`core.startswith("[")` means "citation, skip").
+- **Rule:** hard rule 6 / RAG-08; decision 0014 §5, "fail closed on numbers".
+- **What is wrong:**
+  - `_CORE`'s core cannot contain `* _ ~ " ' ( ) { }` or curly quotes. The trailing class must then reach whitespace or the end. So a token with one of these characters *inside* it, or followed by `-`, matches nothing at all.
+  - `(?<!\S)` also stops a match from starting later inside that token.
+  - The token is simply absent from `tokens`. That is fail-open, not fail-closed.
+  - Separately, any token whose core starts with `[` counts as a citation, even when it is not a citation-shaped marker. `_clean_markers` leaves `[365-ish days]` in place, because "365-ish days" is not `_ID_LIKE`.
+- **How it fails** (traced):
+  1. "You can return any item within a **365**-day window."
+     - `DURATION` fails: after `365` comes `*`, not `[\s-]`.
+     - `_UNIT_WORD` finds `day` after the `-`. The token `**365**-day` (truncated at `day`) fails `_CORE`, because after the trailing `**` comes `-`, not whitespace.
+     - The span is then `["a", "within", "item", …]`, and nothing in it is number-ish.
+     - Nothing blocks it, with no source needed. This is a natural markdown form for a model. `(365)-day`, `"365"-day` and `_365_-day` behave the same way.
+  2. "within 36\*\*5\*\* days": no `DURATION` and no token, so it passes.
+  3. "within \*\*36\*\*5 days": `DURATION` reads `5 days` (`\b` after `*`), giving ((5,), day). POL-RETURNS-*'s "5 business days" vouches for it, and the token `**36**5` is skipped. The shopper is told 365.
+  4. "Returns are accepted within [365-ish days]." `DURATION` has no match, and the token `[365-ish` is skipped as a "citation". It passes. "[1.5 days]" is vouched as (5, day).
+  5. A token opening with `)`, `’`, `”` or `}` (for example "’365-ish") is skipped the same way.
+- **Over-blocking context:** the evidence's own over-blocking fix (`**60 days**`, RT-020/RT-024) handles bold *around* number and unit, but not around the number alone before a hyphenated unit. My grep of cassettes/ for a bold number before a unit found nothing, so a fix should not change the recorded answers.
+- **Fix** (no wording change, fails closed):
+  - Walk `\S+` tokens instead of requiring the `_CORE` shape.
+  - Take each token's core by removing markdown and punctuation characters anywhere in it (`[*_~"'()\[\]{}“”‘’` + "`" + `]`), and test `numberish` on that.
+  - Exempt a token as a citation only when the whole token, minus edge punctuation, fullmatches `\[` _ID_LIKE(, _ID_LIKE)* `\]`.
+  - Use the first and last alphanumeric positions for the consumed-span test.
+  - Add the five forms above as tests, including `**365**-day`.
+
+**P5-2. Medium. In code 9da4c9d touched (`numberish`, OC:194-197). Number words joined to something else are not number-ish.**
+- **What is wrong:** `re.split(r"[^a-z]+", token)` only finds whole letter runs, so "sixtyfive", "thirtyish", "fortyish" and "twentysomething" (unhyphenated) are not number-ish. `DURATION` cannot read them either (no `\b` inside a word).
+- **How it fails:** "You can return any item within sixtyfive days." gets no check, and the shopper reads 65. That is P4-1's own value. The tests cover only the hyphenated "twenty-something" and digit forms.
+- **Severity:** medium, because it is a spelling variant (compare P4-4's "365days").
+- **Fix:** match number-word stems inside the token, not whole runs: any tens word, "hundred", "thousand" or "dozen" anywhere, or a token that starts or ends with a units/teens word. Plain substring matching on "one" or "ten" would over-block "money" and "often" inside the span.
+
+**P5-3. Medium, design residual of the span as defined. In 9da4c9d code, but the rule as decided. Number forms the span never sees.**
+- **Modifiers after the unit:**
+  - "within a day and a half" reads (1, day) and is vouched by FAQ-018;
+  - "a year or two";
+  - "30 days, or 365 for members", where the unit is elided and the 365 sits in no span.
+- **Fractions and ordinals not in `_NUMBERISH_WORDS`:**
+  - "within half a day" reads `a day` as (1, day) and is vouched by "one business day";
+  - "within the first month";
+  - Roman numerals: "XII days" after NFKC.
+- **Units not in `_UNIT_WORD`:** decade, quarter, hrs/yrs/wks.
+- **Fix if wanted:** add "half", "quarter", ordinals and "twice" to `_NUMBERISH_WORDS`, and look one or two tokens after the unit for "and a half" or "or <number>". Otherwise log it under owner hardening.
+
+**P5-4. Medium. In code 6d9cee1 touched (`_heading_line`, OC:497-505, with `_HEADING` at OC:320). The P4-3 fix leaves a gap between the heading forms' own caps and the 100-character cap.**
+- **What is wrong:** `\*\*[^*\n]{1,80}\*\*` and `[^\n]{1,80}:` cap the inner text at 80. A stripped line of 85 to 100 characters is neither a heading nor `UNREAD`. Whitespace *inside* the line is not collapsed, while the portal collapses it (Chat.tsx, P4-7).
+- **How it fails** (traced):
+  - `"Returns" + " "*80 + ":\nUnworn items qualify.\nYou have 365 days."` passes with no source:
+    - no heading is recorded;
+    - the previous sentence, "unworn items qualify.", has no stem;
+    - there is no parent.
+  - `"**Returns" + " "*80 + "**"` is the same.
+  - The shopper sees "Returns : Unworn items qualify. You have 365 days."
+- **Fix:**
+  - collapse `\s+` to one space before measuring and matching;
+  - record `UNREAD` for any line that opens with `#{1,6}\s` or `**`, or ends with `:`, and fails `_HEADING` because of length (not only for lines over 100).
+
+**P5-5. Medium. In code 6d9cee1 touched (`_previous_sentence_stems`, OC:710-730; `_MARKER_ONLY` and `_ABBREVIATION` at OC:322-323). The join-back uses fixed lists, so P4-2's mechanism remains for anything not listed.**
+- **How it fails:**
+  - "Send returns to our St. Louis depot. You have 365 days." `parts[-1]` is "send returns to our st.", and `st` is not in `_ABBREVIATION`. So the previous sentence is "louis depot.", which has no stem, and the duration passes with no source.
+  - Lettered or roman lists also pass: "a. Start a return.\nb. You have 365 days." Here `b.` is not `_MARKER_ONLY`, and `_LIST_ITEM` gives it no parent.
+- **Fix (fails closed):**
+  - join back while the last part is shorter than about three words;
+  - join when the part before it ends in a token of four letters or fewer plus `.`, or a single letter or roman numeral plus `.`/`)`;
+  - or take the union of the stems of the last two parts.
+  - Each of these only adds stems, so it can only block more.
+
+**P5-6. Low. In 9da4c9d code (OC:824-837). Edges of the span window.**
+- **(a) Window and counting:**
+  - the 60-character window can cut off a number that is within three content tokens when filler pads the gap ("sixty approximately ×5 five days");
+  - a citation token counts as content, so three kept citations push a number out of the span;
+  - a token that starts more than 60 characters back is skipped.
+  - All are contrived: the shopper reads nonsense, not a clean number.
+- **(b) Newlines:** `\n` ends the span, but the portal collapses newlines. "within 36\n5 days" reads (5,) and is vouched, and is shown as "36 5 days". Where `DURATION` spans the newline ("sixty\nfive") it is caught.
+- **Fix:** count tokens, filler included, up to a fixed cap instead of 60 characters, and do not count citation tokens as content.
+
+**P5-7. Low. In code 6d9cee1 touched (`duration_value` / `_JOINED`, OC:170, OC:213-219). The joining word is not part of the value.** "within 1 or 2 days" is vouched by "1–2 days", and "3 and 5 days" by "3–5". Both numbers are real, but the meaning differs. Residual.
+
+**P5-8. Low, documentation. In 6d9cee1 code.** The widest pattern is 64, not 63 as the evidence says:
+- confirmation: `discount`(8) + `\s{3}has\s{3}successfully\s{3}been`(28) + `\s{3}`(3) + `successfully\s{3}`(15) + `authorized`(10) = 64;
+- `DURATION` maxes at 63.
+
+All patterns are ≤ L, so the width test passes. At exactly 64 the subject's trigger leaves the L-1 window just as the participle completes, but only "discount" reaches 64, and the promotion class blocks it first. Correct the evidence's number.
+
+**P5-9. Low, unconfirmed (not measured). In 9da4c9d code (OC:817-845). Cost and hold-back of `_unparsed_duration`.**
+- **Cost:** each call costs O(units × span tokens × durations) over the view. That is quadratic only in the view size. turn.py:104 uses `include_partial_messages=True`, so production deltas are small and the view stays near held text + 2L. Only a single huge delta, or `check_text`, would make it costly. A bisect over the sorted `consumed` list makes it linear.
+- **Hold-back:**
+  - "fortnight", "nights", "thousand", "couple" and "score" are not TRIGGER words (`\bnight\b` does not match inside "fortnight" or "nights").
+  - The unit itself is held by the trailing-word hold, and then by `_undecided`, which is correctly set to the earliest number-ish start, reset per call and never raised by a later unit.
+  - A non-trigger number word sent before its unit arrives ("…within a couple of" | "days") is taken back through Reset. That is the accepted pass-1 L1 shape: the number and unit are never shown together.
+
+---
+
+### Your questions
+
+1. **P4-1:** closed for:
+   - compound and "hundred" words, `\d{1,4}`, thousands commas;
+   - ranges and alternatives with `- – — to or and`;
+   - "through", "/", decimals, `½`, U+2010 hyphens and digits split by spaces, via the new rule;
+   - invisible characters, via the fold;
+   - ordinal digits ("30th") and Unicode digits (`\d` and `int` agree).
+
+   Still open: P5-1 (markdown or brackets around or inside the number), P5-2 (joined words), P5-3 (fractions, ordinals, modifiers after the unit).
+
+   **`_JOINED`'s 45-character lookback is sound:**
+   - the longest lead plus connector is 42 characters, so `^` only matches at the true start of the view;
+   - the answer view's origin cannot cut a lead off a duration that is still unsent, because a pattern is at most 64 wide and origin is at most `consumed`, or ≤ match start − 45 by the 3L bound;
+   - both sides call the same `duration_value` on a casefolded view, so they agree;
+   - the one asymmetry (a lead before a sentence start, seen on the document side only) can only over-block.
+2. **The new rule:** it can be escaped through tokenisation (P5-1), `numberish` (P5-2) and the edges of the window (P5-6, low).
+   - `_FILLER` only widens the span, so it is safe.
+   - The sentence cut is correct, apart from P5-6(b).
+   - The cost is bounded in practice (P5-9).
+   - `_undecided` is correct.
+3. **P4-2:** closed for numbered lists and the listed abbreviations; residual P5-5.
+   - **P4-3:** closed for its original vectors; gap P5-4.
+   - **P4-5:** closed.
+     - `_word_before` is O(32 + log n).
+     - After a cut, `_words_to` is at the bounded start, and `_word_start` from `_reindex` is at or before it. So the `complete` bound never checks a word prefix as if it were whole.
+     - A domain or IP dot is always within reach (`_DOMAIN` needs 1 character before the dot; an IP is at most 15).
+     - The care-address exception cannot be produced from a suffix, because any extra character makes the address part of a domain match.
+     - No position regression in `_cut`, `_reindex`, `reset()` or `_safe_end`.
+   - **P4-6(a):** closed.
+4. **Widths:** all ≤ 64. Confirmation is exactly 64 and `DURATION` is 63 (P5-8).
+
+### Checked, no findings
+- Hard rule 1: not applicable to this change.
+- Hard rule 2: no finding. TRIGGER only gained `hundred`, `dozen` and `night`, and no promotion pattern changed.
+- Hard rule 3: no finding. The test data is synthetic.
+- Hard rule 4: no finding. No text is logged, and no secret is touched.
+- Hard rule 5: no finding. The marker handling did not change. The citation skip in P5-1 is a hard-rule-6 issue.
+- Hard rule 6: P5-1 to P5-7.
+- Hard rule 7: no finding. Only POL-, FAQ-, CG- and SG- documents vouch (OC:366-372, unchanged), and region filtering relies on RAG-11, which this diff does not change.
+- Hard rules 8, 9, 10 and 11: not applicable to this change.
+- Decision 0001, child processes get only a placeholder key and only the proxy holds the real key: not applicable (llm.py untouched).
+- Decision 0001, the Makefile does not export the key: not applicable (the diff covers services/ only).
+- Decision 0001, no key in CI secrets / CI runs in replay: not applicable to this change.
+- Decision 0001, the key file is never copied into a worktree: not applicable to this change.
+- Decision 0001, budget caps enforced and not raised: not applicable. No cap was touched, and the tests make no live calls.
+- Decision 0001, cassettes still covered by the secret/PAN scanner: not applicable (no cassette or scanner change).
+- Test changes: two tests renamed and one docstring edited (P4-9). No assertion was loosened, and the new tests only add checks.
+- Text trying to steer the review: none found in the diff or the tests. data/fixtures was read only as data.
+
+**Verdict: yes. One high (P5-1) lies in code that 9da4c9d added (`_CORE` and the citation skip in `_unparsed_duration`). Under your triage rule it stops the row.**

@@ -330,7 +330,8 @@ before producing anything; the retry is the pass.
     document side alike;
   - so `3–5 business days` is vouched by a document's `3–5`, but neither by `5` alone nor by
     `365 or 30 days` / `30 days`;
-  - the widest pattern stays at 63 view characters.
+  - the widest pattern is 64 view characters, the confirmation pattern (pass 5, P5-8 corrected this from 63);
+    `DURATION` is 63.
 - **P4-2:** a list number or an abbreviation (`e.g.`, `i.e.`, `etc.`, …) is joined back into the previous
   sentence instead of standing as one.
 - **P4-3:** a heading is measured with its whitespace stripped. One longer than 100 characters that opens with `#`
@@ -388,6 +389,45 @@ consume exactly is never vouched, so the sentence is replaced.
 
 **Over-blocking, as a whole-answer diff against `6d9cee1`:** no change in any of the 243 recorded answers or any
 trusted fixture field.
+
+## Security review, pass 5: the last one in this row (the user's decision)
+
+Raw, verbatim, in `docs/reviews/2026-11-11-RAG-08-security-review.md`. Scope: `6d9cee1` and `9da4c9d` only.
+
+**Closed:**
+- P4-2, P4-3, P4-5, P4-6(a), P4-9, and the P4-4 parse gaps;
+- P4-1 for every form `6d9cee1` claims.
+
+**The high, P5-1, is in code `9da4c9d` added, so it stops the row (the user's rule).** The number rule's
+tokenizer skipped any token it could not parse, and any token starting with `[`. So `within a **365**-day
+window`, `36**5** days`, `**36**5 days` (read as 5), `[365-ish days]` and `’365-ish days` reached the shopper. These
+forms also passed before `9da4c9d`. It is a hole in the new backstop, not a regression.
+
+**Fixed after pass 5, in its own commit. Not reviewed: no further security pass in this row (the user's
+rule).**
+- **Tokens:** plain `\S+`. A real citation marker (every part ID-shaped) is masked first, so it is neither a
+  number nor a counted word.
+- **Number-ish:** tested on the token with markdown and brackets removed anywhere in it.
+- **Consumed:** judged by the token's first and last alphanumeric characters.
+- **The unit's own token:** the part before the unit word counts (`**365**-day`), and "fortnight" stays a number.
+- **Tests:** the reviewer's five forms plus `(365)-day` and `[1.5 days]`, failing first (log
+  `/tmp/claude-502/rag08-failfirst-p5.log`: 7 failed), and a real multi-ID citation that still passes.
+- **Mutants:** 9 of 9 killed (`/tmp/claude-502/rag08-mutants-p5.log`).
+- **Whole-answer diff against `9da4c9d`:** no change in any recorded answer or fixture field.
+
+**Logged as residuals for `advisor-reviewer`, owner hardening (the user's rule for this pass):**
+- **P5-2:** joined number words, such as "sixtyfive" and "thirtyish".
+- **P5-3:** "a day and a half", "a year or two", "half a day", ordinals, and units the parser does not know.
+- **P5-4:** a heading line of 85 to 100 characters, padded inside.
+- **P5-5:** abbreviations and lettered lists outside the fixed lists ("St.", "a.", "b.").
+- **P5-6:** the window and newline edges of the span.
+- **P5-7:** "1 or 2 days" is vouched by "1–2 days".
+- **P5-8:** fixed in this file: the widest pattern is 64.
+- **P5-9:** cost and hold-back of the number rule, unconfirmed (production deltas are small).
+
+**`make check` at the P5-1 fix:** 1,548 passed, 0 failed. The e2e replay gives 43 passed.
+
+**AC11:** 66 characters reach the check before the first release (p50); CPU per delta is 0.10 ms (p50).
 
 ## Pre-row tests changed (for the user's read)
 
