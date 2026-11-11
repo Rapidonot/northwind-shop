@@ -1,0 +1,42 @@
+## N1 failing first (fix stashed), 2026-11-11T01:59:12Z
+=========================== short test summary info ============================
+FAILED services/backend/tests/backend_audit/test_be08_reconstruct.py::test_two_unreadable_key_refunds_never_settle_each_other
+1 failed, 1 passed, 22 deselected in 0.10s
+## N1 with fix
+2 passed, 22 deselected in 0.07s
+## P1-P3 tests against the base src (dd8a16f), 2026-11-11T02:08:29Z
+ERROR services/backend/tests/test_be05_prerequisites.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in 0.10s
+## test-writer escalate-first bug, before the fix, 2026-11-11T02:37:45Z
+E       AssertionError: money moved on an escalated order
+E       AssertionError: money moved after an escalation
+FAILED services/backend/tests/orders_place/test_be05_criteria.py::test_after_an_escalation_no_money_moves
+FAILED services/backend/tests/orders_place/test_be05_criteria.py::test_a_model_that_escalates_first_then_tries_everything_moves_no_money
+2 failed, 70 deselected in 1.26s
+## security F1-F4 regressions against the pre-fix src (2e2e22f), 2026-11-11T02:49:21Z
+FAILED services/backend/tests/orders_place/test_be05_security_fixes.py::test_a_later_run_moves_no_money_on_an_order_an_earlier_run_escalated[first0]
+FAILED services/backend/tests/orders_place/test_be05_security_fixes.py::test_a_later_run_moves_no_money_on_an_order_an_earlier_run_escalated[first1]
+FAILED services/backend/tests/orders_place/test_be05_security_fixes.py::test_a_duplicate_with_a_fresh_confirmation_moves_no_money_after_an_escalation
+FAILED services/backend/tests/orders_place/test_be05_security_fixes.py::test_a_rerun_after_a_doubtful_write_moves_no_more_money[assess]
+FAILED services/backend/tests/orders_place/test_be05_security_fixes.py::test_a_rerun_after_a_doubtful_write_moves_no_more_money[authorize]
+FAILED services/backend/tests/orders_place/test_be05_security_fixes.py::test_a_rerun_of_a_placed_order_writes_nothing_and_reports_placed
+FAILED services/backend/tests/orders_place/test_be05_security_fixes.py::test_a_doubtful_escalation_is_never_written_again
+FAILED services/backend/tests/orders_place/test_be05_security_fixes.py::test_capture_follows_a_later_validation_that_found_an_issue
+FAILED services/backend/tests/orders_place/test_be05_security_fixes.py::test_no_repr_shows_a_confirmation_reference
+9 failed in 0.61s
+## F1 claim tests against the pre-fix src (d6a5d7e), 2026-11-11T03:37:20Z
+FAILED services/backend/tests/orders_place/test_be05_security_fixes.py::test_a_concurrent_duplicates_hold_is_reported_in_the_escalation
+FAILED services/backend/tests/orders_place/test_be05_security_fixes.py::test_a_run_identity_never_looks_like_card_data
+FAILED services/backend/tests/orders_place/test_chk05_idempotent_placement.py::test_two_duplicates_with_the_same_keys_never_both_get_the_claim
+FAILED services/backend/tests/orders_place/test_chk05_idempotent_placement.py::test_concurrent_claims_from_ten_runs_give_exactly_one_owner
+FAILED services/backend/tests/orders_place/test_chk05_idempotent_placement.py::test_a_rerun_after_a_crash_finds_the_claim_and_escalates
+FAILED services/backend/tests/backend_audit/test_be08_views.py::test_the_placement_sets_are_exactly_these
+6 failed, 51 deselected in 0.52s
+## claim-fix review C1-C4 regressions against 8ed9890 src, 2026-11-11T04:05:18Z
+FAILED services/backend/tests/orders_place/test_be05_security_fixes.py::test_a_failed_capture_report_never_hides_the_capture_in_the_escalation
+FAILED services/backend/tests/orders_place/test_be05_security_fixes.py::test_a_stale_escalation_view_never_replaces_a_fresher_claim_view
+FAILED services/backend/tests/orders_place/test_be05_security_fixes.py::test_a_crashed_owners_order_is_escalated_by_a_rerun_that_stops_short
+FAILED services/backend/tests/orders_place/test_be05_security_fixes.py::test_a_doubtful_claim_is_uncertain_in_the_reconstruction
+FAILED services/backend/tests/orders_place/test_be05_security_fixes.py::test_a_duplicate_is_told_escalated_only_when_the_escalation_was_written
+5 failed, 16 deselected in 0.52s
