@@ -45,7 +45,7 @@ import re
 import secrets
 import string
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from functools import partial
 from typing import Any, Literal
 
@@ -1004,9 +1004,17 @@ async def finish(handlers: _Handlers, result: AgentResult) -> PlacementResult:
             p.reason = reason or p.reason or reason_for(p, "code")
             p.handoff = handlers.handoff(order)
         context = p.handoff
+    # Cassette read L1: the model's own summary can misstate the outcome (a rerun of a placed order
+    # called it escalated), so nothing downstream gets it; the summary is built from the store.
+    oid = handlers.task.order_id
+    summary = {
+        "placed": f"Order {oid} is placed.",
+        "escalated": f"Order {oid} is escalated ({reason or 'no reason recorded'}).",
+        "failed": f"Order {oid} is neither placed nor escalated; see the failures.",
+    }[outcome]
     return PlacementResult(
         outcome=outcome,
-        agent=result,
+        agent=replace(result, summary=summary),
         reason=reason,
         context=context,
         uncertain=tuple(p.uncertain),

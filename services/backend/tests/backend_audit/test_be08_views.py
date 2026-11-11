@@ -386,7 +386,8 @@ def test_every_view_built_under_src_uses_a_read_only_constant() -> None:
         "AuditedCatalogPort",
         "AuditedOrderStore",
     }
-    read_only = {"PAYMENT_READ_ONLY", "FRAUD_READ_ONLY", "CARRIER_READ_ONLY", "CATALOG_READ"}
+    # Advisor finding 8: CATALOG_READ is admitted in the placement module only, as approved.
+    read_only = {"PAYMENT_READ_ONLY", "FRAUD_READ_ONLY", "CARRIER_READ_ONLY"}
     # Row #21 (stop 5, approved): the placement sets, in the placement module only.
     placement = {"PAYMENT_PLACE", "FRAUD_PLACE", "CATALOG_READ", "ORDERS_PLACE"}
     built = 0

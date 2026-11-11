@@ -522,3 +522,87 @@ def test_a_duplicate_is_told_escalated_only_when_the_escalation_was_written() ->
     text = asyncio.run(run())
     assert "has been escalated" not in text
     assert "service_unavailable" in text
+
+
+# ---- the claim-fix re-review (`docs/reviews/2026-11-11-BE-05-security-claim-rereview.md`) -------
+
+
+def test_a_claim_view_says_it_is_what_the_owner_last_reported() -> None:
+    """Re-review N1: the claim's payment view is labelled as the owner's last report, and the
+    duplicate's recommended action sends the reader to the port or the reconstruction."""
+    from northwind_backend.agents.orders_place import RECOMMENDED
+
+    world, row = World.make(), first_of("clean")
+    task = world.task(row)
+    owner = build_handlers(
+        task,
+        world.ports(),
+        world.audit(),
+        correlation_id="run-a",
+        read_policy=FAST,
+        write_policy=FAST_WRITE,
+    )
+
+    async def run() -> PlacementResult:
+        for call in HAPPY[:3]:
+            await getattr(owner, call)({"order_id": task.order_id})
+        return await drive(world, task, ["validate_order"], "run-b")
+
+    rerun = asyncio.run(run())
+    assert rerun.reason == "duplicate_in_progress"
+    assert world.orders.escalations[task.order_id]["payment"]["source"] == "claim_report"
+    advice = RECOMMENDED["duplicate_in_progress"]
+    assert "payment port" in advice and "payment_label" in advice
+
+
+def test_the_store_labels_an_unlabelled_claim_view_unreported() -> None:
+    """Re-review N3: an escalation that brings no payment view of its own gets the claim's view,
+    labelled `unreported`, since the store can't know who escalated."""
+    world, row = World.make(), first_of("clean")
+    store = world.ports().orders
+    oid = row["order_id"]
+    claimed = store.claim_payment(order_id=oid, run_id="run_abcdefghijklmnopqrst")
+    assert getattr(claimed, "is_error", True) is False
+    done = store.escalate(
+        idempotency_key=f"{oid}:order.escalate", order_id=oid, reason="not_finished", context={}
+    )
+    assert getattr(done, "is_error", True) is False
+    assert world.orders.escalations[oid]["payment"]["claim"] == "unreported"
+
+
+# ---- advisor finding 1: the production write policy itself ------------------------------------
+
+
+def test_the_production_write_policy_retries_only_when_nothing_ran() -> None:
+    """The doubtful-write tests pass their own fast policy; this pins the one production and the
+    recorded replay use (a mutant that made writes retry like reads survived without it)."""
+    import inspect
+
+    from northwind_backend.agents.orders_place import run_order_placement
+    from northwind_backend.recovery import WRITE_POLICY
+
+    assert WRITE_POLICY.retry_codes == frozenset({"service_unavailable", "audit_unavailable"})
+    for fn in (build_handlers, run_order_placement):
+        assert inspect.signature(fn).parameters["write_policy"].default is WRITE_POLICY
+
+
+@pytest.mark.parametrize("operation", ["authorize", "capture"])
+def test_with_the_default_policies_a_doubtful_write_is_called_once(operation: str) -> None:
+    world, row = World.make(), first_of("clean")
+    ports = world.ports()
+    ports.payment.faults.inject(operation, FaultKind.TIMEOUT_AFTER)  # type: ignore[attr-defined]
+    task = world.task(row)
+    h = build_handlers(task, ports, world.audit(), correlation_id="run-1")  # the defaults
+
+    async def run() -> PlacementResult:
+        for call in HAPPY:
+            await getattr(h, call)({"order_id": task.order_id})
+        return await finish(h, AgentResult(RunStatus.COMPLETE, (), (), "run-1"))
+
+    result = asyncio.run(run())
+    attempts = [
+        e
+        for e in world.sink.read_all()
+        if e.action == f"payment.{operation}" and e.phase == "attempt"
+    ]
+    assert len(attempts) == 1 and result.reason == "uncertain_write"

@@ -1,0 +1,28 @@
+{
+  "by_kind": {
+    "address_error": {
+      "placed": 25
+    },
+    "clean": {
+      "placed": 900
+    },
+    "fraud_flag": {
+      "escalated": 25
+    },
+    "soft_decline": {
+      "placed": 25
+    },
+    "stock_out": {
+      "escalated": 25
+    }
+  },
+  "escalation_reasons": {
+    "fraud_review": 25,
+    "out_of_stock": 25
+  },
+  "label_agreement": 1.0,
+  "orders": 1000,
+  "placed": 950,
+  "seconds": 2186.7,
+  "touchless": 0.95
+}

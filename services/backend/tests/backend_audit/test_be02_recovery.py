@@ -419,3 +419,23 @@ def test_with_deadline_turns_an_exception_into_unexpected() -> None:
         raise ValueError("4111111111111111")
 
     assert asyncio.run(with_deadline(boom, 1.0)) is UNEXPECTED
+
+
+@pytest.mark.req("BE-02")
+def test_the_orders_checks_read_timeout_text_is_tool_specific() -> None:
+    """Row #21, U3 (#20 cassette read C2): the model reads tool-specific text after a read timeout,
+    never "a retry with the same key is safe", and the envelope keeps its code and category."""
+    from northwind_backend.agents.messages import model_envelope
+
+    for tool, name in (
+        ("get_fraud_assessments", "fraud lookup"),
+        ("get_payment_status", "payment status lookup"),
+    ):
+        envelope = model_envelope(tool, TIMEOUT)
+        assert envelope["code"] == "timeout" and envelope["errorCategory"] == "transient"
+        assert envelope["message"].startswith(f"The {name} did not finish in time, after retries.")
+        assert (
+            "do not call it again" in envelope["message"] and "same key" not in envelope["message"]
+        )
+    # Any other error keeps the port's own envelope exactly.
+    assert model_envelope("get_fraud_assessments", UNEXPECTED) == UNEXPECTED.to_envelope()

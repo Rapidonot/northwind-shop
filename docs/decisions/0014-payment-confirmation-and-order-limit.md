@@ -38,3 +38,23 @@ handlers take the reference from the task, never from the model, so the model ca
 - `void`, `refund` and `status` take no reference. Void releases money; refund keeps its cap and gets PAY-06's
   approval hook later.
 - The real portal control (CHK-02) and per-session and per-day limits (CHK-03) are later rows.
+
+## Addendum: the payment claim (the user's Option 1, 2026-11-11, stop 6)
+
+Security review F1 found that a concurrent duplicate of one order could authorize, or capture, while another run
+escalated the order, and the stored escalation would not mention it. The user chose a claim on the order store:
+
+- **The claim.** `OrderStorePort.claim_payment` is a compare-and-set from `pending` to `paying`, under the store's
+  lock. It records the owning run's code-only identity (`run_` and 20 letters, never in model input; the audit writes
+  it as type and length). It is never resolved through the idempotency store: duplicates share the order-ID keys, so
+  a replay would hand the claim to both.
+- **Who may pay.** The run claims inside `authorize_payment`'s code before the payment call; there is no new model
+  tool. A run that doesn't own the claim never authorizes and escalates as `duplicate_in_progress`. So does a rerun
+  that finds a crashed owner's claim, fail closed.
+- **What an escalation shows.** The owner reports its intent on the claim after authorize and after capture. An
+  escalation of a claimed order stores whichever view of the payment shows more money moved: the escalating run's,
+  or the claim's as the owner last reported it, compared under the store's lock. Escalation is allowed from `paying`.
+- **Known limits.** A concurrent duplicate escalates the order, with the money held and reported (owner #24: per-order
+  serialization or a claim lease). If both views are stale (a failed report and a crashed owner), the stored view can
+  understate the money, so the recommended action sends the reader to the payment port or the reconstruction.
+
