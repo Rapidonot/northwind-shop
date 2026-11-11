@@ -195,6 +195,9 @@ ALREADY_DONE = business("step_already_done", "This step already succeeded in thi
 ESCALATED = business(
     "order_escalated", "The order is escalated to a person, so nothing more is done. Stop here."
 )
+ALREADY_PLACED = business(
+    "order_already_placed", "The order is already placed, so nothing more is done. Stop here."
+)
 
 Reason = Literal[
     "uncertain_write",
@@ -220,7 +223,8 @@ RECOMMENDED: dict[str, str] = {
     "confirmation_problem": "ask the shopper to confirm the order again in the portal",
     "port_failure": "retry the order later",
     "agent_requested": "check the order; the agent escalated without a known cause",
-    "not_finished": "rerun the placement or finish it by hand",
+    # Not "rerun": a later run makes no write on an escalated order (security review F1).
+    "not_finished": "read the order and payment state, then finish the order by hand",
 }
 _DECLINES = frozenset({"soft_decline", "hard_decline"})
 _LIMITS = frozenset({"over_order_limit", "no_order_limit"})
@@ -235,7 +239,7 @@ class OrderPlacementTask:
     order ID goes into the prompt; the reference never does (hard rules 1, 6 and 9)."""
 
     order_id: str
-    confirmation_ref: str
+    confirmation_ref: str = field(repr=False)  # security review F4: never in a repr or a log
 
     def __post_init__(self) -> None:
         if not isinstance(self.order_id, str) or card_data(self.order_id):
@@ -261,7 +265,7 @@ class OrderPlacementTask:
 class Placement:
     """What this run's handlers established. Bound into the handlers (L4)."""
 
-    task: OrderPlacementTask
+    task: OrderPlacementTask = field(repr=False)
     order: Order | None = None
     issues: tuple[str, ...] | None = None
     total: Money | None = None
@@ -383,6 +387,23 @@ class _Handlers:
             error = AUDIT_UNAVAILABLE
         return _text(model_envelope(tool_name, error), error=True)
 
+    async def _store_gate(self, tool_name: str) -> dict[str, Any] | None:
+        """Security review F1: the order store, not this run's memory, says whether the order is
+        still open. An order another run escalated or placed gets no write from this run, so a
+        rerun or a duplicate never moves money on an escalated order. Read just before each write,
+        so the window left is the instant between this read and the port call (see the row's
+        evidence: the remaining race needs a conditional store transition)."""
+        p = self.placement
+        seen = await self._read(lambda: self.orders.get(self.task.order_id))
+        if not isinstance(seen.result, Ok):
+            return self._error(tool_name, seen)
+        status = seen.result.value.status
+        if status is OrderStatus.ESCALATED and p.escalated is None:
+            return self._refuse(tool_name, ESCALATED)
+        if status is OrderStatus.CONFIRMED and p.confirmed is None:
+            return self._refuse(tool_name, ALREADY_PLACED)
+        return None
+
     async def _write(
         self, tool_name: str, action: str, key: str, call: Callable[[], Result[Any]]
     ) -> Recovered[Any]:
@@ -465,6 +486,9 @@ class _Handlers:
             return self._refuse(ADDRESS, ESCALATED)
         if p.doubtful:
             return self._refuse(ADDRESS, STOPPED)
+        gated = await self._store_gate(ADDRESS)
+        if gated is not None:
+            return gated
         if p.issues is None:
             return self._refuse(ADDRESS, OUT_OF_ORDER)
         if p.issues != (ADDRESS_UNDELIVERABLE,):
@@ -492,6 +516,9 @@ class _Handlers:
             return self._refuse(FRAUD, ESCALATED)
         if p.doubtful:
             return self._refuse(FRAUD, STOPPED)
+        gated = await self._store_gate(FRAUD)
+        if gated is not None:
+            return gated
         if p.issues is None or p.issues or p.order is None or p.total is None:
             return self._refuse(FRAUD, OUT_OF_ORDER)
         if p.fraud is not None:
@@ -528,6 +555,9 @@ class _Handlers:
             return self._refuse(AUTHORIZE, ESCALATED)
         if p.doubtful:
             return self._refuse(AUTHORIZE, STOPPED)
+        gated = await self._store_gate(AUTHORIZE)
+        if gated is not None:
+            return gated
         if p.intent is not None:
             return self._refuse(AUTHORIZE, ALREADY_DONE)
         order, total = p.order, p.total
@@ -570,6 +600,12 @@ class _Handlers:
             return self._refuse(CAPTURE, ESCALATED)
         if p.doubtful:
             return self._refuse(CAPTURE, STOPPED)
+        gated = await self._store_gate(CAPTURE)
+        if gated is not None:
+            return gated
+        if p.issues != ():
+            # Security review F3: a later validation found an issue; nothing more moves.
+            return self._refuse(CAPTURE, OUT_OF_ORDER)
         if p.intent is None:
             return self._refuse(CAPTURE, OUT_OF_ORDER)
         if p.captured is not None:
@@ -603,6 +639,12 @@ class _Handlers:
             return self._refuse(CONFIRM, ESCALATED)
         if p.doubtful:
             return self._refuse(CONFIRM, STOPPED)
+        gated = await self._store_gate(CONFIRM)
+        if gated is not None:
+            return gated
+        if p.issues != ():
+            # Security review F3: a later validation found an issue; nothing more moves.
+            return self._refuse(CONFIRM, OUT_OF_ORDER)
         if p.confirmed is not None:
             return self._refuse(CONFIRM, ALREADY_DONE)
         captured, total = p.captured, p.total
@@ -642,10 +684,19 @@ class _Handlers:
             return self._refuse(ESCALATE, NOT_NEEDED)
         if self.placement.escalated is not None:
             return self._refuse(ESCALATE, ALREADY_DONE)
+        if self._escalate_doubtful():
+            return self._refuse(ESCALATE, STOPPED)
+        gated = await self._store_gate(ESCALATE)
+        if gated is not None:
+            return gated
         done = await self.escalate("agent")
         if not isinstance(done.result, Ok):
             return self._error(ESCALATE, done)
         return _ok({"status": "escalated", "reason": self.placement.reason})
+
+    def _escalate_doubtful(self) -> bool:
+        """Security review F2: a doubtful escalation is never written again either."""
+        return any(action == "order.escalate" for action, _ in self.placement.uncertain)
 
     async def escalate(self, by: Literal["agent", "code"]) -> Recovered[Any]:
         """Escalates with a reason and context from the run's state (#20 C1). Used by the
@@ -834,21 +885,41 @@ async def finish(handlers: _Handlers, result: AgentResult) -> PlacementResult:
     """No silent end: an order neither confirmed nor escalated is escalated by code. The outcome is
     read from the store, so a duplicate run of an order another run placed reports `placed`."""
     p = handlers.placement
-    if p.confirmed is None and p.escalated is None:
+
+    async def stored() -> Order | None:
+        seen = await call_with_recovery(lambda: handlers.orders.get(handlers.task.order_id))
+        return seen.result.value if isinstance(seen.result, Ok) else None
+
+    before = await stored()
+    still_open = before is not None and before.status is OrderStatus.PENDING
+    if (
+        p.confirmed is None
+        and p.escalated is None
+        and still_open
+        and not handlers._escalate_doubtful()
+    ):
         await handlers.escalate("code")
-    seen = await call_with_recovery(lambda: handlers.orders.get(handlers.task.order_id))
+    order = await stored()
     outcome: Literal["placed", "escalated", "failed"] = "failed"
-    if isinstance(seen.result, Ok):
-        status = seen.result.value.status
-        if status is OrderStatus.CONFIRMED:
-            outcome = "placed"
-        elif status is OrderStatus.ESCALATED:
-            outcome = "escalated"
+    if order is not None and order.status is OrderStatus.CONFIRMED:
+        outcome = "placed"
+    elif order is not None and order.status is OrderStatus.ESCALATED:
+        outcome = "escalated"
+    # The reason is the store's (F2): a doubtful or another run's escalation keeps the first one.
+    # A run that found the order already escalated still reports context, built from what it saw
+    # under the store's reason, so every escalated result carries context.
+    reason = order.escalation if outcome == "escalated" and order is not None else None
+    context = None
+    if outcome == "escalated":
+        if p.escalated is None or p.context is None:
+            p.reason = reason
+            p.context = handlers.context()
+        context = p.context
     return PlacementResult(
         outcome=outcome,
         agent=result,
-        reason=p.reason if outcome == "escalated" else None,
-        context=p.context if outcome == "escalated" else None,
+        reason=reason,
+        context=context,
         uncertain=tuple(p.uncertain),
         escalated_by=handlers.escalated_by,
     )

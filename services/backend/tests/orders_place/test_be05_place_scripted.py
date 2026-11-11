@@ -30,7 +30,7 @@ from northwind_backend.recovery import RetryPolicy
 from northwind_common.llm import agent_runtime
 from northwind_llm_replay.scripted import ScriptedLLM
 
-from ._placement import World, first_of
+from ._placement import World, first_of, total_for
 
 pytestmark = pytest.mark.req("BE-05")
 
@@ -256,28 +256,51 @@ def test_every_write_key_comes_from_the_order_id_alone(tmp_path: Path) -> None:
     assert written and all(KEY.fullmatch(k) and k.startswith(row["order_id"]) for k in written)
 
 
-def test_the_model_sees_no_amount_id_token_address_or_reference(tmp_path: Path) -> None:
-    world, row = World.make(), first_of("clean")
+# Security review F5: every kind of path, not just the happy one.
+HIDDEN_PATHS = [
+    ("clean", None, HAPPY),
+    ("stock_out", None, ["validate_order", "escalate_order"]),
+    ("fraud_flag", None, ["validate_order", "assess_fraud", "escalate_order"]),
+    (
+        "soft_decline",
+        None,
+        ["validate_order", "assess_fraud", "authorize_payment", "authorize_payment"]
+        + ["capture_payment", "confirm_order"],
+    ),
+    ("address_error", None, ["validate_order", "use_address_on_file", *HAPPY]),
+    ("clean", "capture", [*HAPPY[:4], "escalate_order"]),  # a doubtful write
+]
+
+
+@pytest.mark.parametrize(("kind", "fault", "tools"), HIDDEN_PATHS)
+def test_the_model_sees_no_amount_id_token_address_or_reference(
+    tmp_path: Path, kind: str, fault: str | None, tools: list[str]
+) -> None:
+    world, row = World.make(), first_of(kind)
     task = world.task(row)
+    ports = world.ports()
+    if fault is not None:
+        ports.payment.faults.inject(fault, FaultKind.TIMEOUT_AFTER)  # type: ignore[attr-defined]
     with ScriptedLLM() as llm:
-        script(llm, row["order_id"], HAPPY)
-        result = place(llm, tmp_path, world, task, correlation_id="run-secret-1")
+        script(llm, row["order_id"], tools)
+        result = place(llm, tmp_path, world, task, ports=ports, correlation_id="run-secret-1")
     seen = model_text(llm)
     order = world.orders.orders[row["order_id"]]
-    assert order.intent_id is not None
-    for hidden in (
+    hidden = [
         task.confirmation_ref,
         row["payment_token"],
         row["shopper_id"],
         row["shipping_postal_code"],
-        order.intent_id,
-        "fa_0",
+        order.shipping_postal_code,
         "run-secret-1",
         "checkout-1",
-        str(order.amount_minor),
-    ):
-        assert hidden not in seen, hidden
-    assert result.outcome == "placed"
+        "pi_0",
+        "fa_0",
+        str(total_for(row).amount_minor),
+    ]
+    for hidden_value in hidden:
+        assert hidden_value not in seen, (kind, hidden_value)
+    assert result.outcome in ("placed", "escalated")
 
 
 def test_the_prompt_names_only_the_order() -> None:

@@ -48,7 +48,22 @@ FORBIDDEN = [
     re.compile(r"\b(?:US|CA|UK|EU|XX)-\d{4}\b"),
     re.compile(r"\bS\d{4}\b"),
     re.compile(r"@example\.com"),
+    # Security review F5: no intent, assessment or correlation ID either.
+    re.compile(r"\bpi_\d{6}\b"),
+    re.compile(r"\bfa_\d{6}\b"),
+    re.compile(r"\brun-O\d{6}"),
+    re.compile(r"\bcheckout-\d"),
 ]
+
+
+def _shopper_text() -> list[str]:
+    """Every shopper's name and street line (F5): none may reach the model."""
+    with (DATA / "shoppers.jsonl").open(encoding="utf-8") as handle:
+        rows = [json.loads(line) for line in handle if line.strip()]
+    return sorted({r["name"] for r in rows} | {r["address"]["line1"] for r in rows})
+
+
+SHOPPER_TEXT = _shopper_text()
 
 
 def replay_slice() -> int:
@@ -110,6 +125,9 @@ def assert_money(world: World, row: dict[str, Any], placed: bool) -> None:
     order = world.orders.orders[oid]
     confirms = [e for e in world.orders.effects if e.operation == "confirm" and e.reference == oid]
     assert len(confirms) <= 1, oid
+    if not placed:
+        # Security review F1: an order that wasn't placed has nothing captured, whoever escalated.
+        assert all(i.captured_minor == 0 for i in intents), oid
     if placed:
         assert order.status is OrderStatus.CONFIRMED, oid
         assert live[0].captured_minor == order.amount_minor == total_for(row).amount_minor, oid
@@ -186,8 +204,11 @@ def check_replay(
 
 
 def check_cassettes() -> None:
-    """6: no token, reference, postal code, shopper ID or email in any cassette."""
+    """6: no token, reference, postal code, shopper, intent, assessment or correlation ID,
+    email, name or street line in any cassette."""
     for path in sorted(CASSETTES.glob("*.json")):
         text = path.read_text(encoding="utf-8")
         for pattern in FORBIDDEN:
             assert pattern.search(text) is None, (path.name, pattern.pattern)
+        for value in SHOPPER_TEXT:
+            assert value not in text, path.name

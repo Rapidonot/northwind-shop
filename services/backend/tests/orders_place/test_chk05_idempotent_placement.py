@@ -128,21 +128,38 @@ def test_ten_replays_at_once_yield_one_order(kind: str) -> None:
     assert_one_order(world, row, kind)
 
 
-def test_a_replay_repeats_the_same_write_keys() -> None:
+def test_two_interleaved_duplicates_use_the_same_keys_and_write_once() -> None:
+    """Two runs of one task, step by step in turn: the second presents the first's keys and gets
+    its first results, and once the order is confirmed it writes nothing more (security review
+    F1: the store, not the run, says whether the order is open)."""
     world, row = World.make(), first_of("soft_decline")
     task = world.task(row)
+    runs = [
+        build_handlers(
+            task,
+            world.ports(),
+            world.audit(),
+            correlation_id=f"run-{n}",
+            read_policy=FAST,
+            write_policy=FAST_WRITE,
+        )
+        for n in (1, 2)
+    ]
 
-    async def twice() -> None:
-        await drive(world, task, "soft_decline", 1)
-        await drive(world, task, "soft_decline", 2)
+    async def interleave() -> None:
+        for call in CALLS["soft_decline"]:
+            for h in runs:
+                await getattr(h, call)({"order_id": task.order_id})
 
-    asyncio.run(twice())
+    asyncio.run(interleave())
     per_run: dict[str, list[str]] = {}
     for e in world.sink.read_all():
         key = e.inputs.get("idempotency_key")
         if e.phase == "attempt" and isinstance(key, str):
             per_run.setdefault(e.correlation_id, []).append(key)
-    assert per_run["run-1"] == per_run["run-2"]
+    confirm = f"{task.order_id}:order.confirm"
+    assert per_run["run-2"] == [k for k in per_run["run-1"] if k != confirm]
+    assert_one_order(world, row, "soft_decline")
 
 
 def test_a_duplicate_message_with_a_fresh_confirmation_charges_nothing_more() -> None:
@@ -158,12 +175,11 @@ def test_a_duplicate_message_with_a_fresh_confirmation_charges_nothing_more() ->
     first, second = asyncio.run(both())
     assert first.outcome == second.outcome == "placed"
     assert_one_order(world, row, "clean")
-    codes = [
-        (e.outcome or {}).get("code")
-        for e in world.sink.read_all()
-        if e.correlation_id == "run-2" and e.action == "payment.authorize" and e.phase == "outcome"
-    ]
-    assert codes == ["idempotency_conflict"]
+    # Security review F1: the duplicate never reaches the payment port at all.
+    run_two = [e for e in world.sink.read_all() if e.correlation_id == "run-2"]
+    assert not [e for e in run_two if e.action.startswith("payment.")]
+    refused = [(e.outcome or {}).get("code") for e in run_two if e.action == "agent.refused"]
+    assert "order_already_placed" in refused
 
 
 def test_a_transient_retry_inside_a_run_gives_one_effect() -> None:

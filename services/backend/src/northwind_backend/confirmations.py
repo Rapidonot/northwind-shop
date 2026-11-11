@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import re
 import secrets
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from northwind_backend.errors import ToolError, business, validation
 from northwind_backend.ports import Money
@@ -44,7 +44,7 @@ CONFIRMATION_USED = business(
 
 @dataclass(frozen=True, slots=True)
 class Confirmation:
-    ref: str
+    ref: str = field(repr=False)  # security review F4
     order_id: str
     amount: Money
 
