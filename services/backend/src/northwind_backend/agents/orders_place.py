@@ -91,8 +91,8 @@ MAX_AUTHORIZE_ATTEMPTS = 2
 READ_POLICY = RetryPolicy()
 _ORDER_ID = re.compile(r"O\d{6}", re.ASCII)
 
-# One constant per tool, so `tests/governance/test_tool_register.py` finds each decorated tool and its
-# register row.
+# One constant per tool, so `tests/governance/test_tool_register.py` finds each decorated tool
+# and its register row.
 VALIDATE_TOOL = "validate_order"
 ADDRESS_TOOL = "use_address_on_file"
 FRAUD_TOOL = "assess_fraud"
