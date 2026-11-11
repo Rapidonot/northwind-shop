@@ -48,11 +48,13 @@ PAYMENT_READ_ONLY = frozenset({"status"})
 FRAUD_READ_ONLY = frozenset({"read"})
 CARRIER_READ_ONLY = frozenset({"track"})
 
-# The Orders agent's placement task (row #21). No void, no refund, no carrier.
-PAYMENT_PLACE = frozenset({"authorize", "capture", "status"})
-FRAUD_PLACE = frozenset({"assess", "read"})
+# The Orders agent's placement task (row #21). No void, no refund, no carrier. Narrowed to what the
+# code calls (security review F6, the user's decision): no payment status, no fraud read.
+PAYMENT_PLACE = frozenset({"authorize", "capture"})
+FRAUD_PLACE = frozenset({"assess"})
 CATALOG_READ = frozenset({"price", "stock"})
-ORDERS_PLACE = frozenset({"get", "use_address_on_file", "confirm", "escalate"})
+# `claim_payment`: the payment claim (F1, the user's Option 1; pin change approved, stop 5).
+ORDERS_PLACE = frozenset({"get", "use_address_on_file", "confirm", "escalate", "claim_payment"})
 
 
 def _amount(amount: Money | None) -> dict[str, object]:
@@ -361,6 +363,30 @@ class AuditedOrderStore(_View):
                 intent_id=intent_id,
                 amount=amount,
                 dry_run=dry_run,
+            ),
+        )
+
+    def claim_payment(
+        self,
+        *,
+        order_id: str,
+        run_id: str,
+        payment: PaymentIntent | None = None,
+        dry_run: bool = False,
+    ) -> Result[Order]:
+        # `run_id` is a code-only identity: written as type and length, never as a value.
+        inputs = {
+            "order_id": order_id,
+            "run_id": run_id,
+            "intent_id": None if payment is None else payment.intent_id,
+            "dry_run": dry_run,
+        }
+        return self._run(
+            "claim_payment",
+            "order.claim_payment",
+            inputs,
+            lambda: self._fake.claim_payment(
+                order_id=order_id, run_id=run_id, payment=payment, dry_run=dry_run
             ),
         )
 

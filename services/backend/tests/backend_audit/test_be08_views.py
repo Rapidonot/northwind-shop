@@ -191,10 +191,11 @@ def test_the_placement_sets_are_exactly_these() -> None:
     """Row #21: no void, no refund, no carrier, no catalog write (hard rule 8, PRD §7)."""
     from northwind_backend.views import CATALOG_READ, FRAUD_PLACE, ORDERS_PLACE, PAYMENT_PLACE
 
-    assert PAYMENT_PLACE == {"authorize", "capture", "status"}
-    assert FRAUD_PLACE == {"assess", "read"}
+    # Narrowed to what the code calls (F6) and the claim added (F1); both approved by the user.
+    assert PAYMENT_PLACE == {"authorize", "capture"}
+    assert FRAUD_PLACE == {"assess"}
     assert CATALOG_READ == {"price", "stock"}
-    assert ORDERS_PLACE == {"get", "use_address_on_file", "confirm", "escalate"}
+    assert ORDERS_PLACE == {"get", "use_address_on_file", "confirm", "escalate", "claim_payment"}
 
 
 def test_the_read_only_sets_are_reads() -> None:

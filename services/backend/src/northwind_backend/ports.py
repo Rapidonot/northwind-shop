@@ -168,6 +168,7 @@ class CarrierPort(Protocol):
 
 class OrderStatus(StrEnum):
     PENDING = "pending"
+    PAYING = "paying"  # claimed by one run for payment (row #21, F1)
     CONFIRMED = "confirmed"
     ESCALATED = "escalated"
 
@@ -197,6 +198,24 @@ class Order:
     escalation: str | None = None
     address_on_file: bool = False
     dry_run: bool = False
+    # The run that holds the payment claim: a code-only identity, never in model input or the
+    # audit's allow-list (F1, the user's Option 1).
+    claimed_by: str | None = field(default=None, repr=False)
+    # What the claim owner last reported of its intent (F1): status and captured minor units.
+    payment_status: str | None = None
+    captured_minor: int = 0
+
+
+def claim_payment_view(order: Order, claim: str) -> dict[str, Any]:
+    """The claim and any payment on it, as an escalation context shows them (F1)."""
+    return {
+        "status": order.payment_status or "payment_claimed",
+        "claim": claim,
+        "intent_id": order.intent_id,
+        "authorized_minor": order.amount_minor if order.intent_id else None,
+        "captured_minor": order.captured_minor,
+        "currency": order.currency,
+    }
 
 
 @dataclass(frozen=True, slots=True)
@@ -244,6 +263,22 @@ class OrderStorePort(Protocol):
         dry_run: bool = False,
     ) -> Result[Order]:
         """One confirmed order per order ID, whatever the key (CHK-05)."""
+        ...
+
+    def claim_payment(
+        self,
+        *,
+        order_id: str,
+        run_id: str,
+        payment: PaymentIntent | None = None,
+        dry_run: bool = False,
+    ) -> Result[Order]:
+        """A compare-and-set on the order's state, never resolved through the idempotency store:
+        duplicates share the order-ID keys, so a replay would hand the claim to both. With no
+        intent, it claims: pending becomes paying, owned by `run_id`; the owner claiming again gets
+        `Ok`; anyone else gets `claimed_by_another_run`. With a payment, the owner reports its
+        intent's state on the claim (after authorize and after capture), which an escalation of the
+        order then shows."""
         ...
 
     def escalate(

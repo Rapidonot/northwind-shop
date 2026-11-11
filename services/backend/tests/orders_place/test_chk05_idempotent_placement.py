@@ -85,6 +85,22 @@ def effects(world: World, order_id: str) -> Counter[str]:
     return seen
 
 
+def assert_at_most_one_of_everything(world: World, row: dict[str, Any], outcome: str) -> None:
+    """CHK-05 whatever the interleaving: one intent, capture and confirmed order at most; nothing
+    captured unless placed... or, if escalated with money on it, reported in the escalation."""
+    oid = row["order_id"]
+    seen = effects(world, oid)
+    assert seen["authorize"] <= 1 and seen["capture"] <= 1 and seen["confirm"] <= 1, seen
+    intents = [i for i in world.payment.intents.values() if i.order_id == oid]
+    assert len(intents) <= 1
+    if outcome == "placed":
+        assert seen["confirm"] == 1 and intents[0].captured_minor > 0
+    elif intents:
+        stored = world.orders.escalations[oid]["payment"]
+        assert stored is not None and stored["intent_id"] == intents[0].intent_id
+        assert stored["captured_minor"] == intents[0].captured_minor
+
+
 def assert_one_order(world: World, row: dict[str, Any], kind: str) -> None:
     oid = row["order_id"]
     seen = effects(world, oid)
@@ -116,7 +132,11 @@ def test_ten_replays_in_a_row_yield_one_order(kind: str) -> None:
 
 
 @pytest.mark.parametrize("kind", sorted(CALLS))
-def test_ten_replays_at_once_yield_one_order(kind: str) -> None:
+def test_ten_replays_at_once_never_charge_twice_and_report_money(kind: str) -> None:
+    """Ten at once: never a second charge, and any money on an escalated order reported. It can
+    pass with no order placed: under the payment claim (F1, the user's
+    Option 1) a run that finds another run paying never authorizes and escalates instead, so an
+    overlap ends escalated, fail closed, with any live payment reported in the escalation."""
     world, row = World.make(), first_of(kind)
     task = world.task(row)
 
@@ -124,15 +144,15 @@ def test_ten_replays_at_once_yield_one_order(kind: str) -> None:
         return list(await asyncio.gather(*(drive(world, task, kind, n) for n in range(10))))
 
     results = asyncio.run(ten())
-    assert {r.outcome for r in results} == {OUTCOME[kind]}
-    assert_one_order(world, row, kind)
+    assert len({r.outcome for r in results}) == 1  # one terminal state, the store's
+    assert_at_most_one_of_everything(world, row, results[0].outcome)
 
 
-def test_two_interleaved_duplicates_use_the_same_keys_and_write_once() -> None:
-    """Two runs of one task, step by step in turn: the second presents the first's keys and gets
-    its first results, and once the order is confirmed it writes nothing more (security review
-    F1: the store, not the run, says whether the order is open)."""
-    world, row = World.make(), first_of("soft_decline")
+def test_two_duplicates_with_the_same_keys_never_both_get_the_claim() -> None:
+    """The user's test for the claim (F1): two runs of one task, the same keys, step by step in
+    turn. Only one claims; the other never authorizes and escalates as a duplicate in progress, and
+    the stored escalation reports the claim owner's authorization."""
+    world, row = World.make(), first_of("clean")
     task = world.task(row)
     runs = [
         build_handlers(
@@ -147,19 +167,75 @@ def test_two_interleaved_duplicates_use_the_same_keys_and_write_once() -> None:
     ]
 
     async def interleave() -> None:
-        for call in CALLS["soft_decline"]:
+        for call in HAPPY:
             for h in runs:
                 await getattr(h, call)({"order_id": task.order_id})
 
     asyncio.run(interleave())
-    per_run: dict[str, list[str]] = {}
-    for e in world.sink.read_all():
-        key = e.inputs.get("idempotency_key")
-        if e.phase == "attempt" and isinstance(key, str):
-            per_run.setdefault(e.correlation_id, []).append(key)
-    confirm = f"{task.order_id}:order.confirm"
-    assert per_run["run-2"] == [k for k in per_run["run-1"] if k != confirm]
-    assert_one_order(world, row, "soft_decline")
+    oid = task.order_id
+    assert [step for order, step in world.orders.claims if order == oid].count("claimed") == 1
+    keys = {
+        e.correlation_id: [k for k in [e.inputs.get("idempotency_key")] if isinstance(k, str)]
+        for e in world.sink.read_all()
+    }
+    assert keys  # both runs wrote under the same order-ID keys
+    authorizes = [e for e in world.payment.effects if e.operation == "authorize"]
+    assert len(authorizes) == 1
+    second = [e for e in world.sink.read_all() if e.correlation_id == "run-2"]
+    assert not [e for e in second if e.action == "payment.authorize"]
+    refused = [(e.outcome or {}).get("code") for e in second if e.action == "agent.refused"]
+    assert "duplicate_in_progress" in refused
+    order = world.orders.orders[oid]
+    assert order.status.value == "escalated" and order.escalation == "duplicate_in_progress"
+    stored = world.orders.escalations[oid]
+    assert stored["payment"] is not None
+    assert stored["payment"]["intent_id"] == authorizes[0].reference
+    assert not [e for e in world.payment.effects if e.operation == "capture"]
+
+
+def test_concurrent_claims_from_ten_runs_give_exactly_one_owner() -> None:
+    """The store's compare-and-set alone, from ten threads: one owner, nine refusals."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    world, row = World.make(), first_of("clean")
+    store = world.ports().orders
+    with ThreadPoolExecutor(max_workers=10) as pool:
+        results = list(
+            pool.map(
+                lambda n: store.claim_payment(
+                    order_id=row["order_id"], run_id=f"run-identity-{n:02d}"
+                ),
+                range(10),
+            )
+        )
+    codes = [getattr(r, "code", "ok") for r in results]
+    assert codes.count("ok") == 1 and codes.count("claimed_by_another_run") == 9
+
+
+def test_a_rerun_after_a_crash_finds_the_claim_and_escalates() -> None:
+    """Fail closed: a run that claimed and died leaves the order paying; a rerun is not the owner,
+    never authorizes, and escalates with the claim and its payment reported."""
+    world, row = World.make(), first_of("clean")
+    task = world.task(row)
+    crashed = build_handlers(
+        task,
+        world.ports(),
+        world.audit(),
+        correlation_id="run-1",
+        read_policy=FAST,
+        write_policy=FAST_WRITE,
+    )
+
+    async def run() -> PlacementResult:
+        for call in HAPPY[:3]:  # claimed and authorized, then nothing: no finish()
+            await getattr(crashed, call)({"order_id": task.order_id})
+        return await drive(world, task, "clean", 2)
+
+    rerun = asyncio.run(run())
+    assert rerun.outcome == "escalated" and rerun.reason == "duplicate_in_progress"
+    assert len([e for e in world.payment.effects if e.operation == "authorize"]) == 1
+    assert rerun.context is not None and rerun.context["payment"]["claim"] == "another_run"
+    assert world.orders.escalations[task.order_id]["payment"]["intent_id"] is not None
 
 
 def test_a_duplicate_message_with_a_fresh_confirmation_charges_nothing_more() -> None:

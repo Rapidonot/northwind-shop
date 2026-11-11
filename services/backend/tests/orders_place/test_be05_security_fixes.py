@@ -319,15 +319,11 @@ def test_capture_follows_a_later_validation_that_moved_the_total() -> None:
     assert "capture" not in money(world, row["order_id"])
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="F1 residual, open for the user (stop 6): needs a conditional store transition",
-)
 def test_a_concurrent_duplicates_hold_is_reported_in_the_escalation() -> None:
     """The re-review's hold variant, interleaved by hand. Run A stops; run B authorizes; run A
     escalates; B's capture is refused. The stored escalation must report B's live authorization.
-    Today it says nothing of it, so this fails, and strict xfail keeps that visible: it passes, and
-    so fails the suite, the moment the gap closes without this mark being removed."""
+    Closed by the payment claim (F1, the user's Option 1); the strict xfail it carried until then is
+    removed and its assertions are unchanged."""
     world, row = World.make(), first_of("clean")
     task = world.task(row)
     a, b = (
@@ -357,3 +353,14 @@ def test_a_concurrent_duplicates_hold_is_reported_in_the_escalation() -> None:
     assert live and "capture" not in money(world, task.order_id)  # the hold is real
     stored = world.orders.escalations[task.order_id]
     assert stored["payment"] is not None, "the escalation doesn't mention the live authorization"
+
+
+def test_a_run_identity_never_looks_like_card_data() -> None:
+    """Found while fixing F1: a hex run identity held 13 digits in a row in about 1 run in 40, the
+    card-data screen refused its claim, and the order ended `failed`."""
+    from northwind_backend.audit import card_data
+
+    world, row = World.make(), first_of("clean")
+    for n in range(2_000):
+        h = build_handlers(world.task(row), world.ports(), world.audit(), correlation_id=f"r-{n}")
+        assert not card_data(h.run_id), h.run_id

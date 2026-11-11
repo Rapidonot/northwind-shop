@@ -38,6 +38,8 @@ from __future__ import annotations
 
 import json
 import re
+import secrets
+import string
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from functools import partial
@@ -71,6 +73,7 @@ from northwind_backend.ports import (
     PaymentIntent,
     PaymentPort,
     PaymentStatus,
+    claim_payment_view,
 )
 from northwind_backend.recovery import (
     WRITE_POLICY,
@@ -196,6 +199,10 @@ STOPPED = business(
     "An earlier step may have taken effect, so no more changes are made. Escalate the order.",
 )
 ALREADY_DONE = business("step_already_done", "This step already succeeded in this task.")
+DUPLICATE = business(
+    "duplicate_in_progress",
+    "Another run is already paying for this order, so it has been escalated. Stop here.",
+)
 ESCALATION_DOUBTFUL = business(
     "escalation_doubtful", "The escalation may already have taken effect. Stop here."
 )
@@ -208,6 +215,7 @@ ALREADY_PLACED = business(
 
 Reason = Literal[
     "uncertain_write",
+    "duplicate_in_progress",
     "fraud_review",
     "out_of_stock",
     "not_sold_here",
@@ -221,6 +229,9 @@ Reason = Literal[
 ]
 RECOMMENDED: dict[str, str] = {
     "uncertain_write": "read the payment and order state, settle the uncertain action, then finish",
+    "duplicate_in_progress": (
+        "another run holds the payment claim: check its authorization (in `payment`) first"
+    ),
     "fraud_review": "review the fraud assessment; release or cancel the order",
     "out_of_stock": "offer a substitute or a back-order, or cancel (BE-04)",
     "not_sold_here": "correct the order lines or cancel",
@@ -283,7 +294,7 @@ class Placement:
     confirmed: Order | None = None
     escalated: Order | None = None
     reason: str | None = None
-    context: dict[str, Any] | None = None
+    handoff: dict[str, Any] | None = None  # the escalation context, built by code
     codes: list[str] = field(default_factory=list)  # every error code a port returned
     uncertain: list[tuple[str, str]] = field(default_factory=list)  # (action, key)
 
@@ -358,6 +369,11 @@ class _Handlers:
         self.catalog = AuditedCatalogPort(ports.catalog, audit, allowed=CATALOG_READ)
         self.orders = AuditedOrderStore(ports.orders, audit, allowed=ORDERS_PLACE)
         self.escalated_by: Literal["agent", "code"] | None = None
+        # The run's own identity for the payment claim (F1): random, code-only, never in model
+        # input, so no other run, a rerun after a crash included, can present it.
+        # Letters only: hex could hold 13 digits in a row, which the card-data screen rightly
+        # refuses (about 1 run in 40).
+        self.run_id = "run_" + "".join(secrets.choice(string.ascii_letters) for _ in range(20))
 
     # ---- shared plumbing -------------------------------------------------------------------
 
@@ -393,6 +409,18 @@ class _Handlers:
         except AuditWriteError:
             error = AUDIT_UNAVAILABLE
         return _text(model_envelope(tool_name, error), error=True)
+
+    async def _report_on_claim(self, tool_name: str, intent: PaymentIntent) -> None:
+        """The claim owner reports its intent's state, after authorize and after capture, so an
+        escalation of the order shows the money whoever escalates (F1)."""
+        await self._write(
+            tool_name,
+            "order.claim_payment",
+            self.task.key("order.claim_payment"),
+            lambda: self.orders.claim_payment(
+                order_id=self.task.order_id, run_id=self.run_id, payment=intent
+            ),
+        )
 
     async def _store_gate(self, tool_name: str) -> dict[str, Any] | None:
         """Security review F1: the order store, not this run's memory, says whether the order is
@@ -575,6 +603,20 @@ class _Handlers:
         retry_ok = attempt == 1 or p.authorize_codes[-1] == "soft_decline"
         if attempt > MAX_AUTHORIZE_ATTEMPTS or not retry_ok:
             return self._refuse(AUTHORIZE, NO_MORE_ATTEMPTS)
+        # The claim (F1, the user's Option 1): a compare-and-set on the order's state, owned by this
+        # run. A run that doesn't own it never authorizes; it escalates.
+        claim_key = self.task.key("order.claim_payment")
+        claimed = await self._write(
+            AUTHORIZE,
+            "order.claim_payment",
+            claim_key,
+            lambda: self.orders.claim_payment(order_id=order.order_id, run_id=self.run_id),
+        )
+        if not isinstance(claimed.result, Ok):
+            if claimed.result.code == "claimed_by_another_run":
+                await self.escalate("code")
+                return self._refuse(AUTHORIZE, DUPLICATE)
+            return self._error(AUTHORIZE, claimed)
         key = self.task.key("payment.authorize", attempt)
         done = await self._write(
             AUTHORIZE,
@@ -595,6 +637,7 @@ class _Handlers:
         p.authorize_codes.append("ok")
         intent: PaymentIntent = done.result.value
         p.intent = intent
+        await self._report_on_claim(AUTHORIZE, intent)
         self._step(AUTHORIZE, done, _money(intent))
         return _ok({"status": intent.status.value})
 
@@ -640,6 +683,7 @@ class _Handlers:
             return self._error(CAPTURE, done)
         captured: PaymentIntent = done.result.value
         p.captured = captured
+        await self._report_on_claim(CAPTURE, captured)
         self._step(CAPTURE, done, _money(captured))
         return _ok({"status": captured.status.value})
 
@@ -716,9 +760,10 @@ class _Handlers:
         `escalate_order` tool and by the run itself when the model stopped short."""
         p = self.placement
         p.reason = reason_for(p, by)
-        p.context = self.context()
+        seen = await self._read(lambda: self.orders.get(self.task.order_id))
+        p.handoff = self.handoff(seen.result.value if isinstance(seen.result, Ok) else None)
         key = self.task.key("order.escalate")
-        context = p.context
+        context = p.handoff
         reason = p.reason
         done = await self._write(
             ESCALATE,
@@ -733,13 +778,17 @@ class _Handlers:
             self.escalated_by = by
         return done
 
-    def context(self) -> dict[str, Any]:
-        """What a person needs to act without the transcript. Values come from step results and
-        audited outcomes only: never from model text."""
+    def handoff(self, stored: Order | None = None) -> dict[str, Any]:
+        """What a person needs to act without the transcript. Values come from step results,
+        audited outcomes and the store only: never from model text. An order in `paying` reports
+        the claim and any authorization on it, whichever run holds it (F1)."""
         p = self.placement
         results, failures = self.state.results()
         values = {r.step: r.value for r in results}
         payment = values.get(CAPTURE) or values.get(AUTHORIZE)
+        if payment is None and stored is not None and stored.claimed_by is not None:
+            claim = "this_run" if stored.claimed_by == self.run_id else "another_run"
+            payment = claim_payment_view(stored, claim)
         return {
             "order_id": self.task.order_id,
             "shopper_id": None if p.order is None else p.order.shopper_id,
@@ -813,6 +862,8 @@ def reason_for(p: Placement, by: Literal["agent", "code"]) -> str:
     """The escalation reason, from the run's state alone, in a fixed order of precedence."""
     if p.uncertain:
         return "uncertain_write"
+    if "claimed_by_another_run" in p.codes:
+        return "duplicate_in_progress"
     if p.fraud is not None and p.fraud.decision is FraudDecision.REVIEW:
         return "fraud_review"
     issues = set(p.issues or ())
@@ -907,7 +958,10 @@ async def finish(handlers: _Handlers, result: AgentResult) -> PlacementResult:
     # Re-review N1: skip the code escalation only when the store positively holds the order as
     # not pending, or this run's escalation is doubtful; a failed read still tries (the store's
     # own checks make that safe).
-    closed = before is not None and before.status is not OrderStatus.PENDING
+    closed = before is not None and (
+        before.status in (OrderStatus.CONFIRMED, OrderStatus.ESCALATED)
+        or (before.status is OrderStatus.PAYING and before.claimed_by != handlers.run_id)
+    )
     if (
         p.confirmed is None
         and p.escalated is None
@@ -928,10 +982,10 @@ async def finish(handlers: _Handlers, result: AgentResult) -> PlacementResult:
     context = None
     if outcome != "placed":
         # Re-review N1: a failed run reports context too, built from what it saw.
-        if p.escalated is None or p.context is None:
+        if p.escalated is None or p.handoff is None:
             p.reason = reason or p.reason or reason_for(p, "code")
-            p.context = handlers.context()
-        context = p.context
+            p.handoff = handlers.handoff(order)
+        context = p.handoff
     return PlacementResult(
         outcome=outcome,
         agent=result,

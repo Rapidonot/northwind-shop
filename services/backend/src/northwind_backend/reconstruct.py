@@ -43,7 +43,15 @@ STATE_CHANGING = frozenset(
         "order.escalate",
     }
 )
-ORDER_ACTIONS = frozenset({"order.get", "order.address_on_file", "order.confirm", "order.escalate"})
+ORDER_ACTIONS = frozenset(
+    {
+        "order.get",
+        "order.address_on_file",
+        "order.confirm",
+        "order.escalate",
+        "order.claim_payment",
+    }
+)
 UNCERTAIN_CODES = frozenset({"timeout", "unexpected_error", "audit_incomplete"})
 PAYMENT_ACTIONS = frozenset({"payment.capture", "payment.void", "payment.refund", "payment.status"})
 
