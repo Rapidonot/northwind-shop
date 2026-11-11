@@ -126,7 +126,7 @@ _WORDS = rf"(?:[^\W\d_]{{1,10}}{_GAP}){{0,3}}"  # at most three short words in b
 _SUBJECT = r"(?:order|payment|refund|discount|code)"
 # One adverb may sit between the verb and its participle ("is now confirmed", M3). A negation is not
 # one of them, so "is not confirmed" still passes.
-_ADVERB = r"(?:(?:now|already|just|also|since|[a-z]{2,10}ly)\s{1,3})?"
+_ADVERB = r"(?:(?:now|already|just|also|since|fully|finally|successfully)\s{1,3})?"
 _NUMBER_WORDS = {
     "a": 1, "an": 1, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7,
     "eight": 8, "nine": 9, "ten": 10, "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14,
@@ -172,8 +172,8 @@ PATTERNS: tuple[Pattern, ...] = (
     _p("promotion", rf"staff{_S}codes?"),
     _p("promotion", rf"member{_S}prices?"),
     _p("promotion", rf"free{_S}today"),
-    _p("promotion", rf"\d{{1,3}}\s?(?:percent|per{_S}cent){_S}off\b"),  # M3, the user's list
-    _p("promotion", rf"\bhalf{_S}price"),
+    _p("promotion", rf"(?:\d{{1,3}}|\b(?:{_NUMBER}))\s?(?:percent|per{_S}cent){_S}off\b"),  # M3
+    _p("promotion", r"\bhalf[\s-]{1,3}price"),
     _p("promotion", rf"\bclearance{_S}(?:sale|price|event)s?\b"),
     _p("promotion", rf"\b[Cc]ode{_S}[A-Z0-9]{{4,12}}\b", exact=True),
     # 2. Links and contact details. Bare domains and emails are the word check, below.
@@ -185,7 +185,7 @@ PATTERNS: tuple[Pattern, ...] = (
     # 3. Order or payment state, said as done.
     _p(
         "confirmation",
-        rf"\b{_SUBJECT}{_S}(?P<cop>is|has{_S}been|was){_S}{_ADVERB}"
+        rf"\b{_SUBJECT}(?:{_S}(?P<cop>is|has{_S}(?:already{_S})?been|was)|['’]s{_S}been){_S}{_ADVERB}"
         r"(?:confirmed|processed|approved|authori[sz]ed|applied|placed|issued)\b",
         "conditional",
     ),
@@ -301,33 +301,6 @@ def stems_of(text: str) -> frozenset[str]:
 
 
 @lru_cache(maxsize=512)
-def policy_durations(text: str) -> frozenset[tuple[int, str, str]]:
-    """(value, unit, stem) for every duration in a sentence of a document, with every policy stem
-    of that sentence and of the heading or parent line above it (M2, the user's decision)."""
-    found: set[tuple[int, str, str]] = set()
-    heading = ""
-    for number, paragraph in enumerate(re.split(r"\n\s*\n", text)):
-        lines = [line for line in paragraph.split("\n") if line.strip()]
-        # A markdown heading, or an indexed chunk's own first line, "Title > Section" (P3-5).
-        titled = number == 0 and len(lines) == 1 and " > " in lines[0]
-        if lines and (lines[0].lstrip().startswith("#") or titled):
-            heading, lines = lines[0], lines[1:]
-        parent, prose, units = heading, [], []
-        for line in lines:
-            if _LIST_ITEM.match(line):
-                units.append((parent, line))
-            else:
-                prose.append(line)
-                parent = line
-        units += [(heading, s) for s in re.split(r"(?<=[.!?])\s+", " ".join(prose)) if s]
-        for above, sentence in units:
-            stems = stems_of(f"{heading} {above} {sentence}")
-            for value, unit in durations(sentence):
-                found.update((value, unit, stem) for stem in stems)
-    return frozenset(found)
-
-
-@lru_cache(maxsize=512)
 def durations(text: str) -> frozenset[tuple[int, str]]:
     found = set()
     for match in DURATION.finditer(view_of(text).text):
@@ -373,6 +346,8 @@ class OutputCheck:
     _exacts: list[str] = field(default_factory=list)  # the same before casefolding
     _vlen: list[int] = field(default_factory=lambda: [0])  # view length of raw[:i]
     _visible: list[int] = field(default_factory=list)  # raw positions that fold to something
+    _headings: list[tuple[int, frozenset[str]]] = field(default_factory=list)  # (line start, stems)
+    _line_start: int = 0  # where the line being written starts
     _matched_to: int = 0  # raw text before this has been matched (patterns are at most L wide)
     _words_to: int = 0  # every complete word before this was checked and is not a link
     _markers_to: int = 0  # every marker starting before this was dealt with
@@ -422,6 +397,7 @@ class OutputCheck:
         self._scan = (0, 0, 0)
         self._dropping, self._lead, self._drop_from = None, "", 0
         self._folds, self._exacts, self._vlen, self._visible = [], [], [0], []
+        self._headings, self._line_start = [], 0
         self._matched_to = self._words_to = self._markers_to = 0
         self._ws_start = self._word_start = None
         if not keep_shown:
@@ -437,7 +413,17 @@ class OutputCheck:
             self._vlen.append(self._vlen[-1] + len(folded))
             if folded:
                 self._visible.append(position)
+            if self._raw[position] == "\n":
+                self._heading_line(position)
             self._track(position)
+
+    def _heading_line(self, end: int) -> None:
+        """A line has ended at `end`: if it is a heading, keep its stems for the lines below."""
+        start, self._line_start = self._line_start, end + 1
+        if self._wide(start, end) <= 100:
+            line = self._view(start, end).text
+            if _HEADING.fullmatch(line):
+                self._headings.append((start, stems_of(line)))
 
     def _track(self, position: int) -> None:
         if self._raw[position].isspace():
@@ -450,6 +436,8 @@ class OutputCheck:
         """After raw text from `start` (not yet sent) changed: refold it and find the tail."""
         del self._folds[start:], self._exacts[start:], self._vlen[start + 1 :]
         del self._visible[bisect_left(self._visible, start) :]
+        self._line_start = self._raw.rfind("\n", 0, start) + 1
+        del self._headings[bisect_left(self._headings, (self._line_start,)) :]
         self._ws_start = self._word_start = None
         # From the start of the word that holds `_consumed`, which may be partly sent: tracking
         # from `_consumed` itself would split that word in two (pass 3, P3-1).
@@ -539,7 +527,7 @@ class OutputCheck:
         if pattern.exempt == "phone":
             return not _is_phone(raw)
         if pattern.exempt == "conditional":
-            copula = re.sub(r"\s+", " ", found["cop"]) if "cop" in found.groupdict() else ""
+            copula = re.sub(r"\s+", " ", found.groupdict().get("cop") or "")
             introduced = _CONDITIONAL.search(view.text[max(0, start - 40) : start])
             return bool(introduced) and copula in PRESENT_COPULAS
         if pattern.exempt == "duration":
@@ -553,18 +541,18 @@ class OutputCheck:
             return any(s.public_policy and span in normal(s.text) for s in self.sources)
         raise ValueError(f"unknown exemption: {pattern.exempt}")  # fail closed on a new kind
 
-    def _vouched(self, text: str, stems: frozenset[str]) -> bool:
-        """A policy duration passes only if a sentence of a public document returned this turn
-        states the same duration with one of the same policy stems (M2): FAQ-012's repair
-        warranty of two years does not vouch for a returns window of two years."""
+    def _vouched(self, text: str) -> bool:
+        """A policy duration passes if a public, non-internal document returned this turn states
+        the same duration; retrieval returns only the shopper's region or `ALL` (RAG-11). Class 5
+        stops relayed or injected numbers. A real policy number on the wrong term ("return any
+        item within two years", from the repair warranty) is a grounding error left to #13b's
+        judge (the user's decision, 2026-11-11)."""
         wanted = durations(text)
-        have: set[tuple[int, str, str]] = set()
+        have: set[tuple[int, str]] = set()
         for source in self.sources:
             if source.public_document:
-                have |= policy_durations(source.text)
-        return bool(wanted) and all(
-            any((value, unit, stem) in have for stem in stems) for value, unit in wanted
-        )
+                have |= durations(source.text)
+        return bool(wanted) and wanted <= have
 
     def _policy_context(self, start: int, end: int, final: bool) -> frozenset[str] | None:
         """Whether the sentence holding a duration is about policy; None while it cannot be told.
@@ -595,11 +583,9 @@ class OutputCheck:
         stems = frozenset(POLICY_STEMS.findall(region)) | self._context_stems(sentence)
         return stems if boundary is not None and self._wide(end, boundary) <= L else stems or UNREAD
 
-    def _context_stems(self, sentence: int) -> frozenset[str]:
-        """The policy stems of the line that heads the sentence's line (M2): for a list item its
-        parent, otherwise the line before it if that is a heading. Measured in view characters
-        (pass 3, P3-3): a list item whose parent lies more than 16L back counts as policy with
-        unreadable stems (fail closed)."""
+    def _parent_stems(self, sentence: int) -> frozenset[str]:
+        """For a list item, the stems of its parent line. Measured in view characters (pass 3,
+        P3-3): a parent more than 16L back counts as policy with unreadable stems (fail closed)."""
         line_start = self._raw.rfind("\n", 0, sentence) + 1
         back = self._back(line_start, 16 * L)
         truncated = back > 0 and self._raw[back - 1] != "\n"
@@ -616,9 +602,33 @@ class OutputCheck:
                 if above is None or len(above.group(1)) < depth:
                     return stems_of(line)
             return UNREAD if truncated else frozenset()
-        if complete and complete[-1][0] and _HEADING.fullmatch(complete[-1][1]):
-            return stems_of(complete[-1][1])
         return frozenset()
+
+    def _context_stems(self, sentence: int) -> frozenset[str]:
+        """Policy context for a sentence (M2 and P3-3, the user's decisions): its list parent,
+        the nearest heading above it, and the previous sentence in the same paragraph."""
+        line_start = self._raw.rfind("\n", 0, sentence) + 1
+        stems = self._parent_stems(sentence)
+        at = bisect_left(self._headings, (line_start,)) - 1
+        if at >= 0:
+            stems |= self._headings[at][1]
+        return stems | self._previous_sentence_stems(sentence)
+
+    def _previous_sentence_stems(self, sentence: int) -> frozenset[str]:
+        """The sentence before this one, unless a blank line comes between. One longer than 16L
+        view characters counts as policy with unreadable stems (fail closed)."""
+        back = self._back(sentence, 16 * L)
+        before = self._view(back, sentence).text
+        paragraph = re.split(r"\n[ \t]*\n", before)
+        if len(paragraph) > 1 and not paragraph[-1].strip():
+            return frozenset()  # the paragraph starts here
+        text = paragraph[-1].rstrip()
+        if not text:
+            return frozenset()
+        parts = re.split(r"(?<=[.!?])\s+|\n", text)
+        if len(parts) == 1 and len(paragraph) == 1 and back > 0:
+            return UNREAD
+        return stems_of(parts[-1])
 
     def _clean_markers(self, final: bool) -> None:
         """An invented citation marker comes out of the held text before anything is matched, so
@@ -676,7 +686,7 @@ class OutputCheck:
                         if self._undecided is None or start < self._undecided:
                             self._undecided = start
                         continue
-                    if not stems or self._vouched(view.text[found.start() : found.end()], stems):
+                    if not stems or self._vouched(view.text[found.start() : found.end()]):
                         continue
                 if self._exempt(pattern, view, found, self._raw[start:end]):
                     continue

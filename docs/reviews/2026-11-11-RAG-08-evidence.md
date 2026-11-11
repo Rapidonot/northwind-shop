@@ -261,6 +261,53 @@ Raw, verbatim, appended to `docs/reviews/2026-11-11-RAG-08-security-review.md`, 
 
 **`make check`: 1,475 passed, 0 failed.** Window A is no longer writing the ledger, which held at $2.950179.
 
+## The user's answers at the third stop (2026-11-11), built
+
+- **P3-4: class 5's vouching is simplified.** A policy duration passes if the same duration appears in any
+  public, non-internal document returned this turn. The document-side stem and heading matching is gone, and
+  the answer-side policy-word gate stays. Decision 0014 now says class 5 stops relayed or injected numbers, and
+  that a real number on the wrong term is #13b's judge's.
+- **P3-3(c)/(d):** on the answer side, the nearest heading above (tracked as lines complete) and the previous
+  sentence in the same paragraph count as policy context. A previous sentence longer than 16L fails closed.
+- **P3-6:** the adverb list is now now, already, just, also, since, fully, finally and successfully. Added:
+  "has already been", "order's been", "half-price" and "ninety percent off". "Your refund issued" is left
+  out, as you decided.
+- **P3-8:** logged to hardening.
+
+**Tests whose expectation changed by the user's decision (P3-4), in `test_rag08_m2_m3.py`:**
+- `test_m2_a_real_policy_number_on_the_wrong_term_is_left_to_the_judge`, formerly
+  `…_repair_duration_does_not_vouch…`: FAQ-012's two years now vouches;
+- `test_m2_any_public_document_with_the_duration_vouches`, formerly `…_another_stem_does_not_vouch`:
+  FAQ-007's one hour now vouches;
+- `test_m2_a_long_policy_sentence_keeps_the_stems_read_up_to_the_bound`: FAQ-017's 14 days now vouches for
+  the long "Returns take 14 days…", and with no source it is still replaced;
+- `test_m2_a_documents_heading_vouches_for_a_bullet_with_no_stem_of_its_own`: the bare bullet now vouches, and
+  with no source it is still replaced.
+
+**Kept, as you asked:** a duration only in a review, only in an internal document or only in a product is
+replaced (`test_a_duration_only_in_a_review_or_an_internal_document_is_replaced`,
+`test_m2_an_internal_document_never_vouches`).
+
+**New tests:**
+- R00056 still passes;
+- both of the reviewer's strings (`**Return window**\nUnworn items qualify.\n365 days.` and `You can return any
+  item. You have 365 days.`) are replaced;
+- a previous paragraph does not count;
+- a too-long previous sentence fails closed;
+- the added wordings are replaced;
+- "only", "usually" and "typically" no longer over-block.
+
+These failed first: 13 failed, log `/tmp/claude-502/rag08-failfirst-stop3.log`.
+
+**Mutants: 13 of 14 killed** (`/tmp/claude-502/rag08-mutants-stop3.log`). The one survivor, "headings kept after
+a cut", is equivalent: without the trim, a heading cut on its own line is recorded twice with the same stems,
+and a cut marker cannot change a stem.
+
+**Over-blocking, re-run, comparing every whole answer under the committed code with the new code** (script
+`/tmp/claude-502/rag08-whole-diff.py`, output `/tmp/claude-502/rag08-whole-diff.out`): **no change** in the 13
+smoke, the 28 red-team and the 202 eval answers, nor in any trusted fixture field. The block list stays the
+same 38 sentences, and the fixture hit list stays FAQ-003 and FAQ-005.
+
 ## Pre-row tests changed (for the user's read)
 
 1. `test_smoke_e2e.py::test_a_planted_injections_subject_is_not_named`: the strict xfail marker

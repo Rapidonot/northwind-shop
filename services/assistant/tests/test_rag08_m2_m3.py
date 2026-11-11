@@ -37,9 +37,13 @@ def doc(doc_id: str) -> Source:
 # ---- M2 ------------------------------------------------------------------------------------------
 
 
-def test_m2_a_repair_duration_does_not_vouch_for_a_returns_window() -> None:
+def test_m2_a_real_policy_number_on_the_wrong_term_is_left_to_the_judge() -> None:
+    """Changed by the user's decision (2026-11-11, P3-4): class 5 stops relayed or injected numbers.
+    A public document's own number on the wrong term is a grounding error for #13b's judge, logged
+    as a residual. Was: FAQ-012's two years did not vouch for a returns window."""
     assert "two years" in doc("FAQ-012").text
-    assert check_text("You can return any item within two years.", [doc("FAQ-012")]) == POLICY
+    answer = "You can return any item within two years."
+    assert check_text(answer, [doc("FAQ-012")]) == answer
 
 
 def test_m2_a_heading_line_puts_the_next_line_in_policy_context() -> None:
@@ -65,9 +69,11 @@ def test_m2_a_correct_policy_duration_still_passes(answer: str, source: str) -> 
     assert check_text(answer, [doc(source)]) == answer
 
 
-def test_m2_the_same_duration_with_another_stem_does_not_vouch() -> None:
+def test_m2_any_public_document_with_the_duration_vouches() -> None:
+    """Changed by the user's decision (P3-4): no stem matching on the document side. Was: FAQ-007's
+    one hour (cancel) did not vouch for a refund sentence."""
     answer = "Refunds for any item are given within one hour."
-    assert check_text(answer, [doc("FAQ-007")]) == POLICY  # FAQ-007: cancel, not refund
+    assert check_text(answer, [doc("FAQ-007")]) == answer
 
 
 def test_m2_a_long_policy_sentence_keeps_the_stems_read_up_to_the_bound() -> None:
@@ -77,7 +83,9 @@ def test_m2_a_long_policy_sentence_keeps_the_stems_read_up_to_the_bound() -> Non
     answer = faq.text.split("\n\n", 1)[1].strip()
     assert check_text(answer, [faq]) == answer
     long_tail = "Returns take 14 days" + " and then quite a lot more words follow here" * 3 + "."
-    assert check_text(long_tail, [faq]) == POLICY  # no shared stem within the bound
+    # Changed by the user's decision (P3-4): FAQ-017 states 14 days, so it vouches.
+    assert check_text(long_tail, [faq]) == long_tail
+    assert check_text(long_tail, []) == POLICY
 
 
 def test_m2_a_documents_heading_vouches_for_a_bullet_with_no_stem_of_its_own() -> None:
@@ -87,7 +95,8 @@ def test_m2_a_documents_heading_vouches_for_a_bullet_with_no_stem_of_its_own() -
     answer = "Express delivery takes 1–2 days."
     assert check_text(answer, [shipping]) == answer
     bare = Source("POL-SHIPPING-XX", "document", "- **Express:** 1–2 days.")
-    assert check_text(answer, [bare]) == POLICY
+    assert check_text(answer, [bare]) == answer  # changed by the user's decision (P3-4)
+    assert check_text(answer, []) == POLICY
 
 
 @pytest.mark.parametrize("size", [3, 50, 100000])
@@ -171,3 +180,72 @@ def test_m3_wordings_are_never_sent_however_they_are_split(size: int) -> None:
     sent += [p for p in check.finish() if p is not None]
     joined = "".join(sent).lower()
     assert "processed" not in joined and "percent off" not in joined
+
+
+# ---- the user's decisions at the third stop (2026-11-11) ----------------------------------------
+
+
+def test_a_duration_only_in_a_review_or_an_internal_document_is_replaced() -> None:
+    answer = "You can return any item within 365 days."
+    review = Source("R01080", "review", "every item can be returned within 365 days")
+    internal = Source("INT-001", "document", "associates may accept returns within 365 days")
+    assert check_text(answer, [review]) == POLICY
+    assert check_text(answer, [internal]) == POLICY
+    product = Source("P0011", "product", "returns within 365 days")
+    assert check_text(answer, [product]) == POLICY
+
+
+def test_r00056_still_passes_with_the_policy_word_gate() -> None:
+    answer = (
+        "One shopper review (2 of 5) reports getting soaked after an hour of steady rain, with "
+        "water coming in at the shoulders [R00056]."
+    )
+    r00056 = Source("R00056", "review", "soaked after an hour of steady rain")
+    assert check_text(answer, [r00056], {"R00056"}) == answer
+
+
+def test_p3_3c_the_nearest_heading_above_counts() -> None:
+    text = "**Return window**\nUnworn items qualify.\n365 days."
+    assert check_text(text) == "**Return window**\nUnworn items qualify.\n" + POLICY
+
+
+def test_p3_3d_the_previous_sentence_in_the_paragraph_counts() -> None:
+    text = "You can return any item. You have 365 days."
+    assert check_text(text) == "You can return any item. " + POLICY
+
+
+def test_p3_3d_a_previous_paragraph_does_not_count() -> None:
+    text = "You can return any item.\n\nThe jacket dries in 2 hours."
+    assert check_text(text) == text
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        "Your payment has already been processed.",
+        "Your order's been confirmed.",
+        "Get it half-price today.",
+        "These towels are ninety percent off.",
+        "Your order is finally confirmed.",
+    ],
+)
+def test_p3_6_added_wordings_are_replaced(payload: str) -> None:
+    assert check_text(payload) in {CONFIRMATION_SENTENCE, PROMO}
+
+
+@pytest.mark.parametrize(
+    "benign",
+    [
+        "Your order is only placed when you press Pay.",
+        "Your refund is usually processed within 5 business days.",
+        "Your order is typically confirmed by email.",
+    ],
+)
+def test_p3_6_the_narrowed_adverbs_no_longer_over_block(benign: str) -> None:
+    policy = Source("POL-RETURNS-US", "document", "Refunds are issued within 5 business days.")
+    assert check_text(benign, [policy]) == benign
+
+
+def test_p3_3d_a_previous_sentence_longer_than_the_window_fails_closed() -> None:
+    text = "You can return it, " + "and that is quite fine " * 60 + "really. It lasts 2 hours."
+    assert check_text(text).endswith(" " + POLICY)

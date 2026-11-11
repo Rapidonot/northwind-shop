@@ -67,12 +67,13 @@ the model does; a deterministic check on what leaves is the control.
      as `aborted`.
 5. **Classes**, frozen at the user's approval. A change after any recording is stop 7.
    - **Promotion** (hard rule 2), class-level, with no exemption: discount, coupon, promo code, `N% off`,
-     `N percent off`, half price, clearance sale, price or event, voucher, staff code, member price, free
+     `N percent off` (digits or words), half price or half-price, clearance sale, price or event, voucher, staff code, member price, free
      today, and `code` followed by a code shape.
    - **Links and contact:** every URL; every phone number; every email but `care@northwind.example`; and any
      word that is a bare domain.
    - **Confirmation:** an order, payment, refund, discount or code said to be confirmed, processed, approved,
-     authorised, applied, placed or issued, with one adverb allowed ("is now confirmed"), and "I've placed…",
+     authorised, applied, placed or issued, with one adverb from a fixed list allowed (now, already, just,
+     also, since, fully, finally, successfully), "has already been", "order's been", and "I've placed…",
      "we've processed…" and the like. Exempt only when `if`, `when`,
      `once`, `after` or `before` directly introduces the subject, in the present or future tense, and per
      match.
@@ -81,14 +82,18 @@ the model does; a deterministic check on what leaves is the control.
        this turn, and never for `issue_refund` or `apply_discount`;
      - stock claims, class-level, including "just N left" and "stock is running low".
    - **False policy:**
-     - a duration in a sentence holding a policy stem (return, refund, exchange, cancel, withdraw, deliver,
-       ship, dispatch, warrant, guarantee, back, money, policy, window, period, label, replace, repair) passes
-       only if a sentence of a public document returned this turn states the same duration with one of the same
-       stems (the user, M2). On both sides the policy context includes the preceding heading or parent bullet
-       line;
-     - "free returns" and "prepaid label" pass only if a public document says returns are free;
-     - a public document is `POL-`, `FAQ-`, `CG-` or `SG-`, never internal, and neither a product nor a
-       variant, since an internal product cannot be told apart from a public one.
+     - a duration counts only in a sentence about policy: one holding a policy stem (return, refund,
+       exchange, cancel, withdraw, deliver, ship, dispatch, warrant, guarantee, back, money, policy, window,
+       period, label, replace, repair), in the sentence itself, its list parent, the nearest heading above it,
+       or the previous sentence in the same paragraph (the user's decisions, M2 and P3-3);
+     - such a duration passes if the same duration appears in any public, non-internal document returned this
+       turn (`POL-`, `FAQ-`, `CG-`, `SG-`); retrieval returns only the shopper's region or `ALL` (RAG-11). No
+       stem or heading matching on the document side (the user's decision, P3-4);
+     - **class 5 stops relayed or injected numbers.** A real policy number on the wrong term ("return any item
+       within two years", from the repair warranty) is a grounding error left to #13b's judge, and logged as a
+       residual;
+     - "free returns" and "prepaid label" pass only if a public document says returns are free.
+   - **Frozen for this row** after the fourth security pass (the user, 2026-11-11): no new wording patterns.
 6. **The reviewed hit list.** FAQ-003 and FAQ-005 are the trusted texts the check blocks. An answer quoting
    them gets the class's sentence. Any other trusted fixture that is blocked fails a test.
 7. **The contract with row #12.** This row owns the engine. #12 extends it and changes none of these tests:
@@ -111,6 +116,9 @@ the model does; a deterministic check on what leaves is the control.
 - **Residuals recorded by the security review**, owner hardening unless named:
   - `northwind-deals[.]net` passes (not clickable);
   - phone numbers of 8 digits or fewer pass, the threshold kept by the user;
+  - a real policy number on the wrong term passes class 5 (the user's decision; owner #13b's judge);
+  - "your refund issued" and other wordings outside the frozen lists pass (owner hardening);
+  - the pin misses an aliased `client.ClaudeSDKClient` and `importlib` (owner hardening);
   - `in` is not a trigger, so "…is in" can be sent before a repair takes it back;
   - a payload cut between words by the model's reset is checked as cut;
   - markers that are not ID-shaped stay (they never become citations);
