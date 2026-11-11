@@ -293,7 +293,8 @@ def _settle_by_read(
 
     A refund total can also grow from another key's refund, so a doubtful refund is left `open`
     when any other refund on the same intent succeeded or was doubtful after `first`: a later
-    read can't tell whose refund it shows (re-review L1)."""
+    read can't tell whose refund it shows (re-review L1). With an unreadable key, "another" is
+    told apart by action ID, since two unreadable keys compare equal (#20 advisor re-review N1)."""
     event = first
     later = [e for e in mine if e.seq > last.seq and _is_ok(e)]
     if action in ("payment.capture", "payment.void", "payment.refund"):
@@ -317,7 +318,11 @@ def _settle_by_read(
             and e.seq > first.seq
             and _str(e.inputs, "intent_id") == intent
             and e.inputs.get("dry_run") is not True
-            and _str(e.inputs, "idempotency_key") != key
+            and (
+                _str(e.inputs, "idempotency_key") != key
+                if key is not None
+                else e.action_id != first.action_id
+            )
         ]
         if others:
             return "open"

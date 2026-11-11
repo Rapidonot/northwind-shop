@@ -34,7 +34,7 @@ for anything in the repo; see the build-time row.
 | Ledger | No | No | No | No |
 | Eval items | Window, through `make eval-live` | Yes | Yes, the query | Query vector only, not stored |
 | Answer key | No | Yes, in fixtures | No | No |
-| Synthetic shopper data | **Window, since #20:** order, intent, assessment and shopper IDs, intent status, currency and minor amounts, and fraud decisions, scores and reasons, through the Orders subagent's two read-only tools. No names, emails, addresses or tokens | Yes, in `data/backend/`, and in the `backend-audit` cassette suite once recorded | No | No |
+| Synthetic shopper data | **Window, since #20:** order, intent, assessment and shopper IDs, intent status, currency and minor amounts, and fraud decisions, scores and reasons, through the Orders subagent's two read-only tools. No names, emails, addresses or tokens | Yes, in `data/backend/`, and in the `backend-audit` cassette suite (12 cassettes, recorded in #20, PR #35) | No | No |
 | Audit events | No | No: written in memory or to a caller's JSONL path in tests | No | No |
 | Build-time session context | **Yes, through Claude Code, on the Max subscription** | Not applicable | No | Not applicable |
 

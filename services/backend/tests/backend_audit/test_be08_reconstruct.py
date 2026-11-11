@@ -428,3 +428,59 @@ def _dump(events: tuple[AuditEvent, ...]) -> str:
 def test_a_rerun_writes_byte_identical_events() -> None:
     rows = orders()[:30]
     assert _dump(run_all(rows)[1].read_all()) == _dump(run_all(rows)[1].read_all())
+
+
+def _intent(refunded: int) -> Ok[Any]:
+    from northwind_backend.ports import PaymentIntent
+
+    status = PaymentStatus.PARTIALLY_REFUNDED if refunded else PaymentStatus.CAPTURED
+    return Ok(PaymentIntent("pi_000001", "O000001", status, "USD", 10_000, 10_000, refunded))
+
+
+def test_two_unreadable_key_refunds_never_settle_each_other() -> None:
+    """#20 advisor re-review N1 (real adapters only: the fakes refuse a malformed key). Two refund
+    keys written as type and length compare equal, so the other refund was not seen as another,
+    and its success settled the doubtful one as done. It must stay open: the read can't tell whose
+    refund it shows. The events are written directly, as an adapter's view would."""
+    from northwind_backend.audit import AuditContext, outcome_ref
+    from northwind_backend.errors import TIMEOUT
+    from northwind_backend.ports import Money
+
+    sink = InMemoryAuditSink()
+    audit = AuditContext(sink, correlation_id="corr-n1", actor="test")
+    authorize = {"idempotency_key": "O000001:authorize", "order_id": "O000001"}
+    audit.record("payment.authorize", authorize, outcome_ref(_intent(0)))
+    capture = {"idempotency_key": "O000001:capture", "intent_id": "pi_000001"}
+    audit.record("payment.capture", capture, outcome_ref(_intent(0)))
+    refund = Money(100, "USD")
+    for key, result in (("doubtful key 1", TIMEOUT), ("other key 2", _intent(100))):
+        inputs = {
+            "idempotency_key": key,  # a space: written as type and length, unreadable
+            "intent_id": "pi_000001",
+            "amount_minor": refund.amount_minor,
+            "currency": refund.currency,
+            "dry_run": False,
+        }
+        audit.record("payment.refund", inputs, outcome_ref(result))
+    audit.record("payment.status", {"intent_id": "pi_000001"}, outcome_ref(_intent(100)))
+
+    record = reconstruct_order(sink.read_all(), "O000001")
+    assert [(u.action, u.idempotency_key, u.settled) for u in record.uncertain] == [
+        ("payment.refund", None, "open")
+    ]
+
+
+def test_an_unreadable_key_refund_alone_is_still_settled_by_a_later_read() -> None:
+    """The N1 fix compares action IDs only against other refunds: one doubtful refund on its own
+    is still settled by a status read after it."""
+    from northwind_backend.audit import AuditContext, outcome_ref
+    from northwind_backend.errors import TIMEOUT
+
+    sink = InMemoryAuditSink()
+    audit = AuditContext(sink, correlation_id="corr-n1b", actor="test")
+    audit.record("payment.authorize", {"order_id": "O000001"}, outcome_ref(_intent(0)))
+    inputs = {"idempotency_key": "doubtful key", "intent_id": "pi_000001", "amount_minor": 100}
+    audit.record("payment.refund", inputs, outcome_ref(TIMEOUT))
+    audit.record("payment.status", {"intent_id": "pi_000001"}, outcome_ref(_intent(100)))
+    record = reconstruct_order(sink.read_all(), "O000001")
+    assert [u.settled for u in record.uncertain] == ["done"]
