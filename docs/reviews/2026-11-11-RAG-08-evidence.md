@@ -471,7 +471,8 @@ rule).**
 
 **`findings`: no high or critical; 3 mediums and 3 lows, all process or documentation. All were fixed in the
 next commit:**
-1. **AC8 at the reviewed head:** the e2e replay is re-run at the final head, with its SHA in the log (below).
+1. **AC8 at the reviewed head:** the e2e replay is re-run at the final head, with its SHA in the log; the path and
+   result are in the gate report, since a commit cannot name its own SHA.
 2. **AC2:** `test_tool_loop.py::test_a_fifth_turn_never_happens` (the turn cap's fixed insufficient-evidence
    reply) gains `req("RAG-08")`. A marker was added; nothing else changed.
 3. **PROGRESS.md:**
@@ -487,6 +488,14 @@ next commit:**
    - this file's header, the renamed test and the mutant logs.
 6. **The merge record:** the section above.
 
+**Scoped re-read at `ca61e44`: `findings`, no high.** Findings 1, 2 and 4–6 are closed, and 3 is partly closed.
+New: N1 (medium) and N2–N4 (low), all fixed in the next commit:
+- **N1:** #17a's check 6 moves to #13b, as the plan said, and #8c's R00970 condition-4 item goes to #13b (an
+  eval-check item; the user may re-own it). #13b's scope names both.
+- **N2:** the "(below)" pointer now says the e2e head log is in the gate report.
+- **N3:** the AC2 tag is in both lists of pre-row tests changed.
+- **N4:** PROGRESS's "#13's answerer adapter" now reads #13b's, and #14's R2 records what #13 took.
+
 ## Pre-row tests changed (for the user's read)
 
 1. `test_smoke_e2e.py::test_a_planted_injections_subject_is_not_named`: the strict xfail marker
@@ -497,6 +506,8 @@ next commit:**
 3. `test_usage.py::FIELDS`: gains `blocked`, the new key of the one telemetry line. The tests still
    require exactly this key set.
 4. `test_red_team_e2e.py`: adds check (h) and the `NFR-03` tag. Added assertions only.
+5. `test_tool_loop.py::test_a_fifth_turn_never_happens`: gains `req("RAG-08")` (AC2, the row review). A marker
+   only.
 
 ## Over-blocking (re-run after the user's stop-7 decisions; the classes are now frozen)
 
