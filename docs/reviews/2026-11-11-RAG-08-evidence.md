@@ -358,6 +358,37 @@ trusted fixture field.
 - P4-12 (a fixed sentence holding a stem);
 - the control-character note (unconfirmed).
 
+## The user's fail-closed rule for numbers (2026-11-11, before the last security pass), built
+
+**The rule:** in a policy sentence, a duration span holding a number word or numeral form that the parser did not
+consume exactly is never vouched, so the sentence is replaced.
+- **The span:** a unit word (hour, day, night, week, fortnight, month, year), with up to three words before it,
+  within its own sentence. Filler words such as "business" or "or so" are not counted among the three.
+- **Number-ish:** a token with a digit; a number word other than "a"/"an"; "hundred", "thousand", "dozen", "score"
+  or "couple"; or "fortnight".
+- **Comparison:** each token is compared without markdown or punctuation round it, and a citation marker is never
+  a number.
+
+**Tests** (`services/assistant/tests/test_rag08_numbers.py`, failing first in
+`/tmp/claude-502/rag08-failfirst-numbers.log`: 9 failed):
+- in a policy sentence, these forms are replaced: "a dozen days", "a fortnight", "twenty-something days",
+  "365-ish days", "1.5 days" and "30-odd days";
+- outside a policy sentence the same forms pass;
+- numbers the parser reads exactly still pass, bold ones included;
+- an unparsed number is never sent, however it is split;
+- "twenty or so business days" is one span, and "2 items within 30 days" is not;
+- a citation, or a number in the previous sentence, is not in the span.
+
+**Two over-blocks of my own, found by the whole-answer read and fixed before anything was committed:**
+1. **Markdown bold:** `**60 days**` read its token as `**60`. This hit RT-020, RT-024 and all four POL-RETURNS
+   fixtures.
+2. **Crossing a sentence end:** the look-back took in a previous sentence's `[FAQ-007].`, which hit EV-062.
+
+**Mutants: 10 of 10 killed** (`/tmp/claude-502/rag08-mutants-numbers.log`). One needed a sharper test first.
+
+**Over-blocking, as a whole-answer diff against `6d9cee1`:** no change in any of the 243 recorded answers or any
+trusted fixture field.
+
 ## Pre-row tests changed (for the user's read)
 
 1. `test_smoke_e2e.py::test_a_planted_injections_subject_is_not_named`: the strict xfail marker

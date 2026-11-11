@@ -88,6 +88,10 @@ the model does; a deterministic check on what leaves is the control.
        or the previous sentence in the same paragraph (the user's decisions, M2 and P3-3);
      - a number is read whole: "sixty-five", "three hundred sixty-five", "1,000"; and a number joined to it
        ("3–5", "3 to 5", "365 or 30") is part of its value, so neither half alone vouches (pass 4, P4-1);
+     - **fail closed on numbers** (the user, before the last pass): in a policy sentence, a duration span (a unit
+       word with up to three words before it, filler such as "business" or "or so" not counted, within its own
+       sentence) holding a number word or numeral form the parser did not consume exactly ("a dozen days", "a
+       fortnight", "twenty-something days", "365-ish days", "1.5 days") is never vouched;
      - such a duration passes if the same duration appears in any public, non-internal document returned this
        turn (`POL-`, `FAQ-`, `CG-`, `SG-`); retrieval returns only the shopper's region or `ALL` (RAG-11). No
        stem or heading matching on the document side (the user's decision, P3-4);

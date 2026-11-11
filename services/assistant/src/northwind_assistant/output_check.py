@@ -170,6 +170,33 @@ DURATION = re.compile(
 _JOINED = re.compile(rf"(?:^|[^\w-])(?P<n>{_NUMERAL})\s{{0,2}}(?:[-–—]|to|or|and)\s{{0,2}}$")
 
 
+# Fail closed on numbers (the user's decision, 2026-11-11): every duration unit word is looked at
+# with the three tokens before it. A number word or numeral form there that the parser did not
+# consume exactly ("a dozen", "twenty-something", "365-ish", "1.5") makes the span unvouched.
+_UNIT_WORD = re.compile(r"\b(?:hour|day|night|week|fortnight|month|year)s?\b")
+_NUMBERISH_WORDS = frozenset(
+    (_NUMBER_WORDS.keys() - {"a", "an"}) | {"hundred", "thousand", "dozen", "score", "couple"}
+)
+
+
+# A token's core, without markdown or punctuation round it: `**60` is `60` (RT-020, RT-024).
+_CORE = re.compile(
+    r"(?<!\S)(?=\S)[*_~\"'(“‘{]*(?P<core>\[[^\]\s]*\]?|[^\s*_~\"'()“”‘’{}]*?)[*_~\"')”’}.,;:!?]*(?=\s|$)"
+)
+
+
+_FILLER = frozenset(
+    {"business", "working", "calendar", "full", "or", "so", "and", "to", "odd", "about",
+     "around", "roughly", "approximately", "some"}
+)  # fmt: skip
+
+
+def numberish(token: str) -> bool:
+    if re.search(r"\d", token) or "fortnight" in token:
+        return True
+    return any(part in _NUMBERISH_WORDS for part in re.split(r"[^a-z]+", token))
+
+
 def number_value(text: str) -> int:
     digits = text.replace(",", "")
     if digits.isdigit():
@@ -281,7 +308,7 @@ _SPELLED_WORDS = "|".join(sorted((w for w in _NUMBER_WORDS if len(w) > 2), key=l
 TRIGGER = re.compile(
     r"disc|coupon|promo|vouch|staff|member|free|prepaid|%|http|www|authori|approv|refund|order|"
     r"payment|confirm|process|appl|placed|issued|stock|sold|issue_|hour|day|week|month|year|"
-    rf"code|\d|\bi['’\s]|\bwe['’\s]|\[|\+|\(|\b(?:{_SPELLED_WORDS}|hundred|out|only|low|half|clearance)\b"
+    rf"code|\d|\bi['’\s]|\bwe['’\s]|\[|\+|\(|\b(?:{_SPELLED_WORDS}|hundred|dozen|night|out|only|low|half|clearance)\b"
 )
 # A duration is a policy term only in a sentence that holds one of these stems (the user's list,
 # row #13): a reviewer's "after an hour of steady rain" is an experience, not a policy.
@@ -765,6 +792,9 @@ class OutputCheck:
                 if best is None or start < best.start:
                     best = Match(pattern.cls, start, end)
                 break
+        unparsed = self._unparsed_duration(view, final)
+        if unparsed is not None and (best is None or unparsed.start < best.start):
+            best = unparsed
         checked = max(self._plain_since, self._words_to)
         # Only complete words: the trailing one is still being written (unless the stream ended).
         if final or self._word_start is None:
@@ -780,6 +810,52 @@ class OutputCheck:
             checked = end
         self._words_to = checked
         return best
+
+    def _unparsed_duration(self, view: View, final: bool) -> Match | None:
+        """The earliest duration span in a policy sentence holding a number the parser did not
+        consume exactly (the user's fail-closed rule). Such a span is never vouched."""
+        consumed: list[tuple[int, int]] = []
+        for match in DURATION.finditer(view.text):
+            lead = max(0, match.start() - 45)
+            joined = _JOINED.search(view.text[lead : match.start()])
+            consumed.append((lead + joined.start("n") if joined else match.start(), match.end()))
+        for unit in _UNIT_WORD.finditer(view.text):
+            first = None
+            base = max(0, unit.start() - 60)
+            # Only the unit's own sentence: a citation or a number before a full stop is not part
+            # of the span (found by the whole-answer read, EV-062).
+            for boundary in _BOUNDARY.finditer(view.text, base, unit.start()):
+                base = boundary.end()
+            tokens = list(_CORE.finditer(view.text, base, unit.end()))
+            # The unit, and up to three words before it, not counting filler such as "business"
+            # or "or so": "twenty or so business days" is one span, "2 items within 30 days" is not.
+            span, content = [tokens.pop()] if tokens else [], 0
+            while tokens and content < 3:
+                token = tokens.pop()
+                span.append(token)
+                if token.group("core") not in _FILLER:
+                    content += 1
+            for token in span:
+                begin, finish = token.start("core"), token.end("core")
+                core = token.group("core")
+                if not core or core.startswith("[") or not numberish(core):
+                    continue
+                if any(lo <= begin and finish <= hi for lo, hi in consumed):
+                    continue  # read whole by the parser
+                first = begin if first is None else min(first, begin)
+            if first is None:
+                continue
+            start, end = view.raw_span(first, unit.end())
+            if end <= self._consumed or (end >= len(self._raw) and not final):
+                continue
+            stems = self._policy_context(start, end, final)
+            if stems is None:
+                if self._undecided is None or start < self._undecided:
+                    self._undecided = start
+                continue
+            if stems:
+                return Match("false_policy", start, end)
+        return None
 
     def _safe_end(self, final: bool) -> int:
         if final:
