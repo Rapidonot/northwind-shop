@@ -18,6 +18,8 @@ What the model decides is the order of calls. Everything that matters is decided
 - Writes use `WRITE_POLICY`: after a `timeout`, `unexpected_error` or `audit_incomplete` a write is
   never called again. The action is uncertain, every later write but the escalation is refused, and
   the order is escalated (#20, "exception after the effect").
+- Once the order is escalated, every later write is refused (`order_escalated`): an escalated order
+  moves no money (found by `test-writer`, row #21).
 - The escalation reason and context are built from the run's state, never from model text (#20 C1):
   amounts come from step values. A run that ends with the order neither confirmed nor escalated is
   escalated by code (`not_finished`), so no run ends silently.
@@ -190,6 +192,9 @@ STOPPED = business(
     "An earlier step may have taken effect, so no more changes are made. Escalate the order.",
 )
 ALREADY_DONE = business("step_already_done", "This step already succeeded in this task.")
+ESCALATED = business(
+    "order_escalated", "The order is escalated to a person, so nothing more is done. Stop here."
+)
 
 Reason = Literal[
     "uncertain_write",
@@ -456,6 +461,8 @@ class _Handlers:
         if wrong is not None:
             return wrong
         p = self.placement
+        if p.escalated is not None:
+            return self._refuse(ADDRESS, ESCALATED)
         if p.doubtful:
             return self._refuse(ADDRESS, STOPPED)
         if p.issues is None:
@@ -481,6 +488,8 @@ class _Handlers:
         if wrong is not None:
             return wrong
         p = self.placement
+        if p.escalated is not None:
+            return self._refuse(FRAUD, ESCALATED)
         if p.doubtful:
             return self._refuse(FRAUD, STOPPED)
         if p.issues is None or p.issues or p.order is None or p.total is None:
@@ -515,6 +524,8 @@ class _Handlers:
         if wrong is not None:
             return wrong
         p = self.placement
+        if p.escalated is not None:
+            return self._refuse(AUTHORIZE, ESCALATED)
         if p.doubtful:
             return self._refuse(AUTHORIZE, STOPPED)
         if p.intent is not None:
@@ -555,6 +566,8 @@ class _Handlers:
         if wrong is not None:
             return wrong
         p = self.placement
+        if p.escalated is not None:
+            return self._refuse(CAPTURE, ESCALATED)
         if p.doubtful:
             return self._refuse(CAPTURE, STOPPED)
         if p.intent is None:
@@ -586,6 +599,8 @@ class _Handlers:
         if wrong is not None:
             return wrong
         p = self.placement
+        if p.escalated is not None:
+            return self._refuse(CONFIRM, ESCALATED)
         if p.doubtful:
             return self._refuse(CONFIRM, STOPPED)
         if p.confirmed is not None:
