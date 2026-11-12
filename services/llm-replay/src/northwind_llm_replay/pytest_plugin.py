@@ -111,6 +111,14 @@ def llm_proxy(
     state = handle.state
     if state.scan_failures:
         pytest.fail("cassette refused by the secret/PAN scanner: " + "; ".join(state.scan_failures))
+    if state.fallback_attempts:
+        betas = sorted({b for a in state.fallback_attempts for b in a["betas"]})
+        pytest.fail(
+            f"the CLI sent a fallback beta {betas} ({len(state.fallback_attempts)} request(s); "
+            f"suite {suite!r}, mode {mode}). The proxy refused it and forwarded nothing "
+            "(HARDEN-1). Fix the CLI env in northwind_common.llm; do not re-record.",
+            pytrace=False,
+        )
     if state.misses:
         first = state.misses[0]
         pytest.fail(
