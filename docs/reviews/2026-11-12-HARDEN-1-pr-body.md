@@ -30,7 +30,8 @@ settings (option A). No fallback beta is ever sent, and no runner refusal is use
   `llm_refusals` user property). It changes nothing else.
 
 **M2.** The proxy log writes the scrubbed body the cassette uses (the same `SCRUB_RULES`). A body it cannot parse
-is logged as `<unlogged:unparsed-body>`. The scanner is unchanged.
+is logged as `<unlogged:unparsed-body>`. A body that fails to scrub is refused (`refused-scrub`, a structured
+400) and logged as `<unlogged:unscrubbed-body>`. The scanner is unchanged.
 
 **S1.** `REVIEW_DIFF` defaults to `$(TMPDIR)/northwind-review-<cksum of $(CURDIR)>.diff`, with no git call. A
 checkout path holding a `'` is refused. An explicit value wins.
@@ -52,6 +53,7 @@ ledger instead.
   - The pytest half of `make e2e`: 43 passed.
   - `make test-integration`: 282 passed, including the 1,000-order replay.
   - `make eval-gate`: equal to the baseline on all 7 metrics, 100/100 replayed, 0 stale.
+- `advisor-reviewer`: two plan reads and a row review at `64982c4` (1 medium, 3 low; all fixed, triage in the plan).
 - Security review, verbatim with its triage: `docs/reviews/2026-11-12-HARDEN-1-security-review.md`.
 - No spend: `make llm-spend` $2.950179 before and after. No cassette added or changed.
 
