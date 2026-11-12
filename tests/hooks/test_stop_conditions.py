@@ -89,6 +89,7 @@ CONTROL_SURFACE = [
     "cassettes/**",
     "data/enrichment/**",
     "data/embeddings/**",
+    "evals/adversarial/**",  # HARDEN-1
     "**/conftest.py",
     ".gitignore",
     "pyproject.toml",
@@ -338,3 +339,19 @@ def test_commands_list_has_ship_and_review_diff() -> None:
     assert any(line.startswith("make finish ") for line in lines)
     assert any(line.startswith("make check ") for line in lines)
     assert any(line.startswith("make review-diff") for line in lines)
+
+
+def llm_calls_rule() -> str:
+    """The "LLM calls" bullet of "How we work", flattened."""
+    start = CLAUDE.index("- LLM calls (decision 0001)")
+    end = CLAUDE.index("\n- ", start + 1) if "\n- " in CLAUDE[start + 1 :] else len(CLAUDE)
+    return re.sub(r"\s+", " ", CLAUDE[start:end])
+
+
+@pytest.mark.req("HARDEN-1")
+def test_slice_wording_follows_decision_0013_and_keeps_the_default_after_expiry() -> None:
+    rule = llm_calls_rule()
+    assert "decision 0013" in rule
+    assert "full runs" in rule and "RUN_BUDGET" in rule
+    assert "10–20-item slices during development" in rule  # the default again after ~2026-11-24
+    assert "budget cap is never raised without asking" in rule

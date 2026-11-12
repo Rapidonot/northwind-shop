@@ -224,7 +224,9 @@ finish: ## Commit /req-done's files, push, open the PR, then ship (CHECKOUT=/abs
 
 # The one diff advisor-reviewer accepts: base and head SHA first, so it can tell what it read. Refuses
 # uncommitted work, because the head line would not describe it (AUTO-1).
-REVIEW_DIFF ?= $(or $(TMPDIR),/tmp)/northwind-review.diff
+# The default is per checkout, from its path and no git call, so two windows never share one file
+# (HARDEN-1, like LLM_PROXY_PORT). An explicit REVIEW_DIFF= still wins.
+REVIEW_DIFF ?= $(or $(TMPDIR),/tmp)/northwind-review-$(shell printf '%s' '$(CURDIR)' | cksum | cut -d' ' -f1).diff
 review-diff: ## Write the committed diff against origin/main for review, SHAs first
 	@[[ -z "$$(git status --porcelain)" ]] || (echo "commit first: review-diff covers commits only" && exit 2)
 	@base=$$(git merge-base origin/main HEAD) && head=$$(git rev-parse HEAD) && { echo "base $$base"; echo "head $$head"; git --no-pager diff --text --no-ext-diff --no-textconv --no-renames "$$base" "$$head"; } > "$(REVIEW_DIFF)" && echo "$(REVIEW_DIFF)"

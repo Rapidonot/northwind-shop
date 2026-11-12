@@ -80,6 +80,7 @@ CONTROL_SURFACE = [
     "cassettes/**",
     "data/enrichment/**",
     "data/embeddings/**",
+    "evals/adversarial/**",  # HARDEN-1
     "**/conftest.py",
     ".gitignore",
     "pyproject.toml",
@@ -199,3 +200,45 @@ def test_review_diff_refuses_a_dirty_tree(work: Path, tmp_path: Path, dirty: str
     done = review_diff(work, out)
     assert done.returncode != 0
     assert not out.exists()
+
+
+# -- HARDEN-1 S1: a per-checkout default for REVIEW_DIFF ---------------------------------------
+
+REVIEW_DIFF_PROBE = "\nreviewdiffpath:\n\t@echo $(REVIEW_DIFF)\n"
+
+
+def review_diff_default(checkout: Path, *overrides: str) -> str:
+    """REVIEW_DIFF as the Makefile resolves it in `checkout`, which need not be a git repo."""
+    checkout.mkdir(parents=True, exist_ok=True)
+    (checkout / "Makefile").write_text((REPO / "Makefile").read_text() + REVIEW_DIFF_PROBE)
+    env = {"PATH": "/usr/bin:/bin:/usr/local/bin", "HOME": str(checkout), "TMPDIR": "/tmp/nw-t"}
+    return subprocess.run(  # noqa: S603
+        ["make", "-s", "reviewdiffpath", *overrides],  # noqa: S607
+        cwd=checkout,
+        capture_output=True,
+        text=True,
+        check=True,
+        env=env,
+    ).stdout.strip()
+
+
+@pytest.mark.req("HARDEN-1")
+def test_review_diff_default_differs_per_checkout(tmp_path: Path) -> None:
+    """Two windows writing the same default path overwrote each other's review diff."""
+    a = review_diff_default(tmp_path / "northwind-shop")
+    b = review_diff_default(tmp_path / "northwind-shop-wt-b")
+    assert a != b
+    for path in (a, b):
+        assert re.fullmatch(r"/tmp/nw-t/northwind-review-\d+\.diff", path), path
+
+
+@pytest.mark.req("HARDEN-1")
+def test_review_diff_default_is_stable_for_one_checkout(tmp_path: Path) -> None:
+    checkout = tmp_path / "northwind-shop"
+    assert review_diff_default(checkout) == review_diff_default(checkout)
+
+
+@pytest.mark.req("HARDEN-1")
+def test_an_explicit_review_diff_still_wins(tmp_path: Path) -> None:
+    out = "/tmp/nw-t/northwind-review-HARDEN-1.diff"
+    assert review_diff_default(tmp_path / "x", f"REVIEW_DIFF={out}") == out
