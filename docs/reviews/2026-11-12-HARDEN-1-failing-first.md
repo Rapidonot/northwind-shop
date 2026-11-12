@@ -160,3 +160,19 @@ suite: 967 passed.
 Counting covers replay hits, buffered responses (JSON, and SSE through the runner) and the sandbox proxy's
 streamed SSE. The response bytes, the outcome and the cassette are unchanged (the counting test compares them).
 `ScriptedLLM` now also records each request's query string, so the gate check sees what the runner would.
+
+## Step 0, the rest: measured at `24b9448` with the stack up (2026-11-12)
+
+The first attempt after the user's `make up` still got `Connection refused` on 5432, and nothing was listening on
+any probed port. A later probe connected. The suites:
+
+| Suite | Result |
+|---|---|
+| `make ingest` | 2,351 chunks unchanged, 0 embedded, `deleted: 1` (see below) |
+| pytest half of `make e2e` | **43 passed**, 0 cassette misses |
+| `make test-integration` (with the 1,000-order replay) | **282 passed**, 0 cassette misses |
+| `make eval-gate` | **passed**, all 7 metrics equal to the baseline (recall@5 0.954, MRR 0.881, groundedness 0.981, relevance 0.935, false_refusal 0.016, behaviour_ok 0.980, citation_ok 0.960), top-k `99135472…`, **100/100 replayed, stale 0** |
+
+So the flag (and the counting code) changes no recorded model input. Observation, not caused by this row (no data
+or RAG file changed): both `make ingest` runs reported `deleted: 1`, a chunk in the index that is not in the
+fixtures. It is logged as a low open item for #13b/RAG, the owners of the index.
