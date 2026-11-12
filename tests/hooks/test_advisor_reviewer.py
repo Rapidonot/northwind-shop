@@ -81,6 +81,7 @@ CONTROL_SURFACE = [
     "data/enrichment/**",
     "data/embeddings/**",
     "evals/adversarial/**",  # HARDEN-1
+    "evals/contexts/**",  # HARDEN-1, the user's scope addition
     "**/conftest.py",
     ".gitignore",
     "pyproject.toml",

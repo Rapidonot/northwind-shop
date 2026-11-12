@@ -338,3 +338,11 @@ first.
 - **Q2 (recommended: yes).** The tripwire refuses both `fallback-credit-*` and `server-side-fallback-*` betas.
   The CLI strips and retries both the same way, and neither is on `ALLOWED_BETAS`. Or only `fallback-credit-*`,
   as written in the prompt?
+
+## Scope addition to S2 (the user, 2026-11-12, from #13b's coverage check)
+
+`evals/contexts/**` joins the control surface in the same places as `evals/adversarial/**`: CLAUDE.md's list,
+`tools/ship.sh` `classify()`, `tools/advisor-reviewer.proposed.md`, and the pinning tests (`CONTROL_SURFACE` in
+both hook tests, and the ship path-table row `evals/contexts/refinements.ndjson`). It is not added to
+`refused-paths.sh`. Only the lists change: no file under `evals/contexts` (a #13b path) is touched. It arrived
+while `security-reviewer` was reading `686ed4c`, so this commit goes to the scoped re-review.

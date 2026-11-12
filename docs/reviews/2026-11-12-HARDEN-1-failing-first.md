@@ -176,3 +176,9 @@ any probed port. A later probe connected. The suites:
 So the flag (and the counting code) changes no recorded model input. Observation, not caused by this row (no data
 or RAG file changed): both `make ingest` runs reported `deleted: 1`, a chunk in the index that is not in the
 fixtures. It is logged as a low open item for #13b/RAG, the owners of the index.
+
+## S2 scope addition, `evals/contexts/**`: failing first
+
+Before the list edits: `test_the_control_surface_paragraph_names_the_entry[evals/contexts/**]`,
+`test_control_surface_names_the_path[evals/contexts/**]` and
+`test_control_surface_lists_the_path[evals/contexts/refinements.ndjson]` all FAILED (3 failed, 499 deselected).

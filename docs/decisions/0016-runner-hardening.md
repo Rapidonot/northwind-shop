@@ -39,7 +39,8 @@ proxy log kept the CLI's hex `metadata.user_id`, which tripped the Luhn check at
    fixed placeholder, never raw. The scanner is unchanged.
 5. **`REVIEW_DIFF` defaults per checkout:** `$(TMPDIR)/northwind-review-<cksum of $(CURDIR)>.diff`. It needs no
    git call. An explicit value wins.
-6. **`evals/adversarial/**` is on the control surface**: in `CLAUDE.md`, `tools/ship.sh` and the advisor proposal.
+6. **`evals/adversarial/**` and `evals/contexts/**` are on the control surface** (`evals/contexts`, the user's scope
+   addition from #13b's coverage check): in `CLAUDE.md`, `tools/ship.sh` and the advisor proposal.
    It is not in `tools/refused-paths.sh`, which refuses a path outright rather than listing control surface
    (the user, Q1).
 7. **CLAUDE.md's slice wording follows decision 0013:** full runs until the credit expires (~2026-11-24), then

@@ -242,7 +242,7 @@ inside the row's files, otherwise log it with an owner. Low: log it in `PROGRESS
 
 The control surface: `CLAUDE.md`, `.claude/**`, `.github/workflows/**`, `Makefile`, `tools/*.proposed*`,
 `tools/ship.sh`, `tools/finish.sh`, `tools/refused-paths.sh`, the files in `RUNNER_SYNC_PATHS`,
-`evals/baselines/**`, `evals/src/**`, `evals/fixtures/**`, `cassettes/**`, `data/enrichment/**`, `data/embeddings/**`, `evals/adversarial/**`,
+`evals/baselines/**`, `evals/src/**`, `evals/fixtures/**`, `cassettes/**`, `data/enrichment/**`, `data/embeddings/**`, `evals/adversarial/**`, `evals/contexts/**`,
 `**/conftest.py`, `.gitignore`, the root
 `pyproject.toml` and the `package.json` files. `make ship` lists these above its question, and asks for the
 PR number instead of `y` when any changed.
