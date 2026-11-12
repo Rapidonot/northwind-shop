@@ -182,3 +182,11 @@ fixtures. It is logged as a low open item for #13b/RAG, the owners of the index.
 Before the list edits: `test_the_control_surface_paragraph_names_the_entry[evals/contexts/**]`,
 `test_control_surface_names_the_path[evals/contexts/**]` and
 `test_control_surface_lists_the_path[evals/contexts/refinements.ndjson]` all FAILED (3 failed, 499 deselected).
+
+## Security review pass 1 fixes: failing first
+
+- L1: `test_counting_never_raises_on_an_odd_delta_and_the_stream_is_still_recorded` ×3 (a string, a list and a
+  number `delta`) FAILED before the fix.
+- L2: `test_a_checkout_path_with_a_quote_is_refused_and_runs_nothing` FAILED before the fix. `make` exited 0, and
+  **`touch MARK` ran**: the file was found inside the quoted checkout directory, so the injection was real.
+- With the fixes: 104 passed (`test_harden1.py`, `test_harden1_extra.py`, `tests/hooks/test_advisor_reviewer.py`).
