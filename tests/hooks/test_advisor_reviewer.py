@@ -211,7 +211,8 @@ def review_diff_default(checkout: Path, *overrides: str) -> str:
     """REVIEW_DIFF as the Makefile resolves it in `checkout`, which need not be a git repo."""
     checkout.mkdir(parents=True, exist_ok=True)
     (checkout / "Makefile").write_text((REPO / "Makefile").read_text() + REVIEW_DIFF_PROBE)
-    env = {"PATH": "/usr/bin:/bin:/usr/local/bin", "HOME": str(checkout), "TMPDIR": "/tmp/nw-t"}
+    tmpdir = str(checkout.parent / "tmpdir")
+    env = {"PATH": "/usr/bin:/bin:/usr/local/bin", "HOME": str(checkout), "TMPDIR": tmpdir}
     return subprocess.run(  # noqa: S603
         ["make", "-s", "reviewdiffpath", *overrides],  # noqa: S607
         cwd=checkout,
@@ -229,7 +230,8 @@ def test_review_diff_default_differs_per_checkout(tmp_path: Path) -> None:
     b = review_diff_default(tmp_path / "northwind-shop-wt-b")
     assert a != b
     for path in (a, b):
-        assert re.fullmatch(r"/tmp/nw-t/northwind-review-\d+\.diff", path), path
+        pattern = re.escape(str(tmp_path / "tmpdir")) + r"/northwind-review-\d+\.diff"
+        assert re.fullmatch(pattern, path), path
 
 
 @pytest.mark.req("HARDEN-1")
@@ -240,5 +242,5 @@ def test_review_diff_default_is_stable_for_one_checkout(tmp_path: Path) -> None:
 
 @pytest.mark.req("HARDEN-1")
 def test_an_explicit_review_diff_still_wins(tmp_path: Path) -> None:
-    out = "/tmp/nw-t/northwind-review-HARDEN-1.diff"
+    out = str(tmp_path / "elsewhere" / "northwind-review-HARDEN-1.diff")
     assert review_diff_default(tmp_path / "x", f"REVIEW_DIFF={out}") == out
