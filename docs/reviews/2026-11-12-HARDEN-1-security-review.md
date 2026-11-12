@@ -83,3 +83,55 @@ I reviewed `/tmp/claude-502/northwind-review-HARDEN-1.diff` (base `1e1cfd91abb90
 | L3 | low | **Logged** (residual in decision 0016, open item in `PROGRESS.md`; owner: RECORD-ALL prep): outside pytest (`make llm-proxy`, `make dev`), a fallback attempt is only a `refused-fallback` log line |
 | Note 1 | – | **Fixed**: the doc no longer spells out the 16-digit number |
 | Note 2 | – | Not this row. It predates it and fails closed. Noted only |
+
+---
+
+# Scoped re-review 1 of 2, raw output
+
+Of `make review-diff` at base `1e1cfd91abb905c409f676210b25b8b5f73d1335`, head
+`cca0e6324ad0a6c636a8cba610ef5998756fcc8e`. Scope: `0e1b6bb`, `121471d` and `cca0e63`.
+
+Scoped re-review 1 of 2 for HARDEN-1 (diff `/tmp/claude-502/northwind-review-HARDEN-1.diff`, base `1e1cfd91abb905c409f676210b25b8b5f73d1335`, head `cca0e6324ad0a6c636a8cba610ef5998756fcc8e`). I looked only at what changed since `686ed4c`: `0e1b6bb`, `121471d` and `cca0e63`.
+
+**There is nothing at medium or above, and no new finding at any severity.** L1 and L2 are closed. L3 is now logged as a residual. Note 1 (the PAN literal in the doc) is gone from the doc.
+
+## L1: closed
+- `/Users/rapido/Projects/northwind-shop/services/llm-replay/src/northwind_llm_replay/proxy.py:217-221`. The code now reads `delta = data.get("delta")` and only calls `delta.get("stop_reason")` when `isinstance(delta, dict)`. The outer `isinstance(data, dict)` check and the `isinstance(reason, str)` check are still there.
+- The JSON path at `proxy.py:202-208` was already shape-safe.
+- Nothing left in `stop_reason` can raise `AttributeError` or `TypeError` on a malformed value.
+- The new test at `/Users/rapido/Projects/northwind-shop/services/llm-replay/tests/test_harden1.py:515-535` drives a non-dict `delta` through the proxy in record mode. It checks that the response bytes are unchanged, the outcome is `recorded`, and nothing is counted as a refusal. That covers the case where a recording was lost.
+- Not a finding: `json.loads` on deeply nested input raises `RecursionError`, which `stop_reason` does not catch. `parse_sse_usage` and the usage parse (`proxy.py:552`) parse the same text first with the same exceptions, so the live and record paths fail exactly as they did before. On replay hits, `stop_reason` is the first parse of `hit.body`. A body like that would already have raised when it was recorded, so reaching it needs a hand-edited cassette, which `eval-integrity` refuses.
+
+## L2: closed, and normal use is not affected
+`/Users/rapido/Projects/northwind-shop/Makefile:230`:
+`REVIEW_DIFF ?= $(if $(findstring ',$(CURDIR)),$(error ...),$(or $(TMPDIR),/tmp)/northwind-review-$(shell printf '%s' '$(CURDIR)' | cksum | cut -d' ' -f1).diff)`
+
+- **Every expansion is guarded.** `?=` makes a recursive variable, so the whole `$(if ...)` runs again on each expansion. Both uses in the recipe (`Makefile:233`, the redirect and the `echo`) go through the guard. `$(if)` expands only the branch it picks, so when the path holds `'` the `$(shell)` never runs.
+- **Other metacharacters stay literal.** Once `'` is refused, nothing inside single quotes can end the quoted string: `$`, backticks, `\`, `"`, `;`, spaces and newlines are all literal to the shell. Make inserts CURDIR's value without expanding it again, so `$(...)` inside a path name is not run by make either.
+- **Commas in the path are safe.** Make splits function arguments on commas in the source text, before it expands `$(CURDIR)`, so a comma in the path cannot break `$(if)` or `$(findstring)`. The `$(error)` message contains no comma.
+- **Normal paths and other targets still work.** The variable is deferred and used only in the `review-diff` recipe. No other target, and nothing in `tools/` (`ship`, `finish`, `runner-sync`, `eval-promote`), expands it, so a quoted path fails only `make review-diff` (and `make -n review-diff`). A path without `'` gives the same `cksum` result as before; the per-checkout and stable-path tests still pin that.
+- **An explicit value bypasses the guard, which is fine.** `REVIEW_DIFF=` set on the command line or in the environment means `?=` assigns nothing, so neither the guard nor the `$(shell)` runs. The new test checks that this still works in the quoted checkout.
+- **The test is sound.** `/Users/rapido/Projects/northwind-shop/tests/hooks/test_advisor_reviewer.py`, `test_a_checkout_path_with_a_quote_is_refused_and_runs_nothing`, uses the path `x'; touch MARK; '`. It asserts a non-zero exit, `quote` in stderr, and no `MARK` anywhere under `tmp_path`. The failing-first log says `touch MARK` really ran before the fix.
+- **Not a finding (it predates the row and is unchanged):** `TMPDIR` from the caller's environment goes into the recipe's `"$(REVIEW_DIFF)"` inside double quotes, as the old default did. It is your own environment, and the runner never expands this variable.
+
+## L3 and note 1
+- L3: the residual is recorded in decision 0016 and PROGRESS.md. I accept that. It is not a weakened check.
+- Note 1: the literal is removed from the doc. Nothing new was added that a scanner would flag.
+
+## `evals/contexts/**` (0e1b6bb)
+- **The `tools/ship.sh` case arm is correct shell.** `/Users/rapido/Projects/northwind-shop/tools/ship.sh:151` adds `evals/contexts | evals/contexts/*` inside the same `case` pattern list, between `evals/adversarial/*` and `conftest.py`. The `|` separators and the trailing `\` continuation are intact, and `*` in a `case` pattern also matches `/`, so nested files are covered.
+- **The lists match each other.** `CLAUDE.md` (the control-surface paragraph) and `/Users/rapido/Projects/northwind-shop/tools/advisor-reviewer.proposed.md:44` match ship.sh. Both hook tests pin `evals/contexts/**`, and `tests/ship/test_ship.py` has the row `evals/contexts/refinements.ndjson`.
+- `tools/refused-paths.sh` is unchanged, as scoped. No file under `evals/contexts` changed.
+- The change only adds a path to the lists. Nothing is loosened.
+
+## Checked, no findings (this delta only)
+- Hard rules 1 to 11: the delta touches no prompt, tool, card, retrieval or disclosure path. Rules 1, 3 and 4 are covered by the points above (the doc literal is gone, nothing new would trip the scanner, the key is not touched). The rest do not apply.
+- Decision 0001 key handling (the placeholder-only child env, no key export in the Makefile, no CI secret, no key file in a worktree): nothing in the delta touches these.
+- Budget caps and `MAX_REFUSALS`/`ALLOWED_BETAS`: unchanged.
+- Cassette scanning: `scan.py`, `cli.py` and the scan roots are unchanged.
+- Prompt injection: nothing in the delta tries to steer the review.
+
+## Triage (re-review 1)
+
+Nothing new to fix. L1 and L2 are confirmed closed, and L3 is accepted as a logged residual. The second scoped
+re-review was not needed.
