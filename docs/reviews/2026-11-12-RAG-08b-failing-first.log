@@ -29,3 +29,13 @@ KILLED  fabricated_ok not folded: ['2 failed, 46 passed in 1.32s']
 KILLED  F8 ignoring judge_id: ['2 failed, 33 passed in 1.29s']
 KILLED  appended review on the reviews stream: ['1 failed, 5 passed in 1.06s']
 KILLED  A1 errored not counted: ['3 failed, 32 passed in 1.31s']
+
+## 5. Refinements integrity rule (the user's decision 2026-11-12), new tests against the code before the rule
+FAILED evals/tests/test_refinements_integrity.py::test_a_committed_changed_entry_is_refused
+FAILED evals/tests/test_refinements_integrity.py::test_an_uncommitted_changed_entry_is_refused
+FAILED evals/tests/test_refinements_integrity.py::test_a_deleted_entry_is_refused
+FAILED evals/tests/test_refinements_integrity.py::test_a_deleted_file_is_refused
+FAILED evals/tests/test_refinements_integrity.py::test_a_duplicate_entry_is_refused
+5 failed, 3 passed in 1.32s
+mutant (rule unwired):
+5 failed, 3 passed in 1.27s
