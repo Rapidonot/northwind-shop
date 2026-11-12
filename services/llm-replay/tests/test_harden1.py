@@ -505,3 +505,31 @@ def test_the_runner_reports_nothing_from_the_body(
     new = sorted(set(rig.tmp.rglob("*")) - set(before))
     assert [p.name for p in new] in ([], ["ledger.lock"])  # the ledger's own lock, for totals()
     assert not any(TEST_PAN in p.read_text(errors="replace") for p in new if p.is_file())
+
+
+@pytest.mark.req("HARDEN-1")
+@pytest.mark.parametrize("delta", ['"refusal"', '["refusal"]', "7"])
+def test_counting_never_raises_on_an_odd_delta_and_the_stream_is_still_recorded(
+    rig: Rig, delta: str
+) -> None:
+    """Security review L1: a `message_delta` whose delta is not an object must not cost the
+    recording (counting is observation only)."""
+    sse = (
+        'event: message_start\ndata: {"type": "message_start", "message": {"model": "m", '
+        '"id": "x", "type": "message", "role": "assistant", "content": [], '
+        '"usage": {"input_tokens": 1, "output_tokens": 1}}}\n\n'
+        f'event: message_delta\ndata: {{"type": "message_delta", "delta": {delta}, '
+        '"usage": {"input_tokens": 1, "output_tokens": 2}}\n\n'
+        'event: message_stop\ndata: {"type": "message_stop"}\n\n'
+    )
+    assert proxy_module.stop_reason(sse, True) is None
+    rig.upstream.reply_raw(200, sse, "text/event-stream")
+    with rig.proxy("record") as p:
+        r = httpx.post(
+            p.url + "/v1/messages", json=body(stream=True), headers=OK_HEADERS, timeout=30
+        )
+        state = p.proxy.state
+    assert r.status_code == 200
+    assert r.text == sse
+    assert [c["outcome"] for c in state.calls] == ["recorded"]
+    assert state.refusals == []

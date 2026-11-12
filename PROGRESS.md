@@ -205,6 +205,8 @@ FOUND-2 spike gate (proxy path), parallel-worktree layout for LLM state (decisio
 - Low, from #21's claim-fix re-review (N2); owner: P4 (the real payment adapters, PAY-01's contract suite): `ports.further_along` assumes one intent per claim and neither payment view carries `refunded_minor`; not reachable on the fakes (one live intent per order, no refund on the placement path). Before a real adapter, keep both views when their intent IDs differ and carry `refunded_minor`. `docs/reviews/2026-11-11-BE-05-security-claim-rereview.md`.
 - Low, from HARDEN-1's scope (the user, 2026-11-12); owner: after RECORD-ALL: test speed, a per-module test server instead of one per test (`make test` took 42 min during HARDEN-1's step 0).
 - Low, from HARDEN-1's scope (the user, 2026-11-12); owner: after RECORD-ALL: merge `northwind_backend/errors.py` with `northwind_common/errors.py`, and move `audit.py` to `northwind_common` (both were owned by hardening in row #20).
+- Low, from HARDEN-1's security review (L3); owner: before RECORD-ALL, if `make dev` or `make llm-proxy` records: outside pytest a fallback attempt is only a `refused-fallback` log line. `make record` runs pytest and fails on it. Fix: `cmd_serve` prints a stderr line per `refused-fallback`.
+- Low, observation from HARDEN-1's step 0; owner: #13b / RAG: every `make ingest` reports `deleted: 1`, a chunk in the index not in the fixtures, although no data or RAG file changed in that row.
 ## Log
 
 - 2026-11-03: PRD converted to docs/PRD.md (figures in docs/images/); CLAUDE.md and Phase 1 scope written.

@@ -89,7 +89,7 @@ code: 22 passed. It is not evidence and is listed only so the log is complete.
 | `test_plugin_fails_a_test_that_sent_a_fallback_beta` | FAILED, `nomatch: '*fallback beta*HARDEN-1*do not re-record*'` |
 | `test_refusal_ends_as_two_recorded_requests_that_replay_with_no_miss` | FAILED: `no_fallback_beta(upstream_betas(…))` is False. **The real CLI sent `fallback-credit-2026-06-01` upstream** |
 | `test_with_the_flag_dropped_the_tripwire_fails_closed_the_same_way_every_run` | FAILED, no `fallback_attempts` |
-| `test_proxy_log_scrubs_metadata_user_id_and_the_scan_passes` | FAILED: `'4111111111111111' not in '{"auth": …'`, **the Luhn-valid run was in the log** |
+| `test_proxy_log_scrubs_metadata_user_id_and_the_scan_passes` | FAILED: `'<the 16-digit sandbox test number>' not in '{"auth": …'`, **the Luhn-valid run was in the log** |
 | `test_an_unparsed_body_is_logged_as_a_placeholder_never_raw` | FAILED: `[None] == ['<missing>']` |
 | `test_child_env_is_built_from_scratch` (FOUND-2, the key set updated) | FAILED, the new key is missing |
 | `test_child_env_sets_only_the_refusal_fallback_flag` | FAILED |

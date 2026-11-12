@@ -215,7 +215,8 @@ def stop_reason(text: str, is_sse: bool) -> str | None:
         except json.JSONDecodeError:
             continue
         if isinstance(data, dict) and data.get("type") == "message_delta":
-            reason = (data.get("delta") or {}).get("stop_reason")
+            delta = data.get("delta")  # never trust the shape: counting must not raise (L1)
+            reason = delta.get("stop_reason") if isinstance(delta, dict) else None
             if isinstance(reason, str):
                 found = reason
     return found

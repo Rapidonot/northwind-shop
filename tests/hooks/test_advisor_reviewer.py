@@ -245,3 +245,26 @@ def test_review_diff_default_is_stable_for_one_checkout(tmp_path: Path) -> None:
 def test_an_explicit_review_diff_still_wins(tmp_path: Path) -> None:
     out = str(tmp_path / "elsewhere" / "northwind-review-HARDEN-1.diff")
     assert review_diff_default(tmp_path / "x", f"REVIEW_DIFF={out}") == out
+
+
+@pytest.mark.req("HARDEN-1")
+def test_a_checkout_path_with_a_quote_is_refused_and_runs_nothing(tmp_path: Path) -> None:
+    """Security review L2: the default puts the path in single quotes, so a quote in it is
+    refused rather than handed to the shell. An explicit REVIEW_DIFF still works there."""
+    checkout = tmp_path / "x'; touch MARK; '"
+    checkout.mkdir()
+    (checkout / "Makefile").write_text((REPO / "Makefile").read_text() + REVIEW_DIFF_PROBE)
+    env = {"PATH": "/usr/bin:/bin:/usr/local/bin", "HOME": str(tmp_path), "TMPDIR": str(tmp_path)}
+    done = subprocess.run(  # noqa: S603
+        ["make", "-s", "reviewdiffpath"],  # noqa: S607
+        cwd=checkout,
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
+    )
+    assert done.returncode != 0
+    assert "quote" in done.stderr
+    assert not list(tmp_path.rglob("MARK"))
+    out = str(tmp_path / "explicit.diff")
+    assert review_diff_default(checkout, f"REVIEW_DIFF={out}") == out

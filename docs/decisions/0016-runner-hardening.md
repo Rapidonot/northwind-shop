@@ -52,6 +52,10 @@ The `child_env` guard covers three keys. Other `CLAUDE_CODE_*` refusal switches 
 `CLAUDE_CODE_REFUSAL_FALLBACK_CATCH_ALL`) were measured only alone, not combined with the flag. The proxy tripwire
 is the backstop: any fallback beta still fails the test and never leaves.
 
+Outside pytest (`make llm-proxy`, `make dev`), a fallback attempt is only a `refused-fallback` log line. The CLI
+then strips the beta, and its retry goes on quietly. `make record` runs pytest, so it is covered. Security review
+L3, logged.
+
 ## Why not the alternatives
 
 - Adding `fallback-credit` to `ALLOWED_BETAS`, raising `MAX_REFUSALS`, or recording the runner's 400s would
