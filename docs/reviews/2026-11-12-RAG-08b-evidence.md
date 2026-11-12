@@ -108,3 +108,14 @@ New:
 - 102 × (2.6 × 4 s assistant + 1 × 4 s judge + 1 s overhead) = 102 × 15.4 s = 1,571 s, about 26 min;
 - with the 2× margin, about 52 min. **Proposed `RUNNER_MINUTES=55`.**
 - At medians it would be about 18 min.
+
+## `refinements.ndjson` coverage (the user's condition on the name, 2026-11-12)
+
+| Check | Covers `evals/contexts/refinements.ndjson`? | Evidence |
+|---|---|---|
+| `make scan-cassettes` | **Yes** | Test `evals/tests/test_refinements_coverage.py`: the path is under `EVAL_ROOTS`, and a canary in it is found and never printed. Measured run: with a synthetic canary planted in the real file, `scan FAIL: 1 finding(s)`, `evals/contexts/refinements.ndjson:1: internal-canary`, rc 2; after removing it, `scan clean: 0 finding(s)`, rc 0 |
+| `make eval-integrity` | **No**, and it covers nothing else under `evals/contexts` either | `integrity.py` has no rule for `evals/contexts`. Measured: `eval-integrity passed against origin/main` while `dense-only.jsonl` differs from main on 100 lines (`git diff --numstat`: 102 added, 100 deleted) |
+| `ship`'s control-surface classification | **No**, and not `dense-only.jsonl` either | `tools/ship.sh`'s surface `case` (lines 148–152) and `RUNNER_SYNC_PATHS` hold no `evals/contexts`. `grep -c evals/contexts` gives 0 in `tools/ship.sh`, `tools/refused-paths.sh`, `tools/finish.sh` and `RUNNER_SYNC_PATHS`. CLAUDE.md's control-surface list does not name it either |
+
+**The suffix makes no difference:** both gaps are at the directory level, and a `refinements.jsonl` would be
+equally unguarded.
