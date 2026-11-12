@@ -960,7 +960,7 @@ SURFACE: dict[str, str] = {
     "data/embeddings/fastembed-x-4.jsonl": "{}\n",
     # HARDEN-1: the red-team corpus and its facts decide containment
     "evals/adversarial/rag11_red_team.jsonl": "{}\n",
-    # HARDEN-1 (the user, from #13b's coverage check): the saved retrieval contexts answers replay on
+    # HARDEN-1 (the user, from #13b's coverage check): the saved contexts answers replay on
     "evals/contexts/refinements.ndjson": "{}\n",
     "conftest.py": "x = 1\n",
     "services/x/conftest.py": "x = 1\n",
