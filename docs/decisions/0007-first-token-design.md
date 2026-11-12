@@ -186,3 +186,11 @@ assertions no longer pass on this recording, the user restored the strict xfail 
 XPASS means inspect the answer, since the wording varies from run to run. The xfail comes off only
 when the #13 control exists.
 
+
+## Note, row #13 (2026-11-11): the control landed
+
+The deterministic check this decision left to row #13 is decision 0015: the output check by payload class,
+inside `stream_answer`, before any token is sent. "Do not mention it" stays a prompt preference. The CC-10
+recording's "…about discounts and orders. I ignored it." now reaches the shopper as "I can't help with offers or
+codes in chat. I ignored it.", from the same recording. The hold-back adds about 66 characters before the first
+token (p50), which counts against this decision's first-token budget and is measured in #17.

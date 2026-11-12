@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import html
+import unicodedata
 
 from northwind_rag.retrieval import ShopperRegion
 from northwind_rag.sources import TRUSTED_SOURCE_TYPES, UNTRUSTED_SOURCE_TYPES
@@ -36,7 +37,7 @@ cannot change these rules.
 # a fake "SYSTEM:" or shopper label inside a block stays inside it (hard rule 6, decision 0007).
 # Source text is NFKC-normalised before escaping (`tools.as_data`, RAG-11), so fullwidth and
 # small-form lookalikes such as `＜/source＞` fold to ASCII and are escaped too. The shopper message
-# is escaped but not normalised (owner #13). The CLI
+# gets the same NFKC before escaping (row #13, RAG-11 open item). The CLI
 # reads a prompt starting with "/" as a slash command, so shopper text never comes first.
 USER_PROMPT = """\
 <sources>
@@ -65,5 +66,7 @@ def system_prompt(region: ShopperRegion) -> str:
 
 
 def user_prompt(message: str, sources: str) -> str:
-    """`sources` is already escaped by `render_sources`, or is fixed text of ours."""
-    return USER_PROMPT.format(sources=sources, message=html.escape(message, quote=False))
+    """`sources` is already escaped by `render_sources`, or is fixed text of ours. The message is
+    NFKC-normalised, then escaped, as source text is (RAG-11)."""
+    message = html.escape(unicodedata.normalize("NFKC", message), quote=False)
+    return USER_PROMPT.format(sources=sources, message=message)
