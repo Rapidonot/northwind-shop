@@ -631,15 +631,26 @@ def test_make_enrich_with_no_window_open_exits_before_any_call_and_leaves_every_
     ledger = tmp_path / "ledger.jsonl"
     ledger.write_bytes(b'{"id": "synthetic", "cost_usd": 0.0}\n\x00 tail')
     before = ledger.read_bytes()
-    real = Path.home() / ".northwind" / "ledger.jsonl"
-    real_before = real.read_bytes() if real.exists() else None
+    # HARDEN-1: never read the shared ledger. A temporary HOME holds the default ledger
+    # (`~/.northwind/ledger.jsonl`, used if LLM_LEDGER_PATH were ignored), so a path that skipped
+    # the env would write there, and this test would see it. uv keeps its real caches.
+    home = tmp_path / "home"
+    default = home / ".northwind" / "ledger.jsonl"
+    default.parent.mkdir(parents=True)
+    default.write_bytes(b'{"id": "synthetic-default", "cost_usd": 0.0}\n')
+    default_before = default.read_bytes()
+    real_home = Path(os.environ["HOME"])
     cache_dir = tmp_path / "cache"
     cache_dir.mkdir()
     env = {
         "PATH": os.environ["PATH"],
-        "HOME": os.environ["HOME"],
+        "HOME": str(home),
+        "UV_CACHE_DIR": os.environ.get("UV_CACHE_DIR", str(real_home / ".cache" / "uv")),
+        "UV_PYTHON_INSTALL_DIR": os.environ.get(
+            "UV_PYTHON_INSTALL_DIR", str(real_home / ".local" / "share" / "uv" / "python")
+        ),
         "FASTEMBED_CACHE_PATH": os.environ.get(
-            "FASTEMBED_CACHE_PATH", str(Path.home() / ".cache" / "fastembed")
+            "FASTEMBED_CACHE_PATH", str(real_home / ".cache" / "fastembed")
         ),
         "DATABASE_URL": os.environ.get(
             "DATABASE_URL",
@@ -663,8 +674,8 @@ def test_make_enrich_with_no_window_open_exits_before_any_call_and_leaves_every_
     assert done.returncode != 0, output
     assert "window" in output and "llm-runner" in output, output
     assert ledger.read_bytes() == before
-    if real_before is not None:
-        assert real.read_bytes() == real_before
+    assert default.read_bytes() == default_before
+    assert sorted(p.name for p in default.parent.iterdir()) == ["ledger.jsonl"]  # nothing new
     assert list(cache_dir.iterdir()) == []
 
 
