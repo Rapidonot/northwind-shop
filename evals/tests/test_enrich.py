@@ -625,6 +625,7 @@ def closed_port() -> int:
         return int(probe.getsockname()[1])
 
 
+@pytest.mark.req("HARDEN-1")  # S3: the no-window check reads no shared ledger
 def test_make_enrich_with_no_window_open_exits_before_any_call_and_leaves_every_file(
     tmp_path: Path,
 ) -> None:

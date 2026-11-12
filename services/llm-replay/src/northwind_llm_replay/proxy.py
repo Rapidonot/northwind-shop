@@ -81,6 +81,8 @@ LOG_HASH_CHARS = HASH_PREFIX_CHARS  # enough to find a cassette by prefix
 FALLBACK_BETA_PREFIXES = ("fallback-credit-", "server-side-fallback-")
 # Logged in place of a request body the proxy could not parse: the raw bytes are never logged.
 UNPARSED_BODY = "<unlogged:unparsed-body>"
+# Logged when scrubbing a parsed body fails: the request is refused and nothing raw is written.
+UNSCRUBBED_BODY = "<unlogged:unscrubbed-body>"
 NOT_SENT_ERRORS = (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout)
 
 
@@ -334,8 +336,25 @@ class Proxy:
         except json.JSONDecodeError:
             body = None
         # One scrub for the match key and the log, so the log can never hold what a cassette drops
-        # (HARDEN-1, M2). If it raises, the request fails here, before anything is logged.
-        key = match_key(request.method, full_path, headers, scrub(body))
+        # (HARDEN-1, M2). If it fails, the request is refused and logged with a placeholder only.
+        try:
+            scrubbed = scrub(body)
+        except Exception:  # noqa: BLE001 - any failure: fail closed, never log the raw body
+            self._log(
+                {
+                    "ts": now_iso(),
+                    "mode": self.cfg.mode,
+                    "method": request.method,
+                    "path": full_path,
+                    "test_id": test_id,
+                    "outcome": "refused-scrub",
+                    "body": UNSCRUBBED_BODY,
+                }
+            )
+            return error_response(
+                400, "validation", False, "the LLM proxy could not scrub this request body"
+            )
+        key = match_key(request.method, full_path, headers, scrubbed)
         h = request_hash(key)
         entry: dict[str, Any] = {
             "ts": now_iso(),

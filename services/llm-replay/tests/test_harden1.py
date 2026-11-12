@@ -473,12 +473,18 @@ def test_a_scrub_that_raises_never_logs_the_raw_body(
     sent = body(metadata={"user_id": device_user_id()})
     with rig.proxy("record") as p:
         r = httpx.post(p.url + "/v1/messages", json=sent, headers=OK_HEADERS, timeout=30)
-    assert r.status_code >= 400
+        state = p.proxy.state
+    # Advisor row review 1: the user's addition 3 asks for a placeholder in the log, not silence.
+    assert r.status_code == 400
+    err = r.json()
+    assert (err["isError"], err["errorCategory"], err["isRetryable"]) == (True, "validation", False)
     assert rig.upstream.requests == []
-    text = rig.log.read_text(encoding="utf-8") if rig.log.exists() else ""
-    assert TEST_PAN not in text
-    if rig.log.exists():
-        assert scan_paths([rig.log.parent]) == []
+    assert [c["outcome"] for c in state.calls] == ["refused-scrub"]
+    [entry] = log_lines(rig.log)
+    assert entry["outcome"] == "refused-scrub"
+    assert entry["body"] == getattr(proxy_module, "UNSCRUBBED_BODY", "<missing>")
+    assert TEST_PAN not in rig.log.read_text(encoding="utf-8")
+    assert scan_paths([rig.log.parent]) == []
 
 
 @pytest.mark.req("HARDEN-1")
