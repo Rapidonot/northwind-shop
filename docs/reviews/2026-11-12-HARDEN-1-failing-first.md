@@ -190,3 +190,30 @@ Before the list edits: `test_the_control_surface_paragraph_names_the_entry[evals
 - L2: `test_a_checkout_path_with_a_quote_is_refused_and_runs_nothing` FAILED before the fix. `make` exited 0, and
   **`touch MARK` ran**: the file was found inside the quoted checkout directory, so the injection was real.
 - With the fixes: 104 passed (`test_harden1.py`, `test_harden1_extra.py`, `tests/hooks/test_advisor_reviewer.py`).
+
+## `make ci`, 2026-11-12/13
+
+- At `2a710a9`: **failed at lint** (`ruff` E501 on a comment this row added in `tests/ship/test_ship.py:963`), so no
+  tests ran. Fixed in `64982c4`.
+- At `64982c420faee74d097770f8c49aeeaf944d0659` (the head the advisor's row review read): **exit 0**. Lint clean
+  (ruff, format, mypy 266 files, eslint, tsc); `scan clean: 0 finding(s)` (regex only); 5,815 passed, 325
+  deselected, 22 xfailed (the known ones); 54 Vitest; 282 integration; `eval-integrity passed against origin/main`;
+  `eval-gate passed`, all 7 metrics equal to the baseline, `answers replayed 100/100, stale 0`.
+- 64 tests carry `req("HARDEN-1")` at `64982c4` (counted by collection over `services/llm-replay/tests`,
+  `services/common/tests`, `tests/hooks`, `tests/ship` and `evals/tests/test_enrich.py`). All ran in that
+  `make ci`. The S3 test was tagged after it (advisor row review, low 3).
+- `make llm-spend` after: **$2.950179** (unchanged).
+
+## Advisor row review fixes: failing first
+
+- **Medium 1:** the tightened `test_a_scrub_that_raises_never_logs_the_raw_body` FAILED on `64982c4`
+  (`assert 500 == 400`: the request failed and no line was logged). With the fix (`refused-scrub`, the placeholder
+  `<unlogged:unscrubbed-body>`, a structured 400) the whole `services/llm-replay/tests` suite passes, 1,000 tests.
+- **Low 2, `test_harden1_extra.py`** (test-writer's 30 tests):
+  - Against the base source (`1e1cfd9`, four source files set back): a collection error, because it imports names
+    this row adds. So per-test proof comes from three mutations of the head code instead, each restored after:
+    - tripwire off (`fallback_betas` returns `[]`): **10 failed**, 20 passed;
+    - `stop_reason` always `None`: **9 failed**, 21 passed;
+    - the raw body logged: **1 failed**, 29 passed.
+  - Every mutant is killed. The tests that survive a given mutant test other code (for example the `stop_reason`
+    shapes that expect `None`).

@@ -346,3 +346,28 @@ first.
 both hook tests, and the ship path-table row `evals/contexts/refinements.ndjson`). It is not added to
 `refused-paths.sh`. Only the lists change: no file under `evals/contexts` (a #13b path) is touched. It arrived
 while `security-reviewer` was reading `686ed4c`, so this commit goes to the scoped re-review.
+
+## `advisor-reviewer`, second plan read (R1–R5): triage
+
+| # | Sev | Finding | Done |
+|---|---|---|---|
+| R1 | medium | The stop-7 section listed step 0 as done | Fixed in `f0e5ffc`: step 0 marked partial, and the three suites listed as waiting on `make up`. They were measured later at `24b9448` |
+| R2 | medium | Option B's costs were incomplete | Fixed in `f0e5ffc`: the four unmeasured costs listed. The user chose A |
+| R3 | medium | The triage claimed plan edits that were not made | Fixed in `f0e5ffc`: the old lines are marked superseded, and the triage rows reworded |
+| R4 | unconfirmed | Was the flag committed? | Yes, in `eaefd39`, after the failing-first runs. The F4 row was corrected |
+| R5 | low | 0016 wording, the flag-dropped test, which option the e2e test encodes, the guard's reach | Fixed in `f0e5ffc` (the key removed, the A note, the residual in 0016) |
+
+## `advisor-reviewer`, row review at `64982c4`: `findings`, no critical or high; triage
+
+| # | Sev | Finding | Done |
+|---|---|---|---|
+| 1 | medium | An unscrubbable body gave a 500 and no log line, not the placeholder addition 3 asked for. The test was only a guard | **Fixed** in `1e98b29`: `refused-scrub`, `<unlogged:unscrubbed-body>`, a structured 400. The test was tightened and seen failing first |
+| 2 | low | test-writer's 30 tests had no failing-first run | **Done**: three mutations, each killed (failing-first log) |
+| 3 | low | The S3 test was not tagged | **Fixed**: `req("HARDEN-1")` |
+| 4 | low | Records: the Luhn item, RAG-11 F2 and CC-04 not closed | **Fixed**: PROGRESS row #9's two hardening items and the Luhn open item marked closed by H1; COVERAGE CC-04 evidence added |
+| U1 | unconfirmed | R1, R3 and R4 triage missing | The table above |
+| U2 | unconfirmed | `make ci` at `64982c4` not on disk | Recorded in the failing-first log |
+| U3 | unconfirmed | Spend after not on disk | $2.950179, recorded in the failing-first log |
+
+Every fix is in the files this row already changed. Because the reviewed head moved, `make ci` runs again, and the
+advisor re-reads the new head.
