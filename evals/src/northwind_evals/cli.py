@@ -117,7 +117,8 @@ from northwind_rag.store import _corpus_sha256
 
 ITEMS = Path("evals/fixtures/starter_set.jsonl")
 CONTEXTS = Path("evals/contexts/dense-only.jsonl")
-REFINEMENTS = Path("evals/contexts/refinements.jsonl")
+# Not `.jsonl`: every `evals/contexts/*.jsonl` is a saved-contexts file (test_render_nfkc_identity).
+REFINEMENTS = Path("evals/contexts/refinements.ndjson")
 GROUNDEDNESS_TARGET = 0.95  # RAG-08, enforced at Gate 1; reported here
 BASELINE = Path("evals/baselines/dense-only.json")
 CANDIDATE = Path(".llm-proxy-log/baseline-candidate.json")

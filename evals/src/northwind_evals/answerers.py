@@ -4,7 +4,7 @@
 Shopper Assistant itself: `stream_answer`, never `run_turn`, so the assistant's own prompt and the
 output check (decision 0015) are what gets scored. Its first search returns the item's saved
 context (decision 0007); the model's later `retrieve_context` calls are refinement searches,
-recorded in `evals/contexts/refinements.jsonl` and served from there in replay (option B).
+recorded in `evals/contexts/refinements.ndjson` and served from there in replay (option B).
 
 The judge renders sources with `render_sources` here. Nothing in this module may be imported by
 `gate`, `items` or `metrics`: promotion loads those on the runner, where the assistant is not
