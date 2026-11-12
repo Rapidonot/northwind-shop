@@ -387,3 +387,29 @@ def test_a_scrub_that_raises_never_logs_the_raw_body(
     assert TEST_PAN not in text
     if rig.log.exists():
         assert scan_paths([rig.log.parent]) == []
+
+
+@pytest.mark.req("HARDEN-1")
+@pytest.mark.parametrize("outcome", ["refused-beta", "live"])
+def test_the_runner_reports_nothing_from_the_body(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch, outcome: str
+) -> None:
+    """Addition 3: the runner's terminal line is status and numbers only, and it writes no file."""
+    printed: list[str] = []
+    gate = runner.RunnerGate(FAKE_REAL_KEY + "-x" * 20, rig.ledger, printed.append, printed.append)
+    monkeypatch.chdir(rig.tmp)
+    before = sorted(rig.tmp.rglob("*"))
+    entry = {
+        "outcome": outcome,
+        "status": 200,
+        "model": "claude-haiku-5-5",
+        "cost_usd": 0.0,
+        "usage": {"input_tokens": 1, "output_tokens": 1},
+        "body": body(metadata={"user_id": device_user_id()}),
+    }
+    gate.report(entry)
+    assert printed
+    assert not any(TEST_PAN in line or "user_id" in line or "hello" in line for line in printed)
+    new = sorted(set(rig.tmp.rglob("*")) - set(before))
+    assert [p.name for p in new] in ([], ["ledger.lock"])  # the ledger's own lock, for totals()
+    assert not any(TEST_PAN in p.read_text(errors="replace") for p in new if p.is_file())

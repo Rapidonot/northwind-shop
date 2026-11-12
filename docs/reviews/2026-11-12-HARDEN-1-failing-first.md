@@ -111,3 +111,26 @@ code: 22 passed. It is not evidence and is listed only so the log is complete.
 
 Docker is terminal-only (stop 3). The three unmeasured suites need `make -C ~/.northwind/runner up` from the user,
 then a rerun.
+
+## Addition 3: the runner saves no body (confirmed from the code and by a test)
+
+- `RunnerGate.report()` (`services/llm-replay/src/northwind_llm_replay/runner.py:454-480`) reads only `outcome`,
+  `status`, `model`, `first_byte_ms`, `cost_usd`, `usage` and the ledger totals. It prints one line through
+  `out` and writes no file.
+- The runner's `Proxy` has no `log_path` (`runner.py`, `ProxyConfig(mode="live", …)`), and `Proxy.state.calls`
+  drops `body` (`proxy.py`, `_log`).
+- `test_the_runner_reports_nothing_from_the_body` (×2, `refused-beta` and `live`): the printed lines hold no
+  Luhn run, no `user_id` and no prompt text. The only new file is the ledger's own `ledger.lock`, and it holds
+  no Luhn run. This is a guard, so it passes before and after the fix.
+
+## S1 to S4: failing first
+
+- S1: `test_review_diff_default_differs_per_checkout` FAILED on the old Makefile (both checkouts got
+  `northwind-review.diff`). `…_is_stable_for_one_checkout` and `test_an_explicit_review_diff_still_wins` are pins:
+  they passed before and after.
+- S2: `test_the_control_surface_paragraph_names_the_entry[evals/adversarial/**]`,
+  `test_control_surface_names_the_path[evals/adversarial/**]` and
+  `test_control_surface_lists_the_path[evals/adversarial/rag11_red_team.jsonl]` all FAILED before the edits.
+- S4: `test_slice_wording_follows_decision_0013_and_keeps_the_default_after_expiry` FAILED before the edit.
+- S3: a guard, not a failing-first test. `make enrich` with no window writes no ledger, before and after; only
+  where the check looks changed.
