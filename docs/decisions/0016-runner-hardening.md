@@ -1,7 +1,7 @@
 # 0016: A refusal ends deterministically; review diffs per checkout; adversarial evals on the control surface
 
 Date: 2026-11-12 · Row: HARDEN-1 (no PRD ID) · Status: decided by the user (plan approval with Q1 = no and Q2 =
-yes, additions 1 to 6, 2026-11-12; the M1 outcome is pending the user's stop-7 answer)
+yes, additions 1 to 6; the stop-7 answer A and the amended M1 criterion; all 2026-11-12)
 
 Plan, with the measurements, the advisor triage and the questions: `docs/reviews/2026-11-12-HARDEN-1-plan.md`.
 Measurements: `docs/reviews/2026-11-12-HARDEN-1-failing-first.md`.
@@ -29,9 +29,12 @@ proxy log kept the CLI's hex `metadata.user_id`, which tripped the Luhn check at
    - It never forwards such a request, so a fallback attempt costs no runner refusal.
    - The pytest plugin fails the test with its own message, never as a cassette miss to re-record.
    - The runner is unchanged: `ALLOWED_BETAS`, `MAX_REFUSALS` and its own `refused-beta`.
-3. **What ends a refused turn:** pending the user's answer to the plan's stop 7, option A (the CLI's plain retry
-   is recorded) or option B (the proxy also refuses the CLI's post-refusal retry, so the refusal is the one
-   recorded outcome).
+3. **What ends a refused turn (the user's answer to stop 7, 2026-11-12: option A).** The criterion, amended by the
+   user, is: "a refusal ends as a fixed, deterministic recorded sequence (the refusal, then the CLI's plain
+   retry). No fallback beta is ever sent, and no runner refusal is used."
+   - A double refusal (the retry refused too) ends after a pinned number of requests.
+   - The proxy counts the refusals it sees, in its state and log, and changes nothing else.
+   - Option B, a local 400 for the CLI's post-refusal retry, was measured but not built.
 4. **The proxy log is scrubbed** with the cassettes' own `SCRUB_RULES`. A body it cannot parse is logged as a
    fixed placeholder, never raw. The scanner is unchanged.
 5. **`REVIEW_DIFF` defaults per checkout:** `$(TMPDIR)/northwind-review-<cksum of $(CURDIR)>.diff`. It needs no

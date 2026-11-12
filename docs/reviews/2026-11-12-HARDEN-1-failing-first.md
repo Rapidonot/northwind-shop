@@ -134,3 +134,29 @@ then a rerun.
 - S4: `test_slice_wording_follows_decision_0013_and_keeps_the_default_after_expiry` FAILED before the edit.
 - S3: a guard, not a failing-first test. `make enrich` with no window writes no ledger, before and after; only
   where the check looks changed.
+
+## The user's M1 additions (answer A, 2026-11-12)
+
+**Double refusal measured first** (scratchpad rig `exp3.py`, the committed flag, record plus two replays):
+
+| Scripted refusals | Requests | Fallback beta | Result |
+|---|---|---|---|
+| 2 | **2** (both refusals, recorded); replays 2 hits, 0 misses | none | the CLI's error result "…safeguards flagged this session…", every run |
+| 3 | **2** (the third refusal is never requested) | none | the same |
+
+So the CLI stops after its one plain retry, with no loop. `DOUBLE_REFUSAL_REQUESTS = 2` is pinned.
+
+**Failing first**, with the three new or extended tests at `f0e5ffc` plus the test edits, before the counting code:
+
+- `test_refusal_ends_as_two_recorded_requests_that_replay_with_no_miss`: FAILED, `'ProxyState' object has no
+  attribute 'refusals'`. Its new `runner_refusals(rig) == []` assertion ran before that line and passed: the
+  runner's own gate accepts both CLI requests.
+- `test_a_double_refusal_ends_after_a_pinned_number_of_requests`: FAILED, the same reason.
+- `test_the_proxy_counts_refusals_it_sees_and_changes_nothing_else` ×2 (SSE and JSON): FAILED, the same reason.
+
+**With the code:** 174 passed (`test_harden1.py` and `test_llm_factory.py`). The whole `services/llm-replay/tests`
+suite: 967 passed.
+
+Counting covers replay hits, buffered responses (JSON, and SSE through the runner) and the sandbox proxy's
+streamed SSE. The response bytes, the outcome and the cassette are unchanged (the counting test compares them).
+`ScriptedLLM` now also records each request's query string, so the gate check sees what the runner would.

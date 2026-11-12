@@ -153,6 +153,8 @@ class ProxyState:
     calls: list[dict[str, Any]] = field(default_factory=list)
     seq: dict[str, int] = field(default_factory=dict)
     fallback_attempts: list[dict[str, Any]] = field(default_factory=list)
+    # HARDEN-1: responses served with stop_reason "refusal", for tests and evals to report.
+    refusals: list[dict[str, Any]] = field(default_factory=list)
 
 
 def error_response(
@@ -193,6 +195,30 @@ def auth_verdict(headers: dict[str, str], expected: str | None = PLACEHOLDER_API
         headers.get("authorization", ""), f"Bearer {expected}"
     )
     return "placeholder" if ok else "REJECTED"
+
+
+def stop_reason(text: str, is_sse: bool) -> str | None:
+    """The response's stop_reason, from the JSON body or the stream's message_delta (HARDEN-1)."""
+    if not is_sse:
+        try:
+            parsed = json.loads(text)
+        except json.JSONDecodeError:
+            return None
+        reason = parsed.get("stop_reason") if isinstance(parsed, dict) else None
+        return reason if isinstance(reason, str) else None
+    found: str | None = None
+    for line in text.splitlines():
+        if not line.startswith("data:"):
+            continue
+        try:
+            data = json.loads(line[5:].strip())
+        except json.JSONDecodeError:
+            continue
+        if isinstance(data, dict) and data.get("type") == "message_delta":
+            reason = (data.get("delta") or {}).get("stop_reason")
+            if isinstance(reason, str):
+                found = reason
+    return found
 
 
 def fallback_betas(headers: dict[str, str]) -> list[str]:
@@ -274,6 +300,14 @@ class Proxy:
         self.cfg.log_path.parent.mkdir(parents=True, exist_ok=True)
         with self._log_lock, self.cfg.log_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(entry, sort_keys=True, ensure_ascii=False) + "\n")
+
+    def _note_refusal(self, entry: dict[str, Any], text: str, is_sse: bool) -> None:
+        """Count a refusal the proxy served. Observation only: nothing it returns changes."""
+        if stop_reason(text, is_sse) == "refusal":
+            entry["refusal"] = True
+            self.state.refusals.append(
+                {"hash": entry.get("hash"), "test_id": entry.get("test_id"), "mode": self.cfg.mode}
+            )
 
     def _client_get(self) -> httpx.AsyncClient:
         if self._client is None:
@@ -379,6 +413,7 @@ class Proxy:
                     entry["stale"] = True
             if hit is not None:
                 entry["outcome"] = "hit"
+                self._note_refusal(entry, hit.body, hit.kind == "sse")
                 self._log(entry)
                 return self._replay(hit)
             if self.cfg.mode == "replay":
@@ -526,6 +561,7 @@ class Proxy:
         entry["status"] = resp.status_code
         entry["outcome"] = "live"
         entry["usage"] = usage
+        self._note_refusal(entry, text, is_sse)
         if self.cfg.gate is not None and self.cfg.gate.leaks(text):
             entry["outcome"] = "blocked-key"
             self._log(entry)
@@ -582,6 +618,7 @@ class Proxy:
             entry["status"] = resp.status_code
             entry["outcome"] = "live"
             entry["final_usage"] = usage is not None
+            self._note_refusal(entry, text, True)
             if (
                 self.cfg.mode == "record"
                 and resp.status_code == 200

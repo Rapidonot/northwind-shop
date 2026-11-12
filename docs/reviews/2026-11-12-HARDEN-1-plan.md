@@ -299,6 +299,37 @@ were **not measured**, because Postgres was down. They need `make -C ~/.northwin
 example `CLAUDE_CODE_REFUSAL_FALLBACK_CATCH_ALL`, were measured only alone, never with the flag. The tripwire is the
 backstop.
 
+## The user's answer to stop 7 (2026-11-12)
+
+**A, the flag only** (the user's decision). Option B is not built. The stack is up (the user ran
+`make -C ~/.northwind/runner up`).
+
+**M1's criterion, amended by the user** (it replaces "one recorded, deterministic outcome"):
+
+> A refusal ends as a fixed, deterministic recorded sequence (the refusal, then the CLI's plain retry). No fallback
+> beta is ever sent, and no runner refusal is used.
+
+**Added to M1, with tests:**
+
+1. **Double refusal.** A scripted double refusal (the retry is refused too) ends after a bounded number of
+   requests, with no fallback beta and no loop. The exact request count is pinned
+   (`test_a_double_refusal_ends_after_a_pinned_number_of_requests`).
+2. **The proxy counts the refusals it sees.** A response with `stop_reason: "refusal"` (JSON or SSE) adds to
+   `ProxyState.refusals`, and its log entry gets `"refusal": true`, so tests and evals can report them. Nothing
+   else changes in behaviour: the same response, outcome, recording and cassette
+   (`test_the_proxy_counts_refusals_it_sees_and_changes_nothing_else`; replay hits count too).
+3. **The real-CLI e2e test asserts:**
+   - in record: exactly 2 upstream requests, 0 fallback attempts and 0 runner refusals;
+   - in two replays: 0 misses.
+
+   "0 runner refusals" is measured as: no request reached the scripted upstream that the runner's own gate
+   (`RunnerGate.refuse`, unchanged) would refuse. The test runs every upstream request through the real gate.
+
+**Order:** first rerun the three step-0 suites (the pytest half of `make e2e`, `make test-integration` with the
+1,000-order replay, and `make eval-gate`, which needs 100/100 replayed and 0 stale). Any miss or stale is a stop.
+Then the chain, to the full gate report. Stop before `/req-done`, because the user checks the gate report on disk
+first.
+
 ## Questions (answered above)
 
 - **Q1 (recommended: no).** Leave `evals/adversarial/**` out of `tools/refused-paths.sh`, since that file refuses

@@ -111,6 +111,8 @@ def llm_proxy(
     state = handle.state
     if state.scan_failures:
         pytest.fail("cassette refused by the secret/PAN scanner: " + "; ".join(state.scan_failures))
+    if state.refusals:  # reported, never a failure (HARDEN-1)
+        request.node.user_properties.append(("llm_refusals", len(state.refusals)))
     if state.fallback_attempts:
         betas = sorted({b for a in state.fallback_attempts for b in a["betas"]})
         pytest.fail(

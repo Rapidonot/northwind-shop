@@ -261,6 +261,19 @@ def no_fallback_beta(betas: list[list[str]]) -> bool:
     return not any(b.startswith(PREFIXES) for each in betas for b in each)
 
 
+def runner_refusals(rig: Rig) -> list[str]:
+    """What the runner's own gate (unchanged) would refuse among the requests that reached the
+    upstream, the runner's stand-in: each refusal there would count toward MAX_REFUSALS."""
+    gate = runner.RunnerGate(FAKE_REAL_KEY + "-x" * 20, rig.ledger, print, print)
+    refused = []
+    for r in rig.upstream.requests:
+        raw = json.dumps(r["body"]).encode()
+        verdict = gate.refuse("POST", r["path"], r["query"], raw, r["body"], r["headers"])
+        if verdict is not None:
+            refused.append(verdict[0])
+    return refused
+
+
 @pytest.mark.req("HARDEN-1")
 def test_refusal_ends_as_two_recorded_requests_that_replay_with_no_miss(rig: Rig) -> None:
     script_refusal(rig.upstream)
@@ -270,7 +283,9 @@ def test_refusal_ends_as_two_recorded_requests_that_replay_with_no_miss(rig: Rig
     assert len(rig.upstream.requests) == 2  # the refusal, then the CLI's plain retry
     assert no_fallback_beta(upstream_betas(rig.upstream))
     assert rec_state.fallback_attempts == []
+    assert runner_refusals(rig) == []  # the runner would have used none of its refusals
     assert [c["outcome"] for c in rec_state.calls] == ["recorded", "recorded"]
+    assert len(rec_state.refusals) == 1  # the proxy saw the one refusal
     assert len(list((rig.tmp / "cassettes" / "t").glob("*.json"))) == 2
     hashes = [c["hash"] for c in rec_state.calls]
     for n in range(2):  # the same result on every replay
@@ -281,8 +296,85 @@ def test_refusal_ends_as_two_recorded_requests_that_replay_with_no_miss(rig: Rig
         assert state.fallback_attempts == []
         assert [c["outcome"] for c in state.calls] == ["hit", "hit"]
         assert [c["hash"] for c in state.calls] == hashes
+        assert len(state.refusals) == 1
         assert replayed == recorded
     assert len(rig.upstream.requests) == 2  # replay never went upstream
+
+
+DOUBLE_REFUSAL_REQUESTS = 2  # measured on the bundled CLI 0.2.178; a change here is a reviewed one
+
+
+@pytest.mark.req("HARDEN-1")
+def test_a_double_refusal_ends_after_a_pinned_number_of_requests(rig: Rig) -> None:
+    """The retry is refused too: the CLI stops with its own error result, no fallback beta, no loop.
+    A third refusal is scripted and never asked for."""
+    for _ in range(3):
+        rig.upstream.reply_raw(200, refusal_sse(MODEL), "text/event-stream")
+    rig.upstream.reply_stream("must not be reached", model=MODEL)
+    results = []
+    for n, mode in enumerate(["record", "replay", "replay"]):
+        with rig.proxy(mode) as p:
+            results.append(run_turn(p.url, rig.tmp / f"rt-{n}"))
+            state = p.proxy.state
+        assert len(state.calls) == DOUBLE_REFUSAL_REQUESTS
+        assert len(state.refusals) == DOUBLE_REFUSAL_REQUESTS
+        assert state.fallback_attempts == []
+        assert state.misses == []
+    assert len(rig.upstream.requests) == DOUBLE_REFUSAL_REQUESTS
+    assert no_fallback_beta(upstream_betas(rig.upstream))
+    assert runner_refusals(rig) == []
+    assert results[0] == results[1] == results[2]
+    assert results[0] and results[0][-1].startswith("error:")  # the CLI's error result, every run
+
+
+def refusal_json(model: str) -> str:
+    return json.dumps(
+        {
+            "id": "msg_scripted_refusal_json",
+            "type": "message",
+            "role": "assistant",
+            "model": model,
+            "content": [],
+            "stop_reason": "refusal",
+            "stop_sequence": None,
+            "usage": {"input_tokens": 4, "output_tokens": 5},
+        }
+    )
+
+
+@pytest.mark.req("HARDEN-1")
+@pytest.mark.parametrize("stream", [True, False])
+def test_the_proxy_counts_refusals_it_sees_and_changes_nothing_else(rig: Rig, stream: bool) -> None:
+    if stream:
+        rig.upstream.reply_raw(200, refusal_sse(MODEL), "text/event-stream")
+    else:
+        rig.upstream.reply_raw(200, refusal_json(MODEL))
+    rig.upstream.reply("an ordinary answer")
+    refused_body = body("refuse me", stream=stream)
+    with rig.proxy("record") as p:
+        first = httpx.post(
+            p.url + "/v1/messages", json=refused_body, headers=OK_HEADERS, timeout=30
+        )
+        second = httpx.post(
+            p.url + "/v1/messages", json=body("fine"), headers=OK_HEADERS, timeout=30
+        )
+        state = p.proxy.state
+    assert first.status_code == 200
+    assert first.text == (refusal_sse(MODEL) if stream else refusal_json(MODEL))  # untouched
+    assert second.status_code == 200
+    assert [c["outcome"] for c in state.calls] == ["recorded", "recorded"]
+    assert [r["hash"] for r in state.refusals] == [state.calls[0]["hash"]]
+    entries = log_lines(rig.log)
+    assert [e.get("refusal") for e in entries] == [True, None]
+    assert len(list((rig.tmp / "cassettes" / "t").glob("*.json"))) == 2
+    with rig.proxy("replay") as p:
+        again = httpx.post(
+            p.url + "/v1/messages", json=refused_body, headers=OK_HEADERS, timeout=30
+        )
+        replay_state = p.proxy.state
+    assert again.content == first.content
+    assert [c["outcome"] for c in replay_state.calls] == ["hit"]
+    assert len(replay_state.refusals) == 1
 
 
 @pytest.mark.req("HARDEN-1")
