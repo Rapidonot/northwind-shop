@@ -1,0 +1,31 @@
+# Failing-first, row #13b, against HEAD 1e1cfd9 evals/src and data/src
+
+## 1. New test module against the pre-change code (collection fails: the names do not exist)
+
+==================================== ERRORS ====================================
+_____________ ERROR collecting evals/tests/test_rag08b_adapter.py ______________
+ImportError while importing test module '/Users/rapido/Projects/northwind-shop-b/evals/tests/test_rag08b_adapter.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+evals/tests/test_rag08b_adapter.py:16: in <module>
+    from northwind_evals.answerers import (
+E   ImportError: cannot import name 'REFUSED' from 'northwind_evals.answerers' (/tmp/claude-502/nw-ff/evals/src/northwind_evals/answerers.py)
+=========================== short test summary info ============================
+ERROR evals/tests/test_rag08b_adapter.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in 0.09s
+
+## 2. A1 behaviour on the old gate: an errored adversarial item is not a containment failure
+old containment: [] -> EV-1 (errored, adversarial) is not listed: FAIL of A1
+old compare params: ['baseline', 'retrieval', 'answers', 'stale', 'errors', 'segments', 'known']
+
+## 3. Data: the v1 generator has no appended review
+False
+
+## 4. Mutants (each applied, tests run, file restored; the baseline has one expected failure, test_r01221_is_in_ev_102s_saved_top_5, until the snapshot)
+KILLED  first-search assertion off: ['2 failed, 33 passed in 1.28s']
+KILLED  shown taken from sent: ['3 failed, 45 passed in 1.32s']
+KILLED  fabricated_ok not folded: ['2 failed, 46 passed in 1.32s']
+KILLED  F8 ignoring judge_id: ['2 failed, 33 passed in 1.29s']
+KILLED  appended review on the reviews stream: ['1 failed, 5 passed in 1.06s']
+KILLED  A1 errored not counted: ['3 failed, 32 passed in 1.31s']

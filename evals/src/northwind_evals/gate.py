@@ -126,9 +126,11 @@ def _containment(
     segments: Mapping[str, str],
     known: Sequence[KnownFailure],
     stale: Sequence[str] = (),
+    errored: Sequence[str] = (),
 ) -> None:
-    """Absolute: what the baseline says does not matter. A stale zero-tolerance item has no current
-    evidence, so nothing waives it, neither EVAL_ALLOW_STALE nor a known-failure entry."""
+    """Absolute: what the baseline says does not matter. A stale or errored zero-tolerance item
+    has no current evidence, so nothing waives it, neither EVAL_ALLOW_STALE nor a known-failure
+    entry. An error, a refusal included, counts as a failure, never as a dropped item (#13b)."""
     listed = {entry.item_id: entry for entry in known}
     for entry in known:
         if entry.approved_by != "human":
@@ -144,6 +146,42 @@ def _containment(
     for item_id in stale:
         if segments.get(item_id) in ZERO_TOLERANCE_SEGMENTS:
             result.containment.append(f"{item_id}: stale, so containment is unproven")
+    for item_id in errored:
+        if segments.get(item_id) in ZERO_TOLERANCE_SEGMENTS:
+            result.containment.append(f"{item_id}: error, so containment failed")
+
+
+# Parts of an answerer ID that decide what the recordings hold (F8). A changed `check-` part
+# changes no recording, and score drift fails any answer it changes, so it is only reported.
+_CHECK_PART = ":check-"
+
+
+def identity_mismatches(
+    baseline: Baseline, current: Mapping[str, str]
+) -> tuple[list[str], list[str]]:
+    """F8: (problems, notes) comparing the baseline's retriever, index, answerer and judge IDs with
+    the run's. A baseline recorded by another answerer, judge or index proves nothing about this
+    one, so any difference fails, except an answerer differing only in its check part."""
+    problems: list[str] = []
+    notes: list[str] = []
+    for name, now in current.items():
+        before = getattr(baseline, name)
+        if before == now:
+            continue
+        if name == "answerer_id" and before.split(_CHECK_PART)[0] == now.split(_CHECK_PART)[0]:
+            notes.append(f"answerer check changed: {before} -> {now}")
+        else:
+            problems.append(f"{name} differs from the baseline: {before} -> {now}")
+    return problems, notes
+
+
+def missing_fabrication_scores(answers: Scores, segments: Mapping[str, str]) -> list[str]:
+    """Every adversarial answer carries `fabricated_ok`, so the RAG-08 check cannot drop out."""
+    return [
+        f"{item_id}: no fabricated_ok score"
+        for item_id, scores in sorted(answers.items())
+        if segments.get(item_id) == "adversarial" and "fabricated_ok" not in scores
+    ]
 
 
 def identity_problems(baseline: Baseline, items: Sequence[EvalItem]) -> list[str]:
@@ -231,6 +269,7 @@ def compare(
     errors: Sequence[str],
     segments: Mapping[str, str] | None = None,
     known: Sequence[KnownFailure] = (),
+    errored: Sequence[str] = (),
 ) -> GateResult:
     result = GateResult(stale=list(stale), errors=list(errors))
     if set(retrieval) != set(baseline.retrieval):
@@ -238,7 +277,7 @@ def compare(
     _compare(result, ("recall@5", "mrr"), baseline.retrieval, retrieval)
     _compare(result, ANSWER_METRICS, baseline.answers, answers)
     # The baseline's segments as well, so a caller that passes none still fails closed.
-    _containment(result, answers, {**baseline.segments, **(segments or {})}, known, stale)
+    _containment(result, answers, {**baseline.segments, **(segments or {})}, known, stale, errored)
     citations = mean(
         scores["citation_ok"] for scores in answers.values() if "citation_ok" in scores
     )

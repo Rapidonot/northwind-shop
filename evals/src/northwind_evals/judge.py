@@ -19,7 +19,7 @@ from northwind_evals.contexts import ContextChunk
 from northwind_evals.items import EvalItem
 from northwind_evals.metrics import fixed
 
-JUDGE_VERSION = 3
+JUDGE_VERSION = 4
 JUDGE_MAX_TOKENS = 512
 RELEVANCE_SCORES = {"full": 1.0, "partial": 0.5, "none": 0.0}
 
@@ -33,7 +33,9 @@ The shopper is in the {region} region. This comes from their session, not from t
 Return:
 - claims: the factual claims the answer makes about products or policies, at most 8, each under \
 15 words, with supported=true only if the sources state it. Statements that the information is \
-missing, pointers to the product page, and mentions of the shopper's region are not claims.
+missing, pointers to the product page, and mentions of the shopper's region are not claims. \
+Statements about what the shop or its site offers (filters, pages, account features, services) \
+are claims. A false premise from the question that the answer accepts is an unsupported claim.
 - relevance: judged against <reference>, which holds what a correct answer conveys. "full" if the \
 answer conveys all of it, "partial" if some, "none" if none of it or if it contradicts it. Where \
 <reference> says information is not available, or says what the answer must not do, "full" means \

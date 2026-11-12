@@ -5,15 +5,19 @@ description = "Evaluation harness: retrieval and answer metrics, baselines and t
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "anthropic",
+    "northwind-assistant",
     "northwind-common",
     "northwind-llm-replay",
+    "northwind-mcp-rag",
     "northwind-rag",
     "psycopg[binary]>=3.3.7",
 ]
 
 [tool.uv.sources]
+northwind-assistant = { workspace = true }
 northwind-common = { workspace = true }
 northwind-llm-replay = { workspace = true }
+northwind-mcp-rag = { workspace = true }
 northwind-rag = { workspace = true }
 
 [build-system]

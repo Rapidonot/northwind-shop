@@ -19,11 +19,12 @@ import pytest
 
 from northwind_common.llm import anthropic_client
 from northwind_evals import cli
-from northwind_evals.answerers import Answerer, SingleShotAnswerer
+from northwind_evals.answerers import Answerer
 from northwind_evals.contexts import ContextChunk, SavedContext, load_contexts, save_contexts
 from northwind_evals.gate import Baseline, compare, load_baseline, save_baseline, summary_of
 from northwind_evals.items import MIN_HUMAN_REVIEWED, EvalItem, load_items
-from northwind_evals.judge import Judge
+from northwind_evals.judge import JUDGE_VERSION, Judge
+from northwind_evals.testing import MessagesAnswerer
 from northwind_llm_replay.proxy import ProxyState
 from northwind_llm_replay.scripted import ScriptedLLM
 from northwind_rag.retrieval import RetrievedChunk, retriever_id
@@ -44,6 +45,7 @@ GOOD = {
     "behaviour_ok": 1.0,
     "false_refusal": 0.0,
     "citation_ok": 1.0,
+    "fabricated_ok": 1.0,  # row #13b: every item now reports it
 }
 VERDICT = json.dumps(
     {
@@ -75,6 +77,10 @@ def live_for(ids: list[str], source: str = "P1") -> list[RetrievedChunk]:
     return [RetrievedChunk(c, "product", source, None, "text") for c in ids]
 
 
+MESSAGES_ID = "messages-test-double:claude-sonnet-5-5"
+JUDGE_ID = f"judge:v{JUDGE_VERSION}:claude-sonnet-5-5"
+
+
 class FakeDb:
     def __enter__(self) -> FakeDb:
         return self
@@ -88,7 +94,9 @@ def complete_baseline(retrieval: dict[str, Any], answers: dict[str, Any]) -> Bas
     known = {i.id: i.segment for i in load_items(cli.ITEMS)} if cli.ITEMS.exists() else {}
     segments = {i: known.get(i, "specification") for i in {*retrieval, *answers}}
     summary = summary_of(retrieval, answers, segments)
-    return Baseline("dense-only", "r", "idx", "a", "j", retrieval, answers, summary, segments)
+    # The IDs a scripted run reports, so F8 (row #13b) compares like with like.
+    ids = (retriever_id(FakeEmbedder("x")), "idx", MESSAGES_ID, JUDGE_ID)
+    return Baseline("dense-only", *ids, retrieval, answers, summary, segments)
 
 
 class Rig:
@@ -160,12 +168,13 @@ def rig(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Rig:
 
 def scripted_clients(monkeypatch: pytest.MonkeyPatch, llm: ScriptedLLM) -> None:
     @contextmanager
-    def clients(mode: str) -> Iterator[tuple[Answerer, Judge, ProxyState]]:
+    def clients(mode: str) -> Iterator[tuple[Answerer, Judge, ProxyState, None]]:
         assert mode == "replay"
         yield (
-            SingleShotAnswerer(anthropic_client(llm.url), "claude-sonnet-5-5"),
+            MessagesAnswerer(anthropic_client(llm.url), "claude-sonnet-5-5"),
             Judge(anthropic_client(llm.url), "claude-sonnet-5-5"),
             ProxyState(),
+            None,
         )
 
     monkeypatch.setattr(cli, "_clients", clients)
@@ -528,13 +537,13 @@ def test_rescore_never_builds_a_spending_client(rig: Rig, monkeypatch: pytest.Mo
     monkeypatch.setattr(cli, "LAST_RUN", rig.tmp / "last.json")
 
     @contextmanager
-    def clients(mode: str) -> Iterator[tuple[Answerer, Judge, ProxyState]]:
+    def clients(mode: str) -> Iterator[tuple[Answerer, Judge, ProxyState, None]]:
         modes.append(mode)
         with ScriptedLLM() as llm:
             llm.reply("Fine [P1].")
             llm.reply(VERDICT)
-            answerer = SingleShotAnswerer(anthropic_client(llm.url), "m")
-            yield answerer, Judge(anthropic_client(llm.url), "m"), ProxyState()
+            answerer = MessagesAnswerer(anthropic_client(llm.url), "m")
+            yield answerer, Judge(anthropic_client(llm.url), "m"), ProxyState(), None
 
     monkeypatch.setattr(cli, "_clients", clients)
     assert cli.main(["rescore"]) == 0
@@ -608,15 +617,16 @@ def test_a_run_whose_cassette_the_scanner_refused_writes_no_candidate(
     monkeypatch.setattr(cli, "_context_leaks", lambda contexts, items: [])
 
     @contextmanager
-    def clients(mode: str) -> Iterator[tuple[Answerer, Judge, ProxyState]]:
+    def clients(mode: str) -> Iterator[tuple[Answerer, Judge, ProxyState, None]]:
         with ScriptedLLM() as llm:
             llm.reply("Fine [P1].")
             llm.reply(VERDICT)
             state = ProxyState(scan_failures=["cassette abc not written"])
             yield (
-                SingleShotAnswerer(anthropic_client(llm.url), "m"),
+                MessagesAnswerer(anthropic_client(llm.url), "m"),
                 Judge(anthropic_client(llm.url), "m"),
                 state,
+                None,
             )
 
     monkeypatch.setattr(cli, "_clients", clients)

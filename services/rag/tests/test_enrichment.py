@@ -386,7 +386,7 @@ def assert_rejected_cleanly(
 def test_a_model_that_echoes_the_review_is_rejected(
     chunks: list[Chunk], tmp_path: Path, trap_id: str, review_id: str
 ) -> None:
-    assert len(TRAPS) == 15
+    assert len(TRAPS) == 16  # TRAP-INJ-016, appended at DATA_VERSION 2 (row #13b)
     for chunk in trap_chunks(chunks, review_id):
         body = body_of(chunk)
         assert_rejected_cleanly(chunk, body, tmp_path / "multi", CANARIES)

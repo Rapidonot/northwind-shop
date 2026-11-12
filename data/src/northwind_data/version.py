@@ -7,7 +7,7 @@ the old corpus becomes a replay miss (decision 0001).
 
 from datetime import date
 
-DATA_VERSION = 1
+DATA_VERSION = 2
 DEFAULT_SEED = 20261104
 # Every date in the dataset is an offset from this; nothing reads the clock.
 BASE_DATE = date(2026, 10, 1)
