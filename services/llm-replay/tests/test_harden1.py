@@ -225,7 +225,7 @@ def script_refusal(upstream: ScriptedLLM) -> None:
 def run_turn(url: str, root: Path, *, flag_dropped: bool = False) -> list[str]:
     rt = agent_runtime(base_url=url, root=root)
     if flag_dropped:  # as if a CLI upgrade ignored it; extra_env refuses this key on purpose
-        dropped = {**rt.env, "CLAUDE_CODE_DISABLE_REFUSAL_FALLBACK": "0"}
+        dropped = {k: v for k, v in rt.env.items() if k != "CLAUDE_CODE_DISABLE_REFUSAL_FALLBACK"}
         write_launcher(rt.root, dropped, bundled_cli())
     opts = agent_options(
         system_prompt="You are a test.", model=MODEL, runtime=rt, tools=[], max_turns=1

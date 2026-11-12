@@ -42,6 +42,12 @@ proxy log kept the CLI's hex `metadata.user_id`, which tripped the Luhn check at
 7. **CLAUDE.md's slice wording follows decision 0013:** full runs until the credit expires (~2026-11-24), then
    10–20-item slices during development.
 
+## Residual
+
+The `child_env` guard covers three keys. Other `CLAUDE_CODE_*` refusal switches (for example
+`CLAUDE_CODE_REFUSAL_FALLBACK_CATCH_ALL`) were measured only alone, not combined with the flag. The proxy tripwire
+is the backstop: any fallback beta still fails the test and never leaves.
+
 ## Why not the alternatives
 
 - Adding `fallback-credit` to `ALLOWED_BETAS`, raising `MAX_REFUSALS`, or recording the runner's 400s would

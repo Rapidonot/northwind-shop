@@ -42,7 +42,7 @@ two error modules, and moving `audit.py` to common. #13b's files are not touched
 Two strings in the CLI turn this off. `CLAUDE_CODE_DISABLE_REFUSAL_RETRY` is checked where the CLI decides to
 retry a refusal. `CLAUDE_CODE_DISABLE_REFUSAL_FALLBACK` gates the refusal-fallback feature. `child_env()` in
 `northwind_common/llm.py` builds the CLI's environment from scratch, so both flags go there. The CLI's
-environment comes from no other place.
+environment comes from no other place. *(Superseded: wrong, `extra_env` also reaches it; advisor F3, guarded in `child_env`.)*
 
 **M2.** `Proxy._log` writes `entry["body"]`, the raw body, to `.llm-proxy-log/<suite>.jsonl`. Cassettes store
 `match_key(…, scrub(body))`, so only the log carries the CLI's device ID. The runner has no `log_path`, so this
@@ -73,7 +73,7 @@ flags only touch the refusal path.
 
 Tests, all `@pytest.mark.req("HARDEN-1")`:
 
-- `test_child_env_disables_refusal_retry_and_fallback` (`services/common/tests/test_llm_factory.py`).
+- `test_child_env_disables_refusal_retry_and_fallback` *(superseded by revision 1: `test_child_env_sets_only_the_refusal_fallback_flag` and `test_extra_env_cannot_undo_the_refusal_setting`)* (`services/common/tests/test_llm_factory.py`).
   Fails first.
 - `test_proxy_never_forwards_a_fallback_credit_beta`, in record, replay and live modes. The scripted upstream must
   see 0 requests, the response is the fixed 400, the outcome is `refused-fallback`, and `fallback_attempts` is
@@ -190,7 +190,7 @@ Approved by the user. Q1 = no (`refused-paths.sh` unchanged). Q2 = yes (both pre
      can never pass quietly. The tripwire's response is a fixed body, so the CLI follows the same path on every
      run.
    - **Tested with the scripted server**
-     (`test_tripwire_then_stripped_retry_is_deterministic`): the CLI runs with the flags *removed* (simulating an
+     (`test_tripwire_then_stripped_retry_is_deterministic`): the CLI runs with the flags *removed* *(revision 1: the one flag's key removed from the launcher env, `test_with_the_flag_dropped_the_tripwire_fails_closed_the_same_way_every_run`)* (simulating an
      upgrade that drops them), twice in record mode and once in replay. Each run must fail on
      `fallback_attempts`. The scripted upstream (standing in for the runner) must see no request with a fallback
      beta. The sequence of logged outcomes and hashes must be identical across runs.
@@ -230,9 +230,10 @@ M1 premise was wrong.
 - **Criterion M1 as the user wrote it:** "a refusal ends as one recorded, deterministic outcome".
   - With revision 1 the *outcome* is one and deterministic: the recorded retry's answer, every time.
   - It takes two recorded requests, not one, and the shopper-visible result is the CLI's post-refusal retry,
-    not the refusal. That is what RAG-11's seq 3 already did live.
-  - Making the refusal itself final would need the proxy to alter a response (it never does), or a CLI setting
-    that does not exist in this version.
+    not the refusal. By analogy, RAG-11's seq 3 also ended with a post-refusal answer (a different path: a beta
+    strip after 400s).
+  - *(Superseded by the second measurement: refusing the retry, option B below, ends the turn on the refusal
+    without altering any response. No CLI setting tried did so; only 7 combinations were tried.)*
   - **This is a scope question (stop 7) for the user:** accept the two-request outcome, or say what "one" must
     mean.
 - Additions 1 to 6 are unchanged. Step 0 now measures `CLAUDE_CODE_DISABLE_REFUSAL_FALLBACK=1` alone.
@@ -242,13 +243,13 @@ M1 premise was wrong.
 | # | Sev | Finding | Done |
 |---|---|---|---|
 | F1 | medium | Replay and "identical every run" were claimed, but only record mode was measured | **Measured** (second measurement): record plus 2 replays, same hashes, 0 misses. Scope stated |
-| F2 | medium | The stop-7 options were incomplete. "No such setting" overclaimed; the option of refusing the retry was missing | **Measured, as option B**; the wording is now "no setting tried". The question below gives both |
-| F3 | medium | `extra_env` can override or undo the flag (`llm.py`, `env.update(extra)`) | **Fix:** `child_env` refuses `extra` that sets `CLAUDE_CODE_DISABLE_REFUSAL_FALLBACK`, `CLAUDE_CODE_DISABLE_REFUSAL_RETRY` or `CLAUDE_CODE_NO_MODEL_FALLBACK` (ValueError), with a test. The flag-dropped test builds its env with `write_launcher` directly. "Comes from no other place" is corrected |
-| F4 | medium | The fix is already in the tree before approval, and the failing-first runs are missing | The flag stays uncommitted. The failing-first runs are taken with `llm.py`, `proxy.py` and `pytest_plugin.py` at `1e1cfd9` (the fix reverted in the tree for the run), and logged below |
-| F5 | low | "Same model" was unmeasured; seq 3 is an analogy | Measured (A: `claude-sonnet-5-5` both times). "What seq 3 did" is now worded as an analogy |
+| F2 | medium | The stop-7 options were incomplete. "No such setting" overclaimed; the option of refusing the retry was missing | **Measured, as option B.** The old lines in revision 1 are marked superseded ("no setting tried"). The question below gives both |
+| F3 | medium | `extra_env` can override or undo the flag (`llm.py`, `env.update(extra)`) | **Fix:** `child_env` refuses `extra` that sets `CLAUDE_CODE_DISABLE_REFUSAL_FALLBACK`, `CLAUDE_CODE_DISABLE_REFUSAL_RETRY` or `CLAUDE_CODE_NO_MODEL_FALLBACK` (ValueError), with a test. The flag-dropped test builds its env with `write_launcher` directly. "Comes from no other place" is marked superseded at its line |
+| F4 | medium | The fix is already in the tree before approval, and the failing-first runs are missing | The flag and the F3 guard do not depend on the A/B answer and are **committed in `eaefd39`**, after the failing-first runs. The failing-first runs are taken with `llm.py`, `proxy.py` and `pytest_plugin.py` at `1e1cfd9` (the fix reverted in the tree for the run), and logged below |
+| F5 | low | "Same model" was unmeasured; seq 3 is an analogy | Measured (A: `claude-sonnet-5-5` both times). "What seq 3 did" is now worded as an analogy at its line |
 | F6 | low | Scripted server ≠ the runner, one scenario, rig in the scratchpad | Scope stated in the measurement. The committed tests are the rig |
 | F7 | low | The e2e test and fixture locations were not named | `services/llm-replay/tests/test_harden1.py`. The refusal frame is built in that file (no fixture file, nothing under `cassettes/**` or `evals/fixtures/**`, no `conftest.py`) |
-| F8 | low | Stale text: a test name, "flags removed", 0016's text | The test is now `test_child_env_sets_only_the_refusal_fallback_flag`; "flag dropped" for addition 1; 0016 records the single flag, the measured interaction and the stop-7 answer |
+| F8 | low | Stale text: a test name, "flags removed", 0016's text | The old lines are marked superseded with the new test names. The flag-dropped test removes the key (re-read R5). 0016 records the single flag and the measured interaction; the stop-7 answer is **pending** there |
 
 ## Stop 7, the question for the user: what ends a refused turn?
 
@@ -263,19 +264,40 @@ unchanged, no cassette is edited, the scanner is unchanged, and the fallback-bet
 - **B, the flag plus a local 400 for the post-refusal retry.**
   - Exactly one recorded request, the refusal. The turn ends as the CLI's error result, the same in record and
     replay, and only one request ever reaches the runner. This matches "one recorded outcome" literally.
-  - Cost: the proxy matches the CLI's note text, which is pinned by the e2e test, so a CLI change fails CI rather
-    than passing quietly.
-  - How the assistant and the gateway present that error to a shopper is in `services/assistant` (#13b's files),
-    so this row does not change it. Its shopper-facing handling would be a #13b item.
-  - Its "more mechanism" is one body-text check, fail-closed.
+  - Costs (advisor re-read R2), none of them measured:
+    - The proxy matches the CLI's note text ("stopped by a safety classifier"). A CLI change to the text fails
+      the e2e test, so CI catches it, not a quiet pass.
+    - Shopper text holding that phrase (for example an adversarial prompt) would get a local 400 and end a turn
+      that was never refused. That fails closed: nothing is answered.
+    - In a multi-turn session the note may stay in the history. Every later turn would then be refused, so the
+      session ends at the first refusal. A narrower match, only the newest user message, might avoid this;
+      unmeasured.
+    - Both measurements ran with `max_turns=1` and no tools. Behaviour in a tool loop and across turns is
+      unknown, and this row would add tests for both.
+    - Every refused turn reaches the caller as the CLI's error result ("API Error: 400 …"). How the assistant and
+      the gateway show that to a shopper is in `services/assistant` (#13b's files), so this row does not change
+      it; it becomes a #13b item.
 
-My recommendation: **B**. It is what "one recorded, deterministic outcome" says. It also never shows the shopper
-a post-refusal answer, which is in line with absolute containment on adversarial items. Its one extra check fails
-closed.
+My recommendation: **B, with the narrower match** (only the newest user message), if a session that hit a refusal
+may end there. It is what "one recorded, deterministic outcome" says, and it never shows the shopper a post-refusal
+answer, which is in line with absolute containment on adversarial items. If refused sessions must carry on, **A**.
 
-Not waiting on the answer, and done before stopping: step 0; the tripwire, plugin and F3 guard; M2; S1 to S4; the
-failing-first runs. Waiting on it: the e2e test's expected outcome, the post-refusal check (B only), decision 0016's
-M1 text, and then the rest of the chain.
+**Done before stopping:** the tripwire, the plugin failure, the flag and the F3 guard; M2; S1 to S4; the
+failing-first runs. **Step 0 is only partly done:** `make test` passed with the flag (one expected key-set pin
+updated). The pytest half of `make e2e`, `make test-integration` (with the 1,000-order replay) and `make eval-gate`
+were **not measured**, because Postgres was down. They need `make -C ~/.northwind/runner up` from the user
+(stop 3), then a rerun.
+
+**Waiting on the answer:**
+- The e2e test's expected outcome. The committed `test_refusal_ends_as_two_recorded_requests_that_replay_with_no_miss`
+  encodes A today and changes under B.
+- The post-refusal check (B only).
+- Decision 0016's M1 text.
+- Then the rest of the chain.
+
+**Residual (re-read R5), for 0016:** the F3 guard covers three keys. Other `CLAUDE_CODE_*` refusal switches, for
+example `CLAUDE_CODE_REFUSAL_FALLBACK_CATCH_ALL`, were measured only alone, never with the flag. The tripwire is the
+backstop.
 
 ## Questions (answered above)
 
