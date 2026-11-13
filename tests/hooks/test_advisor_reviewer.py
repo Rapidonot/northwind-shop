@@ -80,6 +80,8 @@ CONTROL_SURFACE = [
     "cassettes/**",
     "data/enrichment/**",
     "data/embeddings/**",
+    "evals/adversarial/**",  # HARDEN-1
+    "evals/contexts/**",  # HARDEN-1, the user's scope addition
     "**/conftest.py",
     ".gitignore",
     "pyproject.toml",
@@ -199,3 +201,70 @@ def test_review_diff_refuses_a_dirty_tree(work: Path, tmp_path: Path, dirty: str
     done = review_diff(work, out)
     assert done.returncode != 0
     assert not out.exists()
+
+
+# -- HARDEN-1 S1: a per-checkout default for REVIEW_DIFF ---------------------------------------
+
+REVIEW_DIFF_PROBE = "\nreviewdiffpath:\n\t@echo $(REVIEW_DIFF)\n"
+
+
+def review_diff_default(checkout: Path, *overrides: str) -> str:
+    """REVIEW_DIFF as the Makefile resolves it in `checkout`, which need not be a git repo."""
+    checkout.mkdir(parents=True, exist_ok=True)
+    (checkout / "Makefile").write_text((REPO / "Makefile").read_text() + REVIEW_DIFF_PROBE)
+    tmpdir = str(checkout.parent / "tmpdir")
+    env = {"PATH": "/usr/bin:/bin:/usr/local/bin", "HOME": str(checkout), "TMPDIR": tmpdir}
+    return subprocess.run(  # noqa: S603
+        ["make", "-s", "reviewdiffpath", *overrides],  # noqa: S607
+        cwd=checkout,
+        capture_output=True,
+        text=True,
+        check=True,
+        env=env,
+    ).stdout.strip()
+
+
+@pytest.mark.req("HARDEN-1")
+def test_review_diff_default_differs_per_checkout(tmp_path: Path) -> None:
+    """Two windows writing the same default path overwrote each other's review diff."""
+    a = review_diff_default(tmp_path / "northwind-shop")
+    b = review_diff_default(tmp_path / "northwind-shop-wt-b")
+    assert a != b
+    for path in (a, b):
+        pattern = re.escape(str(tmp_path / "tmpdir")) + r"/northwind-review-\d+\.diff"
+        assert re.fullmatch(pattern, path), path
+
+
+@pytest.mark.req("HARDEN-1")
+def test_review_diff_default_is_stable_for_one_checkout(tmp_path: Path) -> None:
+    checkout = tmp_path / "northwind-shop"
+    assert review_diff_default(checkout) == review_diff_default(checkout)
+
+
+@pytest.mark.req("HARDEN-1")
+def test_an_explicit_review_diff_still_wins(tmp_path: Path) -> None:
+    out = str(tmp_path / "elsewhere" / "northwind-review-HARDEN-1.diff")
+    assert review_diff_default(tmp_path / "x", f"REVIEW_DIFF={out}") == out
+
+
+@pytest.mark.req("HARDEN-1")
+def test_a_checkout_path_with_a_quote_is_refused_and_runs_nothing(tmp_path: Path) -> None:
+    """Security review L2: the default puts the path in single quotes, so a quote in it is
+    refused rather than handed to the shell. An explicit REVIEW_DIFF still works there."""
+    checkout = tmp_path / "x'; touch MARK; '"
+    checkout.mkdir()
+    (checkout / "Makefile").write_text((REPO / "Makefile").read_text() + REVIEW_DIFF_PROBE)
+    env = {"PATH": "/usr/bin:/bin:/usr/local/bin", "HOME": str(tmp_path), "TMPDIR": str(tmp_path)}
+    done = subprocess.run(  # noqa: S603
+        ["make", "-s", "reviewdiffpath"],  # noqa: S607
+        cwd=checkout,
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
+    )
+    assert done.returncode != 0
+    assert "quote" in done.stderr
+    assert not list(tmp_path.rglob("MARK"))
+    out = str(tmp_path / "explicit.diff")
+    assert review_diff_default(checkout, f"REVIEW_DIFF={out}") == out

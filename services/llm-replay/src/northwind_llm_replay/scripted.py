@@ -217,7 +217,14 @@ class ScriptedLLM:
         body = json.loads(raw) if raw else {}
         headers = {k.lower(): v for k, v in request.headers.items()}
         with self._lock:
-            self.requests.append({"path": request.url.path, "headers": headers, "body": body})
+            self.requests.append(
+                {
+                    "path": request.url.path,
+                    "query": request.url.query,
+                    "headers": headers,
+                    "body": body,
+                }
+            )
             n = len(self.requests)
             item = self.queue.popleft() if self.queue else None
         if self.require_placeholder:
