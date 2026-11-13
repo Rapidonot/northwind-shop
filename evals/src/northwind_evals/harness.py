@@ -272,7 +272,14 @@ def run_item(item: EvalItem, context: SavedContext, answerer: Answerer, judge: J
         relevance=0.0 if false_refusal else verdict.relevance_score,
         behaviour_ok=behaviour_ok,
         false_refusal=false_refusal if item.answerable else None,
-        citation_ok=citations_ok(shown, verdict.claims_total, sources, verdict.declined),
+        # Citations scale with the claims a source could back: product and policy, never site or
+        # other (the user's (a)). Groundedness still counts every claim.
+        citation_ok=citations_ok(
+            shown,
+            verdict.claims_total if verdict.citable is None else verdict.citable,
+            sources,
+            verdict.declined,
+        ),
         fabricated_ok=fabricated_ok,
         sent=sent,
         sources=source_ids,

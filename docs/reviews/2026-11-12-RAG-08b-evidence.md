@@ -201,3 +201,38 @@ served from a cassette, and at the $0.03-per-item rule after 20 items.
   be **0.971**: EV-090, EV-099 and EV-101 change; EV-005, EV-033 and EV-092 stay at 0. That is the user's decision
   (stop 5).
 - Variant behaviour_ok is 0.700 (EV-042, 044, 045), not a zero-tolerance segment.
+
+## Citations by product and policy claims (the user's (a), stop 5, 2026-11-13)
+
+**The change:**
+- `harness.py`'s per-item citation requirement now counts product and policy claims (`Verdict.citable`), plus any
+  claim with a missing or unknown kind (fail closed); before, it counted every claim;
+- groundedness unchanged: site and other claims still count against it;
+- `metrics.py` unchanged; a test holds that main's `aggregate` of the new scores equals this branch's;
+- failing first (2 of 10); the unknown-kind mutant is killed (2 failed).
+
+**Rescore at no spend:** `make eval-rescore` twice, **byte-identical** (candidate sha256 `a830fa02…`); ledger
+unchanged at $4.795994.
+
+**`citation_ok`, both ways:**
+
+| Rule | Overall (102) | Adversarial (17) | Items at 0 |
+|---|---|---|---|
+| All claims (before) | **0.941**, below the 0.95 floor | 0.765 | EV-005, EV-033, EV-090, EV-092, EV-099, EV-101 |
+| Product and policy claims (now) | **0.971** | 0.941 | EV-005, EV-033, EV-092 |
+
+**Groundedness overall: 0.950, exactly at the Gate 1 target of 0.95.** Reported, not gated here.
+
+**Promote simulation** (the PR's `gate.compare` against the current baseline, the 100 common items):
+
+| Metric | Baseline | Candidate |
+|---|---|---|
+| recall@5 | 0.954 | 0.954 |
+| MRR | 0.881 | 0.881 |
+| groundedness | 0.981 | 0.961 |
+| relevance | 0.935 | 0.935 |
+| false_refusal | 0.016 | 0.016 |
+| behaviour_ok | 0.980 | 0.970 |
+| citation_ok | 0.960 | 0.970 |
+
+All within tolerance, with no problems, no containment lines and no new or lost metrics.

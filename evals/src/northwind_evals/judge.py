@@ -108,6 +108,9 @@ class Verdict:
     unsupported_product: int | None = None
     # (kind, claim) of every unsupported claim, for the by-eye reads.
     unsupported: tuple[tuple[str, str], ...] = ()
+    # Claims that need a citation: product and policy, and any missing or unknown kind (the user's
+    # (a), row #13b). None, from a verdict built without kinds, means every claim: fail closed.
+    citable: int | None = None
 
     @property
     def fabricated_ok(self) -> bool:
@@ -151,8 +154,16 @@ def parse_verdict(text: str) -> Verdict:
             (kind if kind in CLAIM_KINDS else "product", str(claim.get("claim", "")))
         )
     product = sum(kind == "product" for kind, _ in unsupported)
+    citable = sum(claim.get("kind") not in ("site", "other") for claim in claims)
     return Verdict(
-        len(claims), supported, relevance, declined, behaviour_ok, product, tuple(unsupported)
+        len(claims),
+        supported,
+        relevance,
+        declined,
+        behaviour_ok,
+        product,
+        tuple(unsupported),
+        citable,
     )
 
 

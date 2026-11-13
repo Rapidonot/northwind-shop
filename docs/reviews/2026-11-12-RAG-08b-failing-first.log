@@ -70,3 +70,12 @@ FAILED evals/tests/test_rag08b_judge_v5.py::test_an_unsupported_site_policy_or_o
 FAILED evals/tests/test_rag08b_judge_v5.py::test_an_unsupported_site_policy_or_other_claim_does_not[policy]
 FAILED evals/tests/test_rag08b_judge_v5.py::test_an_unsupported_site_policy_or_other_claim_does_not[other]
 3 failed, 7 passed in 0.72s
+
+## 8. Citations by product and policy claims (the user's (a), 2026-11-13), new tests against the code before the change
+FAILED evals/tests/test_rag08b_citations.py::test_site_and_other_claims_need_no_citation
+FAILED evals/tests/test_rag08b_citations.py::test_the_requirement_counts_only_product_and_policy_claims
+2 failed, 8 passed in 0.82s
+mutant (unknown or missing kind needs no citation):
+FAILED evals/tests/test_rag08b_citations.py::test_product_policy_and_unknown_or_missing_kinds_need_citations[None]
+FAILED evals/tests/test_rag08b_citations.py::test_product_policy_and_unknown_or_missing_kinds_need_citations[service]
+2 failed, 8 passed in 0.79s
