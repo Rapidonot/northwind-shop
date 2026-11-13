@@ -820,9 +820,24 @@ def _refinement(name: str, record: Mapping[str, Any]) -> Any:
 
 
 @pytest.mark.integration
+@pytest.mark.skipif(
+    os.environ.get("LLM_MODE") != "record",
+    reason="the pre-window check: run with LLM_MODE=record before recording this suite",
+)
 def test_the_live_index_is_mains_data_version_2() -> None:
-    """Read-only, run before the canary turn: the index the recording searches is main's."""
+    """Read-only, the pre-window check: the index a recording would search is main's. It runs only
+    with LLM_MODE=record (the user's M3 answer), since window A's data and index changes would
+    otherwise fail it; RECORD-ALL (#18) updates INDEX_DATA_VERSION and INDEX_VERSION_PREFIX when it
+    re-records this suite. The recorder runs the same check before and after every turn."""
     assert index_problems() == []
+
+
+def test_the_live_index_check_runs_only_when_recording() -> None:
+    """M3: the pin skips outside record mode and nowhere else."""
+    marks = {m.name: m for m in test_the_live_index_is_mains_data_version_2.pytestmark}  # type: ignore[attr-defined]
+    skip = marks["skipif"]
+    assert "integration" in marks
+    assert skip.args == (os.environ.get("LLM_MODE") != "record",)
 
 
 # ---- the no-LLM checks: no proxy, no DB, no embedder ---------------------------------------------
