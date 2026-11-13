@@ -119,3 +119,18 @@ New:
 
 **The suffix makes no difference:** both gaps are at the directory level, and a `refinements.jsonl` would be
 equally unguarded.
+
+## The shared index and window A during W3 (2026-11-13)
+
+**Postgres is shared by every worktree.** After HARDEN-1, the current index was main's v1 again (`c9e30984…`, no
+R01221): window A's ingest of main's fixtures replaced this branch's v2. That is also the cause of HARDEN-1's open
+low owned by #13b, "every `make ingest` reports `deleted: 1`": the chunk deleted was R01221.
+
+**What W3 depends on:**
+- the model's refinement searches (record mode, `CallerIndex` over the live index);
+- the stale check of every saved context (`_stale_ids` against `cli._live`);
+- the gate's live retrieval stage.
+
+All three read the current index, so W3 needs this branch's v2 index (`389cae01…`) for its whole length. **Window A
+stays idle until W3 is done** (the user, 2026-11-13). Just before the window, `make ingest` here and the index
+version are checked. After W3, the index is checked again.

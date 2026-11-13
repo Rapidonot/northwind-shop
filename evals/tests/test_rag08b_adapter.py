@@ -570,7 +570,7 @@ def test_a_guard_that_cannot_run_counts_as_a_leak() -> None:
 def test_refusals_map_to_items_by_the_per_item_test_id() -> None:
     from northwind_evals.cli import refusals_by_item
 
-    refusals = [
+    refusals: list[dict[str, Any]] = [
         {"hash": "a", "test_id": "eval-answerer:EV-1", "mode": "record"},
         {"hash": "b", "test_id": "eval-answerer:EV-1", "mode": "record"},
         {"hash": "c", "test_id": "eval-answerer:EV-7", "mode": "record"},
