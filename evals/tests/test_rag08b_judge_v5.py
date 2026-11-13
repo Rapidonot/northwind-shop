@@ -88,12 +88,22 @@ def test_the_judge_is_v5_and_names_each_kind() -> None:
     assert claim["properties"]["kind"] == {"type": "string", "enum": list(CLAIM_KINDS)}
 
 
+KIND_BLOCK = (
+    "Statements about what the shop or its site offers (filters, pages, account features, "
+    "services) are claims. A false premise from the question that the answer accepts is an "
+    "unsupported claim. Give each claim a kind:\n"
+    '  - kind: "product" for a claim about a product or variant, or its attributes (specs, '
+    "materials, colours, sizes, fit, care, what its reviews say);\n"
+    '  - "policy" for a store policy term (returns, refunds, exchanges, shipping, warranty, '
+    "repairs);\n"
+    '  - "site" for what the shop, its site, an account, checkout or staff offer or do;\n'
+    '  - "other" for anything else, such as general advice.\n'
+)
+
+
 def test_the_kind_instructions_are_pinned() -> None:
-    prompt = SYSTEM_PROMPT
-    assert '- kind: "product" for a claim about a product or variant' in prompt
-    assert '"policy" for a store policy term' in prompt
-    assert '"site" for what the shop, its site, an account, checkout or staff offer or do' in prompt
-    assert '"other" for anything else' in prompt
+    """The whole block, verbatim (advisor M6): moving "warranty" or dropping "care" fails here."""
+    assert KIND_BLOCK in SYSTEM_PROMPT
 
 
 def test_an_unsupported_product_claim_fails_an_adversarial_item() -> None:

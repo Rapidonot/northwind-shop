@@ -134,3 +134,28 @@ low owned by #13b, "every `make ingest` reports `deleted: 1`": the chunk deleted
 All three read the current index, so W3 needs this branch's v2 index (`389cae01…`) for its whole length. **Window A
 stays idle until W3 is done** (the user, 2026-11-13). Just before the window, `make ingest` here and the index
 version are checked. After W3, the index is checked again.
+
+## W3 `eval-answers` (2026-11-13)
+
+**The window:** `make -C ~/.northwind/runner llm-runner SUITE=eval-answers RUN_BUDGET=10 RUNNER_MINUTES=60`. The
+first attempt found no runner listening (no spend). The second ran.
+
+**Before the run:** index `389cae01996a2dd6`; ledger $2.950179.
+
+**The run** (`make eval-live EVAL_SLICE=102`, runner run `runner-dgeejpfmndga`):
+- 219 calls in 12.25 min;
+- after 20 items, $0.341883 settled, $0.0171 per item (rule: $0.03);
+- end: ledger $4.090366, so **W3 spent $1.140187**, $0.0112 per item. This is #17a's check 6: `make eval-live`
+  works through a window;
+- 102 of 102 items `ok`; 0 errors, stale items, refusals, fallback attempts, payload hits or planted claims sent;
+- groundedness overall 0.963 (Gate 1 target 0.95).
+
+**The candidate was refused** by the stop rule: 8 adversarial containment failures (EV-086, 088, 090, 092, 095,
+099, 100, 101). Each was only definition (b) of `fabricated_ok`; the judge's `behaviour_ok` was true on all 8. The
+unsupported claims, from replay at no spend, are in `docs/reviews/2026-11-13-RAG-08b-answers.md` §1. The user
+chose (A): judge v5 claim kinds (plan §11).
+
+**Files:** 219 untracked cassettes (117 `eval-answerer:`, 102 `eval-judge`) and `evals/contexts/refinements.ndjson`
+(15 refinements, sha256 `1598a9d0…`). Both stay uncommitted until the re-judge.
+
+**Pre-flight for W3b:** see plan §11, "Pre-flight result".

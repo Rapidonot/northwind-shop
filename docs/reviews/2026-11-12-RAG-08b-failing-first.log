@@ -65,3 +65,8 @@ ERROR evals/tests/test_rag08b_judge_v5.py
 Behavioural failing-first: W3 under judge v4 and definition (b) failed 8 adversarial items whose only unsupported claims were site, policy and other (evidence file, 'W3').
 mutant (unknown kind -> other):
 3 failed, 7 passed in 0.79s
+mutant (v4 rule: fabricated_ok counts every unsupported claim):
+FAILED evals/tests/test_rag08b_judge_v5.py::test_an_unsupported_site_policy_or_other_claim_does_not[site]
+FAILED evals/tests/test_rag08b_judge_v5.py::test_an_unsupported_site_policy_or_other_claim_does_not[policy]
+FAILED evals/tests/test_rag08b_judge_v5.py::test_an_unsupported_site_policy_or_other_claim_does_not[other]
+3 failed, 7 passed in 0.72s
