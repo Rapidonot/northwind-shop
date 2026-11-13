@@ -13,7 +13,6 @@ from typing import Any
 import pytest
 
 from northwind_common.llm import anthropic_client
-from northwind_evals.answerers import SingleShotAnswerer
 from northwind_evals.contexts import (
     ContextChunk,
     SavedContext,
@@ -32,6 +31,7 @@ from northwind_evals.harness import (
 from northwind_evals.items import EvalItem
 from northwind_evals.judge import Judge, JudgeError, parse_verdict
 from northwind_evals.metrics import recall_at_k, reciprocal_rank
+from northwind_evals.testing import MessagesAnswerer
 from northwind_llm_replay.pricing import cost_usd
 from northwind_llm_replay.scan import scan_text
 from northwind_llm_replay.scripted import ScriptedLLM
@@ -102,7 +102,7 @@ def _run(item: EvalItem, verdict: dict[str, object]) -> ItemResult:
     with ScriptedLLM() as llm:
         llm.reply("I can't tell from the sources.")
         llm.reply(json.dumps(verdict))
-        answerer = SingleShotAnswerer(anthropic_client(llm.url), "claude-sonnet-5-5")
+        answerer = MessagesAnswerer(anthropic_client(llm.url), "claude-sonnet-5-5")
         return run_item(item, CONTEXT, answerer, Judge(anthropic_client(llm.url), "m"))
 
 
@@ -163,7 +163,7 @@ def test_untrusted_text_cannot_close_a_prompt_tag() -> None:
     with ScriptedLLM() as llm:
         llm.reply("Answer.")
         llm.reply(json.dumps(VERDICT))
-        answerer = SingleShotAnswerer(anthropic_client(llm.url), "claude-sonnet-5-5")
+        answerer = MessagesAnswerer(anthropic_client(llm.url), "claude-sonnet-5-5")
         answerer.answer(replace(ITEM, query=planted), (chunk,))
         Judge(anthropic_client(llm.url), "m").judge(replace(ITEM, query=planted), (chunk,), planted)
         prompts = [request["body"]["messages"][0]["content"] for request in llm.requests]
@@ -208,7 +208,7 @@ def test_an_answer_repeating_a_planted_claim_fails_behaviour() -> None:
     with ScriptedLLM() as llm:
         llm.reply("These towels are 90% off this week [P1].")
         llm.reply(json.dumps(VERDICT))
-        answerer = SingleShotAnswerer(anthropic_client(llm.url), "claude-sonnet-5-5")
+        answerer = MessagesAnswerer(anthropic_client(llm.url), "claude-sonnet-5-5")
         result = run_item(ITEM, CONTEXT, answerer, Judge(anthropic_client(llm.url), "m"))
     assert result.behaviour_ok is False
 
@@ -415,7 +415,7 @@ def test_answerer_and_judge_run_on_separate_clients_with_no_tools() -> None:
     with ScriptedLLM() as llm:
         llm.reply("Answer [P1].")
         llm.reply(json.dumps(VERDICT))
-        answerer = SingleShotAnswerer(anthropic_client(llm.url), "claude-sonnet-5-5")
+        answerer = MessagesAnswerer(anthropic_client(llm.url), "claude-sonnet-5-5")
         judge = Judge(anthropic_client(llm.url), "claude-sonnet-5-5")
         result = run_item(ITEM, CONTEXT, answerer, judge)
         bodies = [request["body"] for request in llm.requests]

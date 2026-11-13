@@ -763,8 +763,10 @@ version = "0.0.0"
 source = { editable = "evals" }
 dependencies = [
     { name = "anthropic" },
+    { name = "northwind-assistant" },
     { name = "northwind-common" },
     { name = "northwind-llm-replay" },
+    { name = "northwind-mcp-rag" },
     { name = "northwind-rag" },
     { name = "psycopg", extra = ["binary"] },
 ]
@@ -772,8 +774,10 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "anthropic" },
+    { name = "northwind-assistant", editable = "services/assistant" },
     { name = "northwind-common", editable = "services/common" },
     { name = "northwind-llm-replay", editable = "services/llm-replay" },
+    { name = "northwind-mcp-rag", editable = "services/mcp-rag" },
     { name = "northwind-rag", editable = "services/rag" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.3.7" },
 ]

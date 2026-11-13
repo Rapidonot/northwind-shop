@@ -23,6 +23,8 @@ from typing import Any
 
 CASSETTES = "cassettes"
 EMBEDDINGS = "data/embeddings"
+# The model's recorded follow-up searches (row #13b): recordings, so add-only like a cassette.
+REFINEMENTS = "evals/contexts/refinements.ndjson"
 
 
 def _git(*args: str) -> subprocess.CompletedProcess[str]:
@@ -176,9 +178,56 @@ def added_frozen_vectors(commit: str) -> dict[tuple[str, str], dict[str, list[fl
     return added
 
 
+def _refinement_lines(text: str, source: str) -> dict[str, str]:
+    """`item_id#n` to line. A duplicate is refused: a second line could hide a changed search."""
+    lines: dict[str, str] = {}
+    for line in text.splitlines():
+        try:
+            record = json.loads(line)
+            key = f"{record['item_id']}#{record['n']}"
+        except (ValueError, KeyError, TypeError):
+            raise RuntimeError(f"{source} has a line that is not a refinement") from None
+        if key in lines:
+            raise RuntimeError(f"{source} holds refinement {key} twice")
+        lines[key] = line
+    return lines
+
+
+def changed_refinements(commit: str) -> list[str]:
+    """Every refinement recorded at `commit` must still be there with the same line, committed at
+    HEAD and on disk (the user, row #13b). New entries pass; a base with no file protects
+    nothing."""
+    shown = _git("show", f"{commit}:{REFINEMENTS}")
+    if shown.returncode != 0:
+        return []
+    before = _refinement_lines(shown.stdout, f"{REFINEMENTS} at {commit}")
+    committed = _git("show", f"HEAD:{REFINEMENTS}")
+    disk = Path(REFINEMENTS)
+    versions = {
+        "HEAD": committed.stdout if committed.returncode == 0 else None,
+        "disk": disk.read_text(encoding="utf-8") if disk.is_file() else None,
+    }
+    problems: list[str] = []
+    for where, text in versions.items():
+        if text is None:
+            problems.append(f"{REFINEMENTS}: deleted ({where}); refinements may only be added")
+            continue
+        now = _refinement_lines(text, f"{REFINEMENTS} ({where})")
+        problems += [
+            f"{REFINEMENTS}: refinement {k} removed ({where})" for k in before if k not in now
+        ]
+        problems += [
+            f"{REFINEMENTS}: refinement {k} changed ({where})"
+            for k in before
+            if k in now and now[k] != before[k]
+        ]
+    return problems
+
+
 def integrity_problems(base: str, baseline: Path) -> list[str]:
     commit = merge_base(base)
     problems = [f"{path}: an existing cassette was modified" for path in modified_cassettes(commit)]
     problems += [f"{path}: a cassette may not be a symlink" for path in linked_cassettes()]
     problems += changed_frozen_vectors(commit)
+    problems += changed_refinements(commit)
     return problems + lost_overrides(commit, baseline)

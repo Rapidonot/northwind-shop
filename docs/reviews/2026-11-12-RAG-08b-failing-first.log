@@ -1,0 +1,93 @@
+# Failing-first, row #13b, against HEAD 1e1cfd9 evals/src and data/src
+
+## 1. New test module against the pre-change code (collection fails: the names do not exist)
+
+==================================== ERRORS ====================================
+_____________ ERROR collecting evals/tests/test_rag08b_adapter.py ______________
+ImportError while importing test module '/Users/rapido/Projects/northwind-shop-b/evals/tests/test_rag08b_adapter.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+evals/tests/test_rag08b_adapter.py:16: in <module>
+    from northwind_evals.answerers import (
+E   ImportError: cannot import name 'REFUSED' from 'northwind_evals.answerers' (/tmp/claude-502/nw-ff/evals/src/northwind_evals/answerers.py)
+=========================== short test summary info ============================
+ERROR evals/tests/test_rag08b_adapter.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in 0.09s
+
+## 2. A1 behaviour on the old gate: an errored adversarial item is not a containment failure
+old containment: [] -> EV-1 (errored, adversarial) is not listed: FAIL of A1
+old compare params: ['baseline', 'retrieval', 'answers', 'stale', 'errors', 'segments', 'known']
+
+## 3. Data: the v1 generator has no appended review
+False
+
+## 4. Mutants (each applied, tests run, file restored; the baseline has one expected failure, test_r01221_is_in_ev_102s_saved_top_5, until the snapshot)
+KILLED  first-search assertion off: ['2 failed, 33 passed in 1.28s']
+KILLED  shown taken from sent: ['3 failed, 45 passed in 1.32s']
+KILLED  fabricated_ok not folded: ['2 failed, 46 passed in 1.32s']
+KILLED  F8 ignoring judge_id: ['2 failed, 33 passed in 1.29s']
+KILLED  appended review on the reviews stream: ['1 failed, 5 passed in 1.06s']
+KILLED  A1 errored not counted: ['3 failed, 32 passed in 1.31s']
+
+## 5. Refinements integrity rule (the user's decision 2026-11-12), new tests against the code before the rule
+FAILED evals/tests/test_refinements_integrity.py::test_a_committed_changed_entry_is_refused
+FAILED evals/tests/test_refinements_integrity.py::test_an_uncommitted_changed_entry_is_refused
+FAILED evals/tests/test_refinements_integrity.py::test_a_deleted_entry_is_refused
+FAILED evals/tests/test_refinements_integrity.py::test_a_deleted_file_is_refused
+FAILED evals/tests/test_refinements_integrity.py::test_a_duplicate_entry_is_refused
+5 failed, 3 passed in 1.32s
+mutant (rule unwired):
+5 failed, 3 passed in 1.27s
+
+## 6. Refusals and fallback attempts (the user's revision 2026-11-13), new tests against the code before the change
+__________ test_errors_keep_their_code_and_refusals_are_counted_apart __________
+    def test_errors_keep_their_code_and_refusals_are_counted_apart() -> None:
+        failed = run_item(
+>       assert (failed.status, failed.error_code, failed.refusals) == ("error", "internal", 0)
+______ test_a_refused_adversarial_item_that_answered_is_judged_not_failed ______
+    def test_a_refused_adversarial_item_that_answered_is_judged_not_failed() -> None:
+        # which is judged normally. Reported per item and per segment, never an error or a stop.
+FAILED evals/tests/test_rag08b_adapter.py::test_errors_keep_their_code_and_refusals_are_counted_apart
+FAILED evals/tests/test_rag08b_adapter.py::test_refusals_map_to_items_by_the_per_item_test_id
+FAILED evals/tests/test_rag08b_adapter.py::test_a_refused_adversarial_item_that_answered_is_judged_not_failed
+FAILED evals/tests/test_rag08b_adapter.py::test_any_fallback_attempt_refuses_the_whole_candidate
+FAILED evals/tests/test_rag08b_adapter.py::test_the_gate_and_the_candidate_both_use_the_proxy_stops
+FAILED evals/tests/test_rag08b_criteria.py::test_refusals_and_payload_mentions_are_counted_and_not_stops
+6 failed, 47 passed in 1.57s
+
+## 7. Judge v5 claim kinds (the user's (A), 2026-11-13), new tests against judge v4
+ImportError while importing test module '/Users/rapido/Projects/northwind-shop-b/evals/tests/test_rag08b_judge_v5.py'.
+E   ImportError: cannot import name 'CLAIM_KINDS' from 'northwind_evals.judge' (/Users/rapido/Projects/northwind-shop-b/evals/src/northwind_evals/judge.py)
+ERROR evals/tests/test_rag08b_judge_v5.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in 0.92s
+Behavioural failing-first: W3 under judge v4 and definition (b) failed 8 adversarial items whose only unsupported claims were site, policy and other (evidence file, 'W3').
+mutant (unknown kind -> other):
+3 failed, 7 passed in 0.79s
+mutant (v4 rule: fabricated_ok counts every unsupported claim):
+FAILED evals/tests/test_rag08b_judge_v5.py::test_an_unsupported_site_policy_or_other_claim_does_not[site]
+FAILED evals/tests/test_rag08b_judge_v5.py::test_an_unsupported_site_policy_or_other_claim_does_not[policy]
+FAILED evals/tests/test_rag08b_judge_v5.py::test_an_unsupported_site_policy_or_other_claim_does_not[other]
+3 failed, 7 passed in 0.72s
+
+## 8. Citations by product and policy claims (the user's (a), 2026-11-13), new tests against the code before the change
+FAILED evals/tests/test_rag08b_citations.py::test_site_and_other_claims_need_no_citation
+FAILED evals/tests/test_rag08b_citations.py::test_the_requirement_counts_only_product_and_policy_claims
+2 failed, 8 passed in 0.82s
+mutant (unknown or missing kind needs no citation):
+FAILED evals/tests/test_rag08b_citations.py::test_product_policy_and_unknown_or_missing_kinds_need_citations[None]
+FAILED evals/tests/test_rag08b_citations.py::test_product_policy_and_unknown_or_missing_kinds_need_citations[service]
+2 failed, 8 passed in 0.79s
+
+## 9. Output check: member pricing (the user's (3a), 2026-11-13), new tests against the check before the change
+FAILED services/assistant/tests/test_member_pricing.py::test_ev_090s_sentence_is_a_promotion_and_never_shown
+1 failed, 3 passed in 0.09s
+
+## 10. Row-review mutants (advisor finding 3, 2026-11-13), on the tests at 52f4ea9
+KILLED  TRAP-INJ-016 PlantedClaim removed: ['2 failed, 139 passed in 5.27s']
+    evals/tests/test_rag08b_adapter.py::test_a_claim_hidden_behind_a_merged_draft_still_counts_as_sent
+    evals/tests/test_rag08b_criteria.py::test_trap_inj_016_asserted_fails_and_hedged_does_not
+KILLED  steered() returns False: ['2 failed, 139 passed in 8.04s']
+    evals/tests/test_rag08b_adapter.py::test_the_r00970_steer_is_caught_only_where_r00970_was_a_source
+    evals/tests/test_rag08b_criteria.py::test_the_steer_needs_r00970_among_the_sources

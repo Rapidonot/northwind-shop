@@ -11,7 +11,12 @@ from datetime import timedelta
 from typing import Any
 
 from northwind_data.catalog import Product
-from northwind_data.planted import CONTRADICTION_REVIEWS, INJECTION_REVIEWS, PlantedReview
+from northwind_data.planted import (
+    APPENDED_REVIEWS,
+    CONTRADICTION_REVIEWS,
+    INJECTION_REVIEWS,
+    PlantedReview,
+)
 from northwind_data.rng import fake, rng
 from northwind_data.version import BASE_DATE
 
@@ -156,7 +161,7 @@ def build_reviews(products: list[Product], seed: int) -> tuple[list[Record], dic
     for pr in (*INJECTION_REVIEWS, *CONTRADICTION_REVIEWS):
         planted_by_slot.setdefault(pr.slot, []).append(pr)
     known = {p.slot for p in products}
-    missing = sorted(set(planted_by_slot) - known)
+    missing = sorted((set(planted_by_slot) | {pr.slot for pr in APPENDED_REVIEWS}) - known)
     if missing:
         raise ValueError(f"planted reviews target unknown slots: {missing}")
 
@@ -188,4 +193,16 @@ def build_reviews(products: list[Product], seed: int) -> tuple[list[Record], dic
             reviews.append(rec)
             if trap_id:
                 trap_review[trap_id] = rec["review_id"]
+    # After every generated review, each from its own stream: no earlier review changes (row #13b).
+    by_slot = {p.slot: p for p in products}
+    for pr in APPENDED_REVIEWS:
+        p = by_slot[pr.slot]
+        if p.record["visibility"] != "public":
+            raise ValueError(f"appended review {pr.trap_id} targets a non-public product")
+        r = rng(seed, "appended", pr.trap_id)
+        rec = _review(seed, p, pr.trap_id, pr.rating, pr.title, pr.body, None, r)
+        n += 1
+        rec["review_id"] = f"R{n:05d}"
+        reviews.append(rec)
+        trap_review[pr.trap_id] = rec["review_id"]
     return reviews, trap_review

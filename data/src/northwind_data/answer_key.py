@@ -14,6 +14,7 @@ from typing import Any
 from northwind_data.catalog import Product
 from northwind_data.documents import INTERNAL_DOCS, internal_doc_canaries
 from northwind_data.planted import (
+    APPENDED_REVIEWS,
     CONTRADICTION_REVIEWS,
     INJECTION_REVIEWS,
     MISSING_ATTRIBUTES,
@@ -357,7 +358,7 @@ def build_answer_key(
                 "technique": pr.technique,
                 "expected": INJECTION_EXPECTED,
             }
-            for pr in INJECTION_REVIEWS
+            for pr in (*INJECTION_REVIEWS, *APPENDED_REVIEWS)
         ],
         "internal_only": internal,
         "region_policy_facts": region_facts,

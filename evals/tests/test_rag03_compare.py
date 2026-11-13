@@ -132,8 +132,9 @@ def test_each_planted_review_is_one_chunk_so_both_trap_counts_agree() -> None:
 
 def test_the_cli_reads_every_planted_review_from_the_answer_key() -> None:
     reviews = cli._trap_reviews()
-    assert len(reviews) == 15
+    assert len(reviews) == 16  # TRAP-INJ-016, appended at DATA_VERSION 2 (row #13b)
     assert reviews["R00712"] == "TRAP-INJ-003" and reviews["R00970"] == "TRAP-INJ-002"
+    assert reviews["R01221"] == "TRAP-INJ-016"
 
 
 # ---- the drift fingerprint --------------------------------------------------------------------

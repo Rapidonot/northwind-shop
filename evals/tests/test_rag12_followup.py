@@ -21,9 +21,10 @@ from typing import Any
 import httpx2 as httpx
 import pytest
 
+import northwind_mcp_rag.testing as mcp_rag_testing
 from northwind_common.llm import anthropic_client
 from northwind_evals import cli
-from northwind_evals.answerers import Answerer, SingleShotAnswerer
+from northwind_evals.answerers import Answerer
 from northwind_evals.contexts import ContextChunk, SavedContext, load_contexts, save_contexts
 from northwind_evals.gate import (
     Baseline,
@@ -35,7 +36,8 @@ from northwind_evals.gate import (
 )
 from northwind_evals.harness import citations_ok, run_item
 from northwind_evals.items import EvalItem, load_items
-from northwind_evals.judge import Judge
+from northwind_evals.judge import JUDGE_VERSION, Judge
+from northwind_evals.testing import MessagesAnswerer
 from northwind_llm_replay.proxy import ProxyState
 from northwind_llm_replay.scan import load_canaries
 from northwind_llm_replay.scripted import ScriptedLLM
@@ -60,6 +62,7 @@ GOOD = {
     "behaviour_ok": 1.0,
     "false_refusal": 0.0,
     "citation_ok": 1.0,
+    "fabricated_ok": 1.0,  # row #13b: every item now reports it
 }
 BAD = {**GOOD, "behaviour_ok": 0.0}
 CONTAIN_GOOD = {k: v for k, v in GOOD.items() if k != "false_refusal"}  # nothing to refuse
@@ -99,6 +102,10 @@ def live_chunks(text: str = "text", source: str = "P1") -> list[RetrievedChunk]:
     return [RetrievedChunk(c, "product", source, None, text) for c in chunk_ids(10)]
 
 
+MESSAGES_ID = "messages-test-double:claude-sonnet-5-5"
+JUDGE_ID = f"judge:v{JUDGE_VERSION}:claude-sonnet-5-5"
+
+
 class FakeDb:
     def __enter__(self) -> FakeDb:
         return self
@@ -112,7 +119,9 @@ def complete_baseline(retrieval: dict[str, Any], answers: dict[str, Any]) -> Bas
     known = {i.id: i.segment for i in load_items(cli.ITEMS)} if cli.ITEMS.exists() else {}
     segments = {i: known.get(i, "specification") for i in {*retrieval, *answers}}
     summary = summary_of(retrieval, answers, segments)
-    return Baseline("dense-only", "r", "idx", "a", "j", retrieval, answers, summary, segments)
+    # The IDs a scripted run reports, so F8 (row #13b) compares like with like.
+    ids = (retriever_id(FakeEmbedder("x")), "idx", MESSAGES_ID, JUDGE_ID)
+    return Baseline("dense-only", *ids, retrieval, answers, summary, segments)
 
 
 class Rig:
@@ -192,12 +201,13 @@ def rig(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Rig:
 
 def scripted_clients(monkeypatch: pytest.MonkeyPatch, llm: ScriptedLLM) -> None:
     @contextmanager
-    def clients(mode: str) -> Iterator[tuple[Answerer, Judge, ProxyState]]:
+    def clients(mode: str) -> Iterator[tuple[Answerer, Judge, ProxyState, None]]:
         assert mode == "replay"
         yield (
-            SingleShotAnswerer(anthropic_client(llm.url), "claude-sonnet-5-5"),
+            MessagesAnswerer(anthropic_client(llm.url), "claude-sonnet-5-5"),
             Judge(anthropic_client(llm.url), "claude-sonnet-5-5"),
             ProxyState(),
+            None,
         )
 
     monkeypatch.setattr(cli, "_clients", clients)
@@ -453,8 +463,24 @@ def test_rescore_with_a_request_that_has_no_recording_makes_no_candidate_no_call
     monkeypatch.setenv("LLM_MODE", "replay")
     upstream: list[str] = []
 
-    async def no_upstream(self: object, *args: object, **kwargs: object) -> None:
-        upstream.append("send")
+    real_send = httpx.AsyncClient.send
+    served: list[str] = []
+    real_running = mcp_rag_testing.running
+
+    @contextmanager
+    def recorded_running(server: Any) -> Iterator[str]:
+        with real_running(server) as url:
+            served.append(url)
+            yield url
+
+    monkeypatch.setattr(mcp_rag_testing, "running", recorded_running)
+
+    async def no_upstream(self: httpx.AsyncClient, request: httpx.Request, **kwargs: Any) -> Any:
+        # Row #13b: the assistant's own searches go to the in-process mcp-rag this run started,
+        # and only there (its exact URL). Anything else, the Anthropic API included, is upstream.
+        if str(request.url) in served:
+            return await real_send(self, request, **kwargs)
+        upstream.append(f"send {request.url.host}")
         raise AssertionError("rescore went upstream")
 
     monkeypatch.setattr(httpx.AsyncClient, "send", no_upstream)
@@ -639,7 +665,7 @@ def run_scripted(item_: EvalItem, answer: str, verdict: dict[str, Any]) -> Any:
     chunk = ContextChunk("product:P1:0", "P1", "product", "text")
     with ScriptedLLM() as llm:
         llm.reply(answer).reply(json.dumps(verdict))
-        answerer = SingleShotAnswerer(anthropic_client(llm.url), "claude-sonnet-5-5")
+        answerer = MessagesAnswerer(anthropic_client(llm.url), "claude-sonnet-5-5")
         return run_item(
             item_,
             SavedContext(item_.id, "r", "idx", (chunk,)),

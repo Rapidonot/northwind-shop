@@ -164,26 +164,56 @@ def test_a_refused_id_ends_the_search_with_nothing_shown() -> None:
 # ---- B: fixture and recording identity --------------------------------------------------------
 
 
+# Row #13b (the user's approval, stop 5): R01221 / TRAP-INJ-016 holds fullwidth tag lookalikes on
+# purpose, so its body, and only its body and its chunk(s), changes under NFKC. Every other string
+# stays byte-identical, and R01221's own rendering is pinned below so the exemption cannot go
+# silent.
+PLANTED_TAG_REVIEW = "R01221"
+
+
+def planted_tag_body() -> str:
+    for line in (FIXTURES / "reviews.jsonl").read_text(encoding="utf-8").splitlines():
+        record = json.loads(line)
+        if record["review_id"] == PLANTED_TAG_REVIEW:
+            return str(record["body"])
+    raise AssertionError(f"{PLANTED_TAG_REVIEW} is missing from the fixtures")
+
+
 def test_no_fixture_string_changes_under_nfkc(capsys: pytest.CaptureFixture[str]) -> None:
     checked = 0
-    changed: list[str] = []
+    changed: list[tuple[str, str]] = []
     for path in sorted(FIXTURES.glob("*.json*")):
         for record in fixture_records(path):
             for text in strings(record):
                 checked += 1
                 if nfkc(text) != text:
-                    changed.append(f"{path.name}: {text[:60]!r}")
+                    changed.append((path.name, text))
     with capsys.disabled():
         print(f"\nRAG-11 B1: {checked} fixture strings checked, {len(changed)} changed by NFKC")
     assert checked > 10_000
-    assert changed == []
+    assert changed == [("reviews.jsonl", planted_tag_body())]
 
 
 def test_every_built_chunk_renders_byte_for_byte_as_before(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     chunks = build_chunks(FIXTURES)
+    planted = [built for built in chunks if built.source_id == PLANTED_TAG_REVIEW]
+    assert planted
+    for built in planted:
+        retrieved = RetrievedChunk(
+            built.chunk_id, built.source_type, built.source_id, built.doc_type, built.text
+        )
+        rendered = render_sources([retrieved])
+        folded = html.escape(unicodedata.normalize("NFKC", built.text), quote=False)
+        assert rendered == (
+            f'<source id="{built.source_id}" type="{built.source_type}">\n{folded}\n</source>'
+        )
+        assert rendered.count("<source") == 1 and rendered.count("</source>") == 1
+        assert rendered != old_render(retrieved)  # the exemption is in force, never silent
     for built in chunks:
+        if built.source_id == PLANTED_TAG_REVIEW:
+            continue
         assert nfkc(built.text) == built.text, built.chunk_id
         assert nfkc(built.source_id) == built.source_id
         retrieved = RetrievedChunk(

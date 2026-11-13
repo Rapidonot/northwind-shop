@@ -1,0 +1,9 @@
+index_version c9e30984a7723d23 -> 389cae01996a2dd6
+first searches compared 164, moved 0
+starter-set items compared 102, saved top 5 changed 1
+  CHANGED EV-102 ['product:P0127:0', 'product:P0123:0', 'document:POL-RETURNS-US:3', 'review:R00758:0', 'product:P0129:0'] -> ['review:R01221:0', 'product:P0156:0', 'review:R00925:0', 'product:P0159:0', 'review:R00930:0']
+top-k sha256, 100 pre-row items: v1 99135472f1545431c10e4b3bdab76bca3cf9eff9d233eb356d8f0486a8368074  v2 ca7e30e7149aa61ec4a53e70bc96478566d7384f9aaf272cbf8f579f6066d503
+top-k sha256, all 102 items:     v1 6738bed65bb37a1dab78347c45054bfa391e9ac48dcc6b13c8e74e09bf8115b7  v2 2126833fa26a9ba44b4bbe93a527a565a1c5bef8592de994e95248b1004fb811
+  recall@5  v1 0.954427  v2 0.954427  (n=64/64)
+  recall@10 v1 0.984375  v2 0.984375  (n=64/64)
+  mrr       v1 0.880729  v2 0.880729  (n=64/64)
