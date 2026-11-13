@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 from dataclasses import replace
 from datetime import date
@@ -20,30 +19,12 @@ from northwind_rag.store import IndexVersion, apply_migrations, embedding_column
 from northwind_rag.testing import FakeEmbedder
 
 from .conftest import Edit  # noqa: TID252
+from .fixture_signing import rehash  # noqa: TID252
 
 pytestmark = [pytest.mark.req("RAG-01"), pytest.mark.integration]
 
 VERSION = IndexVersion(data_version=1, dataset_sha256="0" * 64, chunker_version=1)
 VECTOR = "[" + ",".join(["0.1"] * 384) + "]"
-
-
-def rehash(fixtures: Path) -> Path:
-    """Re-sign an edited fixtures copy: each listed file's hash and `dataset_sha256`, by the
-    generator's formula. Since #10b ingest verifies the dataset first (Q4), an edit made to test
-    chunking or diffs must be re-hashed to reach them. The only re-hashing in the tests (plan
-    §5)."""
-    path = fixtures / "manifest.json"
-    manifest = json.loads(path.read_text(encoding="utf-8"))
-    files = {
-        name: hashlib.sha256((fixtures / name).read_bytes()).hexdigest()
-        for name in sorted(manifest["files"])
-    }
-    manifest["files"] = files
-    manifest["dataset_sha256"] = hashlib.sha256(
-        "".join(f"{n} {h}\n" for n, h in files.items()).encode()
-    ).hexdigest()
-    path.write_text(json.dumps(manifest), encoding="utf-8")
-    return fixtures
 
 
 def count(conn: psycopg.Connection, where: str = "true") -> int:
