@@ -1228,14 +1228,24 @@ def test_a_run_must_have_made_exactly_the_turns_cassettes(tmp_path: Path) -> Non
     assert run_cassette_problems(NAMES[2], State([{"hash": "c" * 16}]), tmp_path)
 
 
+def mixed_hash_binding(fixtures: Mapping[str, Mapping[str, Any]]) -> list[str]:
+    """Names on the weaker binding while another fixture carries cassette hashes (pass 3, P3-3)."""
+    hashed = {
+        name: any("cassette" in call for call in fixture.get("upstream_calls", []))
+        for name, fixture in fixtures.items()
+    }
+    return sorted(name for name, has in hashed.items() if not has) if any(hashed.values()) else []
+
+
 def test_the_fixtures_carry_cassette_hashes_all_or_none() -> None:
     """Pass 3, P3-3: once any fixture is bound to its cassettes by hash, every one must be, so a
     turn whose re-record failed cannot keep its old fixture on the weaker binding."""
-    hashed = {
-        name: any("cassette" in call for call in partner_fixture(name)["upstream_calls"])
-        for name in NAMES
-    }
-    assert len(set(hashed.values())) == 1, hashed
+    assert mixed_hash_binding({name: partner_fixture(name) for name in NAMES}) == []
+    old = {"upstream_calls": [{"model": "m", "stop_reason": "end_turn"}]}
+    new = {"upstream_calls": [{"cassette": "a" * 64, "model": "m", "stop_reason": "end_turn"}]}
+    assert mixed_hash_binding({"pq-01": new, "pq-02": old}) == ["pq-02"]
+    assert mixed_hash_binding({"pq-01": new, "pq-02": new}) == []
+    assert mixed_hash_binding({"pq-01": old, "pq-02": old}) == []
 
 
 def test_no_cassette_in_the_suite_belongs_to_no_turn(tmp_path: Path) -> None:

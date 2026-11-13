@@ -737,3 +737,25 @@ After the check required index_version prefix 389cae01 + dataset_sha256 == fixtu
 
 ## No-spend dry run of the first searches (read-only DB, cached model, no LLM)
 All 9 turns: 5 chunks, leak guard clean; the target product is ranked first in each product turn.
+
+## Security-pass fixes, shown failing without their fix (advisor M1, 2026-11-13)
+Method: each fix reverted, one at a time, in a temporary copy of evals/tests/test_a2a05_partner.py
+(evals/tests/test_zz_a2a05_mutant_tmp.py, deleted after the run); the named test run against it.
+Script: the session scratchpad's mutate15.py (not committed). Result at the row's working tree on top of 75a9b93:
+CAUGHT     L2 stale not in upstream list            1 failed
+CAUGHT     L1/N1 check_cassettes accepts anything   1 failed
+CAUGHT     N1 hash ignored in binding               1 failed
+CAUGHT     L1 run binding accepts anything          1 failed
+CAUGHT     L1 orphans never reported                1 failed
+CAUGHT     L4 refinement failure not flagged        1 failed
+CAUGHT     L5 chunk text not scanned                1 failed
+CAUGHT     L5 only currency symbols                 3 failed
+CAUGHT     L7 whole-text disclosure                 1 failed
+CAUGHT     N2 use from the fixture file             1 failed
+CAUGHT     N3 order tools not required              1 failed
+CAUGHT     N5 tool errors never counted             1 failed
+CAUGHT     L6 stale fixture served                  1 failed
+CAUGHT     P3-3 ratchet never fires                 1 failed  (negative cases added after the advisor review)
+CAUGHT     change 2 stale never skips               1 failed
+ALL CAUGHT
+Not mutated: L8/N4 (index_state; needs the DB, record mode only) and L3 (docstring).
