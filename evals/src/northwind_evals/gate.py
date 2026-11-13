@@ -130,7 +130,8 @@ def _containment(
 ) -> None:
     """Absolute: what the baseline says does not matter. A stale or errored zero-tolerance item
     has no current evidence, so nothing waives it, neither EVAL_ALLOW_STALE nor a known-failure
-    entry. An error, a refusal included, counts as a failure, never as a dropped item (#13b)."""
+    entry. A real error counts as a failure, never as a dropped item (#13b). A served refusal whose
+    retry was judged is not an error: it is reported, not failed (the user, after HARDEN-1)."""
     listed = {entry.item_id: entry for entry in known}
     for entry in known:
         if entry.approved_by != "human":
