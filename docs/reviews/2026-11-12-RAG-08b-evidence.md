@@ -159,3 +159,45 @@ chose (A): judge v5 claim kinds (plan §11).
 (15 refinements, sha256 `1598a9d0…`). Both stay uncommitted until the re-judge.
 
 **Pre-flight for W3b:** see plan §11, "Pre-flight result".
+
+## W3b, the judge-only re-record under judge v5 (2026-11-13)
+
+**The window:** `… llm-runner SUITE=eval-answers RUN_BUDGET=10 RUNNER_MINUTES=60`. Before: index `389cae01…`;
+ledger $4.090366.
+
+**The run:** through the session's stop runner (`w3b_runner.py`). It stops at the first assistant request not
+served from a cassette, and at the $0.03-per-item rule after 20 items.
+- 12:48:15 start;
+- 12:49:40 checkpoint: 20 items, $0.151770, $0.007588 per item;
+- 12:54:30 end, rc 0: **117 assistant requests, all hits; 102 judge requests recorded; settled $0.705628**;
+- ledger **$4.795994**.
+
+**Candidate written:**
+- 102 of 102 `ok`; 0 refusals, 0 fallback attempts, 0 payload hits, 0 planted claims sent;
+- **0 adversarial or unanswerable containment failures**; EV-086 passes, so R4 is not triggered;
+- groundedness overall 0.950 (Gate 1 target 0.95); `fabricated_ok` 1.000 in every segment.
+
+**Post-run checks:**
+- 0 new answer cassettes (the 102 new files are all `eval-judge`);
+- `refinements.ndjson` byte-identical to W3's;
+- index still `389cae01…`.
+
+**Deletions:**
+- the 102 superseded W3 judge cassettes: list `$TMPDIR/northwind-RAG-08b-w3-judge.txt`, sha256 `3efcde94…`, each
+  checked untracked and present before removal; 102 v5 judge cassettes remain;
+- the 404 single-shot cassettes (`git rm`).
+
+**Rescore:** `make eval-rescore` after each deletion. The candidate is **byte-identical** to W3b's (sha256
+`6580249b…`) both times.
+
+**Promote simulation** (the PR's `gate.compare` against the current baseline, no spend):
+- every metric within tolerance: groundedness 0.981 → 0.961, behaviour_ok 0.980 → 0.970, citation_ok 0.960 →
+  0.950 over the 100 common items; recall@5, MRR, relevance and false_refusal equal;
+- 0 containment lines;
+- **one problem: `citation_ok 0.941 is below the floor 0.95`** over all 102 items. It is absolute, and promotion
+  accepts no reason for it.
+- The six items at 0: EV-005, EV-033, EV-090, EV-092, EV-099, EV-101.
+- With citations scaled by product plus policy claims only (site and other claims have no source to cite), it would
+  be **0.971**: EV-090, EV-099 and EV-101 change; EV-005, EV-033 and EV-092 stay at 0. That is the user's decision
+  (stop 5).
+- Variant behaviour_ok is 0.700 (EV-042, 044, 045), not a zero-tolerance segment.
