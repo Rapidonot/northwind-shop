@@ -146,3 +146,19 @@ def test_ingest_stores_the_hash_it_verified_not_a_reread_of_the_manifest(
         "SELECT dataset_sha256 FROM rag_index_manifest WHERE is_current"
     ).fetchone()
     assert row == (sentinel,)
+
+
+def test_ingest_enriched_stores_the_hash_it_verified(
+    enriched_migrated: psycopg.Connection, fixtures_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The same for the enriched path (pass-3 P2, optional part): its manifest row holds the value
+    `verify_dataset` returned, not a re-read of manifest.json."""
+    import northwind_rag.ingest as ingest_module
+
+    sentinel = "e5" * 32
+    monkeypatch.setattr(ingest_module, "verify_dataset", lambda _dir: sentinel)
+    ingest_enriched(enriched_migrated, fixtures_dir, FakeEmbedder())
+    row = enriched_migrated.execute(
+        "SELECT dataset_sha256 FROM rag_index_manifest WHERE is_current"
+    ).fetchone()
+    assert row == (sentinel,)

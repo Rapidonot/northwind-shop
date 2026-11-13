@@ -1,6 +1,6 @@
 # Security re-review (scoped), pass 3 (final): row #10b (mcp-catalog)
 
-> Saved verbatim from the security-reviewer's report. In P3's fix, the reviewer wrote the two escapes as ` ` and ` `; its output rendered them as raw line breaks, so they are written here as escapes.
+> Saved verbatim from the security-reviewer's report. In P3's fix, the reviewer wrote the two escapes as `\u2028` and `\u2029`; its output rendered them as raw line breaks, so they are written here as escapes.
 
 **What I read.** First I re-read `CLAUDE.md` "Hard rules" and `/Users/rapido/Projects/northwind-shop/docs/decisions/0001-llm-first-order-and-record-replay.md`. Then I read my pass-2 report `/Users/rapido/Projects/northwind-shop/docs/reviews/2026-11-13-10b-security-rereview.raw.md`, and the file list, header and PROGRESS/COVERAGE hunks of `/tmp/claude-502/northwind-security-10b-r3.diff`.
 
@@ -55,7 +55,7 @@ I ran nothing, because I have no Bash tool. Every "fails on the mutant" or "pass
 - **Where:** `services/mcp-catalog/tests/test_live.py:167-168`
 - **Rule:** N5 (test robustness)
 - **What is wrong:** I checked the bytes: `x<U+2028>y<U+2029>z` occurs twice on those lines, and U+0085 is written as the escape `\u0085`. The coverage you claimed is real. But the U+2028 and U+2029 characters are raw, so an editor, a paste or a normalising tool could silently turn them into spaces. The test would then stop covering two of its three characters, and still pass.
-- **Fix:** write them as ` ` and ` ` escapes, like `\u0085`.
+- **Fix:** write them as `\u2028` and `\u2029` escapes, like `\u0085`.
 
 ---
 

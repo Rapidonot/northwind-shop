@@ -246,3 +246,26 @@ def test_a_fifo_in_place_of_a_listed_file_is_refused_without_blocking(tmp_path: 
     [result] = outcome
     assert isinstance(result, DatasetMismatchError)
     assert "stock.jsonl" in str(result)
+
+
+@pytest.mark.req("CC-10")
+def test_a_regular_file_is_read_in_blocking_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pass 3, unconfirmed item 1 (#10b): once a file is known to be regular, its descriptor goes
+    back to blocking reads, so no filesystem can hand back a short `EAGAIN` read. Every listed file
+    and the manifest are switched."""
+    import json
+    import os
+
+    from northwind_data import ingest_guard
+
+    switched: list[bool] = []
+    real = os.set_blocking
+
+    def spy(fd: int, blocking: bool) -> None:
+        switched.append(blocking)
+        real(fd, blocking)
+
+    monkeypatch.setattr(ingest_guard.os, "set_blocking", spy)
+    ingest_guard.verify_dataset(FIXTURES_DIR)
+    listed = json.loads((FIXTURES_DIR / "manifest.json").read_text(encoding="utf-8"))["files"]
+    assert switched == [True] * (len(listed) + 1)
