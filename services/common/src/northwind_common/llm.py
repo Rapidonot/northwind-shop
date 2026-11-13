@@ -33,6 +33,15 @@ PLACEHOLDER_API_KEY = "northwind-proxy-placeholder"
 PARENT_ENV_ALLOWLIST = ("PATH", "HOME", "LANG", "TMPDIR")
 # Never inherited, even if a future allowlist entry matched them.
 FORBIDDEN_PREFIXES = ("ANTHROPIC_", "CLAUDE_CODE_", "CLAUDECODE")
+# HARDEN-1: the CLI's refusal switches combine unpredictably (the fallback flag plus
+# NO_MODEL_FALLBACK sends the fallback-credit beta again), so no caller's `extra` may set one.
+REFUSAL_SETTINGS = frozenset(
+    {
+        "CLAUDE_CODE_DISABLE_REFUSAL_FALLBACK",
+        "CLAUDE_CODE_DISABLE_REFUSAL_RETRY",
+        "CLAUDE_CODE_NO_MODEL_FALLBACK",
+    }
+)
 
 # Models (config, not code paths): CLAUDE.md tech stack.
 ASSISTANT_MODEL = os.environ.get("ASSISTANT_MODEL", "claude-sonnet-5-5")
@@ -84,9 +93,18 @@ def child_env(
             "CLAUDE_CODE_ENTRYPOINT": "sdk-py",
             "CLAUDE_AGENT_SDK_VERSION": sdk_version,
             "CLAUDE_CODE_SDK_READS_SESSION_STATE": "1",
+            # HARDEN-1: after a classifier refusal the CLI otherwise retries with the
+            # `fallback-credit` beta, which the runner refuses (decision 0005), so replay misses.
+            # Measured on the bundled CLI (a scripted refusal): this flag alone kept the beta off.
+            # CLAUDE_CODE_DISABLE_REFUSAL_RETRY must stay unset: it sends the beta on the first
+            # request instead (docs/reviews/2026-11-12-HARDEN-1-failing-first.md).
+            "CLAUDE_CODE_DISABLE_REFUSAL_FALLBACK": "1",
         }
     )
     if extra:
+        undo = sorted(k for k in extra if k.upper() in REFUSAL_SETTINGS)
+        if undo:
+            raise ValueError(f"extra env may not set {undo}: the factory pins the refusal setting")
         env.update(extra)
     return env
 

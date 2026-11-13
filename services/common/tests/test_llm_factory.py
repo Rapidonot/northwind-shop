@@ -31,6 +31,7 @@ FIXED_KEYS = {
     "CLAUDE_CODE_ENTRYPOINT",
     "CLAUDE_AGENT_SDK_VERSION",
     "CLAUDE_CODE_SDK_READS_SESSION_STATE",
+    "CLAUDE_CODE_DISABLE_REFUSAL_FALLBACK",  # HARDEN-1
 }
 
 # What a parent process (e.g. a Claude Code session, a shell with an exported key) may carry.
@@ -60,6 +61,36 @@ def test_child_env_is_built_from_scratch(tmp_path: Path) -> None:
     assert env["NO_PROXY"] == "127.0.0.1,localhost"
     leaked = {v for k, v in HOSTILE_PARENT.items() if k not in PARENT_ENV_ALLOWLIST}
     assert leaked.isdisjoint(env.values())
+
+
+@pytest.mark.req("HARDEN-1")
+def test_child_env_sets_only_the_refusal_fallback_flag(tmp_path: Path) -> None:
+    """Measured on the bundled CLI (docs/reviews/2026-11-12-HARDEN-1-failing-first.md):
+    this flag
+    alone kept the fallback-credit beta off; DISABLE_REFUSAL_RETRY sent it on the first request."""
+    env = child_env("http://127.0.0.1:1/", tmp_path, parent=HOSTILE_PARENT)
+    assert env["CLAUDE_CODE_DISABLE_REFUSAL_FALLBACK"] == "1"
+    assert "CLAUDE_CODE_DISABLE_REFUSAL_RETRY" not in env
+    assert "CLAUDE_CODE_NO_MODEL_FALLBACK" not in env
+
+
+@pytest.mark.req("HARDEN-1")
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [
+        ("CLAUDE_CODE_DISABLE_REFUSAL_FALLBACK", "0"),
+        ("CLAUDE_CODE_DISABLE_REFUSAL_RETRY", "1"),
+        ("CLAUDE_CODE_NO_MODEL_FALLBACK", "1"),
+        ("claude_code_disable_refusal_retry", "1"),
+    ],
+)
+def test_extra_env_cannot_undo_the_refusal_setting(tmp_path: Path, key: str, value: str) -> None:
+    """Combinations bring the beta back (the flag plus NO_MODEL_FALLBACK does), so no caller may
+    set these, through child_env or agent_runtime (advisor F3)."""
+    with pytest.raises(ValueError, match="refusal"):
+        child_env("http://127.0.0.1:1/", tmp_path, extra={key: value})
+    with pytest.raises(ValueError, match="refusal"):
+        agent_runtime(base_url="http://127.0.0.1:1/", root=tmp_path / "rt", extra_env={key: value})
 
 
 @pytest.mark.req("FOUND-2")

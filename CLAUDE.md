@@ -86,7 +86,7 @@ make runner-sync      # USER ONLY, in the runner clone: show what changed, ask, 
 make runner-check     # from the sandbox, in each checkout: measure that nothing the runner loads is writable; report any gitlink, .gitmodules or nested .git
 make ship PR=<n> SHA=<reviewed>  # USER ONLY, `make -C ~/.northwind/runner`: check a PR, wait for CI, ask, merge, runner-sync
 make finish CHECKOUT=$HOME/… SHA=<reviewed> BODY=docs/reviews/<file>  # USER ONLY, `make -C ~/.northwind/runner`: after /req-done, commit its files, push, open the PR, add ci-change if needed, then ship (decision 0011)
-make review-diff      # write the committed diff for advisor-reviewer, base and head SHA first
+make review-diff      # write the committed diff for advisor-reviewer, base and head SHA first (default path per checkout; REVIEW_DIFF= wins)
 ```
 Only `make record`, `make eval-live` and `make enrich` spend API credit, and only
 through a window the user opened with `make llm-runner`; everything else runs in replay. Everything Claude runs stays in
@@ -171,8 +171,9 @@ Toolchain notes:
   recovery for `switch` and `merge` only.
 - Record decisions that change this file or the PRD defaults in docs/decisions/.
 - LLM calls (decision 0001): tests and evals run in replay by default. Live calls only
-  through `make record` / `make eval-live` / `make enrich`, on 10–20-item slices during development, with
-  full runs only at milestones. The proxy's budget cap is never raised without asking. Never
+  through `make record` / `make eval-live` / `make enrich`. Until the credit expires (~2026-11-24,
+  decision 0013) full runs are fine, with a generous `RUN_BUDGET`; after that, 10–20-item slices during
+  development, with full runs only at milestones. The proxy's budget cap is never raised without asking. Never
   put an API key in CI secrets. Cassettes hold synthetic data only and must pass the
   secret/PAN scanner. A cassette miss means the model input changed: re-record on purpose,
   never hand-edit a cassette.
@@ -241,7 +242,7 @@ inside the row's files, otherwise log it with an owner. Low: log it in `PROGRESS
 
 The control surface: `CLAUDE.md`, `.claude/**`, `.github/workflows/**`, `Makefile`, `tools/*.proposed*`,
 `tools/ship.sh`, `tools/finish.sh`, `tools/refused-paths.sh`, the files in `RUNNER_SYNC_PATHS`,
-`evals/baselines/**`, `evals/src/**`, `evals/fixtures/**`, `cassettes/**`, `data/enrichment/**`, `data/embeddings/**`,
+`evals/baselines/**`, `evals/src/**`, `evals/fixtures/**`, `cassettes/**`, `data/enrichment/**`, `data/embeddings/**`, `evals/adversarial/**`, `evals/contexts/**`,
 `**/conftest.py`, `.gitignore`, the root
 `pyproject.toml` and the `package.json` files. `make ship` lists these above its question, and asks for the
 PR number instead of `y` when any changed.

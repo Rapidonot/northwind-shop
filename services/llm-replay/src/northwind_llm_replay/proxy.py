@@ -75,6 +75,14 @@ LOGGED_HEADER_VALUES = ("anthropic-version", "anthropic-beta", "content-type", "
 # Failures that prove the request never left: the only ones released at zero cost. After the
 # connection opens the request may have been billed, so anything else is charged the worst case.
 LOG_HASH_CHARS = HASH_PREFIX_CHARS  # enough to find a cassette by prefix
+# HARDEN-1: betas the CLI adds after a classifier refusal. The runner refuses them (they are not on
+# its ALLOWED_BETAS) and counts each toward its refusal cap, and replay can never match them. The
+# sandbox proxy refuses them itself, in every mode, so they never leave and never cost a refusal.
+FALLBACK_BETA_PREFIXES = ("fallback-credit-", "server-side-fallback-")
+# Logged in place of a request body the proxy could not parse: the raw bytes are never logged.
+UNPARSED_BODY = "<unlogged:unparsed-body>"
+# Logged when scrubbing a parsed body fails: the request is refused and nothing raw is written.
+UNSCRUBBED_BODY = "<unlogged:unscrubbed-body>"
 NOT_SENT_ERRORS = (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout)
 
 
@@ -146,6 +154,9 @@ class ProxyState:
     stale: list[str] = field(default_factory=list)
     calls: list[dict[str, Any]] = field(default_factory=list)
     seq: dict[str, int] = field(default_factory=dict)
+    fallback_attempts: list[dict[str, Any]] = field(default_factory=list)
+    # HARDEN-1: responses served with stop_reason "refusal", for tests and evals to report.
+    refusals: list[dict[str, Any]] = field(default_factory=list)
 
 
 def error_response(
@@ -186,6 +197,37 @@ def auth_verdict(headers: dict[str, str], expected: str | None = PLACEHOLDER_API
         headers.get("authorization", ""), f"Bearer {expected}"
     )
     return "placeholder" if ok else "REJECTED"
+
+
+def stop_reason(text: str, is_sse: bool) -> str | None:
+    """The response's stop_reason, from the JSON body or the stream's message_delta (HARDEN-1)."""
+    if not is_sse:
+        try:
+            parsed = json.loads(text)
+        except json.JSONDecodeError:
+            return None
+        reason = parsed.get("stop_reason") if isinstance(parsed, dict) else None
+        return reason if isinstance(reason, str) else None
+    found: str | None = None
+    for line in text.splitlines():
+        if not line.startswith("data:"):
+            continue
+        try:
+            data = json.loads(line[5:].strip())
+        except json.JSONDecodeError:
+            continue
+        if isinstance(data, dict) and data.get("type") == "message_delta":
+            delta = data.get("delta")  # never trust the shape: counting must not raise (L1)
+            reason = delta.get("stop_reason") if isinstance(delta, dict) else None
+            if isinstance(reason, str):
+                found = reason
+    return found
+
+
+def fallback_betas(headers: dict[str, str]) -> list[str]:
+    """The fallback betas in a request's `anthropic-beta`, in order (HARDEN-1)."""
+    betas = (b.strip() for b in headers.get("anthropic-beta", "").split(","))
+    return [b for b in betas if b.lower().startswith(FALLBACK_BETA_PREFIXES)]
 
 
 def encode_test_id(test_id: str) -> str:
@@ -262,6 +304,14 @@ class Proxy:
         with self._log_lock, self.cfg.log_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(entry, sort_keys=True, ensure_ascii=False) + "\n")
 
+    def _note_refusal(self, entry: dict[str, Any], text: str, is_sse: bool) -> None:
+        """Count a refusal the proxy served. Observation only: nothing it returns changes."""
+        if stop_reason(text, is_sse) == "refusal":
+            entry["refusal"] = True
+            self.state.refusals.append(
+                {"hash": entry.get("hash"), "test_id": entry.get("test_id"), "mode": self.cfg.mode}
+            )
+
     def _client_get(self) -> httpx.AsyncClient:
         if self._client is None:
             # trust_env=False: the real key must not route through an HTTPS_PROXY from the env.
@@ -285,7 +335,26 @@ class Proxy:
             body: Any = json.loads(raw) if raw else None
         except json.JSONDecodeError:
             body = None
-        key = match_key(request.method, full_path, headers, scrub(body))
+        # One scrub for the match key and the log, so the log can never hold what a cassette drops
+        # (HARDEN-1, M2). If it fails, the request is refused and logged with a placeholder only.
+        try:
+            scrubbed = scrub(body)
+        except Exception:  # noqa: BLE001 - any failure: fail closed, never log the raw body
+            self._log(
+                {
+                    "ts": now_iso(),
+                    "mode": self.cfg.mode,
+                    "method": request.method,
+                    "path": full_path,
+                    "test_id": test_id,
+                    "outcome": "refused-scrub",
+                    "body": UNSCRUBBED_BODY,
+                }
+            )
+            return error_response(
+                400, "validation", False, "the LLM proxy could not scrub this request body"
+            )
+        key = match_key(request.method, full_path, headers, scrubbed)
         h = request_hash(key)
         entry: dict[str, Any] = {
             "ts": now_iso(),
@@ -304,7 +373,8 @@ class Proxy:
             "model": body.get("model") if isinstance(body, dict) else None,
             "max_tokens": body.get("max_tokens") if isinstance(body, dict) else None,
             "stream": bool(body.get("stream")) if isinstance(body, dict) else False,
-            "body": body,
+            # Scrubbed like the cassette; a body that did not parse is never logged raw.
+            "body": key["body"] if body is not None else (UNPARSED_BODY if raw else None),
         }
 
         if entry["auth"] != "placeholder":
@@ -316,6 +386,23 @@ class Proxy:
                 False,
                 "the LLM proxy only accepts the placeholder key as the single credential "
                 "(build clients with northwind_common.llm)",
+            )
+
+        # HARDEN-1: never forward a fallback beta, and say so as its own failure, not as a miss to
+        # re-record. Sandbox side only: the runner keeps its own `refused-beta` (decision 0005).
+        fallback = fallback_betas(headers) if self.cfg.gate is None else []
+        if fallback:
+            entry["outcome"] = "refused-fallback"
+            self.state.fallback_attempts.append(
+                {"hash": h, "path": full_path, "test_id": test_id, "betas": fallback}
+            )
+            self._log(entry)
+            return error_response(
+                400,
+                "validation",
+                False,
+                "the LLM proxy never forwards a fallback beta (HARDEN-1): the CLI must not retry "
+                "a refusal with one (northwind_common.llm.child_env)",
             )
 
         if self.cfg.gate is not None:
@@ -346,6 +433,7 @@ class Proxy:
                     entry["stale"] = True
             if hit is not None:
                 entry["outcome"] = "hit"
+                self._note_refusal(entry, hit.body, hit.kind == "sse")
                 self._log(entry)
                 return self._replay(hit)
             if self.cfg.mode == "replay":
@@ -493,6 +581,7 @@ class Proxy:
         entry["status"] = resp.status_code
         entry["outcome"] = "live"
         entry["usage"] = usage
+        self._note_refusal(entry, text, is_sse)
         if self.cfg.gate is not None and self.cfg.gate.leaks(text):
             entry["outcome"] = "blocked-key"
             self._log(entry)
@@ -549,6 +638,7 @@ class Proxy:
             entry["status"] = resp.status_code
             entry["outcome"] = "live"
             entry["final_usage"] = usage is not None
+            self._note_refusal(entry, text, True)
             if (
                 self.cfg.mode == "record"
                 and resp.status_code == 200

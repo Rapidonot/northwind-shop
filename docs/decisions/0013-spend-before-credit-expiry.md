@@ -28,6 +28,9 @@ window is open. The window and the cap are the controls that keep spending safe,
 milestones". This decision does not edit it. The open item "CLAUDE.md slice wording to match this decision" is
 owned by hardening.
 
+**2026-11-12, HARDEN-1:** `CLAUDE.md` now says it: full runs with a generous `RUN_BUDGET` until ~2026-11-24, then
+the slice default. The `$90` cap sentence is unchanged (decision 0016).
+
 ## After the credit expires
 
 From about 2026-11-24, the slice default in `CLAUDE.md` applies again, unless the user decides otherwise.
