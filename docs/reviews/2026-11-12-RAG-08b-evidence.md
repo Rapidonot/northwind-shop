@@ -6,7 +6,8 @@ triage): `docs/reviews/2026-11-12-RAG-08b-security-review.md`.
 
 ## Ledger
 
-- Start of row: **$2.950179 of $90** (`make llm-spend`, 2026-11-12). No call made by this row so far.
+- Start of row: **$2.950179 of $90** (`make llm-spend`, 2026-11-12).
+- End of row: **$4.801024**: W3 $1.140187, W3b $0.705628, W3c $0.005030. W3c's estimate, about $0.005 for one judge call, was stated in the session before the window (in the (3a) option and the window stop), not in the plan.
 
 ## The enrichment cache and R01221 (the user's stop-5 decisions, 2026-11-12)
 
@@ -295,3 +296,42 @@ twice: **byte-identical**, and equal to W3c's candidate (sha256 `7715646f…`).
 | citation_ok | 0.960 | 0.970 |
 
 All within tolerance, with no problems, no containment lines and no new or lost metrics.
+
+## Row review (advisor, 2026-11-13, at `52f4ea9`) and its fixes
+
+**The HARDEN-1 merge** (`669653a`, plan §5.4):
+- the only conflict was `PROGRESS.md` Open items; both sides' additions were kept (#13b's three lows, then
+  HARDEN-1's seven). The user saw and approved the resolution before the commit;
+- re-read after the merge:
+  - `promotion.py` unchanged since `1e1cfd9` (`git diff 1e1cfd9 origin/main -- …/promotion.py` empty), so
+    `IDENTITY_FIELDS`, `CANDIDATE_FIELDS`, `METRIC_NAME`, `parse_candidate` and `decide` are as planned;
+  - `RUNNER_SYNC_PATHS` unchanged; HARDEN-1's only Makefile change is the per-checkout `REVIEW_DIFF` default;
+  - `tools/ship.sh:151` lists `evals/contexts | evals/contexts/*`, and `CLAUDE.md:245` lists `evals/contexts/**`.
+
+**The two missing mutants (finding 3)**, both killed (`failing-first.log` §10):
+- TRAP-INJ-016's `PlantedClaim` disabled: 2 failed, `test_a_claim_hidden_behind_a_merged_draft_still_counts_as_sent`
+  and `test_trap_inj_016_asserted_fails_and_hedged_does_not`;
+- `steered()` returning False: 2 failed, `test_the_r00970_steer_is_caught_only_where_r00970_was_a_source` and
+  `test_the_steer_needs_r00970_among_the_sources`.
+
+**The check hash:** the baseline's answerer ID is `assistant:v1:claude-sonnet-5-5:prompt-eb39dcf5:check-0cb61e75`,
+equal to `assistant_id()` at the head. `make ci`'s gate printed no "answerer check changed" line.
+
+**The main-aggregation test ran, not skipped:** `evals/tests/test_rag08b_citations.py`, 10 passed, 0 skipped (`-rs`).
+
+**Blocked counts:** listed per item in the reads file §5 (finding 5). EV-102's 365-day term was kept off the screen
+by the check (`false_policy`); the threat-model row now says so.
+
+**Who wrote the `human` marks:** the user edited `evals/fixtures/starter_set.jsonl` in their checkout:
+- EV-101 and EV-102 on 2026-11-12, committed by the session at `149409d` after checking the diff changed only
+  `reviewed_by`;
+- EV-102 again on 2026-11-13, after the approved edit set it back to `model`, committed at `02e68ec`.
+The session wrote only `model`.
+
+**Lists corrected:**
+- plan §6 and the PR body now name `testing.py` (for the user's explicit acknowledgement), `integrity.py`, the three
+  `services/rag/tests` pins (control surface through `RUNNER_SYNC_PATHS`), `test_render_nfkc.py` and
+  `test_member_pricing.py`;
+- the reads file §1 and §2 are repaired: EV-090's W3b rows are kept and marked superseded;
+- the PROGRESS pointers (row 10, #17a check 6, R00970) and decision 0015's #13b note (adapter, F8,
+  `fabricated_ok`) are updated.

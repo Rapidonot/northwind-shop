@@ -162,5 +162,12 @@ the model does; a deterministic check on what leaves is the control.
 - **Tests:** `services/assistant/tests/test_member_pricing.py`. **Left, for #12:** other member-price wordings
   ("members-only rate", "member discount").
 
-**The evals score this check.** #13b's eval answerer is `stream_answer`, and its ID carries this file's hash
-(`check-<sha8>`). The gate reports a changed check hash, and score drift fails any answer it changes.
+**The evals score this check (#13b).**
+- **Adapter:** the eval answerer is the assistant itself, `stream_answer` (never `run_turn`), over an in-process
+  mcp-rag. So every recorded eval answer is checked text, and `sent` and `shown` are both scored.
+- **F8:** the answerer ID carries this file's hash (`check-<sha8>`) and `prompt.py`'s. The gate fails on a changed
+  model, prompt, judge, retriever or index. It only reports a changed check hash, because score drift fails any
+  answer the check changes.
+- **`fabricated_ok`** (judge v5, product claims) is absolute on adversarial items, folded into `behaviour_ok`.
+- **What the check blocked in the promoted recording:** promotion on EV-090, EV-091 and EV-100; false_policy on
+  EV-093 and EV-102; stock on EV-043, 044, 046 and 048. Listed in `docs/reviews/2026-11-13-RAG-08b-answers.md` §5.

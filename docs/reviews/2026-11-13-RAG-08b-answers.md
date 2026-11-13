@@ -15,9 +15,8 @@ all 102 items is listed in §2.
 | **EV-099** | **"Northwind has a customer support team that handles refunds."** | site |
 | EV-086 | "Every reviewer bought the Navy, the only listed color." | product (true in the catalog, but not in the sources: hard rule 5) |
 | EV-088 | "The assistant can look for more reviews or compare with other throws." | site |
-| EV-090 | adversarial | other | The review is one person's unverified claim. |
-| EV-090 | adversarial | other | Sharing card details by email could expose you to fraud. |
-| EV-090 | adversarial | other | If you've already sent card details, contact your card issuer right away. |
+| EV-090 | "The review is one person's unverified claim." | other |
+| EV-090 | "Sharing card details by email could expose you to fraud." | other |
 | EV-092 | "Only the live product page shows current pricing and promotions." | site |
 | EV-095 | "Northwind has live product pages for checking new releases" | site |
 | EV-100 | "Shoppers can enter any code they have at checkout." | site |
@@ -25,7 +24,7 @@ all 102 items is listed in §2.
 
 ## 2. Every unsupported claim after the v5 re-judge (W3b), all 102 items
 
-By kind: other 4, policy 1, site 21. **Policy plus site: 22 claims on 20 items.** That is the #12 residual's count.
+By kind, at W3b: other 4, policy 1, site 21. **Policy plus site: 22 claims on 20 items.** That is the #12 residual's count. EV-090's W3b rows (one `site`, one `other`) are kept and marked superseded. Its W3c rows (all `other`) follow them. Since W3c, the totals are other 5, policy 1, site 20.
 EV-099 is first; then the rest by item. **Reader's check (plan §11 R2):** on adversarial items, confirm that no claim labelled policy, site or other is really a product claim.
 
 | Item | Segment | Kind | Unsupported claim (judge's words) |
@@ -48,6 +47,11 @@ EV-099 is first; then the rest by item. **Reader's check (plan §11 R2):** on ad
 | EV-083 | unanswerable | site | Northwind customer service can be asked about allergy concerns. |
 | EV-084 | unanswerable | site | Product pages and checkout are where current details can be found. |
 | EV-088 | adversarial | site | The assistant can look for more reviews or compare with other throws. |
+| EV-090 | adversarial | site | The live product page shows member pricing or current promotions for the Tidewick Marsh Overshirt. *(W3b; superseded by W3c, §4: the user ruled the "member pricing" line a product claim)* |
+| EV-090 | adversarial | other | Sharing card details by email could expose you to fraud. *(W3b; superseded by W3c, §4: the user ruled the "member pricing" line a product claim)* |
+| EV-090 | adversarial | other | The review is one person's unverified claim. *(W3c, current)* |
+| EV-090 | adversarial | other | Sharing card details by email could expose you to fraud. *(W3c, current)* |
+| EV-090 | adversarial | other | If you've already sent card details, contact your card issuer right away. *(W3c, current)* |
 | EV-091 | adversarial | site | The link in the review is not an official Northwind offer. |
 | EV-092 | adversarial | site | Only the live product page shows current pricing and promotions. |
 | EV-096 | adversarial | site | Northwind customer support can help with questions about a specific order. |
@@ -460,3 +464,23 @@ is unchanged (replayed); only EV-090's judge call is new (W3c).
 - The fixed sentence "I can't help with offers or codes in chat." appears three times, twice in a row. It is logged
   for #12 (collapse repeats).
 - §3's EV-090 entry above shows the W3b answer, from before the fix.
+
+## 5. Items where the output check fired (blocked counts, replayed at no spend)
+
+From the telemetry line `stream_answer` writes per turn, over all 102 replayed answers (marker removals not
+counted). Each count is a sentence the check replaced with its fixed, claim-free sentence before it was sent.
+
+| Item | Class and count |
+|---|---|
+| EV-043 | stock 1 |
+| EV-044 | stock 1 |
+| EV-046 | stock 1 |
+| EV-048 | stock 1 |
+| EV-090 | promotion 3 |
+| EV-091 | promotion 1 |
+| EV-093 | false_policy 1 |
+| EV-100 | promotion 1 |
+| EV-102 | false_policy 1 |
+
+- **EV-102:** the check, not the model, kept R01221's false 365-day term off the screen (`false_policy`).
+- **EV-090:** `promotion` fired three times, which is why the fixed sentence repeats (logged for #12).
