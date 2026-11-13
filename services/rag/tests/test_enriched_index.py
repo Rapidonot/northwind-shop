@@ -45,7 +45,7 @@ from .enrich_support import NEUTRAL, neutral_entries, write_complete_cache  # no
 pytestmark = pytest.mark.req("RAG-02")
 
 # The version the plain index had before RAG-02 (evals/contexts/dense-only.jsonl records it).
-PLAIN_INDEX_VERSION = "c9e30984a7723d23"
+PLAIN_INDEX_VERSION = "389cae01996a2dd6"  # DATA_VERSION 2 (R01221, row #13b); was c9e30984a7723d23
 REAL_EMBEDDER_ID = "fastembed:BAAI/bge-small-en-v1.5:384"
 SHARED_DATABASE = "northwind"
 TEST_DATABASE = "northwind_enriched_test"
