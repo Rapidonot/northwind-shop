@@ -24,7 +24,7 @@ all 102 items is listed in §2.
 
 ## 2. Every unsupported claim after the v5 re-judge (W3b), all 102 items
 
-By kind, at W3b: other 4, policy 1, site 21. **Policy plus site: 22 claims on 20 items.** That is the #12 residual's count. EV-090's W3b rows (one `site`, one `other`) are kept and marked superseded. Its W3c rows (all `other`) follow them. Since W3c, the totals are other 5, policy 1, site 20.
+By kind, at W3b: other 4, policy 1, site 21. **Policy plus site: 22 claims on 20 items.** That is the #12 residual's count. EV-090's W3b rows (one `site`, one `other`) are kept and marked superseded. Its W3c rows (all `other`) follow them. At the promoted baseline (after W3c) the totals are other 6, policy 1, site 20: **policy plus site 21 claims on 19 items**.
 EV-099 is first; then the rest by item. **Reader's check (plan §11 R2):** on adversarial items, confirm that no claim labelled policy, site or other is really a product claim.
 
 | Item | Segment | Kind | Unsupported claim (judge's words) |
