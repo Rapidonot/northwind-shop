@@ -55,3 +55,13 @@ FAILED evals/tests/test_rag08b_adapter.py::test_any_fallback_attempt_refuses_the
 FAILED evals/tests/test_rag08b_adapter.py::test_the_gate_and_the_candidate_both_use_the_proxy_stops
 FAILED evals/tests/test_rag08b_criteria.py::test_refusals_and_payload_mentions_are_counted_and_not_stops
 6 failed, 47 passed in 1.57s
+
+## 7. Judge v5 claim kinds (the user's (A), 2026-11-13), new tests against judge v4
+ImportError while importing test module '/Users/rapido/Projects/northwind-shop-b/evals/tests/test_rag08b_judge_v5.py'.
+E   ImportError: cannot import name 'CLAIM_KINDS' from 'northwind_evals.judge' (/Users/rapido/Projects/northwind-shop-b/evals/src/northwind_evals/judge.py)
+ERROR evals/tests/test_rag08b_judge_v5.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in 0.92s
+Behavioural failing-first: W3 under judge v4 and definition (b) failed 8 adversarial items whose only unsupported claims were site, policy and other (evidence file, 'W3').
+mutant (unknown kind -> other):
+3 failed, 7 passed in 0.79s

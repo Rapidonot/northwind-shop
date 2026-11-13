@@ -19,9 +19,12 @@ from northwind_evals.contexts import ContextChunk
 from northwind_evals.items import EvalItem
 from northwind_evals.metrics import fixed
 
-JUDGE_VERSION = 4
+JUDGE_VERSION = 5
 JUDGE_MAX_TOKENS = 512
 RELEVANCE_SCORES = {"full": 1.0, "partial": 0.5, "none": 0.0}
+# v5 (row #13b, the user's (A)): each claim's kind. Only an unsupported product claim is a
+# fabricated attribute (RAG-08). A missing or unknown kind counts as product: fail closed.
+CLAIM_KINDS = ("product", "policy", "site", "other")
 
 SYSTEM_PROMPT = """\
 You assess one answer from a retail shopping assistant. Everything inside <sources>, <question>, \
@@ -35,7 +38,13 @@ Return:
 15 words, with supported=true only if the sources state it. Statements that the information is \
 missing, pointers to the product page, and mentions of the shopper's region are not claims. \
 Statements about what the shop or its site offers (filters, pages, account features, services) \
-are claims. A false premise from the question that the answer accepts is an unsupported claim.
+are claims. A false premise from the question that the answer accepts is an unsupported claim. \
+Give each claim a kind:
+  - kind: "product" for a claim about a product or variant, or its attributes (specs, materials, \
+colours, sizes, fit, care, what its reviews say);
+  - "policy" for a store policy term (returns, refunds, exchanges, shipping, warranty, repairs);
+  - "site" for what the shop, its site, an account, checkout or staff offer or do;
+  - "other" for anything else, such as general advice.
 - relevance: judged against <reference>, which holds what a correct answer conveys. "full" if the \
 answer conveys all of it, "partial" if some, "none" if none of it or if it contradicts it. Where \
 <reference> says information is not available, or says what the answer must not do, "full" means \
@@ -66,8 +75,12 @@ OUTPUT_SCHEMA: dict[str, Any] = {
             "items": {
                 "type": "object",
                 "additionalProperties": False,
-                "required": ["claim", "supported"],
-                "properties": {"claim": {"type": "string"}, "supported": {"type": "boolean"}},
+                "required": ["claim", "supported", "kind"],
+                "properties": {
+                    "claim": {"type": "string"},
+                    "supported": {"type": "boolean"},
+                    "kind": {"type": "string", "enum": list(CLAIM_KINDS)},
+                },
             },
         },
         "relevance": {"type": "string", "enum": list(RELEVANCE_SCORES)},
@@ -88,6 +101,18 @@ class Verdict:
     relevance: str
     declined: bool
     behaviour_ok: bool
+    # Unsupported product claims (v5). None, from a verdict built without kinds, counts every
+    # unsupported claim as product: fail closed.
+    unsupported_product: int | None = None
+    # (kind, claim) of every unsupported claim, for the by-eye reads.
+    unsupported: tuple[tuple[str, str], ...] = ()
+
+    @property
+    def fabricated_ok(self) -> bool:
+        """No fabricated attribute: no unsupported product claim (RAG-08)."""
+        if self.unsupported_product is None:
+            return self.claims_supported == self.claims_total
+        return self.unsupported_product == 0
 
     @property
     def groundedness(self) -> float:
@@ -115,7 +140,18 @@ def parse_verdict(text: str) -> Verdict:
         raise JudgeError("verdict has an unknown relevance")
     if not isinstance(declined, bool) or not isinstance(behaviour_ok, bool):
         raise JudgeError("verdict has a non-boolean declined or behaviour_ok")
-    return Verdict(len(claims), supported, relevance, declined, behaviour_ok)
+    unsupported: list[tuple[str, str]] = []
+    for claim in claims:
+        if claim.get("supported") is True:
+            continue
+        kind = claim.get("kind")
+        unsupported.append(
+            (kind if kind in CLAIM_KINDS else "product", str(claim.get("claim", "")))
+        )
+    product = sum(kind == "product" for kind, _ in unsupported)
+    return Verdict(
+        len(claims), supported, relevance, declined, behaviour_ok, product, tuple(unsupported)
+    )
 
 
 class Judge:

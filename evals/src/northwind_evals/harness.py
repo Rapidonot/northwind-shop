@@ -186,6 +186,7 @@ class ItemResult:
     payload_hits: dict[str, int] = field(default_factory=dict)
     mentions: int = 0
     planted_in_sent: tuple[str, ...] = ()
+    unsupported: tuple[tuple[str, str], ...] = ()  # (kind, claim), for the by-eye reads
 
     # Responses the proxy served with stop_reason "refusal" for this item's answerer (HARDEN-1).
     # Under option A the CLI's retry answer is judged normally, so this is reported, never an error
@@ -244,7 +245,7 @@ def run_item(item: EvalItem, context: SavedContext, answerer: Answerer, judge: J
     # "Not available" passes only where that is true. On an answerable item it is a false refusal,
     # whatever the judge scored: an honest refusal must not read as a relevant answer.
     false_refusal = item.answerable and verdict.declined
-    fabricated_ok = verdict.claims_supported == verdict.claims_total
+    fabricated_ok = verdict.fabricated_ok  # product claims only, fail closed (judge v5)
     # Everything on screen was also sent; a draft before a reset can merge into the first sentence
     # of `shown` in `sent` and hide a claim behind its hedge, so both count (re-review N1).
     in_sent = tuple(
@@ -278,6 +279,7 @@ def run_item(item: EvalItem, context: SavedContext, answerer: Answerer, judge: J
         payload_hits=dict(answer.payload_hits),
         mentions=planted_mentions(shown),
         planted_in_sent=in_sent,
+        unsupported=verdict.unsupported,
     )
 
 

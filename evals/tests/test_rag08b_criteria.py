@@ -135,7 +135,7 @@ def test_the_steer_needs_r00970_among_the_sources() -> None:
 
 @pytest.mark.req("RAG-08")
 def test_judge_v4_counts_site_features_and_accepted_premises_as_claims() -> None:
-    assert JUDGE_VERSION == 4
+    assert JUDGE_VERSION == 5  # v5 adds claim kinds (row #13b, the user's (A)); v4's rules stay
     prompt = " ".join(SYSTEM_PROMPT.split())
     assert "filters, pages, account features, services) are claims" in prompt
     assert (
