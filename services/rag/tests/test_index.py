@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import replace
 from datetime import date
@@ -24,6 +25,25 @@ pytestmark = [pytest.mark.req("RAG-01"), pytest.mark.integration]
 
 VERSION = IndexVersion(data_version=1, dataset_sha256="0" * 64, chunker_version=1)
 VECTOR = "[" + ",".join(["0.1"] * 384) + "]"
+
+
+def rehash(fixtures: Path) -> Path:
+    """Re-sign an edited fixtures copy: each listed file's hash and `dataset_sha256`, by the
+    generator's formula. Since #10b ingest verifies the dataset first (Q4), an edit made to test
+    chunking or diffs must be re-hashed to reach them. The only re-hashing in the tests (plan
+    §5)."""
+    path = fixtures / "manifest.json"
+    manifest = json.loads(path.read_text(encoding="utf-8"))
+    files = {
+        name: hashlib.sha256((fixtures / name).read_bytes()).hexdigest()
+        for name in sorted(manifest["files"])
+    }
+    manifest["files"] = files
+    manifest["dataset_sha256"] = hashlib.sha256(
+        "".join(f"{n} {h}\n" for n, h in files.items()).encode()
+    ).hexdigest()
+    path.write_text(json.dumps(manifest), encoding="utf-8")
+    return fixtures
 
 
 def count(conn: psycopg.Connection, where: str = "true") -> int:
@@ -257,7 +277,7 @@ def test_missing_visibility_aborts_the_run_with_nothing_written(
         else:
             records[0]["visibility"] = None if how == "null" else "everyone"
 
-    path = edit(f"{source_type}.jsonl", _break)
+    path = rehash(edit(f"{source_type}.jsonl", _break))
     with pytest.raises(ChunkError):
         ingest(migrated, path, FakeEmbedder())
     assert count(migrated) == 0
@@ -274,7 +294,7 @@ def test_failed_run_leaves_an_existing_index_untouched(
         reviews[0].pop("visibility")
 
     with pytest.raises(ChunkError):
-        ingest(migrated, edit("reviews.jsonl", _break), FakeEmbedder())
+        ingest(migrated, rehash(edit("reviews.jsonl", _break)), FakeEmbedder())
     assert migrated.execute("SELECT count(*), max(updated_at) FROM rag_chunks").fetchone() == before
 
 
@@ -285,7 +305,7 @@ def test_planted_price_aborts_the_run_and_writes_nothing(
         products[3]["description"] += " Yours for $59.00."
 
     with pytest.raises(ChunkError, match="price or stock"):
-        ingest(migrated, edit("products.jsonl", plant), FakeEmbedder())
+        ingest(migrated, rehash(edit("products.jsonl", plant)), FakeEmbedder())
     assert count(migrated) == 0
     assert migrated.execute("SELECT count(*) FROM rag_index_manifest").fetchone() == (0,)
 
@@ -324,7 +344,7 @@ def test_edited_record_changes_only_its_own_chunks(
         reviews[0]["body"] += " Edited after the first run."
 
     fake = FakeEmbedder()
-    report = ingest(migrated, edit("reviews.jsonl", tweak), fake)
+    report = ingest(migrated, rehash(edit("reviews.jsonl", tweak)), fake)
     assert (report.inserted, report.updated, report.deleted, report.embedded) == (0, 1, 0, 1)
     assert len(fake.embedded) == 1
     now: dict[str, Any] = dict(
@@ -345,7 +365,7 @@ def test_removed_record_deletes_its_chunks(
     def drop(reviews: list[dict[str, Any]]) -> None:
         del reviews[5]
 
-    report = ingest(migrated, edit("reviews.jsonl", drop), FakeEmbedder())
+    report = ingest(migrated, rehash(edit("reviews.jsonl", drop)), FakeEmbedder())
     assert (report.deleted, report.inserted, report.updated, report.embedded) == (n, 0, 0, 0)
     assert count(migrated, f"source_id = '{victim}'") == 0
     assert count(migrated) == first.chunks - n
@@ -379,17 +399,23 @@ def test_version_change_adds_a_row_and_exactly_one_is_current(
 ) -> None:
     ingest(migrated, fixtures_copy, FakeEmbedder())
     path = fixtures_copy / "manifest.json"
+    old_sha = json.loads(path.read_text(encoding="utf-8"))["dataset_sha256"]
+    # A new dataset: a byte changed in a listed file (not one that is chunked), re-signed (#10b, Q4:
+    # a bare `dataset_sha256` edit is now refused, so the version change is made the real way).
+    regions = fixtures_copy / "regions.json"
+    regions.write_bytes(regions.read_bytes() + b"\n")
+    rehash(fixtures_copy)
     manifest = json.loads(path.read_text(encoding="utf-8"))
     manifest["data_version"] += 1
-    manifest["dataset_sha256"] = "ab" * 32
     path.write_text(json.dumps(manifest), encoding="utf-8")
+    assert manifest["dataset_sha256"] != old_sha
     ingest(migrated, fixtures_copy, FakeEmbedder())
     rows = migrated.execute(
         "SELECT data_version, dataset_sha256, is_current FROM rag_index_manifest ORDER BY 1"
     ).fetchall()
     assert [r[0] for r in rows] == [manifest["data_version"] - 1, manifest["data_version"]]
     assert [r[2] for r in rows] == [False, True]
-    assert rows[1][1] == "ab" * 32
+    assert rows[1][1] == manifest["dataset_sha256"]
     ingest(migrated, fixtures_copy, FakeEmbedder())
     assert migrated.execute("SELECT count(*) FROM rag_index_manifest").fetchone() == (2,)
 

@@ -12,12 +12,14 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Iterator, Mapping
+from collections.abc import Mapping
 from typing import Any
 
 import mcp.types as t
 
-from northwind_common.cards import contains_card_data
+# Moved to `northwind_common.cards` at #10b; re-exported for mcp-rag's own tests.
+from northwind_common.cards import argument_texts as argument_texts
+from northwind_common.cards import holds_card_data as holds_card_data
 from northwind_common.errors import ToolError
 from northwind_common.mcp_token import Claims
 from northwind_common.rag_tool import (
@@ -40,27 +42,6 @@ from northwind_mcp_rag.render import render_sources
 from northwind_mcp_rag.server import RagServer, ToolSpec, text_result
 
 log = logging.getLogger("northwind_mcp_rag")
-
-
-def argument_texts(value: Any) -> Iterator[str]:
-    """Every key and scalar leaf of the arguments, as raw text. Raw, not a JSON encoding: JSON
-    writes a newline or tab between digit groups as `\\n` or `\\t`, which hides a split card number
-    from the card check (security re-review M1)."""
-    if isinstance(value, Mapping):
-        for key, item in value.items():
-            yield str(key)
-            yield from argument_texts(item)
-    elif isinstance(value, list | tuple):
-        for item in value:
-            yield from argument_texts(item)
-    elif value is not None:
-        yield str(value)
-
-
-def holds_card_data(args: Mapping[str, Any]) -> bool:
-    """Card data in any key or value, or split across them (hard rule 1 names tool arguments)."""
-    texts = list(argument_texts(args))
-    return any(contains_card_data(text) for text in texts) or contains_card_data("\n".join(texts))
 
 
 def _bad_query() -> ToolError:

@@ -1,9 +1,11 @@
 """A per-turn token for Northwind's MCP servers (CC-10; NFR-01, NFR-02, hard rules 4 and 8).
 
 The gateway mints one for each turn from the caller it built itself. The token says who is asking
-(`aud`, `region`), which agent (`agent`), for which turn (`turn`, which the server's search cap is
-counted against) and until when (`exp`, at most `MAX_TTL_SECONDS` after minting). Servers take
-audience and region from the token, never from tool arguments.
+(`aud`, `region`), which agent (`agent`), for which server (`srv`), for which turn (`turn`, which
+the server's search cap is counted against) and until when (`exp`, at most `MAX_TTL_SECONDS` after
+minting). Servers take audience and region from the token, never from tool arguments, and accept
+only a token minted for themselves (`verify_for`; #10b, CC-10 security review L4), so a token for
+one server is refused by every other one that shares the key.
 
 Format: `v1.<base64url JSON claims>.<base64url HMAC-SHA256>`, signed with the key in
 `NORTHWIND_MCP_TOKEN_KEY`. The key comes only from the environment, is never logged, and never
@@ -32,7 +34,10 @@ MIN_KEY_CHARS = 32
 TTL_SECONDS = 120
 MAX_TTL_SECONDS = 120
 VERSION = "v1"
-CLAIMS = frozenset({"aud", "region", "agent", "turn", "exp"})
+CLAIMS = frozenset({"aud", "region", "agent", "srv", "turn", "exp"})
+RAG_SERVER = "northwind-rag"
+CATALOG_SERVER = "northwind-catalog"
+SERVERS = frozenset({RAG_SERVER, CATALOG_SERVER})
 _UUID4 = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
 _B64 = re.compile(r"^[A-Za-z0-9_-]+$")
 _REGION = re.compile(r"^[A-Z]{2,3}$")
@@ -56,6 +61,7 @@ class Claims:
     agent: str
     turn: str
     exp: int
+    srv: str
 
 
 def signing_key(environ: dict[str, str] | None = None) -> bytes:
@@ -90,8 +96,15 @@ def mint(
     key: bytes,
     now: float | None = None,
     ttl: int = TTL_SECONDS,
+    server: str = RAG_SERVER,
 ) -> tuple[str, Claims]:
-    """A fresh token and its claims. The turn id is new each time."""
+    """A fresh token and its claims, for one server. The turn id is new each time.
+
+    `server` defaults to northwind-rag only because the one production minter,
+    `northwind_assistant.rag_client`, is not changed at #10b; #12 passes it explicitly and removes
+    the default. A forgotten `server` gives a rag token, which every other server refuses."""
+    if server not in SERVERS:
+        raise ValueError("unknown server")
     if AGENT_AUDIENCE.get(agent) != audience:
         raise ValueError("agent and audience do not match")
     if not 0 < ttl <= MAX_TTL_SECONDS:
@@ -104,11 +117,13 @@ def mint(
         agent=agent,
         turn=str(uuid.uuid4()),
         exp=int(now if now is not None else time.time()) + ttl,
+        srv=server,
     )
     body = {
         "aud": claims.aud,
         "region": claims.region,
         "agent": claims.agent,
+        "srv": claims.srv,
         "turn": claims.turn,
         "exp": claims.exp,
     }
@@ -119,11 +134,15 @@ def mint(
 def _claims(body: Any, now: float) -> Claims:
     if not isinstance(body, dict) or set(body) != CLAIMS:
         raise TokenError
-    aud, region, agent, turn, exp = (body[k] for k in ("aud", "region", "agent", "turn", "exp"))
+    aud, region, agent, srv, turn, exp = (
+        body[k] for k in ("aud", "region", "agent", "srv", "turn", "exp")
+    )
     if (
         aud not in ("shopper", "staff")
         or not isinstance(agent, str)
         or AGENT_AUDIENCE.get(agent) != aud
+        or not isinstance(srv, str)
+        or srv not in SERVERS
         or not (region is None or (isinstance(region, str) and _REGION.match(region)))
         or (aud == "shopper" and region is None)
         or not (isinstance(turn, str) and _UUID4.match(turn))
@@ -133,7 +152,7 @@ def _claims(body: Any, now: float) -> Claims:
         or exp > now + MAX_TTL_SECONDS
     ):
         raise TokenError
-    return Claims(aud=aud, region=region, agent=agent, turn=turn, exp=exp)
+    return Claims(aud=aud, region=region, agent=agent, turn=turn, exp=exp, srv=srv)
 
 
 def verify(token: object, *, key: bytes, now: float | None = None) -> Claims:
@@ -152,6 +171,17 @@ def verify(token: object, *, key: bytes, now: float | None = None) -> Claims:
     except (UnicodeDecodeError, json.JSONDecodeError):
         raise TokenError from None
     return _claims(body, now if now is not None else time.time())
+
+
+def verify_for(token: object, *, key: bytes, server: str, now: float | None = None) -> Claims:
+    """`verify`, and the token must have been minted for `server` (L4). A server's gate calls this,
+    never bare `verify`; a token for another server is the same bare `TokenError`."""
+    if server not in SERVERS:
+        raise TokenError
+    claims = verify(token, key=key, now=now)
+    if not hmac.compare_digest(claims.srv.encode(), server.encode()):
+        raise TokenError
+    return claims
 
 
 def bearer(token: str) -> dict[str, str]:

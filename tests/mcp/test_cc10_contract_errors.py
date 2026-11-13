@@ -19,6 +19,7 @@ import pytest
 from northwind_common.errors import ENVELOPE_KEYS
 from northwind_common.rag_tool import NO_SOURCES, TOOL_NAME
 from northwind_common.tool_scopes import AGENT_TOOLS, FORBIDDEN_FRAGMENTS
+from northwind_mcp_catalog.tools import TOOLS as CATALOG_TOOLS
 from northwind_mcp_rag.retrieve import TOOLS
 from northwind_mcp_rag.server import Backend, RagServer
 from northwind_mcp_rag.testing import KEY, CallerSearcher, connect, running, token
@@ -189,7 +190,9 @@ def test_a_found_result_is_text_only_with_no_structured_content() -> None:
 @pytest.mark.req("NFR-01")
 def test_the_real_registry_holds_no_refund_capture_or_assign_tool_and_nothing_that_writes() -> None:
     fragments = FORBIDDEN_FRAGMENTS["shopper-assistant"]
-    for name, spec in TOOLS.items():
+    # #10b: mcp-catalog's registry joins (decision D1 scopes it to the assistant).
+    registry = {**TOOLS, **CATALOG_TOOLS}
+    for name, spec in registry.items():
         assert not any(f in name.lower() for f in fragments)
         schema = spec.tool.input_schema
         # Hard rule 9: a tool that changed state would take an idempotency key.
@@ -198,7 +201,7 @@ def test_the_real_registry_holds_no_refund_capture_or_assign_tool_and_nothing_th
         assert spec.tool.annotations.read_only_hint is True
         assert spec.tool.annotations.destructive_hint in (None, False)
     granted = {n for row in AGENT_TOOLS.values() for names in row.values() for n in names}
-    assert granted == set(TOOLS)
+    assert granted == set(registry)
 
 
 @pytest.mark.req("NFR-01")

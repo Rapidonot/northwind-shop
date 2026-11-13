@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import ast
 import base64
 import json
+from pathlib import Path
 
 import pytest
 
@@ -44,6 +46,8 @@ def good_body(**kw: object) -> dict[str, object]:
         "aud": "shopper",
         "region": "UK",
         "agent": "shopper-assistant",
+        # #10b (L4): a valid body names its server, so each bad-claim case fails on its own claim.
+        "srv": "northwind-rag",
         "turn": "1b4e28ba-2fa1-4d2e-883f-0016d3cca427",
         "exp": int(NOW) + 60,
     }
@@ -180,3 +184,190 @@ def test_the_key_is_not_in_the_token() -> None:
 
 def test_bearer_header() -> None:
     assert mcp_token.bearer("abc") == {"Authorization": "Bearer abc"}
+
+
+# ---- L4 (#10b): the token is bound to a server ---------------------------------------------------
+
+
+def for_server(server: str) -> str:
+    return mint(
+        audience="shopper",
+        region="UK",
+        agent="shopper-assistant",
+        key=KEY,
+        now=NOW,
+        server=server,
+    )[0]
+
+
+def test_the_servers_are_rag_and_catalog() -> None:
+    assert mcp_token.SERVERS == {"northwind-rag", "northwind-catalog"}
+    assert (mcp_token.RAG_SERVER, mcp_token.CATALOG_SERVER) == (
+        "northwind-rag",
+        "northwind-catalog",
+    )
+    assert "srv" in mcp_token.CLAIMS
+
+
+def test_the_default_server_is_northwind_rag() -> None:
+    token, claims = mint(
+        audience="shopper", region="UK", agent="shopper-assistant", key=KEY, now=NOW
+    )
+    assert claims.srv == "northwind-rag"
+    assert mcp_token.verify_for(token, key=KEY, server="northwind-rag", now=NOW).srv == claims.srv
+
+
+@pytest.mark.parametrize("server", ["northwind-rag", "northwind-catalog"])
+def test_srv_is_signed_into_the_token(server: str) -> None:
+    token = for_server(server)
+    payload = token.split(".")[1]
+    body = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
+    assert body["srv"] == server
+    assert verify(token, key=KEY, now=NOW).srv == server
+    # editing srv without re-signing breaks the signature
+    other = "northwind-catalog" if server == "northwind-rag" else "northwind-rag"
+    body["srv"] = other
+    forged = f"v1.{b64(body)}.{token.split('.')[2]}"
+    with pytest.raises(TokenError):
+        verify(forged, key=KEY, now=NOW)
+
+
+def test_a_token_without_srv_is_refused() -> None:
+    body = {k: v for k, v in good_body().items() if k != "srv"}
+    with pytest.raises(TokenError):
+        verify(forge(body), key=KEY, now=NOW)
+    with pytest.raises(TokenError):
+        mcp_token.verify_for(forge(body), key=KEY, server="northwind-rag", now=NOW)
+
+
+@pytest.mark.parametrize(
+    "srv", ["northwind-orders", "", "NORTHWIND-RAG", None, 7, ["northwind-rag"]]
+)
+def test_an_unknown_srv_is_refused(srv: object) -> None:
+    with pytest.raises(TokenError):
+        verify(forge(good_body(srv=srv)), key=KEY, now=NOW)
+
+
+@pytest.mark.parametrize(
+    ("minted", "asked"),
+    [("northwind-rag", "northwind-catalog"), ("northwind-catalog", "northwind-rag")],
+)
+def test_verify_for_refuses_the_other_server(minted: str, asked: str) -> None:
+    token = for_server(minted)
+    assert mcp_token.verify_for(token, key=KEY, server=minted, now=NOW).srv == minted
+    with pytest.raises(TokenError) as caught:
+        mcp_token.verify_for(token, key=KEY, server=asked, now=NOW)
+    assert str(caught.value) == str(TokenError())  # the same bare refusal
+
+
+def test_verify_for_refuses_an_unknown_server_and_still_checks_the_token() -> None:
+    with pytest.raises(TokenError):
+        mcp_token.verify_for(for_server("northwind-rag"), key=KEY, server="nope", now=NOW)
+    with pytest.raises(TokenError):
+        mcp_token.verify_for(
+            for_server("northwind-rag"), key=OTHER, server="northwind-rag", now=NOW
+        )
+    with pytest.raises(TokenError):
+        mcp_token.verify_for(
+            for_server("northwind-rag"), key=KEY, server="northwind-rag", now=NOW + 1000
+        )
+
+
+def test_minting_for_an_unknown_server_raises() -> None:
+    with pytest.raises(ValueError):
+        mint(
+            audience="shopper",
+            region="UK",
+            agent="shopper-assistant",
+            key=KEY,
+            now=NOW,
+            server="northwind-orders",
+        )
+
+
+SKIP_DIRS = {".git", ".venv", "node_modules", "tests", "__pycache__", ".claude", "cassettes"}
+
+
+def _non_test_sources(repo: Path) -> list[Path]:
+    """Every non-test Python file in the repository, whatever its source root (services, data,
+    evals and later roots such as agents-external), not just `services/*/src` (security review
+    L4, #10b)."""
+    return [
+        p
+        for p in repo.rglob("*.py")
+        if not SKIP_DIRS & set(p.relative_to(repo).parts[:-1]) and not p.name.startswith("test_")
+    ]
+
+
+def _bare_verify_uses(tree: ast.AST) -> list[int]:
+    """Lines that reach bare `verify`: a call named `verify`; an import of `verify` (any alias) or
+    of `*` from `mcp_token`; `.verify` on any name bound to the `mcp_token` module, called or not;
+    `getattr(<that name>, "verify")` (re-review N6)."""
+    modules = {"mcp_token"}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name.endswith("mcp_token"):
+                    modules.add(alias.asname or alias.name.split(".")[0])
+        elif isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                if alias.name == "mcp_token":
+                    modules.add(alias.asname or alias.name)
+    lines: list[int] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            func = node.func
+            name = func.id if isinstance(func, ast.Name) else getattr(func, "attr", "")
+            if name == "verify":
+                lines.append(node.lineno)
+            elif (
+                isinstance(func, ast.Name)
+                and func.id == "getattr"
+                and len(node.args) >= 2
+                and isinstance(node.args[0], ast.Name)
+                and node.args[0].id in modules
+                and isinstance(node.args[1], ast.Constant)
+                and node.args[1].value == "verify"
+            ):
+                lines.append(node.lineno)
+        elif isinstance(node, ast.ImportFrom) and (node.module or "").endswith("mcp_token"):
+            if any(alias.name in ("verify", "*") for alias in node.names):
+                lines.append(node.lineno)
+        elif isinstance(node, ast.Attribute) and node.attr == "verify":
+            receiver = node.value
+            if isinstance(receiver, ast.Name) and receiver.id in modules:
+                lines.append(node.lineno)
+            elif isinstance(receiver, ast.Attribute) and receiver.attr == "mcp_token":
+                lines.append(node.lineno)
+    return sorted(set(lines))
+
+
+def test_no_source_reaches_bare_verify() -> None:
+    """A server's gate uses `verify_for`; a bare `verify` would accept a token for any server.
+    Every source root, not only `services/*/src`."""
+    repo = Path(__file__).resolve().parents[3]
+    own = Path(mcp_token.__file__).resolve()
+    sources = [p for p in _non_test_sources(repo) if p.resolve() != own]
+    assert len(sources) > 40
+    assert any(p.parts[-3:-1] == ("src", "northwind_data") for p in sources)
+    offenders = [
+        f"{path.relative_to(repo)}:{line}"
+        for path in sources
+        for line in _bare_verify_uses(ast.parse(path.read_text(encoding="utf-8")))
+    ]
+    assert offenders == []
+
+
+def test_the_bare_verify_pin_sees_an_aliased_import_and_an_attribute() -> None:
+    code = (
+        "from northwind_common.mcp_token import verify as check\n"
+        "from northwind_common import mcp_token\n"
+        "x = mcp_token.verify\n"
+        "import northwind_common.mcp_token as tok\n"
+        "y = tok.verify\n"
+        "z = getattr(tok, 'verify')\n"
+        "from northwind_common.mcp_token import *\n"
+        "w = northwind_common.mcp_token.verify\n"
+        "ok = tok.verify_for\n"
+    )
+    assert _bare_verify_uses(ast.parse(code)) == [1, 3, 5, 6, 7, 8]

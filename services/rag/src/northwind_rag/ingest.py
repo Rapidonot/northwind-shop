@@ -1,4 +1,8 @@
-"""Versioned, idempotent ingestion of the fixtures into the index (RAG-01)."""
+"""Versioned, idempotent ingestion of the fixtures into the index (RAG-01).
+
+Both entry points verify the dataset first (#10b, Q4): fixtures whose bytes do not match their
+manifest's `dataset_sha256` abort the run before anything is read, migrated or written.
+"""
 
 from __future__ import annotations
 
@@ -6,7 +10,7 @@ from pathlib import Path
 
 import psycopg
 
-from northwind_data.ingest_guard import load_manifest
+from northwind_data.ingest_guard import load_manifest, verify_dataset
 from northwind_rag.chunking import CHUNKER_VERSION
 from northwind_rag.embedding import Embedder
 from northwind_rag.enrichment import CACHE_DIR, EnrichmentCache, EnrichmentError, apply_cache
@@ -26,8 +30,10 @@ def ingest(
     embedder: Embedder,
     max_chars: int = MAX_CHUNK_CHARS,
 ) -> IngestReport:
-    """Validates every chunk first, then syncs the index. Running it twice changes nothing."""
-    return _sync(conn, build_chunks(fixtures_dir, max_chars), fixtures_dir, embedder)
+    """Verifies the dataset, validates every chunk, then syncs the index. Running it twice changes
+    nothing."""
+    verified = verify_dataset(fixtures_dir)
+    return _sync(conn, build_chunks(fixtures_dir, max_chars), verified, fixtures_dir, embedder)
 
 
 def require_enriched_database(conn: psycopg.Connection) -> None:
@@ -45,17 +51,23 @@ def ingest_enriched(
 ) -> IngestReport:
     """The same, with each chunk's cached context. Reads the cache only, so it makes no calls."""
     require_enriched_database(conn)
+    verified = verify_dataset(fixtures_dir)
     chunks = apply_cache(build_chunks(fixtures_dir, max_chars), EnrichmentCache(cache_dir))
-    return _sync(conn, chunks, fixtures_dir, embedder)
+    return _sync(conn, chunks, verified, fixtures_dir, embedder)
 
 
 def _sync(
-    conn: psycopg.Connection, chunks: list[Chunk], fixtures_dir: Path, embedder: Embedder
+    conn: psycopg.Connection,
+    chunks: list[Chunk],
+    dataset_sha256: str,
+    fixtures_dir: Path,
+    embedder: Embedder,
 ) -> IngestReport:
     manifest = load_manifest(fixtures_dir)
     version = IndexVersion(
         data_version=manifest["data_version"],
-        dataset_sha256=manifest["dataset_sha256"],
+        # The hash that was verified, not a re-read of the manifest (security review L2).
+        dataset_sha256=dataset_sha256,
         chunker_version=CHUNKER_VERSION,
     )
     apply_migrations(conn)

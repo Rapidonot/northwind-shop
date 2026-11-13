@@ -216,9 +216,10 @@ def test_the_tool_the_assistant_really_offers_has_a_register_row() -> None:
     (2026-11-10, row #20), because the Orders subagent's two read-only tools (#20) are in-process
     SDK tools until `mcp-orders` lands. Each `@tool(` under `services/` must use a tool constant."""
     from northwind_common.tool_scopes import AGENT_TOOLS
+    from northwind_mcp_catalog.tools import TOOLS as CATALOG_TOOLS
     from northwind_mcp_rag.retrieve import TOOLS as RAG_TOOLS
 
-    served = set(RAG_TOOLS)
+    served = set(RAG_TOOLS) | set(CATALOG_TOOLS)  # mcp-catalog joins at #10b
     scoped = {name for row in AGENT_TOOLS.values() for names in row.values() for name in names}
     assert served, "the tool scan found nothing"
     assert scoped <= served, "an agent is scoped to a tool no server offers"

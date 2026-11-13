@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import shutil
 import uuid
 from collections.abc import Callable, Iterator
 from pathlib import Path
@@ -104,7 +105,8 @@ def test_the_staff_agent_reads_the_manifest_over_mcp(
     assert manifest == {
         **expected,
         "retriever_id": retriever_id(EMBEDDER),
-        "dataset_verified": False,
+        # #10b, Q4 (decision D4): built from the real fixtures, which the server verifies now.
+        "dataset_verified": True,
     }
     assert set(manifest) == {
         "index_version",
@@ -134,3 +136,89 @@ def test_no_canary_and_no_chunk_text_is_in_the_manifest(
         assert "NWCANARY-" not in text
         assert not [c for c in canaries if c in text]
         assert "P0009" not in text
+
+
+# ---- Q4 (#10b, decision D4): `dataset_verified` is checked against the server's fixtures ------
+
+
+def _tampered_copy(tmp_path: Path) -> Path:
+    target = tmp_path / "fixtures"
+    shutil.copytree(REPO / "data" / "fixtures", target)
+    path = target / "prices.jsonl"
+    data = bytearray(path.read_bytes())
+    data[len(data) // 2] ^= 0x01  # one byte; the manifest is not re-hashed
+    path.write_bytes(bytes(data))
+    return target
+
+
+def test_dataset_verified_is_true_when_the_fixtures_match_the_stored_hash(
+    index: Callable[[], psycopg.Connection],
+) -> None:
+    server = RagServer(Backend(index, EMBEDDER, fixtures_dir=REPO / "data" / "fixtures"), key=KEY)
+    with running(server) as url:
+        assert read(url, "catalog-subagent", None)["dataset_verified"] is True
+
+
+def test_dataset_verified_is_false_on_a_tampered_copy_and_the_manifest_is_still_served(
+    index: Callable[[], psycopg.Connection], tmp_path: Path
+) -> None:
+    server = RagServer(Backend(index, EMBEDDER, fixtures_dir=_tampered_copy(tmp_path)), key=KEY)
+    with running(server) as url:
+        manifest = read(url, "catalog-subagent", None)
+    with index() as conn:
+        expected = store.index_manifest(conn, "staff")
+    assert expected is not None
+    assert manifest["dataset_verified"] is False
+    assert manifest == {
+        **expected,
+        "retriever_id": retriever_id(EMBEDDER),
+        "dataset_verified": False,
+    }
+
+
+def test_dataset_verified_is_false_for_a_missing_directory_and_never_an_error(
+    index: Callable[[], psycopg.Connection], tmp_path: Path
+) -> None:
+    server = RagServer(Backend(index, EMBEDDER, fixtures_dir=tmp_path / "nowhere"), key=KEY)
+    with running(server) as url:
+        manifest = read(url, "catalog-subagent", None)
+    assert manifest["dataset_verified"] is False
+    assert "isError" not in manifest
+    assert manifest["index_version"]
+
+
+def test_the_backend_default_fixtures_directory_is_the_repos(
+    index: Callable[[], psycopg.Connection],
+) -> None:
+    assert Backend(index, EMBEDDER).fixtures_dir.resolve() == (REPO / "data" / "fixtures").resolve()
+
+
+def test_dataset_verified_is_false_when_verified_fixtures_differ_from_the_stored_hash() -> None:
+    """The fixtures verify, but the index was published from another dataset: false. Kills the
+    mutant that reports true whenever the fixtures verify (M6, #10b failing-first log)."""
+    schema = f"mcprag_other_{uuid.uuid4().hex[:12]}"
+    admin = psycopg.connect(_url(), autocommit=True)
+    admin.execute(f'CREATE SCHEMA "{schema}"')
+
+    def connect_other() -> psycopg.Connection:
+        return psycopg.connect(_url(), autocommit=True, options=f"-csearch_path={schema},public")
+
+    try:
+        with connect_other() as conn:
+            store.apply_migrations(conn)
+            conn.execute(
+                "INSERT INTO rag_index_manifest (index_version, data_version, dataset_sha256, "
+                "corpus_sha256, chunker_version, embedder_id, chunk_count, is_current) "
+                "VALUES ('other', 2, %s, 'c', 1, 'e', 0, true)",
+                ("ab" * 32,),
+            )
+        server = RagServer(
+            Backend(connect_other, EMBEDDER, fixtures_dir=REPO / "data" / "fixtures"), key=KEY
+        )
+        with running(server) as url:
+            manifest = read(url, "catalog-subagent", None)
+        assert manifest["dataset_sha256"] == "ab" * 32
+        assert manifest["dataset_verified"] is False
+    finally:
+        admin.execute(f'DROP SCHEMA "{schema}" CASCADE')
+        admin.close()
