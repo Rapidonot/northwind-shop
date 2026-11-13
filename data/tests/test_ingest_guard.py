@@ -265,7 +265,7 @@ def test_a_regular_file_is_read_in_blocking_mode(monkeypatch: pytest.MonkeyPatch
         switched.append(blocking)
         real(fd, blocking)
 
-    monkeypatch.setattr(ingest_guard.os, "set_blocking", spy)
+    monkeypatch.setattr(os, "set_blocking", spy)  # the module calls `os.set_blocking`
     ingest_guard.verify_dataset(FIXTURES_DIR)
     listed = json.loads((FIXTURES_DIR / "manifest.json").read_text(encoding="utf-8"))["files"]
     assert switched == [True] * (len(listed) + 1)
