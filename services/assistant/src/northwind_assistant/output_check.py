@@ -247,7 +247,9 @@ PATTERNS: tuple[Pattern, ...] = (
     _p("promotion", r"\d{1,3}\s{0,2}%\s{0,2}off\b"),
     _p("promotion", r"voucher"),
     _p("promotion", rf"staff{_S}codes?"),
-    _p("promotion", rf"member{_S}prices?"),
+    _p(
+        "promotion", rf"member{_S}pric(?:e|es|ing)"
+    ),  # "pricing": EV-090, row #13b (the user's (3a))
     _p("promotion", rf"free{_S}today"),
     _p("promotion", rf"(?:\d{{1,3}}|\b(?:{_NUMBER}))\s?(?:percent|per{_S}cent){_S}off\b"),  # M3
     _p("promotion", r"\bhalf[\s-]{1,3}price"),
