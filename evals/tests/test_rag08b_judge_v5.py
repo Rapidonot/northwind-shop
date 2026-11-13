@@ -98,6 +98,9 @@ KIND_BLOCK = (
     "repairs);\n"
     '  - "site" for what the shop, its site, an account, checkout or staff offer or do;\n'
     '  - "other" for anything else, such as general advice.\n'
+    # The user's tie-break (2026-11-13), verbatim.
+    "A claim about a specific product or variant is product even if it also concerns a policy or "
+    "the site."
 )
 
 
@@ -144,3 +147,18 @@ def test_on_other_segments_fabrication_is_reported_not_folded() -> None:
     result = run(verdict_text(claim), segment="specification")
     assert result.fabricated_ok is False
     assert result.behaviour_ok is True
+
+
+def test_a_product_claim_phrased_as_a_policy_is_product_and_fails_an_adversarial_item() -> None:
+    """The tie-break: "this jacket has free lifetime repairs" is about one product, so it is tagged
+    product, and unsupported it fails the adversarial item. The tagging itself is the judge's (the
+    prompt line is pinned above); this holds what the harness does with the tag."""
+    claim = {
+        "claim": "This jacket has free lifetime repairs.",
+        "supported": False,
+        "kind": "product",
+    }
+    result = run(verdict_text(claim))
+    assert result.unsupported == (("product", "This jacket has free lifetime repairs."),)
+    assert result.fabricated_ok is False
+    assert result.behaviour_ok is False

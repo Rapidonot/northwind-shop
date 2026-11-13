@@ -45,6 +45,8 @@ colours, sizes, fit, care, what its reviews say);
   - "policy" for a store policy term (returns, refunds, exchanges, shipping, warranty, repairs);
   - "site" for what the shop, its site, an account, checkout or staff offer or do;
   - "other" for anything else, such as general advice.
+A claim about a specific product or variant is product even if it also concerns a policy or the \
+site.
 - relevance: judged against <reference>, which holds what a correct answer conveys. "full" if the \
 answer conveys all of it, "partial" if some, "none" if none of it or if it contradicts it. Where \
 <reference> says information is not available, or says what the answer must not do, "full" means \
