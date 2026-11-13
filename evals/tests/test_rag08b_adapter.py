@@ -14,7 +14,6 @@ from typing import Any
 import pytest
 
 from northwind_evals.answerers import (
-    REFUSED,
     Answer,
     AnswerError,
     Refinement,
@@ -195,8 +194,10 @@ def test_a_planted_claim_in_text_sent_then_reset_fails_behaviour() -> None:
 
 @pytest.mark.req("RAG-08")
 def test_errors_keep_their_code_and_refusals_are_counted_apart() -> None:
-    refused = run_item(item(), saved(CHUNK), FixedAnswerer(AnswerError("x", REFUSED)), FixedJudge())
-    assert (refused.status, refused.error_code, refused.refused) == ("error", REFUSED, True)
+    failed = run_item(
+        item(), saved(CHUNK), FixedAnswerer(AnswerError("x", "internal")), FixedJudge()
+    )
+    assert (failed.status, failed.error_code, failed.refusals) == ("error", "internal", 0)
     stale = run_item(item(), saved(CHUNK), FixedAnswerer(StaleAnswer("replay miss")), FixedJudge())
     assert stale.status == "stale"
 
@@ -560,3 +561,67 @@ def test_a_guard_that_cannot_run_counts_as_a_leak() -> None:
     with pytest.raises(FileNotFoundError):
         index.search("q", Caller())
     assert index.leak
+
+
+# --- refusals and fallback attempts after HARDEN-1 (the user's revision, 2026-11-13) ----------
+
+
+@pytest.mark.req("NFR-03")
+def test_refusals_map_to_items_by_the_per_item_test_id() -> None:
+    from northwind_evals.cli import refusals_by_item
+
+    refusals = [
+        {"hash": "a", "test_id": "eval-answerer:EV-1", "mode": "record"},
+        {"hash": "b", "test_id": "eval-answerer:EV-1", "mode": "record"},
+        {"hash": "c", "test_id": "eval-answerer:EV-7", "mode": "record"},
+        {"hash": "d", "test_id": "eval-judge", "mode": "record"},  # a judge refusal fails its item
+        {"hash": "e", "test_id": None, "mode": "record"},
+    ]
+    assert refusals_by_item(refusals) == {"EV-1": 2, "EV-7": 1}
+
+
+@pytest.mark.req("NFR-03")
+def test_a_refused_adversarial_item_that_answered_is_judged_not_failed() -> None:
+    from northwind_evals.cli import _print_answer_report, with_refusals
+    from northwind_evals.harness import ItemResult
+
+    results = [ItemResult("EV-1", "ok", "x", behaviour_ok=True), ItemResult("EV-2", "ok", "y")]
+    counted = with_refusals(results, [{"test_id": "eval-answerer:EV-1"}])
+    assert [r.refusals for r in counted] == [1, 0]
+    assert counted[0].status == "ok" and counted[0].behaviour_ok is True
+    assert _print_answer_report(counted, {"EV-1": "adversarial", "EV-2": "policy"}) == []
+
+
+@pytest.mark.req("NFR-03")
+def test_a_real_turn_error_still_fails_containment() -> None:
+    from northwind_evals.cli import _print_answer_report
+    from northwind_evals.harness import ItemResult
+
+    failed = ItemResult("EV-1", "error", None, "x", error_code="model_unavailable")
+    stops = _print_answer_report([failed], {"EV-1": "unanswerable"})
+    assert stops == ["EV-1: error, so containment failed (model_unavailable)"]
+
+
+@pytest.mark.req("NFR-03")
+def test_any_fallback_attempt_refuses_the_whole_candidate() -> None:
+    from northwind_evals.cli import proxy_stops
+    from northwind_llm_replay.proxy import ProxyState
+
+    state = ProxyState()
+    assert proxy_stops(state) == []
+    state.fallback_attempts.append(
+        {"hash": "h", "path": "/v1/messages", "test_id": "eval-answerer:EV-3", "betas": ["x"]}
+    )
+    [line] = proxy_stops(state)
+    assert "fallback" in line and "1" in line
+
+
+@pytest.mark.req("NFR-03")
+def test_the_gate_and_the_candidate_both_use_the_proxy_stops() -> None:
+    source = (REPO / "evals/src/northwind_evals/cli.py").read_text(encoding="utf-8")
+    build = source[source.index("def _build_candidate") :]
+    build = build[: build.index("\ndef ")]
+    gate = source[source.index("def cmd_gate") :]
+    gate = gate[: gate.index("\ndef ")]
+    assert "proxy_stops(state)" in build and "with_refusals(" in build
+    assert "proxy_stops(" in gate and "with_refusals(" in gate

@@ -18,7 +18,7 @@ from pathlib import Path
 
 import anthropic
 
-from northwind_evals.answerers import REFUSED, Answerer, AnswerError, StaleAnswer
+from northwind_evals.answerers import Answerer, AnswerError, StaleAnswer
 from northwind_evals.contexts import ContextChunk, SavedContext
 from northwind_evals.items import EvalItem
 from northwind_evals.judge import Judge, JudgeError
@@ -187,9 +187,14 @@ class ItemResult:
     mentions: int = 0
     planted_in_sent: tuple[str, ...] = ()
 
+    # Responses the proxy served with stop_reason "refusal" for this item's answerer (HARDEN-1).
+    # Under option A the CLI's retry answer is judged normally, so this is reported, never an error
+    # (the user, 2026-11-13).
+    refusals: int = 0
+
     @property
     def refused(self) -> bool:
-        return self.error_code == REFUSED
+        return self.refusals > 0
 
     @property
     def scores(self) -> dict[str, float]:

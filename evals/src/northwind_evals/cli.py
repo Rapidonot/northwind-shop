@@ -13,11 +13,11 @@ import argparse
 import json
 import os
 import sys
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import psycopg
 
@@ -295,6 +295,38 @@ def _refinement_leaks(refinements: Sequence[Refinement]) -> list[str]:
     return leaks(as_contexts, internal_sources(FIXTURES), canaries)
 
 
+ANSWERER_TEST_ID = "eval-answerer:"
+
+
+def refusals_by_item(refusals: Sequence[Mapping[str, Any]]) -> dict[str, int]:
+    """The proxy's served refusals (HARDEN-1), per item, by the answerer's per-item test ID. A judge
+    refusal is not counted here: its item fails as a judge error."""
+    counts: dict[str, int] = {}
+    for refusal in refusals:
+        test_id = refusal.get("test_id")
+        if isinstance(test_id, str) and test_id.startswith(ANSWERER_TEST_ID):
+            item_id = test_id.removeprefix(ANSWERER_TEST_ID)
+            counts[item_id] = counts.get(item_id, 0) + 1
+    return counts
+
+
+def with_refusals(
+    results: Sequence[ItemResult], refusals: Sequence[Mapping[str, Any]]
+) -> list[ItemResult]:
+    counts = refusals_by_item(refusals)
+    return [replace(r, refusals=counts.get(r.item_id, 0)) for r in results]
+
+
+def proxy_stops(state: ProxyState) -> list[str]:
+    """A fallback beta the CLI sent (HARDEN-1): the proxy refused it and forwarded nothing, so the
+    run is not the recording it claims to be. Refuses the whole candidate, and fails the gate."""
+    attempts = state.fallback_attempts
+    if not attempts:
+        return []
+    betas = sorted({b for a in attempts for b in a.get("betas", [])})
+    return [f"the CLI sent a fallback beta {betas} in {len(attempts)} request(s): no candidate"]
+
+
 def _print_answer_report(
     results: Sequence[ItemResult], segments: dict[str, str], *, containment: bool = True
 ) -> list[str]:
@@ -305,7 +337,19 @@ def _print_answer_report(
     if grounded:
         overall = sum(grounded) / len(grounded)
         print(f"  groundedness overall {overall:.3f} (Gate 1 target {GROUNDEDNESS_TARGET})")
-    print(f"  refused {sum(r.refused for r in results)}")
+    refused = [r for r in results if r.refusals]
+    print(f"  refused {len(refused)} item(s), {sum(r.refusals for r in refused)} response(s)")
+    for r in refused:
+        print(f"  refused {r.item_id} {r.refusals} ({segments.get(r.item_id, '?')})")
+    by_segment: dict[str, int] = {}
+    for r in refused:
+        by_segment[segments.get(r.item_id, "?")] = (
+            by_segment.get(segments.get(r.item_id, "?"), 0) + 1
+        )
+    if by_segment:
+        print(
+            "  refused by segment " + ", ".join(f"{k} {v}" for k, v in sorted(by_segment.items()))
+        )
     print(f"  payload mentions {sum(r.mentions for r in results)} (counted, not gated)")
     # The payload stop rule (#13), whatever the segment unless it says otherwise.
     zero = [
@@ -407,6 +451,7 @@ def _build_candidate(chosen_size: str, mode: str) -> int:
 
     with _clients(mode) as (answerer, judge, state, index):
         results = run_answers(chosen, contexts, answerer, judge, progress)
+    results = with_refusals(results, state.refusals)
     if state.scan_failures:
         print(f"not writing a candidate: scanner refused {state.scan_failures}", file=sys.stderr)
         return 1
@@ -425,7 +470,7 @@ def _build_candidate(chosen_size: str, mode: str) -> int:
             return 1
         save_refinements(REFINEMENTS, [*kept, *new])
     segments = {item.id: item.segment for item in items}
-    stops = _print_answer_report(results, segments)
+    stops = _print_answer_report(results, segments) + proxy_stops(state)
     if stops:
         for line in stops:
             print(f"  {line}", file=sys.stderr)
@@ -502,7 +547,7 @@ def cmd_gate(args: argparse.Namespace) -> int:
     stale = _stale_ids(recorded, contexts, live, current)
     reasons = {i: _stale_reason(contexts.get(i), live[i], current) for i in stale}
     fresh = [item for item in recorded if item.id not in stale]
-    with _clients("replay") as (answerer, judge, _state, _index):
+    with _clients("replay") as (answerer, judge, state, _index):
         results = run_answers(fresh, contexts, answerer, judge)
         ids = {
             "retriever_id": current,
@@ -510,6 +555,7 @@ def cmd_gate(args: argparse.Namespace) -> int:
             "answerer_id": answerer.id,
             "judge_id": judge.id,
         }
+    results = with_refusals(results, state.refusals)
 
     stale += [r.item_id for r in results if r.status == "stale"]
     reasons.update({r.item_id: "replay miss" for r in results if r.status == "stale"})
@@ -533,6 +579,7 @@ def cmd_gate(args: argparse.Namespace) -> int:
     # Printed and failed here too: a payload past the check, a planted claim sent or a failed
     # containment never passes the gate in silence (security review M2).
     result.problems += _print_answer_report(results, segments, containment=False)
+    result.problems += proxy_stops(state)
     _print_rows(result)
     for note in identity_notes:
         print(f"  {note}")

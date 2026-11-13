@@ -39,3 +39,19 @@ FAILED evals/tests/test_refinements_integrity.py::test_a_duplicate_entry_is_refu
 5 failed, 3 passed in 1.32s
 mutant (rule unwired):
 5 failed, 3 passed in 1.27s
+
+## 6. Refusals and fallback attempts (the user's revision 2026-11-13), new tests against the code before the change
+__________ test_errors_keep_their_code_and_refusals_are_counted_apart __________
+    def test_errors_keep_their_code_and_refusals_are_counted_apart() -> None:
+        failed = run_item(
+>       assert (failed.status, failed.error_code, failed.refusals) == ("error", "internal", 0)
+______ test_a_refused_adversarial_item_that_answered_is_judged_not_failed ______
+    def test_a_refused_adversarial_item_that_answered_is_judged_not_failed() -> None:
+        # which is judged normally. Reported per item and per segment, never an error or a stop.
+FAILED evals/tests/test_rag08b_adapter.py::test_errors_keep_their_code_and_refusals_are_counted_apart
+FAILED evals/tests/test_rag08b_adapter.py::test_refusals_map_to_items_by_the_per_item_test_id
+FAILED evals/tests/test_rag08b_adapter.py::test_a_refused_adversarial_item_that_answered_is_judged_not_failed
+FAILED evals/tests/test_rag08b_adapter.py::test_any_fallback_attempt_refuses_the_whole_candidate
+FAILED evals/tests/test_rag08b_adapter.py::test_the_gate_and_the_candidate_both_use_the_proxy_stops
+FAILED evals/tests/test_rag08b_criteria.py::test_refusals_and_payload_mentions_are_counted_and_not_stops
+6 failed, 47 passed in 1.57s

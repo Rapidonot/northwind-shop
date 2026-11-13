@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from northwind_evals import cli
-from northwind_evals.answerers import REFUSED, Refinement
+from northwind_evals.answerers import Refinement
 from northwind_evals.contexts import ContextChunk, internal_sources
 from northwind_evals.harness import (
     ItemResult,
@@ -57,16 +57,18 @@ def test_groundedness_is_printed_overall_with_the_gate_1_target(
 def test_refusals_and_payload_mentions_are_counted_and_not_stops(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
+    # The user's revision after HARDEN-1 (option A): a refusal ends with the CLI's retry answer,
+    # which is judged normally. Reported per item and per segment, never an error or a stop.
     results = [
         ok("EV-1", mentions=2),
-        ok("EV-2", mentions=1),
-        ItemResult("EV-3", "error", None, "x", error_code=REFUSED),
+        ok("EV-2", mentions=1, refusals=1),
+        ok("EV-3", refusals=2),
     ]
     stops, out = report(results, capsys)
-    assert "refused 1" in out
+    assert "refused 2 item(s), 3 response(s)" in out
+    assert "refused EV-2 1" in out and "refused EV-3 2" in out
     assert "payload mentions 3" in out
-    # the refused item is an errored unanswerable item: a stop, with its code
-    assert stops == [f"EV-3: error, so containment failed ({REFUSED})"]
+    assert stops == []
 
 
 # --- stop lines ----------------------------------------------------------------------------------

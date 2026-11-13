@@ -32,8 +32,6 @@ from typing import Any, Protocol
 from northwind_evals.contexts import ContextChunk
 from northwind_evals.items import EvalItem
 
-# Error codes an answer can end with. `refused` is counted on its own (the user, row #13b).
-REFUSED = "refused"
 REFINEMENT_MISS = "refinement miss"
 REPLAY_MISS = "replay miss"
 
