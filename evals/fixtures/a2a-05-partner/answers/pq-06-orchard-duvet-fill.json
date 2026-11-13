@@ -1,0 +1,66 @@
+{
+  "a2a05_use": "answer",
+  "answer": {
+    "citations": [
+      "P0138"
+    ],
+    "outcome": "answered",
+    "resets": 0,
+    "sent": "The Larchpell Orchard Duvet is filled with washable wool and has a cotton percale shell [P0138]. Its warmth rating is \"all-season,\" so it's designed for year-round use [P0138].\n\nHow warm it feels depends on you and your bedroom. For current details on a specific size or colour, check the live product page.",
+    "shown": "The Larchpell Orchard Duvet is filled with washable wool and has a cotton percale shell [P0138]. Its warmth rating is \"all-season,\" so it's designed for year-round use [P0138].\n\nHow warm it feels depends on you and your bedroom. For current details on a specific size or colour, check the live product page."
+  },
+  "assistant_id": "assistant:v1:claude-sonnet-5-5:prompt-eb39dcf5:check-0cb61e75",
+  "context": [
+    {
+      "chunk_id": "product:P0138:0",
+      "source_id": "P0138",
+      "source_type": "product",
+      "text": "Larchpell Orchard Duvet\n\nBrand: Larchpell. Department: Bedding.\n\nThe Larchpell Orchard Duvet keeps you comfortable through the night. Made from cotton percale shell. Filled with washable wool for all-season comfort. Made in India.\n\nAttributes: country_of_origin: India; fill: washable wool; material: cotton percale shell; warmth: all-season.\n\nSizes: Twin, Full, Queen, King.\n\nColours: Clay, Forest."
+    },
+    {
+      "chunk_id": "product:P0139:0",
+      "source_id": "P0139",
+      "source_type": "product",
+      "text": "Larchpell Skerry Duvet\n\nBrand: Larchpell. Department: Bedding.\n\nThe Larchpell Skerry Duvet is a duvet for restful nights. Made from cotton percale shell. Filled with duck down for extra warm comfort. Made in Portugal.\n\nAttributes: country_of_origin: Portugal; fill: duck down; material: cotton percale shell; warmth: extra warm.\n\nSizes: Twin, Full, Queen.\n\nColours: Heather Grey, Navy."
+    },
+    {
+      "chunk_id": "product:P0140:0",
+      "source_id": "P0140",
+      "source_type": "product",
+      "text": "Larchpell Tarn Duvet\n\nBrand: Larchpell. Department: Bedding.\n\nThe Larchpell Tarn Duvet keeps you comfortable through the night. Made from cotton percale shell. Filled with down alternative for lightweight comfort. Made in Vietnam.\n\nAttributes: country_of_origin: Vietnam; fill: down alternative; material: cotton percale shell; warmth: lightweight.\n\nSizes: Twin, Full, Queen, King.\n\nColours: Oat, White."
+    },
+    {
+      "chunk_id": "product:P0142:0",
+      "source_id": "P0142",
+      "source_type": "product",
+      "text": "Larchpell Skerry Comforter\n\nBrand: Larchpell. Department: Bedding.\n\nThe Larchpell Skerry Comforter keeps you comfortable through the night. Made from cotton percale shell. Filled with washable wool for extra warm comfort. Made in Portugal.\n\nAttributes: country_of_origin: Portugal; fill: washable wool; material: cotton percale shell; warmth: extra warm.\n\nSizes: Full, Queen.\n\nColours: Slate."
+    },
+    {
+      "chunk_id": "variant:P0138-CLY-FULL:0",
+      "source_id": "P0138-CLY-FULL",
+      "source_type": "variant",
+      "text": "Larchpell Orchard Duvet\n\nColour: Clay. Size: Full. SKU: NW-0138-CLY-FULL."
+    }
+  ],
+  "disclosure": {
+    "in_model_text": false,
+    "in_shown": false
+  },
+  "kind": "product_question",
+  "message": "What is the fill in the Larchpell Orchard Duvet, and is it warm enough to use all year?",
+  "message_sha256": "10d67f4faa80cd6c1ea05244595a78540db07fca9ec7f2a612fa04ed7b714e06",
+  "name": "pq-06-orchard-duvet-fill",
+  "note": "A2A-05 replays this text by name; never when assistant_id is not current.",
+  "provisional": true,
+  "recorded": "2026-11-13",
+  "refinements": [],
+  "region": "US",
+  "script_sha256": "2ca30e4d19077f4463ad672bb8afc05bc239be181cb5682ef4fe0f168eacf235",
+  "suite": "a2a-05-partner",
+  "upstream_calls": [
+    {
+      "model": "claude-sonnet-5-5",
+      "stop_reason": "end_turn"
+    }
+  ]
+}

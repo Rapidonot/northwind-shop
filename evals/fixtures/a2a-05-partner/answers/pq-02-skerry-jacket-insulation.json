@@ -1,0 +1,68 @@
+{
+  "a2a05_use": "answer",
+  "answer": {
+    "citations": [
+      "P0021",
+      "P0028",
+      "P0022"
+    ],
+    "outcome": "answered",
+    "resets": 0,
+    "sent": "The Tidewick Skerry Insulated Jacket uses LoftCore synthetic insulation, which stays warm even when damp [P0021].\n\nIt isn't listed as packable [P0021], so it doesn't pack into its own pocket. The sources don't give a packed size. If you want a jacket that packs down, the Tidewick Thistle Puffer [P0028] and the Brindlemoor Fen Insulated Jacket [P0022] both pack into their own pockets. Both use down insulation instead of synthetic.",
+    "shown": "The Tidewick Skerry Insulated Jacket uses LoftCore synthetic insulation, which stays warm even when damp [P0021].\n\nIt isn't listed as packable [P0021], so it doesn't pack into its own pocket. The sources don't give a packed size. If you want a jacket that packs down, the Tidewick Thistle Puffer [P0028] and the Brindlemoor Fen Insulated Jacket [P0022] both pack into their own pockets. Both use down insulation instead of synthetic."
+  },
+  "assistant_id": "assistant:v1:claude-sonnet-5-5:prompt-eb39dcf5:check-0cb61e75",
+  "context": [
+    {
+      "chunk_id": "product:P0021:0",
+      "source_id": "P0021",
+      "source_type": "product",
+      "text": "Tidewick Skerry Insulated Jacket\n\nBrand: Tidewick. Department: Jackets.\n\nThe Tidewick Skerry Insulated Jacket brings serious warmth to winter walks and cold commutes. A DWR finish sheds light showers; it is water-resistant rather than waterproof. LoftCore synthetic insulation stays warm even when damp. Made from recycled nylon. It weighs 630 g. Regular fit. Runs true to size. Made in Turkey.\n\nAttributes: country_of_origin: Turkey; fit_guidance: true_to_size; insulation: synthetic; material: recycled nylon; packable: False; water_protection: water_resistant; weight_g: 630.\n\nSizes: XS, S, M, L.\n\nColours: Forest.\n\nFits: regular."
+    },
+    {
+      "chunk_id": "product:P0028:0",
+      "source_id": "P0028",
+      "source_type": "product",
+      "text": "Tidewick Thistle Puffer\n\nBrand: Tidewick. Department: Jackets.\n\nThe Tidewick Thistle Puffer is a warm insulated jacket for cold, dry days. A DWR finish sheds light showers; it is water-resistant rather than waterproof. 800-fill-power down insulation traps heat without bulk. Made from nylon ripstop. It weighs 790 g. It packs into its own pocket. Regular fit. Runs true to size. Made in Mexico.\n\nAttributes: country_of_origin: Mexico; fill_power: 800; fit_guidance: true_to_size; insulation: down; material: nylon ripstop; packable: True; water_protection: water_resistant; weight_g: 790.\n\nSizes: S, M.\n\nColours: Slate.\n\nFits: regular."
+    },
+    {
+      "chunk_id": "product:P0005:0",
+      "source_id": "P0005",
+      "source_type": "product",
+      "text": "Tidewick Drizzle Jacket\n\nBrand: Tidewick. Department: Jackets.\n\nThe Tidewick Drizzle Jacket is a no-fuss rain shell for trail days and city rain alike. Weather-ready: the DWR finish sheds rain on short walks and quick commutes. The stowable hood keeps rain off your face. Made from recycled polyester with DWR finish. It weighs 310 g. It packs into its own pocket. Cut in a relaxed fit with extra room through the chest and shoulders, it suits broader builds and layering underneath. Runs true to size. Made in Portugal.\n\nAttributes: country_of_origin: Portugal; fit_guidance: true_to_size; hood: stowable; material: recycled polyester with DWR finish; packable: True; water_protection: water_resistant; weight_g: 310.\n\nSizes: S, M, L, XL, 2XL.\n\nColours: Sage, Navy.\n\nFits: relaxed."
+    },
+    {
+      "chunk_id": "product:P0022:0",
+      "source_id": "P0022",
+      "source_type": "product",
+      "text": "Brindlemoor Fen Insulated Jacket\n\nBrand: Brindlemoor. Department: Jackets.\n\nThe Brindlemoor Fen Insulated Jacket brings serious warmth to winter walks and cold commutes. A DWR finish sheds light showers; it is water-resistant rather than waterproof. 650-fill-power down insulation traps heat without bulk. Made from nylon ripstop. It weighs 610 g. It packs into its own pocket. Regular fit. Runs true to size. Made in Vietnam.\n\nAttributes: country_of_origin: Vietnam; fill_power: 650; fit_guidance: true_to_size; insulation: down; material: nylon ripstop; packable: True; water_protection: water_resistant; weight_g: 610.\n\nSizes: M, L, XL.\n\nColours: Charcoal.\n\nFits: regular."
+    },
+    {
+      "chunk_id": "variant:P0021-FOR-REG-M:0",
+      "source_id": "P0021-FOR-REG-M",
+      "source_type": "variant",
+      "text": "Tidewick Skerry Insulated Jacket\n\nColour: Forest. Size: M. Fit: regular. SKU: NW-0021-FOR-REG-M."
+    }
+  ],
+  "disclosure": {
+    "in_model_text": false,
+    "in_shown": false
+  },
+  "kind": "product_question",
+  "message": "What insulation does the Tidewick Skerry Insulated Jacket use, and does it pack down small?",
+  "message_sha256": "87b48c616cdfe078446833ba71fde8a21ab6e39cfe0eed69759d19b402af2497",
+  "name": "pq-02-skerry-jacket-insulation",
+  "note": "A2A-05 replays this text by name; never when assistant_id is not current.",
+  "provisional": true,
+  "recorded": "2026-11-13",
+  "refinements": [],
+  "region": "US",
+  "script_sha256": "2ca30e4d19077f4463ad672bb8afc05bc239be181cb5682ef4fe0f168eacf235",
+  "suite": "a2a-05-partner",
+  "upstream_calls": [
+    {
+      "model": "claude-sonnet-5-5",
+      "stop_reason": "end_turn"
+    }
+  ]
+}

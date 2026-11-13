@@ -1,0 +1,739 @@
+....FFFFFFFFFFFFFFFFFFFF..................................               [100%]
+=================================== FAILURES ===================================
+______________________ test_exactly_one_fixture_per_turn _______________________
+
+    def test_exactly_one_fixture_per_turn() -> None:
+        present = sorted(p.name for p in ANSWERS.glob("*")) if ANSWERS.exists() else []
+>       assert present == sorted(f"{name}.json" for name in NAMES)
+E       AssertionError: assert [] == ['oos-01-refu...it.json', ...]
+E         
+E         Right contains 9 more items, first extra item: 'oos-01-refund.json'
+E         Use -v to get more diff
+
+evals/tests/test_a2a05_partner.py:666: AssertionError
+_____________ test_every_fixture_was_recorded_against_this_script ______________
+
+    def test_every_fixture_was_recorded_against_this_script() -> None:
+        digest = script_sha256()
+        for name in NAMES:
+>           fixture = partner_fixture(name)
+                      ^^^^^^^^^^^^^^^^^^^^^
+
+evals/tests/test_a2a05_partner.py:672: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+evals/tests/test_a2a05_partner.py:114: in partner_fixture
+    fixture: dict[str, Any] = json.loads((answers / f"{name}.json").read_text(encoding="utf-8"))
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.12/3.12.16/Frameworks/Python.framework/Versions/3.12/lib/python3.12/pathlib.py:1027: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/Users/rapido/Projects/northwind-shop-b/evals/fixtures/a2a-05-partner/answers/pq-01-breakwater-waterproofing.json')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/Users/rapido/Projects/northwind-shop-b/evals/fixtures/a2a-05-partner/answers/pq-01-breakwater-waterproofing.json'
+
+/opt/homebrew/Cellar/python@3.12/3.12.16/Frameworks/Python.framework/Versions/3.12/lib/python3.12/pathlib.py:1013: FileNotFoundError
+____ test_every_named_fixture_replays_clean[pq-01-breakwater-waterproofing] ____
+
+name = 'pq-01-breakwater-waterproofing'
+
+    @pytest.mark.parametrize("name", NAMES)
+    def test_every_named_fixture_replays_clean(name: str) -> None:
+        """Checks 1 and 3–8, on the fixture as A2A-05 will load it: by name, with no proxy."""
+>       fixture = partner_fixture(name)
+                  ^^^^^^^^^^^^^^^^^^^^^
+
+evals/tests/test_a2a05_partner.py:680: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+evals/tests/test_a2a05_partner.py:114: in partner_fixture
+    fixture: dict[str, Any] = json.loads((answers / f"{name}.json").read_text(encoding="utf-8"))
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.12/3.12.16/Frameworks/Python.framework/Versions/3.12/lib/python3.12/pathlib.py:1027: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/Users/rapido/Projects/northwind-shop-b/evals/fixtures/a2a-05-partner/answers/pq-01-breakwater-waterproofing.json')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/Users/rapido/Projects/northwind-shop-b/evals/fixtures/a2a-05-partner/answers/pq-01-breakwater-waterproofing.json'
+
+/opt/homebrew/Cellar/python@3.12/3.12.16/Frameworks/Python.framework/Versions/3.12/lib/python3.12/pathlib.py:1013: FileNotFoundError
+____ test_every_named_fixture_replays_clean[pq-02-skerry-jacket-insulation] ____
+
+name = 'pq-02-skerry-jacket-insulation'
+
+    @pytest.mark.parametrize("name", NAMES)
+    def test_every_named_fixture_replays_clean(name: str) -> None:
+        """Checks 1 and 3–8, on the fixture as A2A-05 will load it: by name, with no proxy."""
+>       fixture = partner_fixture(name)
+                  ^^^^^^^^^^^^^^^^^^^^^
+
+evals/tests/test_a2a05_partner.py:680: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+evals/tests/test_a2a05_partner.py:114: in partner_fixture
+    fixture: dict[str, Any] = json.loads((answers / f"{name}.json").read_text(encoding="utf-8"))
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.12/3.12.16/Frameworks/Python.framework/Versions/3.12/lib/python3.12/pathlib.py:1027: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/Users/rapido/Projects/northwind-shop-b/evals/fixtures/a2a-05-partner/answers/pq-02-skerry-jacket-insulation.json')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/Users/rapido/Projects/northwind-shop-b/evals/fixtures/a2a-05-partner/answers/pq-02-skerry-jacket-insulation.json'
+
+/opt/homebrew/Cellar/python@3.12/3.12.16/Frameworks/Python.framework/Versions/3.12/lib/python3.12/pathlib.py:1013: FileNotFoundError
+____ test_every_named_fixture_replays_clean[pq-03-skerry-base-layer-fabric] ____
+
+name = 'pq-03-skerry-base-layer-fabric'
+
+    @pytest.mark.parametrize("name", NAMES)
+    def test_every_named_fixture_replays_clean(name: str) -> None:
+        """Checks 1 and 3–8, on the fixture as A2A-05 will load it: by name, with no proxy."""
+>       fixture = partner_fixture(name)
+                  ^^^^^^^^^^^^^^^^^^^^^
+
+evals/tests/test_a2a05_partner.py:680: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+evals/tests/test_a2a05_partner.py:114: in partner_fixture
+    fixture: dict[str, Any] = json.loads((answers / f"{name}.json").read_text(encoding="utf-8"))
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.12/3.12.16/Frameworks/Python.framework/Versions/3.12/lib/python3.12/pathlib.py:1027: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/Users/rapido/Projects/northwind-shop-b/evals/fixtures/a2a-05-partner/answers/pq-03-skerry-base-layer-fabric.json')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/Users/rapido/Projects/northwind-shop-b/evals/fixtures/a2a-05-partner/answers/pq-03-skerry-base-layer-fabric.json'
+
+/opt/homebrew/Cellar/python@3.12/3.12.16/Frameworks/Python.framework/Versions/3.12/lib/python3.12/pathlib.py:1013: FileNotFoundError
+_______ test_every_named_fixture_replays_clean[pq-04-juniper-pants-fit] ________
+
+name = 'pq-04-juniper-pants-fit'
+
+    @pytest.mark.parametrize("name", NAMES)
+    def test_every_named_fixture_replays_clean(name: str) -> None:
+        """Checks 1 and 3–8, on the fixture as A2A-05 will load it: by name, with no proxy."""
+>       fixture = partner_fixture(name)
+                  ^^^^^^^^^^^^^^^^^^^^^
+
+evals/tests/test_a2a05_partner.py:680: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+evals/tests/test_a2a05_partner.py:114: in partner_fixture
+    fixture: dict[str, Any] = json.loads((answers / f"{name}.json").read_text(encoding="utf-8"))
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.12/3.12.16/Frameworks/Python.framework/Versions/3.12/lib/python3.12/pathlib.py:1027: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/Users/rapido/Projects/northwind-shop-b/evals/fixtures/a2a-05-partner/answers/pq-04-juniper-pants-fit.json')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/Users/rapido/Projects/northwind-shop-b/evals/fixtures/a2a-05-partner/answers/pq-04-juniper-pants-fit.json'
+
+/opt/homebrew/Cellar/python@3.12/3.12.16/Frameworks/Python.framework/Versions/3.12/lib/python3.12/pathlib.py:1013: FileNotFoundError
+______ test_every_named_fixture_replays_clean[pq-05-sateen-sheet-pockets] ______
+
+name = 'pq-05-sateen-sheet-pockets'
+
+    @pytest.mark.parametrize("name", NAMES)
+    def test_every_named_fixture_replays_clean(name: str) -> None:
+        """Checks 1 and 3–8, on the fixture as A2A-05 will load it: by name, with no proxy."""
+>       fixture = partner_fixture(name)
+                  ^^^^^^^^^^^^^^^^^^^^^
+
+evals/tests/test_a2a05_partner.py:680: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+evals/tests/test_a2a05_partner.py:114: in partner_fixture
+    fixture: dict[str, Any] = json.loads((answers / f"{name}.json").read_text(encoding="utf-8"))
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.12/3.12.16/Frameworks/Python.framework/Versions/3.12/lib/python3.12/pathlib.py:1027: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/Users/rapido/Projects/northwind-shop-b/evals/fixtures/a2a-05-partner/answers/pq-05-sateen-sheet-pockets.json')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/Users/rapido/Projects/northwind-shop-b/evals/fixtures/a2a-05-partner/answers/pq-05-sateen-sheet-pockets.json'
+
+/opt/homebrew/Cellar/python@3.12/3.12.16/Frameworks/Python.framework/Versions/3.12/lib/python3.12/pathlib.py:1013: FileNotFoundError
+_______ test_every_named_fixture_replays_clean[pq-06-orchard-duvet-fill] _______
+
+name = 'pq-06-orchard-duvet-fill'
+
+    @pytest.mark.parametrize("name", NAMES)
+    def test_every_named_fixture_replays_clean(name: str) -> None:
+        """Checks 1 and 3–8, on the fixture as A2A-05 will load it: by name, with no proxy."""
+>       fixture = partner_fixture(name)
+                  ^^^^^^^^^^^^^^^^^^^^^
+
+evals/tests/test_a2a05_partner.py:680: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+evals/tests/test_a2a05_partner.py:114: in partner_fixture
+    fixture: dict[str, Any] = json.loads((answers / f"{name}.json").read_text(encoding="utf-8"))
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.12/3.12.16/Frameworks/Python.framework/Versions/3.12/lib/python3.12/pathlib.py:1027: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/Users/rapido/Projects/northwind-shop-b/evals/fixtures/a2a-05-partner/answers/pq-06-orchard-duvet-fill.json')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/Users/rapido/Projects/northwind-shop-b/evals/fixtures/a2a-05-partner/answers/pq-06-orchard-duvet-fill.json'
+
+/opt/homebrew/Cellar/python@3.12/3.12.16/Frameworks/Python.framework/Versions/3.12/lib/python3.12/pathlib.py:1013: FileNotFoundError
+______ test_every_named_fixture_replays_clean[pq-07-highland-throw-care] _______
+
+name = 'pq-07-highland-throw-care'
+
+    @pytest.mark.parametrize("name", NAMES)
+    def test_every_named_fixture_replays_clean(name: str) -> None:
+        """Checks 1 and 3–8, on the fixture as A2A-05 will load it: by name, with no proxy."""
+>       fixture = partner_fixture(name)
+                  ^^^^^^^^^^^^^^^^^^^^^
+
+evals/tests/test_a2a05_partner.py:680: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+evals/tests/test_a2a05_partner.py:114: in partner_fixture
+    fixture: dict[str, Any] = json.loads((answers / f"{name}.json").read_text(encoding="utf-8"))
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.12/3.12.16/Frameworks/Python.framework/Versions/3.12/lib/python3.12/pathlib.py:1027: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/Users/rapido/Projects/northwind-shop-b/evals/fixtures/a2a-05-partner/answers/pq-07-highland-throw-care.json')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/Users/rapido/Projects/northwind-shop-b/evals/fixtures/a2a-05-partner/answers/pq-07-highland-throw-care.json'
+
+/opt/homebrew/Cellar/python@3.12/3.12.16/Frameworks/Python.framework/Versions/3.12/lib/python3.12/pathlib.py:1013: FileNotFoundError
+____________ test_every_named_fixture_replays_clean[oos-01-refund] _____________
+
+name = 'oos-01-refund'
+
+    @pytest.mark.parametrize("name", NAMES)
+    def test_every_named_fixture_replays_clean(name: str) -> None:
+        """Checks 1 and 3–8, on the fixture as A2A-05 will load it: by name, with no proxy."""
+>       fixture = partner_fixture(name)
+                  ^^^^^^^^^^^^^^^^^^^^^
+
+evals/tests/test_a2a05_partner.py:680: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+evals/tests/test_a2a05_partner.py:114: in partner_fixture
+    fixture: dict[str, Any] = json.loads((answers / f"{name}.json").read_text(encoding="utf-8"))
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.12/3.12.16/Frameworks/Python.framework/Versions/3.12/lib/python3.12/pathlib.py:1027: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/Users/rapido/Projects/northwind-shop-b/evals/fixtures/a2a-05-partner/answers/oos-01-refund.json')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/Users/rapido/Projects/northwind-shop-b/evals/fixtures/a2a-05-partner/answers/oos-01-refund.json'
+
+/opt/homebrew/Cellar/python@3.12/3.12.16/Frameworks/Python.framework/Versions/3.12/lib/python3.12/pathlib.py:1013: FileNotFoundError
+_________ test_every_named_fixture_replays_clean[order-01-breakwater] __________
+
+name = 'order-01-breakwater'
+
+    @pytest.mark.parametrize("name", NAMES)
+    def test_every_named_fixture_replays_clean(name: str) -> None:
+        """Checks 1 and 3–8, on the fixture as A2A-05 will load it: by name, with no proxy."""
+>       fixture = partner_fixture(name)
+                  ^^^^^^^^^^^^^^^^^^^^^
+
+evals/tests/test_a2a05_partner.py:680: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+evals/tests/test_a2a05_partner.py:114: in partner_fixture
+    fixture: dict[str, Any] = json.loads((answers / f"{name}.json").read_text(encoding="utf-8"))
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.12/3.12.16/Frameworks/Python.framework/Versions/3.12/lib/python3.12/pathlib.py:1027: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/Users/rapido/Projects/northwind-shop-b/evals/fixtures/a2a-05-partner/answers/order-01-breakwater.json')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/Users/rapido/Projects/northwind-shop-b/evals/fixtures/a2a-05-partner/answers/order-01-breakwater.json'
+
+/opt/homebrew/Cellar/python@3.12/3.12.16/Frameworks/Python.framework/Versions/3.12/lib/python3.12/pathlib.py:1013: FileNotFoundError
+_ test_no_fixture_holds_what_the_output_check_blocks[pq-01-breakwater-waterproofing] _
+
+name = 'pq-01-breakwater-waterproofing'
+
+    @pytest.mark.parametrize("name", NAMES)
+    def test_no_fixture_holds_what_the_output_check_blocks(name: str) -> None:
+        """Check 2, only while the fixture's assistant is the current one (change 2)."""
+>       fixture = partner_fixture(name)
+                  ^^^^^^^^^^^^^^^^^^^^^
+
+evals/tests/test_a2a05_partner.py:688: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+evals/tests/test_a2a05_partner.py:114: in partner_fixture
+    fixture: dict[str, Any] = json.loads((answers / f"{name}.json").read_text(encoding="utf-8"))
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.12/3.12.16/Frameworks/Python.framework/Versions/3.12/lib/python3.12/pathlib.py:1027: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/Users/rapido/Projects/northwind-shop-b/evals/fixtures/a2a-05-partner/answers/pq-01-breakwater-waterproofing.json')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/Users/rapido/Projects/northwind-shop-b/evals/fixtures/a2a-05-partner/answers/pq-01-breakwater-waterproofing.json'
+
+/opt/homebrew/Cellar/python@3.12/3.12.16/Frameworks/Python.framework/Versions/3.12/lib/python3.12/pathlib.py:1013: FileNotFoundError
+_ test_no_fixture_holds_what_the_output_check_blocks[pq-02-skerry-jacket-insulation] _
+
+name = 'pq-02-skerry-jacket-insulation'
+
+    @pytest.mark.parametrize("name", NAMES)
+    def test_no_fixture_holds_what_the_output_check_blocks(name: str) -> None:
+        """Check 2, only while the fixture's assistant is the current one (change 2)."""
+>       fixture = partner_fixture(name)
+                  ^^^^^^^^^^^^^^^^^^^^^
+
+evals/tests/test_a2a05_partner.py:688: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+evals/tests/test_a2a05_partner.py:114: in partner_fixture
+    fixture: dict[str, Any] = json.loads((answers / f"{name}.json").read_text(encoding="utf-8"))
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.12/3.12.16/Frameworks/Python.framework/Versions/3.12/lib/python3.12/pathlib.py:1027: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/Users/rapido/Projects/northwind-shop-b/evals/fixtures/a2a-05-partner/answers/pq-02-skerry-jacket-insulation.json')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/Users/rapido/Projects/northwind-shop-b/evals/fixtures/a2a-05-partner/answers/pq-02-skerry-jacket-insulation.json'
+
+/opt/homebrew/Cellar/python@3.12/3.12.16/Frameworks/Python.framework/Versions/3.12/lib/python3.12/pathlib.py:1013: FileNotFoundError
+_ test_no_fixture_holds_what_the_output_check_blocks[pq-03-skerry-base-layer-fabric] _
+
+name = 'pq-03-skerry-base-layer-fabric'
+
+    @pytest.mark.parametrize("name", NAMES)
+    def test_no_fixture_holds_what_the_output_check_blocks(name: str) -> None:
+        """Check 2, only while the fixture's assistant is the current one (change 2)."""
+>       fixture = partner_fixture(name)
+                  ^^^^^^^^^^^^^^^^^^^^^
+
+evals/tests/test_a2a05_partner.py:688: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+evals/tests/test_a2a05_partner.py:114: in partner_fixture
+    fixture: dict[str, Any] = json.loads((answers / f"{name}.json").read_text(encoding="utf-8"))
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.12/3.12.16/Frameworks/Python.framework/Versions/3.12/lib/python3.12/pathlib.py:1027: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/Users/rapido/Projects/northwind-shop-b/evals/fixtures/a2a-05-partner/answers/pq-03-skerry-base-layer-fabric.json')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/Users/rapido/Projects/northwind-shop-b/evals/fixtures/a2a-05-partner/answers/pq-03-skerry-base-layer-fabric.json'
+
+/opt/homebrew/Cellar/python@3.12/3.12.16/Frameworks/Python.framework/Versions/3.12/lib/python3.12/pathlib.py:1013: FileNotFoundError
+_ test_no_fixture_holds_what_the_output_check_blocks[pq-04-juniper-pants-fit] __
+
+name = 'pq-04-juniper-pants-fit'
+
+    @pytest.mark.parametrize("name", NAMES)
+    def test_no_fixture_holds_what_the_output_check_blocks(name: str) -> None:
+        """Check 2, only while the fixture's assistant is the current one (change 2)."""
+>       fixture = partner_fixture(name)
+                  ^^^^^^^^^^^^^^^^^^^^^
+
+evals/tests/test_a2a05_partner.py:688: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+evals/tests/test_a2a05_partner.py:114: in partner_fixture
+    fixture: dict[str, Any] = json.loads((answers / f"{name}.json").read_text(encoding="utf-8"))
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.12/3.12.16/Frameworks/Python.framework/Versions/3.12/lib/python3.12/pathlib.py:1027: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/Users/rapido/Projects/northwind-shop-b/evals/fixtures/a2a-05-partner/answers/pq-04-juniper-pants-fit.json')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/Users/rapido/Projects/northwind-shop-b/evals/fixtures/a2a-05-partner/answers/pq-04-juniper-pants-fit.json'
+
+/opt/homebrew/Cellar/python@3.12/3.12.16/Frameworks/Python.framework/Versions/3.12/lib/python3.12/pathlib.py:1013: FileNotFoundError
+_ test_no_fixture_holds_what_the_output_check_blocks[pq-05-sateen-sheet-pockets] _
+
+name = 'pq-05-sateen-sheet-pockets'
+
+    @pytest.mark.parametrize("name", NAMES)
+    def test_no_fixture_holds_what_the_output_check_blocks(name: str) -> None:
+        """Check 2, only while the fixture's assistant is the current one (change 2)."""
+>       fixture = partner_fixture(name)
+                  ^^^^^^^^^^^^^^^^^^^^^
+
+evals/tests/test_a2a05_partner.py:688: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+evals/tests/test_a2a05_partner.py:114: in partner_fixture
+    fixture: dict[str, Any] = json.loads((answers / f"{name}.json").read_text(encoding="utf-8"))
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.12/3.12.16/Frameworks/Python.framework/Versions/3.12/lib/python3.12/pathlib.py:1027: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/Users/rapido/Projects/northwind-shop-b/evals/fixtures/a2a-05-partner/answers/pq-05-sateen-sheet-pockets.json')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/Users/rapido/Projects/northwind-shop-b/evals/fixtures/a2a-05-partner/answers/pq-05-sateen-sheet-pockets.json'
+
+/opt/homebrew/Cellar/python@3.12/3.12.16/Frameworks/Python.framework/Versions/3.12/lib/python3.12/pathlib.py:1013: FileNotFoundError
+_ test_no_fixture_holds_what_the_output_check_blocks[pq-06-orchard-duvet-fill] _
+
+name = 'pq-06-orchard-duvet-fill'
+
+    @pytest.mark.parametrize("name", NAMES)
+    def test_no_fixture_holds_what_the_output_check_blocks(name: str) -> None:
+        """Check 2, only while the fixture's assistant is the current one (change 2)."""
+>       fixture = partner_fixture(name)
+                  ^^^^^^^^^^^^^^^^^^^^^
+
+evals/tests/test_a2a05_partner.py:688: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+evals/tests/test_a2a05_partner.py:114: in partner_fixture
+    fixture: dict[str, Any] = json.loads((answers / f"{name}.json").read_text(encoding="utf-8"))
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.12/3.12.16/Frameworks/Python.framework/Versions/3.12/lib/python3.12/pathlib.py:1027: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/Users/rapido/Projects/northwind-shop-b/evals/fixtures/a2a-05-partner/answers/pq-06-orchard-duvet-fill.json')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/Users/rapido/Projects/northwind-shop-b/evals/fixtures/a2a-05-partner/answers/pq-06-orchard-duvet-fill.json'
+
+/opt/homebrew/Cellar/python@3.12/3.12.16/Frameworks/Python.framework/Versions/3.12/lib/python3.12/pathlib.py:1013: FileNotFoundError
+_ test_no_fixture_holds_what_the_output_check_blocks[pq-07-highland-throw-care] _
+
+name = 'pq-07-highland-throw-care'
+
+    @pytest.mark.parametrize("name", NAMES)
+    def test_no_fixture_holds_what_the_output_check_blocks(name: str) -> None:
+        """Check 2, only while the fixture's assistant is the current one (change 2)."""
+>       fixture = partner_fixture(name)
+                  ^^^^^^^^^^^^^^^^^^^^^
+
+evals/tests/test_a2a05_partner.py:688: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+evals/tests/test_a2a05_partner.py:114: in partner_fixture
+    fixture: dict[str, Any] = json.loads((answers / f"{name}.json").read_text(encoding="utf-8"))
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.12/3.12.16/Frameworks/Python.framework/Versions/3.12/lib/python3.12/pathlib.py:1027: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/Users/rapido/Projects/northwind-shop-b/evals/fixtures/a2a-05-partner/answers/pq-07-highland-throw-care.json')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/Users/rapido/Projects/northwind-shop-b/evals/fixtures/a2a-05-partner/answers/pq-07-highland-throw-care.json'
+
+/opt/homebrew/Cellar/python@3.12/3.12.16/Frameworks/Python.framework/Versions/3.12/lib/python3.12/pathlib.py:1013: FileNotFoundError
+______ test_no_fixture_holds_what_the_output_check_blocks[oos-01-refund] _______
+
+name = 'oos-01-refund'
+
+    @pytest.mark.parametrize("name", NAMES)
+    def test_no_fixture_holds_what_the_output_check_blocks(name: str) -> None:
+        """Check 2, only while the fixture's assistant is the current one (change 2)."""
+>       fixture = partner_fixture(name)
+                  ^^^^^^^^^^^^^^^^^^^^^
+
+evals/tests/test_a2a05_partner.py:688: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+evals/tests/test_a2a05_partner.py:114: in partner_fixture
+    fixture: dict[str, Any] = json.loads((answers / f"{name}.json").read_text(encoding="utf-8"))
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.12/3.12.16/Frameworks/Python.framework/Versions/3.12/lib/python3.12/pathlib.py:1027: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/Users/rapido/Projects/northwind-shop-b/evals/fixtures/a2a-05-partner/answers/oos-01-refund.json')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/Users/rapido/Projects/northwind-shop-b/evals/fixtures/a2a-05-partner/answers/oos-01-refund.json'
+
+/opt/homebrew/Cellar/python@3.12/3.12.16/Frameworks/Python.framework/Versions/3.12/lib/python3.12/pathlib.py:1013: FileNotFoundError
+___ test_no_fixture_holds_what_the_output_check_blocks[order-01-breakwater] ____
+
+name = 'order-01-breakwater'
+
+    @pytest.mark.parametrize("name", NAMES)
+    def test_no_fixture_holds_what_the_output_check_blocks(name: str) -> None:
+        """Check 2, only while the fixture's assistant is the current one (change 2)."""
+>       fixture = partner_fixture(name)
+                  ^^^^^^^^^^^^^^^^^^^^^
+
+evals/tests/test_a2a05_partner.py:688: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+evals/tests/test_a2a05_partner.py:114: in partner_fixture
+    fixture: dict[str, Any] = json.loads((answers / f"{name}.json").read_text(encoding="utf-8"))
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.12/3.12.16/Frameworks/Python.framework/Versions/3.12/lib/python3.12/pathlib.py:1027: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/Users/rapido/Projects/northwind-shop-b/evals/fixtures/a2a-05-partner/answers/order-01-breakwater.json')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/Users/rapido/Projects/northwind-shop-b/evals/fixtures/a2a-05-partner/answers/order-01-breakwater.json'
+
+/opt/homebrew/Cellar/python@3.12/3.12.16/Frameworks/Python.framework/Versions/3.12/lib/python3.12/pathlib.py:1013: FileNotFoundError
+=========================== short test summary info ============================
+FAILED evals/tests/test_a2a05_partner.py::test_exactly_one_fixture_per_turn
+FAILED evals/tests/test_a2a05_partner.py::test_every_fixture_was_recorded_against_this_script
+FAILED evals/tests/test_a2a05_partner.py::test_every_named_fixture_replays_clean[pq-01-breakwater-waterproofing]
+FAILED evals/tests/test_a2a05_partner.py::test_every_named_fixture_replays_clean[pq-02-skerry-jacket-insulation]
+FAILED evals/tests/test_a2a05_partner.py::test_every_named_fixture_replays_clean[pq-03-skerry-base-layer-fabric]
+FAILED evals/tests/test_a2a05_partner.py::test_every_named_fixture_replays_clean[pq-04-juniper-pants-fit]
+FAILED evals/tests/test_a2a05_partner.py::test_every_named_fixture_replays_clean[pq-05-sateen-sheet-pockets]
+FAILED evals/tests/test_a2a05_partner.py::test_every_named_fixture_replays_clean[pq-06-orchard-duvet-fill]
+FAILED evals/tests/test_a2a05_partner.py::test_every_named_fixture_replays_clean[pq-07-highland-throw-care]
+FAILED evals/tests/test_a2a05_partner.py::test_every_named_fixture_replays_clean[oos-01-refund]
+FAILED evals/tests/test_a2a05_partner.py::test_every_named_fixture_replays_clean[order-01-breakwater]
+FAILED evals/tests/test_a2a05_partner.py::test_no_fixture_holds_what_the_output_check_blocks[pq-01-breakwater-waterproofing]
+FAILED evals/tests/test_a2a05_partner.py::test_no_fixture_holds_what_the_output_check_blocks[pq-02-skerry-jacket-insulation]
+FAILED evals/tests/test_a2a05_partner.py::test_no_fixture_holds_what_the_output_check_blocks[pq-03-skerry-base-layer-fabric]
+FAILED evals/tests/test_a2a05_partner.py::test_no_fixture_holds_what_the_output_check_blocks[pq-04-juniper-pants-fit]
+FAILED evals/tests/test_a2a05_partner.py::test_no_fixture_holds_what_the_output_check_blocks[pq-05-sateen-sheet-pockets]
+FAILED evals/tests/test_a2a05_partner.py::test_no_fixture_holds_what_the_output_check_blocks[pq-06-orchard-duvet-fill]
+FAILED evals/tests/test_a2a05_partner.py::test_no_fixture_holds_what_the_output_check_blocks[pq-07-highland-throw-care]
+FAILED evals/tests/test_a2a05_partner.py::test_no_fixture_holds_what_the_output_check_blocks[oos-01-refund]
+FAILED evals/tests/test_a2a05_partner.py::test_no_fixture_holds_what_the_output_check_blocks[order-01-breakwater]
+20 failed, 38 passed, 10 deselected in 1.04s
+
+## e2e replay before any recording (LLM_MODE=replay, -m e2e)
+/opt/homebrew/Cellar/python@3.12/3.12.16/Frameworks/Python.framework/Versions/3.12/lib/python3.12/pathlib.py:1013: FileNotFoundError
+=========================== short test summary info ============================
+FAILED evals/tests/test_a2a05_partner.py::test_partner_turn[pq-01-breakwater-waterproofing]
+FAILED evals/tests/test_a2a05_partner.py::test_partner_turn[pq-02-skerry-jacket-insulation]
+FAILED evals/tests/test_a2a05_partner.py::test_partner_turn[pq-03-skerry-base-layer-fabric]
+FAILED evals/tests/test_a2a05_partner.py::test_partner_turn[pq-04-juniper-pants-fit]
+FAILED evals/tests/test_a2a05_partner.py::test_partner_turn[pq-05-sateen-sheet-pockets]
+FAILED evals/tests/test_a2a05_partner.py::test_partner_turn[pq-06-orchard-duvet-fill]
+FAILED evals/tests/test_a2a05_partner.py::test_partner_turn[pq-07-highland-throw-care]
+FAILED evals/tests/test_a2a05_partner.py::test_partner_turn[oos-01-refund] - ...
+FAILED evals/tests/test_a2a05_partner.py::test_partner_turn[order-01-breakwater]
+9 failed, 59 deselected in 2.05s
+
+## Read-only index check before the window (pytest -m integration -k live_index)
+First run, literal check (dataset_sha256 starts 389cae01): FAILED, "dataset_sha256 is 3ac5e2e1…".
+Manifest (read-only): index_version 389cae01996a2dd6, data_version 2, dataset_sha256 3ac5e2e18f2b… (= data/fixtures/manifest.json).
+After the check required index_version prefix 389cae01 + dataset_sha256 == fixtures manifest + data_version 2: 1 passed.
+
+## No-spend dry run of the first searches (read-only DB, cached model, no LLM)
+All 9 turns: 5 chunks, leak guard clean; the target product is ranked first in each product turn.

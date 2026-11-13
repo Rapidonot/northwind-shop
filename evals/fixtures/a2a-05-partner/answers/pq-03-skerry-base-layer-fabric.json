@@ -1,0 +1,66 @@
+{
+  "a2a05_use": "answer",
+  "answer": {
+    "citations": [
+      "P0053"
+    ],
+    "outcome": "answered",
+    "resets": 0,
+    "sent": "The Brindlemoor Skerry Base Layer is made from recycled polyester. Its fabric weight is 200 gsm [P0053].",
+    "shown": "The Brindlemoor Skerry Base Layer is made from recycled polyester. Its fabric weight is 200 gsm [P0053]."
+  },
+  "assistant_id": "assistant:v1:claude-sonnet-5-5:prompt-eb39dcf5:check-0cb61e75",
+  "context": [
+    {
+      "chunk_id": "product:P0053:0",
+      "source_id": "P0053",
+      "source_type": "product",
+      "text": "Brindlemoor Skerry Base Layer\n\nBrand: Brindlemoor. Department: Base Layers.\n\nThe Brindlemoor Skerry Base Layer manages moisture on the move. Made from recycled polyester. The 200 gsm fabric balances warmth, absorbency and feel. Regular fit. Runs true to size. Made in Turkey.\n\nAttributes: country_of_origin: Turkey; fit_guidance: true_to_size; gsm: 200; material: recycled polyester.\n\nSizes: S, M, L, XL.\n\nColours: White, Forest.\n\nFits: regular."
+    },
+    {
+      "chunk_id": "product:P0065:0",
+      "source_id": "P0065",
+      "source_type": "product",
+      "text": "Brindlemoor Cairn Base Layer\n\nBrand: Brindlemoor. Department: Base Layers.\n\nThe Brindlemoor Cairn Base Layer manages moisture on the move. Made from recycled polyester. The 200 gsm fabric balances warmth, absorbency and feel. Regular fit. Runs true to size. Made in Lithuania.\n\nAttributes: country_of_origin: Lithuania; fit_guidance: true_to_size; gsm: 200; material: recycled polyester.\n\nSizes: M, L.\n\nColours: Burgundy.\n\nFits: regular."
+    },
+    {
+      "chunk_id": "product:P0063:0",
+      "source_id": "P0063",
+      "source_type": "product",
+      "text": "Brindlemoor Bluff Thermal Layer\n\nBrand: Brindlemoor. Department: Base Layers.\n\nThe Brindlemoor Bluff Thermal Layer manages moisture on the move. Made from merino-nylon blend. The 150 gsm fabric balances warmth, absorbency and feel. Regular fit. Runs true to size. Made in Portugal.\n\nAttributes: country_of_origin: Portugal; fit_guidance: true_to_size; gsm: 150; material: merino-nylon blend.\n\nSizes: XS, S, M, L.\n\nColours: Oat.\n\nFits: regular."
+    },
+    {
+      "chunk_id": "product:P0060:0",
+      "source_id": "P0060",
+      "source_type": "product",
+      "text": "Corvane Quarry Base Layer\n\nBrand: Corvane. Department: Base Layers.\n\nThe Corvane Quarry Base Layer manages moisture on the move. Made from merino-nylon blend. The 200 gsm fabric balances warmth, absorbency and feel. Regular fit. Runs true to size. Made in India.\n\nAttributes: country_of_origin: India; fit_guidance: true_to_size; gsm: 200; material: merino-nylon blend.\n\nSizes: S, M, L, XL.\n\nColours: Oat.\n\nFits: regular."
+    },
+    {
+      "chunk_id": "product:P0052:0",
+      "source_id": "P0052",
+      "source_type": "product",
+      "text": "Corvane Tarn Base Layer\n\nBrand: Corvane. Department: Base Layers.\n\nThe Corvane Tarn Base Layer is a next-to-skin layer for active days. Made from 100% merino wool. The 200 gsm fabric balances warmth, absorbency and feel. Regular fit. Runs true to size. Made in Mexico.\n\nAttributes: country_of_origin: Mexico; fit_guidance: true_to_size; gsm: 200; material: 100% merino wool.\n\nSizes: S, M, L.\n\nColours: Charcoal, Black.\n\nFits: regular."
+    }
+  ],
+  "disclosure": {
+    "in_model_text": false,
+    "in_shown": false
+  },
+  "kind": "product_question",
+  "message": "What fabric is the Brindlemoor Skerry Base Layer made of, and what is its fabric weight in gsm?",
+  "message_sha256": "45abd883f5eab54062ce4075702bdcf1eb0709c7bd231270200c9ba0be11cdf9",
+  "name": "pq-03-skerry-base-layer-fabric",
+  "note": "A2A-05 replays this text by name; never when assistant_id is not current.",
+  "provisional": true,
+  "recorded": "2026-11-13",
+  "refinements": [],
+  "region": "US",
+  "script_sha256": "2ca30e4d19077f4463ad672bb8afc05bc239be181cb5682ef4fe0f168eacf235",
+  "suite": "a2a-05-partner",
+  "upstream_calls": [
+    {
+      "model": "claude-sonnet-5-5",
+      "stop_reason": "end_turn"
+    }
+  ]
+}
