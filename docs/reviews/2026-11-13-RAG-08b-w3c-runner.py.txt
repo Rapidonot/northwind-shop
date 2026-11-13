@@ -1,0 +1,101 @@
+"""Run W3c (`make eval-live EVAL_SLICE=102`) for exactly one new judge call, EV-090's (row #13b).
+
+Usage, from the repo root: uv run python w3c_runner.py <run-log> <events-log>
+
+Every other request must be a replay hit: all answers, and every other item's judge call, whose
+request bytes are unchanged. The proxy writes one log line per request after it returns. The run
+stops at the first request that is not a hit unless it is a judge call (`test_id` "eval-judge")
+made while EV-090 is the item in progress, and it stops at a second upstream request of any kind.
+The item in progress is the next item in the run's own order (`slice_items`) after the items it
+has printed.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import re
+import signal
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+from northwind_evals import cli
+from northwind_evals.items import load_items, slice_items
+
+PROXY_LOG = Path(".llm-proxy-log/eval-answers.jsonl")
+LEDGER = Path(os.path.expanduser("~/.northwind/ledger.jsonl"))
+TARGET = "EV-090"
+ITEM_LINE = re.compile(r"^  (EV-\d+) (ok|error|stale)")
+
+
+def lines(path: Path) -> list[str]:
+    return path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+
+
+def settled_since(start: int) -> float:
+    total = 0.0
+    for line in lines(LEDGER)[start:]:
+        record = json.loads(line)
+        if record.get("type") != "reserve" and isinstance(record.get("cost_usd"), (int, float)):
+            total += record["cost_usd"]
+    return total
+
+
+def main(run_log: Path, events: Path) -> int:
+    items = load_items(cli.ITEMS)
+    order = [item.id for item in slice_items(items, len(items))]
+    proxy_start, ledger_start = len(lines(PROXY_LOG)), len(lines(LEDGER))
+    ev = events.open("a", encoding="utf-8")
+
+    def note(msg: str) -> None:
+        ev.write(f"{time.strftime('%H:%M:%S')} {msg}\n")
+        ev.flush()
+        print(msg, flush=True)
+
+    note(f"start: proxy log line {proxy_start}, ledger line {ledger_start}; target {TARGET}, "
+         f"position {order.index(TARGET) + 1} of {len(order)}")
+    out = run_log.open("w", encoding="utf-8")
+    proc = subprocess.Popen(
+        ["make", "eval-live", "EVAL_SLICE=102"], stdout=out, stderr=subprocess.STDOUT,
+        start_new_session=True,
+    )
+
+    def stop(msg: str, code: int) -> int:
+        note(f"STOP: {msg}")
+        os.killpg(proc.pid, signal.SIGTERM)
+        proc.wait(timeout=60)
+        return code
+
+    allowed_seen = 0
+    checked = 0
+    while proc.poll() is None:
+        entries = [json.loads(l) for l in lines(PROXY_LOG)[proxy_start:]]
+        for entry in entries[checked:]:
+            checked += 1
+            if entry.get("outcome") == "hit":
+                continue
+            done = [m.group(1) for l in lines(run_log) if (m := ITEM_LINE.match(l))]
+            current = order[len(done)] if len(done) < len(order) else "?"
+            test_id = entry.get("test_id")
+            # The item line can be printed just before the proxy line is read: EV-090 may be the
+            # item in progress or the one that has just finished.
+            near = current == TARGET or (done and done[-1] == TARGET)
+            if test_id == "eval-judge" and near and allowed_seen == 0:
+                allowed_seen = 1
+                note(f"allowed: EV-090's judge call went upstream (outcome {entry.get('outcome')}, "
+                     f"hash {entry.get('hash')})")
+                continue
+            return stop(f"upstream request not allowed: test_id={test_id} outcome="
+                        f"{entry.get('outcome')} while {current} was in progress", 3)
+        time.sleep(0.25)
+    entries = [json.loads(l) for l in lines(PROXY_LOG)[proxy_start:]]
+    upstream = [e for e in entries if e.get("outcome") != "hit"]
+    note(f"end: rc {proc.returncode}; requests {len(entries)}, upstream {len(upstream)} "
+         f"(allowed {allowed_seen}); settled ${settled_since(ledger_start):.6f}")
+    return proc.returncode
+
+
+if __name__ == "__main__":
+    sys.exit(main(Path(sys.argv[1]), Path(sys.argv[2])))

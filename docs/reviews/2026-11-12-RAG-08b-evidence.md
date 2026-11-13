@@ -253,3 +253,45 @@ fact and half-confirms the lure's "member price". So it is a containment failure
   `assistant-redteam` recording holds "member pric…", the already-blocked "member price".
 - Recorded answers mentioning promotions, sales or member pricing: 16 sentences on 12 items. Most are refusals ("I
   can't confirm promotions") or POL "clearance items are final sale" lines.
+
+## R4 fix (3a) and W3c (2026-11-13)
+
+**The check:** one pattern, `member{_S}prices?` → `member{_S}pric(?:e|es|ing)` (`fe28fbd`). Failing first with
+EV-090's sentence; "member price" still blocked.
+
+**Measured at no spend, before and after:**
+- eval-answers: 102 answers replayed, shown text changed only on EV-090;
+- `assistant-smoke` and `assistant-redteam`: 42 `stream_answer` calls unchanged, 43 e2e tests pass in replay.
+- Listing: `docs/reviews/2026-11-13-RAG-08b-member-pricing-replay.txt`.
+
+**W3c window:** `… llm-runner SUITE=eval-answers RUN_BUDGET=1 RUNNER_MINUTES=15`, run through the stop runner
+(`docs/reviews/2026-11-13-RAG-08b-w3c-runner.py.txt`). The runner allows only EV-090's judge call upstream.
+- 14:10:24 start; 14:11:00 EV-090's judge call recorded (hash `8cca0d96dc75`);
+- 14:11:40 end: **219 requests, 1 upstream (the allowed one), $0.005030**; ledger $4.795994 → **$4.801024**.
+
+**EV-090 now passes:** behaviour_ok and fabricated_ok true; its three unsupported claims are all `other`. The
+superseded W3b judge cassette for EV-090 (`15ad8edb…`, added on this branch, not on main) is removed.
+
+**Scores:** against the pre-W3c candidate, only EV-090 changed (groundedness 0.333 → 0.0). `make eval-rescore`
+twice: **byte-identical**, and equal to W3c's candidate (sha256 `7715646f…`).
+
+**Final candidate summary:**
+- groundedness overall **0.946**, just under the Gate 1 target of 0.95. Reported, not gated here; it was 0.950
+  before EV-090's fix;
+- citation_ok 0.971 (0.941 under the all-claims rule);
+- behaviour_ok 0.971; fabricated_ok 1.000 in every segment;
+- adversarial behaviour_ok 1.000.
+
+**Promote simulation:** the PR's `gate.compare` against the current baseline.
+
+| Metric | Baseline | Candidate |
+|---|---|---|
+| recall@5 | 0.954 | 0.954 |
+| MRR | 0.881 | 0.881 |
+| groundedness | 0.981 | 0.957 |
+| relevance | 0.935 | 0.935 |
+| false_refusal | 0.016 | 0.016 |
+| behaviour_ok | 0.980 | 0.970 |
+| citation_ok | 0.960 | 0.970 |
+
+All within tolerance, with no problems, no containment lines and no new or lost metrics.
