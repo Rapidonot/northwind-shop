@@ -4,13 +4,18 @@ from __future__ import annotations
 
 import ast
 import base64
+import inspect
 import json
 from pathlib import Path
 
 import pytest
 
 from northwind_common import mcp_token
-from northwind_common.mcp_token import TokenError, TokenKeyError, mint, signing_key, verify
+from northwind_common.mcp_token import TokenError, TokenKeyError, mint, signing_key
+
+# Private since row #12 (#10b re-review P1): `verify_for` is the public check. These tests reach the
+# server-blind check on purpose, to test the token itself.
+verify = mcp_token._verify
 
 pytestmark = [pytest.mark.req("CC-10"), pytest.mark.req("NFR-02")]
 
@@ -26,9 +31,21 @@ def shopper(**kw: object) -> str:
         "agent": "shopper-assistant",
         "key": KEY,
         "now": NOW,
+        "server": "northwind-rag",
     }
     args.update(kw)
     return mint(**args)[0]  # type: ignore[arg-type]
+
+
+def shopper_claims() -> mcp_token.Claims:
+    return mint(
+        audience="shopper",
+        region="UK",
+        agent="shopper-assistant",
+        key=KEY,
+        now=NOW,
+        server="northwind-rag",
+    )[1]
 
 
 def b64(obj: object) -> str:
@@ -57,7 +74,12 @@ def good_body(**kw: object) -> dict[str, object]:
 
 def test_a_minted_token_verifies_to_its_claims() -> None:
     token, claims = mint(
-        audience="shopper", region="UK", agent="shopper-assistant", key=KEY, now=NOW
+        audience="shopper",
+        region="UK",
+        agent="shopper-assistant",
+        key=KEY,
+        now=NOW,
+        server="northwind-rag",
     )
     assert verify(token, key=KEY, now=NOW + 1) == claims
     assert claims.aud == "shopper" and claims.region == "UK" and claims.agent == "shopper-assistant"
@@ -65,8 +87,8 @@ def test_a_minted_token_verifies_to_its_claims() -> None:
 
 
 def test_every_mint_is_a_new_turn() -> None:
-    a = mint(audience="shopper", region="UK", agent="shopper-assistant", key=KEY, now=NOW)[1]
-    b = mint(audience="shopper", region="UK", agent="shopper-assistant", key=KEY, now=NOW)[1]
+    a = shopper_claims()
+    b = shopper_claims()
     assert a.turn != b.turn
 
 
@@ -147,7 +169,14 @@ def test_a_refusal_says_nothing_about_why() -> None:
 
 
 def test_a_staff_token_may_have_no_region() -> None:
-    token, claims = mint(audience="staff", region=None, agent="catalog-subagent", key=KEY, now=NOW)
+    token, claims = mint(
+        audience="staff",
+        region=None,
+        agent="catalog-subagent",
+        key=KEY,
+        now=NOW,
+        server="northwind-rag",
+    )
     assert verify(token, key=KEY, now=NOW).region is None and claims.aud == "staff"
 
 
@@ -209,12 +238,24 @@ def test_the_servers_are_rag_and_catalog() -> None:
     assert "srv" in mcp_token.CLAIMS
 
 
-def test_the_default_server_is_northwind_rag() -> None:
-    token, claims = mint(
-        audience="shopper", region="UK", agent="shopper-assistant", key=KEY, now=NOW
-    )
-    assert claims.srv == "northwind-rag"
-    assert mcp_token.verify_for(token, key=KEY, server="northwind-rag", now=NOW).srv == claims.srv
+@pytest.mark.req("RAG-09")
+def test_mint_has_no_default_server() -> None:
+    """Row #12 removes #10b's `northwind-rag` default: a minter that forgets the server gets a
+    `TypeError`, never a token for the wrong server."""
+    with pytest.raises(TypeError):
+        mint(audience="shopper", region="UK", agent="shopper-assistant", key=KEY, now=NOW)  # type: ignore[call-arg]
+    assert inspect.signature(mint).parameters["server"].default is inspect.Parameter.empty
+
+
+@pytest.mark.req("RAG-09")
+def test_verify_is_not_a_public_name() -> None:
+    """Row #12 (#10b re-review P1): `verify_for` is the only public check."""
+    assert not hasattr(mcp_token, "verify")
+    assert "verify" not in getattr(mcp_token, "__all__", ())
+    public = {name for name in vars(mcp_token) if not name.startswith("_")}
+    assert "verify_for" in public and not {n for n in public if n.startswith("verify")} - {
+        "verify_for"
+    }
 
 
 @pytest.mark.parametrize("server", ["northwind-rag", "northwind-catalog"])
@@ -318,7 +359,7 @@ def _bare_verify_uses(tree: ast.AST) -> list[int]:
         if isinstance(node, ast.Call):
             func = node.func
             name = func.id if isinstance(func, ast.Name) else getattr(func, "attr", "")
-            if name == "verify":
+            if name in ("verify", "_verify"):
                 lines.append(node.lineno)
             elif (
                 isinstance(func, ast.Name)
@@ -327,13 +368,13 @@ def _bare_verify_uses(tree: ast.AST) -> list[int]:
                 and isinstance(node.args[0], ast.Name)
                 and node.args[0].id in modules
                 and isinstance(node.args[1], ast.Constant)
-                and node.args[1].value == "verify"
+                and node.args[1].value in ("verify", "_verify")
             ):
                 lines.append(node.lineno)
         elif isinstance(node, ast.ImportFrom) and (node.module or "").endswith("mcp_token"):
-            if any(alias.name in ("verify", "*") for alias in node.names):
+            if any(alias.name in ("verify", "_verify", "*") for alias in node.names):
                 lines.append(node.lineno)
-        elif isinstance(node, ast.Attribute) and node.attr == "verify":
+        elif isinstance(node, ast.Attribute) and node.attr in ("verify", "_verify"):
             receiver = node.value
             if isinstance(receiver, ast.Name) and receiver.id in modules:
                 lines.append(node.lineno)
@@ -371,3 +412,15 @@ def test_the_bare_verify_pin_sees_an_aliased_import_and_an_attribute() -> None:
         "ok = tok.verify_for\n"
     )
     assert _bare_verify_uses(ast.parse(code)) == [1, 3, 5, 6, 7, 8]
+
+
+def test_the_pin_also_sees_the_private_name() -> None:
+    """Row #12: `verify` is now `_verify`; reaching it from a non-test source is the same bypass."""
+    code = (
+        "from northwind_common.mcp_token import _verify\n"
+        "from northwind_common import mcp_token\n"
+        "x = mcp_token._verify\n"
+        "y = getattr(mcp_token, '_verify')\n"
+        "ok = mcp_token.verify_for\n"
+    )
+    assert _bare_verify_uses(ast.parse(code)) == [1, 3, 4]
