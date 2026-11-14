@@ -104,13 +104,25 @@ class View:
         return index[start], index[end - 1] + 1
 
 
-def view_of(raw: str, offset: int = 0) -> View:
+# Markdown emphasis and code markers. The stock and money patterns run on a view without them (the
+# user's re-read, 2026-11-14), so "**available**", "avail**able**" and "$2**7**9" read as plain
+# words and amounts; each view position still maps back to its raw character. Strikethrough stays:
+# "is ~~not~~ available" must not read as "is not available", which shows as "available".
+PLAIN_DROPPED = frozenset("*_`")
+# The classes whose patterns run on that plain view.
+PLAIN_CLASSES = frozenset({"stock", "money"})
+
+
+def view_of(raw: str, offset: int = 0, *, plain: bool = False) -> View:
+    """The matching view of `raw`; with `plain`, without markdown emphasis and code markers."""
     text: list[str] = []
     index: list[int] = []
     exact: list[str] = []
     exact_index: list[int] = []
     for position, char in enumerate(raw, start=offset):
         folded = _fold_char(char)
+        if plain and folded in PLAIN_DROPPED:
+            continue
         exact.append(folded)
         exact_index.extend([position] * len(folded))
         lowered = folded.casefold()
@@ -406,52 +418,21 @@ PATTERNS: tuple[Pattern, ...] = (
         rf"(?:left|remaining|in{_S}stock|available|on{_S}hand)\b",
         "live_stock",
     ),
-    #    "available" after a copula, in every spelling the second re-review found (H3): is, are,
-    #    's, 're, remains, be, and a negation (n't, not). No question passes as such any more (H1,
-    #    the user's decision): a hedge gets the stock sentence, which says the same thing, and a
-    #    claim agreeing with every `check_stock` result this turn passes (D3).
+    #    Any "available" or "unavailable" is a stock claim, whatever precedes it (the user's re-read
+    #    of H3, 2026-11-14): a lookbehind for each copula missed "is now available", "are all
+    #    available", "It's readily available". The one exception is "in" and a plural range with no
+    #    time word after it (`_RANGE`, `_TIMELY`). A count before it is read with it, so "3
+    #    available" is vouched as a count (D3). No question passes as such (H1): a claim passes
+    #    only when it agrees with every `check_stock` result this turn (D3).
     _p(
         "stock",
-        rf"(?<=\bis\s)(?:(?:currently|still){_S})?available\b(?!{_S}in{_S}{_RANGE}(?!{_TIMELY}))",
+        rf"(?:\b{_COUNT}\s{{1,3}}(?:(?:units?|items?|pieces?|pairs?){_S})?)?"
+        rf"\b(?:un)?available\b(?!{_S}in{_S}{_RANGE}(?!{_TIMELY}))",
         "live_stock",
     ),
-    _p(
-        "stock",
-        rf"(?<=\bare\s)(?:(?:currently|still){_S})?available\b(?!{_S}in{_S}{_RANGE}(?!{_TIMELY}))",
-        "live_stock",
-    ),
-    _p(
-        "stock",
-        rf"(?<=['’]s\s)(?:(?:currently|still){_S})?available\b(?!{_S}in{_S}{_RANGE}(?!{_TIMELY}))",
-        "live_stock",
-    ),
-    _p(
-        "stock",
-        rf"(?<=['’]re\s)(?:(?:currently|still){_S})?available\b(?!{_S}in{_S}{_RANGE}(?!{_TIMELY}))",
-        "live_stock",
-    ),
-    _p(
-        "stock",
-        rf"(?<=\bremains\s)(?:(?:currently|still){_S})?available\b(?!{_S}in{_S}{_RANGE}(?!{_TIMELY}))",
-        "live_stock",
-    ),
-    _p(
-        "stock",
-        rf"(?<=\bbe\s)(?:(?:currently|still){_S})?available\b(?!{_S}in{_S}{_RANGE}(?!{_TIMELY}))",
-        "live_stock",
-    ),
-    _p(
-        "stock",
-        rf"(?<=n['’]t\s)(?:(?:currently|still){_S})?available\b(?!{_S}in{_S}{_RANGE}(?!{_TIMELY}))",
-        "live_stock",
-    ),
-    _p(
-        "stock",
-        rf"(?<=\bnot\s)(?:(?:currently|still){_S})?available\b(?!{_S}in{_S}{_RANGE}(?!{_TIMELY}))",
-        "live_stock",
-    ),
-    _p("stock", rf"\b(?:currently|still){_S}available\b", "live_stock"),
-    _p("stock", rf"\bavailable{_S}(?:now|today|to{_S}order)\b", "live_stock"),
+    #    A time word before it makes even a plural range a stock claim ("now available in sizes M
+    #    and L").
+    _p("stock", rf"\b(?:now|currently|still){_S}available\b", "live_stock"),
     #    Quantities no tool returns (security review pass 1, finding 4): always blocked.
     _p(
         "stock",
@@ -693,18 +674,21 @@ def _about_weight(view: str, start: int) -> bool:
     return bool(_WEIGHT_GOVERNS.search(view[max(0, start - 40) : start]))
 
 
+# What may follow a stock or money match at the end of a delta and still be continued: markers, then
+# at most a "." or "," (W1's decimal hold).
+_OPEN_TAIL = re.compile(r"[*_`]*[.,]?[*_`]*")
 _COUNT_IN = re.compile(rf"\d[\d,]*|{_SPELLED_COUNT}")
-_NEGATIVE = re.compile(rf"\bout{_S}of{_S}stock\b|\bsold{_S}out\b")
+_NEGATIVE = re.compile(rf"\bout{_S}of{_S}stock\b|\bsold{_S}out\b|\bunavailable\b")
 _LOW = re.compile(r"\blow\b")
 
 
 def stock_vouched(span: str, live: LiveValues, negated: bool | None = False) -> bool:
     """A stock claim passes only as this turn's `check_stock` results say (the user's D3): a count
     must equal a variant's units on hand; "out of stock" or "sold out" needs every checked variant
-    at zero, and "in stock" or "available" every checked variant above zero; "low" never passes, as
-    no tool says it. A negation before the phrase flips its polarity ("isn't in stock" needs every
-    variant at zero; security review pass 1, finding 3), and a negated count never passes. With
-    nothing checked, nothing passes."""
+    at zero (so does "unavailable"), and "in stock" or "available" every checked variant above zero;
+    "low" never passes, as no tool says it. A negation before the phrase flips its polarity ("isn't
+    in stock" needs every variant at zero; security review pass 1, finding 3), and a negated count
+    never passes. With nothing checked, nothing passes."""
     if not live.stock or negated is None:  # a negation elsewhere in the clause: unvouched
         return False
     text = re.sub(r"\s+", " ", span)
@@ -935,7 +919,8 @@ class OutputCheck:
         """How many view characters raw[start:end] folds to."""
         return self._vlen[end] - self._vlen[start]
 
-    def _view(self, start: int, end: int) -> View:
+    def _view(self, start: int, end: int, *, plain: bool = False) -> View:
+        """With `plain`, without markdown emphasis and code markers (`PLAIN_DROPPED`)."""
         text: list[str] = []
         index: list[int] = []
         exact: list[str] = []
@@ -944,6 +929,8 @@ class OutputCheck:
         lo, hi = bisect_left(self._visible, start), bisect_left(self._visible, end)
         for position in self._visible[lo:hi]:
             folded, unfolded = self._folds[position], self._exacts[position]
+            if plain and unfolded in PLAIN_DROPPED:
+                continue
             text.append(folded)
             index.extend([position] * len(folded))
             exact.append(unfolded)
@@ -1173,11 +1160,13 @@ class OutputCheck:
             self._back(self._consumed, 2 * L),
             self._back(self._matched_to, 3 * L),
         )
-        view = self._view(origin, len(self._raw))
+        marked = self._view(origin, len(self._raw))
+        plain = self._view(origin, len(self._raw), plain=True)
         self._matched_to = len(self._raw)
         best: Match | None = None
         self._undecided = None
         for pattern in PATTERNS:
+            view = plain if pattern.cls in PLAIN_CLASSES else marked
             haystack = view.exact if pattern.exact else view.text
             for found in pattern.regex.finditer(haystack):
                 start, end = view.raw_span(found.start(), found.end(), exact=pattern.exact)
@@ -1185,8 +1174,14 @@ class OutputCheck:
                     continue
                 if end >= len(self._raw) and not final:
                     continue  # it may go on: it is held, and is checked when it ends
-                if pattern.cls == "money" and not final and re.fullmatch(r"[.,]", self._raw[end:]):
-                    continue  # "$263." at the end of a delta may go on with its decimals (W1)
+                if (
+                    pattern.cls in PLAIN_CLASSES
+                    and not final
+                    and _OPEN_TAIL.fullmatch(self._raw[end:])
+                ):
+                    # "$263." at the end of a delta may go on with its decimals (W1), and a match
+                    # followed only by markers may go on past them ("$2**" then "79**").
+                    continue
                 if pattern.exempt == "duration":
                     stems = self._policy_context(start, end, final)
                     if stems is None:  # hold it until its sentence shows whether it is policy
@@ -1200,7 +1195,7 @@ class OutputCheck:
                 if best is None or start < best.start:
                     best = Match(pattern.cls, start, end)
                 break
-        unparsed = self._unparsed_duration(view, final)
+        unparsed = self._unparsed_duration(marked, final)
         if unparsed is not None and (best is None or unparsed.start < best.start):
             best = unparsed
         checked = max(self._plain_since, self._words_to)
@@ -1291,10 +1286,14 @@ class OutputCheck:
         if tail is not None:
             end = max(self._consumed, tail)
         window = max(self._consumed, self._back(len(self._raw), L - 1))
-        view = self._view(window, len(self._raw))
-        trigger = TRIGGER.search(view.text)
-        if trigger:
-            end = min(end, view.index[trigger.start()])
+        # In both views: "a**vail**able" holds on "avail" only once its markers are gone.
+        for view in (
+            self._view(window, len(self._raw)),
+            self._view(window, len(self._raw), plain=True),
+        ):
+            trigger = TRIGGER.search(view.text)
+            if trigger:
+                end = min(end, view.index[trigger.start()])
         if self._undecided is not None:
             end = min(end, self._undecided)
         return end
@@ -1431,12 +1430,13 @@ def live_backed(text: str, live: LiveValues) -> int:
     retrieved source can back, does not count toward the citation requirement (row #12, the user's
     change 3). Never logged."""
     check = OutputCheck(set(), [], live=live)
-    view = view_of(text)
+    marked, plain = view_of(text), view_of(text, plain=True)
     starts = [0, *(b.end() for b in _BOUNDARY.finditer(text))]
     sentences: set[int] = set()
     for pattern in PATTERNS:
         if pattern.exempt not in LIVE_EXEMPTIONS:
             continue
+        view = plain if pattern.cls in PLAIN_CLASSES else marked
         for found in pattern.regex.finditer(view.text):
             start, end = view.raw_span(found.start(), found.end())
             if pattern.exempt == "pounds" and _about_weight(view.text, found.start()):

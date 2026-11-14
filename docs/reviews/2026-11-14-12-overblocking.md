@@ -142,3 +142,35 @@ EV-102 ['false_policy'] | replaced: ['The only mention of a return window is a "
 - **W2 (assistant-redteam):** RT-003, 005, 016, 017 refund_authority; RT-007 stock ("These Corvane shells are
   available now:", no stock check); RT-010, 015 promotion; RT-021, 023 false_policy. The sentences are in the W2
   note.
+
+## Seventh pass: the re-read fix (any "available", the plain view), 2026-11-14
+
+The check at `5f74e3f` against the fixed check, on every recorded assistant call. Each call is checked with the live
+values its own request held: every `get_price` and `check_stock` result earlier in that turn, rebuilt from the
+`<catalog_data>` blocks. Script: `docs/reviews/2026-11-14-12-overblocking-pass7.py.txt` (run from the repo root with `uv run python`, with `git show 5f74e3f:services/assistant/src/northwind_assistant/output_check.py` saved as `prevcheck/prev_output_check.py` beside it).
+```
+=== current: assistant calls scanned: 147; hits new minus prev: {}
+=== origin/main: assistant calls scanned: 143; hits new minus prev: {'stock': 3}
+--- eval-answers eval-answerer:EV-092 {'stock': 1} (check_stock this turn: False)
+   BLOCKED NOW: The product listing does give these details for the Wren Bath Towel: organic cotton, 800 gsm, made in Mexico, available in Navy [P0149].
+--- eval-answers eval-answerer:EV-034 {'stock': 1} (check_stock this turn: False)
+   BLOCKED NOW: - **Larchpell Drift Rug**: flat pile, Sage colour, available in 2 x 3 ft, 5 x 8 ft and 8 x 10 ft [P0188].
+--- eval-answers eval-answerer:EV-091 {'stock': 1} (check_stock this turn: False)
+   BLOCKED NOW: - Available in Charcoal, in sizes XS and S
+```
+(The script prints no sentence for EV-092 and EV-034 because its sentence split misses them. They come from a
+direct diff of the shown text.)
+- **Current recordings (W1–W3, final prompt):** nothing changes. So W3's shown answers, and every judge request, are
+  unchanged.
+- **origin/main's recordings:** three new hits, all "available in" plus a specific colour or size, which H2 already
+  treats as stock. Before, they passed only because no copula came first.
+- **`a2a-05-partner`, stale by design until #18 (not in the totals):**
+  - one new hit: "For current price, stock and sizes available right now, check the live product page" (a hedge, as
+    in H1);
+  - `order-01-breakwater`'s "The option you described is available in the sources:" was blocked at `5f74e3f`
+    already (L9).
+- **Non-stock senses:**
+  - "I don't have that information available." appears in no recording. Measured by test: it is blocked in every
+    stock state (another negation in the clause).
+  - The only non-stock "available" in any recording is L9's "available in the sources" (a2a, above).
+  - No exemption is proposed.

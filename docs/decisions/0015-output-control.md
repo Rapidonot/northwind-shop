@@ -348,3 +348,20 @@ are on the user's re-read list instead of a third pass.
 - **H3:** "available" is seen after is, are, 's, 're, remains and be, and after a negation (n't, not).
 - **Over-blocking:** the five hedges measured in §5.1 are now replaced unless live stock agrees. The user accepted
   this as the fail-closed choice. It is re-measured after the new W1–W3.
+
+**After the user's re-read of 72285d7..5f74e3f (2026-11-14).** One high finding (hard rule 2): H3's copula
+lookbehinds missed "available" after any adverb or emphasis ("is now available", "are all available", "It's
+readily available", "**available**"). Fixed, fail closed:
+- **Any "available" or "unavailable"** is a stock claim (`live_stock`, D3), whatever precedes it. The one exception is
+  unchanged: "in" and a plural range with no time word after it. A time word before it ("now", "currently", "still")
+  makes even a range a stock claim. A count before it is read with it, so "3 available" is vouched as a count.
+  "Unavailable" needs every checked variant at zero; a negation governing it flips that.
+- **The stock and money patterns** run on a view without markdown emphasis and code markers (`*`, `_`, `` ` ``), with
+  each position mapped back to its raw character. The hold searches for triggers in both views, and a stock or money
+  match followed only by markers at a delta's end is held. Strikethrough stays in the view: dropping it made "is
+  ~~not~~ available" read as negated.
+- **No new exemption.** "I don't have that information available." is blocked in every stock state, because the
+  clause's other negation makes any stock claim in it unvouched. An exemption for a non-stock sense needs the user's
+  approval, and none was added.
+- **Over-blocking:** no change on the current recordings. On origin/main's recordings, three new hits, each "available
+  in" a specific colour or size (H2's rule). Measured in `docs/reviews/2026-11-14-12-overblocking.md`, seventh pass.
