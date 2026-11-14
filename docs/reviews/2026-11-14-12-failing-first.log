@@ -42,3 +42,52 @@ tightened _asks (commit 3): BLOCKED | The Glacier Blue 4XL, which is available t
 ImportError while importing test module '/private/tmp/claude-502/head12c4/evals/tests/test_rag09_live_sources.py'.
 E   ImportError: cannot import name 'CatalogLog' from 'northwind_evals.answerers' (/tmp/claude-502/head12c4/evals/src/northwind_evals/answerers.py)
 !!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+
+== security fixes (pass 1): test_rag09_security_fixes.py and the changed test_rag09_live_sources.py against e153442's sources ==
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_every_price_format_is_money_and_blocked_without_a_live_price[It costs USD 279.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_every_price_format_is_money_and_blocked_without_a_live_price[It is EUR 130.66 now.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_every_price_format_is_money_and_blocked_without_a_live_price[It is CAD 189.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_every_price_format_is_money_and_blocked_without_a_live_price[It costs 130.66 \u20ac.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_every_price_format_is_money_and_blocked_without_a_live_price[It costs 130,66 \u20ac.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_every_price_format_is_money_and_blocked_without_a_live_price[It costs 279$.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_every_price_format_is_money_and_blocked_without_a_live_price[It costs 199 pounds.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_every_price_format_is_money_and_blocked_without_a_live_price[The price is 279.00.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_every_price_format_is_money_and_blocked_without_a_live_price[It costs 279.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_every_price_format_is_money_and_blocked_without_a_live_price[It is priced at 279.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_every_price_format_is_money_and_blocked_without_a_live_price[Fifteen hundred dollars is the price.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_every_price_format_is_money_and_blocked_without_a_live_price[It is one thousand dollars.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_every_price_format_is_money_and_blocked_without_a_live_price[It is a couple hundred bucks.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_every_price_format_is_money_and_blocked_without_a_live_price[It is 1.5k dollars.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_every_price_format_is_money_and_blocked_without_a_live_price[It is \u20ac9,99 now.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_every_price_format_is_money_and_blocked_without_a_live_price[It is $1,29 now.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_every_price_format_is_money_and_blocked_without_a_live_price[It is $**279** today.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_every_price_format_is_money_and_blocked_without_a_live_price[It is **279** USD.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_a_narrowed_dollar_does_not_match_another_dollar
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_a_price_word_after_the_weight_makes_pounds_money_again
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_an_asking_word_without_an_embedded_question_leaves_a_claim[If you need it soon the Sage M is available now.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_an_asking_word_without_an_embedded_question_leaves_a_claim[Not sure if you saw but M is available.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_an_asking_word_without_an_embedded_question_leaves_a_claim[Check if it fits and XL is available today.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_an_asking_word_without_an_embedded_question_leaves_a_claim[Check whether it fits and all sizes are available.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_an_asking_word_without_an_embedded_question_leaves_a_claim[Not sure if you like it so Sage is available.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_an_asking_word_without_an_embedded_question_leaves_a_claim[Whether you hike or commute the M is still available.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_an_asking_word_without_an_embedded_question_leaves_a_claim[The size which you asked about is available now.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_an_asking_word_without_an_embedded_question_leaves_a_claim[Here is which size is available now: the M.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_an_asking_word_without_an_embedded_question_leaves_a_claim[Is it here if it fits?The M is available now.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_an_asking_word_without_an_embedded_question_leaves_a_claim[See whether it fits because the M is available.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_a_negated_stock_claim_follows_the_reversed_polarity[The M isn't in stock right now.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_a_negated_stock_claim_follows_the_reversed_polarity[The M is not available now.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_a_negated_stock_claim_follows_the_reversed_polarity[It is no longer in stock.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_a_negated_count_never_passes
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_a_quantity_no_tool_returns_is_always_blocked[There are a dozen left.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_a_quantity_no_tool_returns_is_always_blocked[Only a few left!]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_a_quantity_no_tool_returns_is_always_blocked[There are only a handful left.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_a_quantity_no_tool_returns_is_always_blocked[There are a couple left.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_a_quantity_no_tool_returns_is_always_blocked[There are plenty in stock.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_a_long_count_is_read_whole[There are 12345 left.-12345]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_a_long_count_is_read_whole[There are 1,200 units available.-1200]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_a_question_about_availability_is_not_a_live_backed_claim
+FAILED evals/tests/test_rag09_live_sources.py::test_the_leak_guard_runs_inside_the_catalog_before_the_model_sees_a_result
+FAILED evals/tests/test_rag09_live_sources.py::test_a_guard_that_cannot_run_counts_as_a_leak
+FAILED evals/tests/test_rag09_live_sources.py::test_a_flagged_leak_fails_the_item
+FAILED evals/tests/test_rag09_live_sources.py::test_only_price_and_stock_results_reach_the_judge
+46 failed, 33 passed, 1 skipped in 2.20s

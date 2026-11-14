@@ -29,7 +29,7 @@ from bisect import bisect_left, bisect_right
 from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from functools import lru_cache
 
 L = 64
@@ -171,12 +171,21 @@ _SPELLED_COUNT = (
     rf"(?:(?:a|an|{_UNITS})[\s-]{{1,2}}hundred(?:[\s-]{{1,2}}(?:and[\s-]{{1,2}})?{_TENS_UNITS})?"
     rf"|{_TENS_UNITS})"
 )
-_COUNT = rf"(?:\d{{1,4}}|{_SPELLED_COUNT})"
-# An amount of money as written in digits: "279", "279.00", "1,299.5".
-_AMOUNT = r"(?:\d{1,3}(?:,\d{3}){1,2}|\d{1,7})(?:\.\d{1,2})?"
-# "pounds" is left out on purpose: "weighs 2 pounds" is a product attribute, and £ and GBP cover
-# sterling (a residual: "twenty pounds" as money passes).
+# Any run of digits and separators, read whole (security review pass 1, finding 4): "12345 left" and
+# "1,200 units available" are counts too.
+_COUNT = rf"(?:\d[\d,]{{0,9}}|{_SPELLED_COUNT})"
+# An amount of money as written, greedily: digits and separators, ending on a digit (so a sentence's
+# full stop stays outside it), and a trailing "k". `money_value` reads it exactly or the figure is
+# blocked (fail closed; security review pass 1, finding 1), so "€9,99" or "$1.5k" is never a
+# partial match that slips through.
+_AMOUNT = r"\d(?:[\d.,]{0,13}\d)?k?"
+# Markdown that can sit around an amount: "$**279**", "**279** USD".
+_MK = r"[*_~`]{0,4}"
 _CURRENCY_WORD = r"(?:usd|gbp|eur|aud|cad|dollars?|bucks?|quid|euros?)"
+_CURRENCY_CODE = r"(?:usd|gbp|eur|aud|cad)"
+# Size words the parser does not read as part of a number: "fifteen hundred dollars", "a couple
+# hundred bucks", "one thousand dollars". Before a currency word they are always blocked.
+_MAGNITUDE = r"(?:hundred|thousand|grand|million|dozen|couple)"
 _NUMBER = _either_words(_NUMBER_WORDS)
 DURATION = re.compile(
     rf"\b(?P<n>{_NUMERAL})(?:[\s-]{{1,2}}(?:full|calendar))?[\s-]{{1,2}}"
@@ -320,9 +329,29 @@ PATTERNS: tuple[Pattern, ...] = (
     # 6. Row #12 (RAG-09, decision 0015 §7). Money: any amount passes only when a `get_price` result
     #    this turn has the same amount and currency (`live_price`); a figure from a source, from
     #    memory or from the shopper's own message does not (the user's D5).
-    _p("money", rf"[$£€]\s{{0,2}}{_AMOUNT}(?![\d,.]\d)", "live_price"),
-    _p("money", rf"(?<![\w.,]){_AMOUNT}\s{{0,2}}{_CURRENCY_WORD}\b", "live_price"),
+    #    Every way round (security review pass 1, finding 1): sign or code before the amount, sign
+    #    or word after it, markdown inside; an amount `money_value` cannot read exactly is blocked.
+    _p("money", rf"[$£€]{_MK}\s{{0,2}}{_MK}{_AMOUNT}", "live_price"),
+    _p("money", rf"\b{_CURRENCY_CODE}{_MK}\s{{0,2}}{_MK}{_AMOUNT}", "live_price"),
+    _p(
+        "money",
+        rf"(?<![\w.,]){_AMOUNT}{_MK}\s{{0,2}}{_MK}(?:[$£€]|{_CURRENCY_WORD}\b)",
+        "live_price",
+    ),
     _p("money", rf"\b{_SPELLED_COUNT}[\s-]{{1,2}}(?:dollars?|euros?|bucks?|quid)\b", "live_price"),
+    #    "pounds" is money unless the sentence is about weight ("weighs 2 pounds").
+    _p("money", rf"(?<![\w.,]){_AMOUNT}{_MK}\s{{0,2}}pounds?\b", "pounds"),
+    _p("money", rf"\b{_SPELLED_COUNT}[\s-]{{1,2}}pounds?\b", "pounds"),
+    #    A size word before a currency word, read by no parser here: always blocked.
+    _p("money", rf"\b{_MAGNITUDE}{_MK}\s{{0,2}}(?:{_CURRENCY_WORD}|pounds?)\b"),
+    #    A bare amount said to be a price or cost: "The price is 279.00", "It costs 279".
+    _p(
+        "money",
+        rf"\b(?:prices?|costs?)(?:\s{{1,3}}(?:is|was|are|of|at|comes{_S}to|will{_S}be)|\s{{0,2}}[:=])"
+        rf"\s{{0,3}}{_MK}{_AMOUNT}",
+        "bare_price",
+    ),
+    _p("money", rf"\b(?:priced(?:{_S}at)?|costing|costs?)\s{{1,3}}{_MK}{_AMOUNT}", "bare_price"),
     #    Stock counts and availability (#15 L5, L9): pass only as a `check_stock` result this turn
     #    says (`live_stock`). "Available in sizes/colours/fits" is the range offered, not stock, and
     #    "whether/if/which … is available" asks rather than claims (`availability`; measured on
@@ -345,6 +374,13 @@ PATTERNS: tuple[Pattern, ...] = (
     ),
     _p("stock", rf"\b(?:currently|still){_S}available\b", "availability"),
     _p("stock", rf"\bavailable{_S}(?:now|today|to{_S}order)\b", "availability"),
+    #    Quantities no tool returns (security review pass 1, finding 4): always blocked.
+    _p(
+        "stock",
+        rf"\b(?:a{_S})?(?:dozen|few|handful|couple|several|plenty|lots|loads|hundreds|thousands|"
+        rf"many)(?:{_S}of)?(?:{_S}(?:units?|items?|pieces?|pairs?|them))?"
+        rf"{_S}(?:left|remaining|in{_S}stock|available|on{_S}hand)\b",
+    ),
     #    More member-price wordings (#13b R4 left these to #12), class 1: no exemption.
     _p("promotion", rf"\bmembers?[\s-]{{1,3}}only{_S}(?:rates?|prices?|pricing|deals?|offers?)\b"),
     _p("promotion", rf"\bmember{_S}(?:rates?|deals?|offers?|savings?|exclusives?)\b"),
@@ -362,7 +398,8 @@ _SPELLED_WORDS = "|".join(sorted((w for w in _NUMBER_WORDS if len(w) > 2), key=l
 TRIGGER = re.compile(
     r"disc|coupon|promo|vouch|staff|member|free|prepaid|%|http|www|authori|approv|refund|order|"
     r"payment|confirm|process|appl|placed|issued|stock|sold|issue_|hour|day|week|month|year|"
-    r"\$|£|€|avail|currently|still|loyal|"
+    r"\$|£|€|avail|currently|still|loyal|usd|gbp|eur|aud|cad|price|cost|pound|grand|thousand|"
+    r"million|few|handful|several|plenty|lots|loads|many|"
     rf"code|\d|\bi['’\s]|\bwe['’\s]|\[|\+|\(|\b(?:{_SPELLED_WORDS}|hundred|dozen|night|out|only|low|half|clearance)\b"
 )
 # A duration is a policy term only in a sentence that holds one of these stems (the user's list,
@@ -458,55 +495,96 @@ _CURRENCY_OF_WORD = {
     "euro": frozenset({"EUR"}),
     "euros": frozenset({"EUR"}),
 }
-_DOLLAR_PREFIX = re.compile(r"(?:^|[^a-z])(us|ca|c|a)$")
+_DOLLAR_PREFIX = re.compile(r"(?:^|[^a-z])([a-z]{1,3})$")
+# `$` with a prefix: these narrow it; any other prefix (NZ$, HK$, R$) is no live currency here.
+_NARROWED = {"us": "USD", "ca": "CAD", "c": "CAD", "a": "AUD", "au": "AUD"}
 _CENT = Decimal("0.01")
+_MARKS = re.compile(r"[*_~`]")
+_STRICT_AMOUNT = re.compile(r"\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?")
+_SPELLED_WHOLE = re.compile(rf"{_SPELLED_COUNT}")
+_SIGNS = {"£": frozenset({"GBP"}), "€": frozenset({"EUR"})}
+
+
+def _amount(number: str) -> Decimal | None:
+    """An amount read exactly, or None. Digits: thousands commas only, at most two decimals, one
+    trailing full stop or comma taken as punctuation. Words: a whole spelled count."""
+    number = number.strip()
+    if number[-1:] in ".," and not number[-2:-1].isspace():
+        trimmed = number[:-1]
+        if _STRICT_AMOUNT.fullmatch(trimmed):
+            number = trimmed
+    if _STRICT_AMOUNT.fullmatch(number):
+        return Decimal(number.replace(",", ""))
+    if _SPELLED_WHOLE.fullmatch(number):
+        value = number_value(number)
+        return Decimal(value) if value > 0 else None
+    return None
 
 
 def money_value(span: str, before: str) -> tuple[Decimal, frozenset[str]] | None:
     """The amount and the currencies a money match can mean, from the matching view (casefolded).
-    `$` alone is any dollar; `US$`, `C$`/`CA$` and `A$` narrow it. None if it cannot be read
-    exactly (fail closed: an unread amount is never vouched)."""
-    text = re.sub(r"\s+", " ", span).strip()
+    `$` alone is any dollar; `US$`, `C$`/`CA$` and `A$`/`AU$` narrow it, and any other prefix
+    means no currency the catalog returns. None if the amount cannot be read exactly (fail
+    closed: an unread amount is never vouched)."""
+    text = re.sub(r"\s+", " ", _MARKS.sub("", span)).strip()
+    if not text:
+        return None
+    code_first = re.fullmatch(rf"({_CURRENCY_CODE}) ?(.+)", text)
+    sign_after = re.fullmatch(r"(.+?) ?([$£€])", text)
     if text[0] in "$£€":
-        number = text[1:].strip()
-        if text[0] == "£":
-            currencies = frozenset({"GBP"})
-        elif text[0] == "€":
-            currencies = frozenset({"EUR"})
-        else:
-            prefix = _DOLLAR_PREFIX.search(before)
-            narrowed = {"us": "USD", "ca": "CAD", "c": "CAD", "a": "AUD"}
-            currencies = frozenset({narrowed[prefix.group(1)]}) if prefix else _DOLLARS
+        number, sign = text[1:], text[0]
+    elif code_first:
+        number, sign = code_first.group(2), ""
+        currencies = _CURRENCY_OF_WORD[code_first.group(1)]
+    elif sign_after:
+        number, sign = sign_after.group(1), sign_after.group(2)
     else:
         found = re.fullmatch(rf"(.+?)[\s-]*({_CURRENCY_WORD})", text)
         if found is None:
             return None
-        number, word = found.group(1).strip(), found.group(2)
-        currencies = _CURRENCY_OF_WORD.get(word, _DOLLARS)  # dollars, bucks
-    digits = number.replace(",", "")
-    try:
-        if re.fullmatch(r"\d+(?:\.\d{1,2})?", digits):
-            amount = Decimal(digits)
+        number, sign = found.group(1), ""
+        currencies = _CURRENCY_OF_WORD.get(found.group(2), _DOLLARS)  # dollars, bucks
+    if sign in _SIGNS:
+        currencies = _SIGNS[sign]
+    elif sign == "$":
+        prefix = _DOLLAR_PREFIX.search(before) if text[0] == "$" else None
+        if prefix:
+            narrowed = _NARROWED.get(prefix.group(1))
+            currencies = frozenset({narrowed}) if narrowed else frozenset()
         else:
-            value = number_value(number)
-            if value <= 0:
-                return None
-            amount = Decimal(value)
-    except InvalidOperation:
+            currencies = _DOLLARS
+    amount = _amount(number)
+    if amount is None:
         return None
     return amount.quantize(_CENT), currencies
 
 
-_COUNT_IN = re.compile(rf"\d{{1,4}}|{_SPELLED_COUNT}")
+_WEIGHT = re.compile(r"\b(?:weigh\w*|weight|heavy|heavier|light|lighter|lightweight|lbs?)\b")
+_PRICE_WORD = re.compile(r"\b(?:price\w*|cost\w*|pay\w*|spend|charge\w*|£|gbp)")
+
+
+def _about_weight(view: str, start: int) -> bool:
+    """Whether "N pounds" is a weight: a weight word in the same sentence, at most 40 characters
+    back, with no price word between it and the figure."""
+    before = view[max(0, start - 40) : start]
+    for boundary in _BOUNDARY.finditer(before):
+        before = before[boundary.end() :]
+    weights = list(_WEIGHT.finditer(before))
+    return bool(weights) and not _PRICE_WORD.search(before[weights[-1].end() :])
+
+
+_COUNT_IN = re.compile(rf"\d[\d,]*|{_SPELLED_COUNT}")
 _NEGATIVE = re.compile(rf"\bout{_S}of{_S}stock\b|\bsold{_S}out\b")
 _LOW = re.compile(r"\blow\b")
 
 
-def stock_vouched(span: str, live: LiveValues) -> bool:
+def stock_vouched(span: str, live: LiveValues, negated: bool = False) -> bool:
     """A stock claim passes only as this turn's `check_stock` results say (the user's D3): a count
     must equal a variant's units on hand; "out of stock" or "sold out" needs every checked variant
     at zero, and "in stock" or "available" every checked variant above zero; "low" never passes, as
-    no tool says it. With nothing checked, nothing passes."""
+    no tool says it. A negation before the phrase flips its polarity ("isn't in stock" needs every
+    variant at zero; security review pass 1, finding 3), and a negated count never passes. With
+    nothing checked, nothing passes."""
     if not live.stock:
         return False
     text = re.sub(r"\s+", " ", span)
@@ -514,40 +592,83 @@ def stock_vouched(span: str, live: LiveValues) -> bool:
         return False
     count = _COUNT_IN.search(text)
     if count is not None:
-        return number_value(count.group()) in set(live.stock.values())
-    if _NEGATIVE.search(text):
-        return all(n == 0 for n in live.stock.values())
-    return all(n > 0 for n in live.stock.values())
+        return not negated and number_value(count.group()) in set(live.stock.values())
+    positive = not _NEGATIVE.search(text)
+    if negated:
+        positive = not positive
+    if positive:
+        return all(n > 0 for n in live.stock.values())
+    return all(n == 0 for n in live.stock.values())
+
+
+_NEGATION = re.compile(r"\b(?:not|no|never|none|nothing|nowhere|neither|nor)\b|n['’]t\b")
+
+
+def _negated(view: str, start: int) -> bool:
+    """A negation earlier in the same clause, at most 40 characters back."""
+    before = view[max(0, start - 40) : start]
+    for cut in re.finditer(r"[.!?;,:\n]", before):
+        before = before[cut.end() :]
+    return bool(_NEGATION.search(before))
 
 
 _ASKING = re.compile(r"\b(whether|if|which)\b")
-# What opens a new clause between the asking word and "available" (the user, row #12): a comma,
-# semicolon, colon or spaced dash, or "but", "and" or "so" followed by a subject word. A bare "and"
-# inside a noun phrase ("which size and colour combinations are") does not.
-_CLAUSE_BREAK = re.compile(
-    r"[,;:]|\s[-–—]\s|[–—]|\b(?:but|and|so)\s{1,3}"
-    r"(?:the|it|its|this|that|these|those|they|we|you|i|he|she|there|your|our|my|a|an)\b"
+# An embedded question needs a verb that asks or shows, directly or within two words before the
+# asking word (security review pass 1, finding 2): "to see whether", "will show whether", "shows
+# which", "can't say whether". A sentence-initial or concessive "if"/"whether" never asks.
+_FRAME = re.compile(
+    r"\b(?:see|check|checking|show|shows|showing|confirm|know|say|tell|ask|find\s{1,3}out|sure|"
+    r"wonder|wondering)(?:\s{1,3}[a-z'’]{1,12}){0,2}\s{1,3}$"
 )
+# What ends the asking word's clause before "available": punctuation, a dash (not a hyphen inside
+# a word), or a conjunction. "and" is handled apart (`_asks`).
+_CLAUSE_BREAK = re.compile(
+    r"[,;:、]|(?<![\w])[-‐‑‒–—―]|[-‐‑‒–—―](?![\w])|[‒–—―]|"
+    r"\b(?:but|so|or|nor|then|yet|because|since|although|though|while|as|until|unless|when|"
+    r"once|whereas)\b"
+)
+_AND = re.compile(r"\band\b")
+_VERB = re.compile(
+    r"\b(?:is|are|was|were|be|been|being|has|have|had|will|would|can|could|do|does)\b"
+)
+# A sentence ends at these for this rule, with or without a space after (a missing space after "?"
+# must not let the previous sentence's "if" govern).
+_HARD_BOUNDARY = re.compile(r"[.!?؟。\u2028\u2029\n]")
 # "which" right before a verb is a relative clause ("which is available today"), not a question.
 _RELATIVE_WHICH = re.compile(r"\s*(?:is|are|was|were|will|has|have)\b")
 
 
-def _asks(view: str, start: int) -> bool:
-    """Whether "available" at `start` sits in a clause governed by an asking word: "check whether
-    the M is available" or "shows which sizes are available" ask; they do not claim stock.
-    The asking word must be in the same sentence, at most 60 characters back, with nothing between
-    it and the match that opens a new clause (`_CLAUSE_BREAK`). "which" counts only as a question:
-    never after a comma, and never directly before a verb. So "If you need it soon, the M is
-    available now", "Not sure if you saw, but the M is available" and "The 4XL, which is available
-    today" are claims, and pass only as `check_stock` says (fail closed)."""
+def _asks(view: str, start: int, end: int | None = None) -> bool:
+    """Whether "available" at `start` sits in an embedded question: "check whether the M is
+    available" or "shows which sizes are available" ask; they do not claim stock.
+
+    All of these must hold (the user's rules, tightened after security review pass 1):
+    - the asking word is in the same sentence, at most 60 characters back;
+    - a verb that asks or shows comes right before it (`_FRAME`);
+    - nothing between it and the match ends the clause (`_CLAUSE_BREAK`); "and" does only after
+      a question "which" and before any verb ("which size and colour combinations are");
+    - "which" is a question: never after a comma, never directly before a verb;
+    - no colon or dash follows the match in its sentence ("which size is available now: the M").
+    Anything else is a claim, and passes only as `check_stock` says (fail closed)."""
     before = view[max(0, start - 60) : start]
-    for boundary in _BOUNDARY.finditer(before):
+    for boundary in _HARD_BOUNDARY.finditer(before):
         before = before[boundary.end() :]
+    if end is not None:
+        after = view[end : end + 60]
+        cut = _HARD_BOUNDARY.search(after)
+        if re.search(r"[:‒–—―]|\s-\s", after[: cut.start()] if cut else after):
+            return False
     for word in _ASKING.finditer(before):
+        if not _FRAME.search(before[: word.start()]):
+            continue
         between = before[word.end() :]
         if _CLAUSE_BREAK.search(between):
             continue
-        if word.group(1) == "which" and (
+        is_which = word.group(1) == "which"
+        joined = _AND.search(between)
+        if joined and not (is_which and not _VERB.search(between[: joined.start()])):
+            continue
+        if is_which and (
             before[: word.start()].rstrip().endswith(",") or _RELATIVE_WHICH.match(between)
         ):
             continue
@@ -812,15 +933,29 @@ class OutputCheck:
         if pattern.exempt == "policy_span":
             return any(s.public_policy and span in normal(s.text) for s in self.sources)
         if pattern.exempt == "live_price":
-            value = money_value(span, view.text[max(0, start - 3) : start])
+            value = money_value(span, view.text[max(0, start - 4) : start])
             if value is None:
                 return False
             amount, currencies = value
             return any((amount, currency) in self.live.prices for currency in currencies)
+        if pattern.exempt == "pounds":
+            if _about_weight(view.text, start):
+                return True
+            words = re.fullmatch(r"(.+?)[\s-]*pounds?", span.strip())
+            sterling = _amount(words.group(1)) if words else None
+            return sterling is not None and (sterling.quantize(_CENT), "GBP") in self.live.prices
+        if pattern.exempt == "bare_price":
+            figure = re.search(rf"{_AMOUNT}$", _MARKS.sub("", span).strip())
+            bare = _amount(figure.group()) if figure else None
+            return bare is not None and any(
+                bare.quantize(_CENT) == have for have, _currency in self.live.prices
+            )
         if pattern.exempt == "live_stock":
-            return stock_vouched(span, self.live)
+            return stock_vouched(span, self.live, _negated(view.text, start))
         if pattern.exempt == "availability":
-            return _asks(view.text, start) or stock_vouched(span, self.live)
+            return _asks(view.text, start, end) or stock_vouched(
+                span, self.live, _negated(view.text, start)
+            )
         raise ValueError(f"unknown exemption: {pattern.exempt}")  # fail closed on a new kind
 
     def _vouched(self, text: str, match: re.Match[str]) -> bool:
@@ -1202,7 +1337,7 @@ def hits(
     return {cls: n for cls, n in check.counts.items() if cls != "marker"}
 
 
-LIVE_EXEMPTIONS = frozenset({"live_price", "live_stock", "availability"})
+LIVE_EXEMPTIONS = frozenset({"live_price", "live_stock", "availability", "pounds", "bare_price"})
 
 
 def live_backed(text: str, live: LiveValues) -> int:
@@ -1221,11 +1356,15 @@ def live_backed(text: str, live: LiveValues) -> int:
         for found in pattern.regex.finditer(view.text):
             start, end = view.raw_span(found.start(), found.end())
             span = re.sub(r"\s+", " ", view.text[found.start() : found.end()])
-            backed = (
-                stock_vouched(span, live)  # a question passes too, but claims nothing
-                if pattern.exempt == "availability"
-                else check._exempt(pattern, view, found, text[start:end])
-            )
+            if pattern.exempt == "availability":
+                # A question passes the check but claims nothing (security review pass 1, 7).
+                backed = not _asks(view.text, found.start(), found.end()) and stock_vouched(
+                    span, live, _negated(view.text, found.start())
+                )
+            elif pattern.exempt == "pounds" and _about_weight(view.text, found.start()):
+                backed = False  # a weight, not a price
+            else:
+                backed = check._exempt(pattern, view, found, text[start:end])
             if backed:
                 sentences.add(bisect_right(starts, start) - 1)
     return len(sentences)

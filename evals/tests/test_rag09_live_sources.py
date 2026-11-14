@@ -196,27 +196,99 @@ def test_live_values_for_another_region_are_not_live_for_this_item() -> None:
     assert live.prices == set()
 
 
-def test_a_catalog_result_holding_a_canary_fails_the_item(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_the_leak_guard_runs_inside_the_catalog_before_the_model_sees_a_result() -> None:
+    """Security review pass 1, finding 5: a leaking result is replaced by the fixed failure
+    envelope inside the server, so the model, a cassette and a file never see it."""
+    import asyncio
+
+    from northwind_assistant.caller import Caller
+    from northwind_assistant.catalog_client import CatalogEndpoint
+    from northwind_evals.answerers import serve_catalog
+    from northwind_mcp_catalog.testing import connect
+
+    key = b"k" * 40
+    log = CatalogLog()
+
+    def guard(chunks: Sequence[ContextChunk]) -> bool:
+        return any("Cairn" in c.text for c in chunks)  # P0011's name stands in for a canary
+
+    with serve_catalog(key, log, guard) as url:
+        token = CatalogEndpoint(url, key).mint(Caller(region="US"))
+
+        async def call() -> Any:
+            async with connect(url, token) as client:
+                return await client.call_tool("get_product", {"product_id": "P0011"})
+
+        result = asyncio.run(call())
+    [block] = result.content
+    assert result.is_error is True
+    assert "Cairn" not in block.text and json.loads(block.text)["code"] == "tool_failed"
+    assert log.leak is True
+    assert all("Cairn" not in text for _tool, _err, text in log.taken())
+
+
+def test_a_guard_that_cannot_run_counts_as_a_leak() -> None:
+    import asyncio
+
+    from northwind_assistant.caller import Caller
+    from northwind_assistant.catalog_client import CatalogEndpoint
+    from northwind_evals.answerers import serve_catalog
+    from northwind_mcp_catalog.testing import connect
+
+    key = b"k" * 40
+    log = CatalogLog()
+
+    def broken(chunks: Sequence[ContextChunk]) -> bool:
+        raise RuntimeError("no canary file")
+
+    with serve_catalog(key, log, broken) as url:
+        token = CatalogEndpoint(url, key).mint(Caller(region="US"))
+
+        async def call() -> Any:
+            async with connect(url, token) as client:
+                return await client.call_tool("get_price", {"variant_id": "P0011-SAG-REG-M"})
+
+        result = asyncio.run(call())
+    assert result.is_error is True and log.leak is True
+
+
+def test_a_flagged_leak_fails_the_item(monkeypatch: pytest.MonkeyPatch) -> None:
     import northwind_assistant.turn as turn
     import northwind_common.llm as llm
     from northwind_assistant.turn import Citations, TextDelta
     from northwind_evals.answerers import AnswerError, AssistantAnswerer
 
     log = CatalogLog()
-    leaked = catalog_tool.label("get_product", {"description": "CANARY-12-xyz"})
 
     async def fake_stream(*_args: Any) -> Any:
-        log.add("get_product", False, leaked)
+        log.leak = True  # what serve_catalog sets when its guard refuses a result
         yield TextDelta("A shell [P1].")
         yield Citations(("P1",))
 
     monkeypatch.setattr(turn, "stream_answer", fake_stream)
     monkeypatch.setattr(llm, "agent_runtime", lambda **_kw: object())
-    index = SavedFirstIndex({}, leaks=lambda chunks: any("CANARY" in c.text for c in chunks))
-    answerer = AssistantAnswerer("http://p", index, object(), "m", lambda s: s, object(), log)
+    answerer = AssistantAnswerer(
+        "http://p", SavedFirstIndex({}), object(), "m", lambda s: s, object(), log
+    )
     with pytest.raises(AnswerError) as raised:
         answerer.answer(ITEM, (CHUNK,))
     assert raised.value.code == "leak"
+
+
+def test_only_price_and_stock_results_reach_the_judge() -> None:
+    """Security review pass 1, finding 9: a product attribute only `get_product` returned is not
+    support for the judge; a product claim must cite a retrieved source (hard rule 5)."""
+    product = catalog_tool.label("get_product", {"product_id": "P1", "description": "Warm."})
+    variant = catalog_tool.label("get_variant", {"variant_id": "P1-BLK-M", "colour": "Black"})
+    blocks, _live = live_of(
+        [
+            ("get_product", False, product),
+            ("get_variant", False, variant),
+            ("get_price", False, PRICE),
+        ],
+        "US",
+    )
+    assert [b.source_id for b in blocks] == ["live:get_price:2"]
 
 
 def test_an_allowed_live_price_is_not_counted_as_a_payload_bypass(

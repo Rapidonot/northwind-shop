@@ -71,3 +71,9 @@ stock claims passed with no `check_stock`. Now:
 - **Re-measured:** 143 calls, new hits **money 2** (EV-029, EV-030, as above), **stock 0**, member wordings 0.
 
 EV-029 and EV-030 are also on the user's W3 watch list: their reference facts say price is "on the product page".
+
+## Fourth pass: after security review pass 1 (2026-11-14)
+- The check now has more money formats (code before, sign after, pounds, bare price, size words, markdown), and
+  "available" needs an embedded-question frame. It also handles negation and reads quantities.
+- Re-measured, 143 calls: new hits **money 2** (EV-029, EV-030), **stock 0**, member wordings 0.
+- The five measured questions still pass.

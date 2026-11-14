@@ -232,3 +232,41 @@ filters, D5) and stock 0, after `_asks` was tightened. The member wordings had 0
 - "twenty pounds" as money passes.
 - A stock count matches *any* checked variant's units.
 - The question rule reads only the 60 characters before "available".
+
+**After security review pass 1 (2026-11-14; `docs/reviews/2026-11-14-12-security-review.raw.md`).** Two high findings
+and three medium were fixed. All fixes tighten the check; none loosens it.
+- **Money, every way round (finding 1):**
+  - code before the amount ("USD 279") and sign after it ("130,66 €");
+  - digits with "pounds", unless the sentence is about weight;
+  - a bare amount said to be a price ("The price is 279.00", "It costs 279");
+  - markdown inside the figure;
+  - size words before a currency ("fifteen hundred dollars", "1.5k dollars"), always blocked;
+  - amounts read greedily and exactly, or blocked ("€9,99" is no longer skipped);
+  - a `$` prefix other than US/CA/C/A/AU means no live currency.
+- **`availability` (finding 2):**
+  - the asking word must follow a verb that asks or shows (see, check, show, confirm, know, say, tell, ask, find
+    out, sure, wonder);
+  - but, so, or, then, yet, because, since, although, while, as, until, unless, when and once always end the
+    clause;
+  - "and" ends it except after a question "which" and before any verb;
+  - no colon or dash may follow the match in its sentence;
+  - the sentence is cut at "?", "!" and "." with or without a space after.
+- **Negation (finding 3):** a negation earlier in the clause reverses polarity ("isn't in stock" needs every
+  variant at zero), and a negated count never passes.
+- **Counts (finding 4):**
+  - any digit run is read whole ("12345 left", "1,200 units");
+  - dozen, few, handful, couple, several, plenty, lots, loads, hundreds, thousands and many before a stock word are
+    always blocked.
+- **Eval leak guard (finding 5):** it runs on every catalog result inside the in-process server, before the model,
+  a cassette or a file sees it.
+- **Judge blocks (finding 9):** only `get_price` and `check_stock` results reach the judge. A product attribute
+  only `get_product` returned is not support (hard rule 5).
+- **`live_backed` (finding 7, part):** it does not count a question.
+- **Re-measured on the 143 recorded calls:** new hits are still money 2 (EV-029, EV-030) and stock 0.
+- **More residuals (logged):**
+  - MAX_TURNS bounds model rounds, not parallel catalog calls (finding 6, hardening);
+  - a polarity claim about a variant that was not checked passes when every checked variant agrees (finding 8);
+  - `live_claims` is not capped at the judge's product-claim count, which needs `judge.py` (finding 7, part; off
+    limits this row);
+  - a price-table cell with no currency or price word passes;
+  - "a hundred dollars" and other round spelled hundreds are always blocked, even when live.
