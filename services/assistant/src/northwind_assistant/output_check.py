@@ -138,6 +138,9 @@ def normal(text: str) -> str:
 
 
 _S = r"\s{1,3}"
+# Between the words of a stock phrase: whitespace, or a hyphen ("in-stock", "out-of-stock",
+# "sold-out"; the user, 2026-11-14).
+_J = r"(?:\s{1,3}|\s{0,3}[-‐‑]\s{0,3})"
 _GAP = r"[\s,]{1,2}"
 _WORDS = rf"(?:[^\W\d_]{{1,10}}{_GAP}){{0,3}}"  # at most three short words in between
 _SUBJECT = r"(?:order|payment|refund|discount|code)"
@@ -296,7 +299,7 @@ def _p(cls: str, pattern: str, exempt: str | None = None, *, exact: bool = False
 # and L right now"; second re-review H2).
 _TIMELY = (
     r"[^.!?\n]{0,40}\b(?:now|today|tonight|at\s{1,3}the\s{1,3}moment|currently|still|"
-    r"in\s{1,3}stock)\b"
+    rf"in{_J}stock)\b"
 )
 _RANGE = (
     r"(?:(?:sizes|colou?rs|fits|lengths|widths)\b|(?:\d{1,2}|two|three|four|five|six|seven|eight|"
@@ -346,11 +349,11 @@ PATTERNS: tuple[Pattern, ...] = (
     _p("refund_authority", rf"\brefunds?{_GAP}{_WORDS}(?:authori[sz]ed|approved)\b", "policy_span"),
     _p("refund_authority", rf"\bapprov\w{{0,4}}{_GAP}{_WORDS}refunds?\b", "policy_span"),
     _p("refund_authority", r"issue_refund|apply_discount"),
-    _p("stock", rf"\bout{_S}of{_S}stock\b", "live_stock"),
-    _p("stock", rf"\bsold{_S}out\b", "live_stock"),
-    _p("stock", rf"\bin{_S}stock\b", "live_stock"),
+    _p("stock", rf"\bout{_J}of{_J}stock\b", "live_stock"),
+    _p("stock", rf"\bsold{_J}out\b", "live_stock"),
+    _p("stock", rf"\bin{_J}stock\b", "live_stock"),
     _p("stock", rf"\bonly{_S}\d{{1,4}}{_S}left\b", "live_stock"),
-    _p("stock", rf"\blow{_S}stock\b", "live_stock"),
+    _p("stock", rf"\blow{_J}stock\b", "live_stock"),
     _p("stock", rf"\bjust{_S}\d{{1,4}}{_S}left\b", "live_stock"),
     _p("stock", rf"\bstock{_S}is{_S}(?:running{_S})?low\b", "live_stock"),
     # 5. False policy: a duration in a policy sentence, or a free-returns term, that no public
@@ -415,7 +418,7 @@ PATTERNS: tuple[Pattern, ...] = (
     _p(
         "stock",
         rf"\b{_COUNT}\s{{1,3}}(?:(?:units?|items?|pieces?|pairs?){_S})?"
-        rf"(?:left|remaining|in{_S}stock|available|on{_S}hand)\b",
+        rf"(?:left|remaining|in{_J}stock|available|on{_J}hand)\b",
         "live_stock",
     ),
     #    Any "available" or "unavailable" is a stock claim, whatever precedes it (the user's re-read
@@ -438,7 +441,7 @@ PATTERNS: tuple[Pattern, ...] = (
         "stock",
         rf"\b(?:a{_S})?(?:dozen|few|handful|couple|several|plenty|lots?|loads|tons|hundreds|"
         rf"thousands|many|some)(?:{_S}of)?(?:{_S}(?:units?|items?|pieces?|pairs?|them|those|sizes|"
-        rf"colou?rs))?{_S}(?:left|remaining|in{_S}stock|available|on{_S}hand)\b",
+        rf"colou?rs))?{_S}(?:left|remaining|in{_J}stock|available|on{_J}hand)\b",
     ),
     _p("stock", rf"\blimited{_S}(?:stock|availability|quantities|numbers)\b"),
     #    More member-price wordings (#13b R4 left these to #12), class 1: no exemption.
@@ -678,7 +681,7 @@ def _about_weight(view: str, start: int) -> bool:
 # at most a "." or "," (W1's decimal hold).
 _OPEN_TAIL = re.compile(r"[*_`]*[.,]?[*_`]*")
 _COUNT_IN = re.compile(rf"\d[\d,]*|{_SPELLED_COUNT}")
-_NEGATIVE = re.compile(rf"\bout{_S}of{_S}stock\b|\bsold{_S}out\b|\bunavailable\b")
+_NEGATIVE = re.compile(rf"\bout{_J}of{_J}stock\b|\bsold{_J}out\b|\bunavailable\b")
 _LOW = re.compile(r"\blow\b")
 
 

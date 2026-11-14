@@ -1,7 +1,10 @@
 """Over-blocking on trusted text (row #13, NFR-03): every public product, variant and document text
 in the fixtures passes the output check with itself as the source, except the reviewed hit list.
 FAQ-003 and FAQ-005 are on it by the user's decision (2026-11-11): they name stock and discount
-codes, and an answer quoting them gets the class's fixed sentence, which says the same thing."""
+codes, and an answer quoting them gets the class's fixed sentence, which says the same thing.
+P0001 and P0008 are on it by the user's decision in row #12 (2026-11-14, decision 0015): their
+descriptions say "Also available in a regular fit", and a specific fit is stock that needs
+`check_stock` (#12 second re-review H2), so an answer quoting it gets the stock sentence."""
 
 from __future__ import annotations
 
@@ -15,7 +18,12 @@ from northwind_assistant.output_check import Source, hits
 pytestmark = pytest.mark.req("NFR-03")
 
 FIXTURES = Path(__file__).resolve().parents[3] / "data" / "fixtures"
-REVIEWED_HIT_LIST = {"FAQ-003": {"stock"}, "FAQ-005": {"promotion"}}
+REVIEWED_HIT_LIST = {
+    "FAQ-003": {"stock"},
+    "FAQ-005": {"promotion"},
+    "P0001": {"stock"},  # "Also available in a regular fit" (H2, row #12)
+    "P0008": {"stock"},  # the same sentence
+}
 KINDS = {"documents.jsonl": "document", "products.jsonl": "product", "variants.jsonl": "variant"}
 
 

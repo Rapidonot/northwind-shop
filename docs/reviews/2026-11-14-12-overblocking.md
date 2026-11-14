@@ -174,3 +174,14 @@ direct diff of the shown text.)
     stock state (another negation in the clause).
   - The only non-stock "available" in any recording is L9's "available in the sources" (a2a, above).
   - No exemption is proposed.
+
+## Eighth pass: hyphenated stock phrases, 2026-11-14
+
+The check at `e9401f7` against the check with hyphenated stock phrases ("in-stock", "out-of-stock", "sold-out"), run
+by the seventh pass's script with `a2a-05-partner` added. Each call has its own turn's live values.
+```
+=== current: assistant calls scanned: 156; hits new minus prev: {}
+=== origin/main: assistant calls scanned: 143; hits new minus prev: {}
+```
+No change on any recording. The fixture over-blocking test (#13, NFR-03) gains no new hit either. Its list changes
+only by the user's P0001/P0008 decision.

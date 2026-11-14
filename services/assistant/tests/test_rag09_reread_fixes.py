@@ -163,3 +163,44 @@ def test_a_marked_amount_split_across_deltas_is_read_whole() -> None:
 def test_live_backed_reads_the_plain_view() -> None:
     assert live_backed("The M is **available** today.", ALL_IN) == 1
     assert live_backed("It costs $2**7**9.00.", PRICE) == 1
+
+
+# ---- hyphenated stock phrases (the user, 2026-11-14) ---------------------------------------------
+
+POSITIVE_HYPHENATED = ["The M is in-stock.", "The M is in - stock.", "The M is in‑stock."]
+NEGATIVE_HYPHENATED = ["The M is out-of-stock.", "The 3XL is sold-out.", "The M is out-of stock."]
+
+
+@pytest.mark.parametrize("text", POSITIVE_HYPHENATED + NEGATIVE_HYPHENATED)
+def test_a_hyphenated_stock_phrase_is_blocked_with_no_live_values(text: str) -> None:
+    assert hits(text) == {"stock": 1}
+    assert check_text(text) == STOCK
+
+
+@pytest.mark.parametrize("text", POSITIVE_HYPHENATED)
+def test_in_stock_with_hyphens_needs_every_check_above_zero(text: str) -> None:
+    assert hits(text, live=ALL_IN) == {}
+    assert hits(text, live=ALL_OUT) == {"stock": 1}
+    assert hits(text, live=MIXED) == {"stock": 1}
+
+
+@pytest.mark.parametrize("text", NEGATIVE_HYPHENATED)
+def test_out_of_stock_and_sold_out_with_hyphens_need_every_check_at_zero(text: str) -> None:
+    assert hits(text, live=ALL_OUT) == {}
+    assert hits(text, live=ALL_IN) == {"stock": 1}
+    assert hits(text, live=MIXED) == {"stock": 1}
+
+
+def test_a_negated_hyphenated_phrase_flips_its_polarity() -> None:
+    assert hits("The M isn't in-stock.", live=ALL_OUT) == {}
+    assert hits("The M isn't in-stock.", live=ALL_IN) == {"stock": 1}
+
+
+def test_a_hyphenated_count_phrase_is_read_as_a_count() -> None:
+    assert hits("Only 3 units in-stock.", live=LiveValues(stock={"a": 3})) == {}
+    assert hits("Only 5 units in-stock.", live=LiveValues(stock={"a": 3})) == {"stock": 1}
+    assert hits("Plenty in-stock.", live=ALL_IN) == {"stock": 1}  # a quantity no tool returns
+
+
+def test_a_hyphenated_time_word_ends_the_range_exception() -> None:
+    assert hits("The jacket is available in sizes M and L, all in-stock.") == {"stock": 1}

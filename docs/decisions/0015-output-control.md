@@ -365,3 +365,14 @@ readily available", "**available**"). Fixed, fail closed:
   approval, and none was added.
 - **Over-blocking:** no change on the current recordings. On origin/main's recordings, three new hits, each "available
   in" a specific colour or size (H2's rule). Measured in `docs/reviews/2026-11-14-12-overblocking.md`, seventh pass.
+
+**A second user-approved exception to "#12 changes none of #13's tests" (2026-11-14).** The re-read fix makes the
+check block P0001's and P0008's description, "Also available in a regular fit": a specific fit is stock that needs
+`check_stock` (H2). In `services/assistant/tests/test_output_check_fixtures.py` (#13, NFR-03), the reviewed hit list
+gains `"P0001": {"stock"}` and `"P0008": {"stock"}`, with a note citing H2. An answer quoting that line gets the
+stock sentence. No other #13 assertion changed, and the check is not loosened.
+
+**Hyphenated stock phrases (the user, 2026-11-14).** Stock phrases accept a hyphen between their words: "in-stock",
+"out-of-stock", "sold-out" (and "low-stock", "on-hand" in the same patterns). At e9401f7, "The M is in-stock."
+passed with no check. They are vouched under D3 as the spaced forms are, and "in-stock" after a plural range ends
+the range exception as "in stock" does.
