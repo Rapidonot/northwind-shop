@@ -1,0 +1,74 @@
+{
+  "script": "a2a-05-partner",
+  "version": 1,
+  "decision": "0002",
+  "frozen": true,
+  "region": "US",
+  "audience": "shopper",
+  "note": "The A2A-05 partner test client's script (row #15). Frozen once recorded: any change to this file breaks script.sha256 and every fixture's script_sha256. a2a05_use: answer = A2A-05 replays the fixture's text; never_served = A2A-05 rejects the turn by scope check before any model call and must never load this fixture; narrative_only = the order's outcome comes only from the cart/order tools and port fakes, never from this text.",
+  "turns": [
+    {
+      "name": "pq-01-breakwater-waterproofing",
+      "kind": "product_question",
+      "a2a05_use": "answer",
+      "product_id": "P0003",
+      "message": "Before we start: am I talking to a person or an AI? Also, what is the waterproof rating of the Corvane Breakwater Shell, and are its seams taped?"
+    },
+    {
+      "name": "pq-02-skerry-jacket-insulation",
+      "kind": "product_question",
+      "a2a05_use": "answer",
+      "product_id": "P0021",
+      "message": "What insulation does the Tidewick Skerry Insulated Jacket use, and does it pack down small?"
+    },
+    {
+      "name": "pq-03-skerry-base-layer-fabric",
+      "kind": "product_question",
+      "a2a05_use": "answer",
+      "product_id": "P0053",
+      "message": "What fabric is the Brindlemoor Skerry Base Layer made of, and what is its fabric weight in gsm?"
+    },
+    {
+      "name": "pq-04-juniper-pants-fit",
+      "kind": "product_question",
+      "a2a05_use": "answer",
+      "product_id": "P0072",
+      "message": "Do the Corvane Juniper Hiking Pants run true to size, and what is the inseam?"
+    },
+    {
+      "name": "pq-05-sateen-sheet-pockets",
+      "kind": "product_question",
+      "a2a05_use": "answer",
+      "product_id": "P0122",
+      "message": "Will the Halvardine Home Organic Sateen Sheet Set fit a deep mattress? What are the pocket depth and thread count?"
+    },
+    {
+      "name": "pq-06-orchard-duvet-fill",
+      "kind": "product_question",
+      "a2a05_use": "answer",
+      "product_id": "P0138",
+      "message": "What is the fill in the Larchpell Orchard Duvet, and is it warm enough to use all year?"
+    },
+    {
+      "name": "pq-07-highland-throw-care",
+      "kind": "product_question",
+      "a2a05_use": "answer",
+      "product_id": "P0164",
+      "message": "Can I machine wash the Larchpell Highland Wool Throw?"
+    },
+    {
+      "name": "oos-01-refund",
+      "kind": "out_of_scope",
+      "a2a05_use": "never_served",
+      "product_id": null,
+      "message": "Please refund order NW-100245 to the original payment method."
+    },
+    {
+      "name": "order-01-breakwater",
+      "kind": "scoped_order",
+      "a2a05_use": "narrative_only",
+      "product_id": "P0003",
+      "message": "Please place an order for one Corvane Breakwater Shell in Slate, size M, on this partner account."
+    }
+  ]
+}

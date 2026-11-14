@@ -1,0 +1,66 @@
+{
+  "a2a05_use": "answer",
+  "answer": {
+    "citations": [
+      "P0003"
+    ],
+    "outcome": "answered",
+    "resets": 0,
+    "sent": "I'm an AI shopping assistant for Northwind Outfitters, not a person.\n\nFor the Corvane Breakwater Shell:\n- **Waterproof rating:** 15,000 mm, using the StormVeil 2.5-layer membrane [P0003].\n- **Seams:** Yes, it's fully waterproof with taped seams [P0003]. The product data also lists it as seam-sealed [P0003].\n\nFor current price, stock and sizes available right now, check the live product page.",
+    "shown": "I'm an AI shopping assistant for Northwind Outfitters, not a person.\n\nFor the Corvane Breakwater Shell:\n- **Waterproof rating:** 15,000 mm, using the StormVeil 2.5-layer membrane [P0003].\n- **Seams:** Yes, it's fully waterproof with taped seams [P0003]. The product data also lists it as seam-sealed [P0003].\n\nFor current price, stock and sizes available right now, check the live product page."
+  },
+  "assistant_id": "assistant:v1:claude-sonnet-5-5:prompt-eb39dcf5:check-0cb61e75",
+  "context": [
+    {
+      "chunk_id": "product:P0003:0",
+      "source_id": "P0003",
+      "source_type": "product",
+      "text": "Corvane Breakwater Shell\n\nBrand: Corvane. Department: Jackets.\n\nThe Corvane Breakwater Shell is a no-fuss rain shell for trail days and city rain alike. It is fully waterproof with taped seams. The StormVeil 2.5-layer membrane is rated to 15,000 mm. The adjustable hood keeps rain off your face. Made from recycled nylon ripstop. It weighs 420 g. Relaxed fit: more space across the chest and shoulders for a broader build. Runs true to size. Made in Vietnam.\n\nAttributes: country_of_origin: Vietnam; fit_guidance: true_to_size; hood: adjustable; material: recycled nylon ripstop; membrane: StormVeil 2.5-layer; packable: False; seam_sealed: True; water_protection: waterproof; waterproof_rating_mm: 15000; weight_g: 420.\n\nSizes: S, M, L, XL, 2XL, 3XL.\n\nColours: Slate.\n\nFits: relaxed."
+    },
+    {
+      "chunk_id": "product:P0015:0",
+      "source_id": "P0015",
+      "source_type": "product",
+      "text": "Corvane Alder Rain Jacket\n\nBrand: Corvane. Department: Jackets.\n\nBuilt for unsettled weather, the Corvane Alder Rain Jacket is an everyday shell. It is fully waterproof with taped seams. The NW-Shield 2-layer membrane is rated to 15,000 mm. The adjustable hood keeps rain off your face. Made from recycled nylon ripstop. It weighs 300 g. It packs into its own pocket. Regular fit. Runs true to size. Made in India.\n\nAttributes: country_of_origin: India; fit_guidance: true_to_size; hood: adjustable; material: recycled nylon ripstop; membrane: NW-Shield 2-layer; packable: True; seam_sealed: True; water_protection: waterproof; waterproof_rating_mm: 15000; weight_g: 300.\n\nSizes: XS, S.\n\nColours: Burgundy.\n\nFits: regular."
+    },
+    {
+      "chunk_id": "product:P0006:0",
+      "source_id": "P0006",
+      "source_type": "product",
+      "text": "Corvane Torrent Rain Jacket\n\nBrand: Corvane. Department: Jackets.\n\nThe Corvane Torrent Rain Jacket is a rain jacket for wet commutes and long walks. It is fully waterproof with taped seams. The StormVeil 2.5-layer membrane is rated to 20,000 mm. The adjustable hood keeps rain off your face. Made from recycled nylon ripstop. It weighs 420 g. Regular fit. Runs true to size. Made in Vietnam.\n\nAttributes: country_of_origin: Vietnam; fit_guidance: true_to_size; hood: adjustable; material: recycled nylon ripstop; membrane: StormVeil 2.5-layer; packable: False; seam_sealed: True; water_protection: waterproof; waterproof_rating_mm: 20000; weight_g: 420.\n\nSizes: S, M, L, XL, 2XL.\n\nColours: Black, Cobalt.\n\nFits: regular."
+    },
+    {
+      "chunk_id": "product:P0012:0",
+      "source_id": "P0012",
+      "source_type": "product",
+      "text": "Corvane Thistle Shell\n\nBrand: Corvane. Department: Jackets.\n\nBuilt for unsettled weather, the Corvane Thistle Shell is an everyday shell. It is fully waterproof with taped seams. The StormVeil 2.5-layer membrane is rated to 15,000 mm. The adjustable hood keeps rain off your face. Made from recycled nylon ripstop. It weighs 400 g. Regular fit. Runs true to size. Made in Peru.\n\nAttributes: country_of_origin: Peru; fit_guidance: true_to_size; hood: adjustable; material: recycled nylon ripstop; membrane: StormVeil 2.5-layer; packable: False; seam_sealed: True; water_protection: waterproof; waterproof_rating_mm: 15000; weight_g: 400.\n\nSizes: S, M, L.\n\nColours: Navy.\n\nFits: regular."
+    },
+    {
+      "chunk_id": "product:P0014:0",
+      "source_id": "P0014",
+      "source_type": "product",
+      "text": "Corvane Birch Rain Jacket\n\nBrand: Corvane. Department: Jackets.\n\nThe Corvane Birch Rain Jacket is a no-fuss rain shell for trail days and city rain alike. It is fully waterproof with taped seams. The NW-Shield 2-layer membrane is rated to 20,000 mm. The stowable hood keeps rain off your face. Made from recycled polyester. It weighs 420 g. It packs into its own pocket. Regular fit. Runs true to size. Made in Lithuania.\n\nAttributes: country_of_origin: Lithuania; fit_guidance: true_to_size; hood: stowable; material: recycled polyester; membrane: NW-Shield 2-layer; packable: True; seam_sealed: True; water_protection: waterproof; waterproof_rating_mm: 20000; weight_g: 420.\n\nSizes: S, M, L, XL.\n\nColours: White.\n\nFits: regular."
+    }
+  ],
+  "disclosure": {
+    "in_model_text": true,
+    "in_shown": true
+  },
+  "kind": "product_question",
+  "message": "Before we start: am I talking to a person or an AI? Also, what is the waterproof rating of the Corvane Breakwater Shell, and are its seams taped?",
+  "message_sha256": "7e8079b2c42ce1943201d7e5d3c148e891b5be2d8973e03cf1972eda29d2c25b",
+  "name": "pq-01-breakwater-waterproofing",
+  "note": "A2A-05 replays this text by name; never when assistant_id is not current.",
+  "provisional": true,
+  "recorded": "2026-11-13",
+  "refinements": [],
+  "region": "US",
+  "script_sha256": "2ca30e4d19077f4463ad672bb8afc05bc239be181cb5682ef4fe0f168eacf235",
+  "suite": "a2a-05-partner",
+  "upstream_calls": [
+    {
+      "model": "claude-sonnet-5-5",
+      "stop_reason": "end_turn"
+    }
+  ]
+}
