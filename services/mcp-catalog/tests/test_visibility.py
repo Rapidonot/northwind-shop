@@ -17,7 +17,7 @@ from northwind_common.errors import ToolError
 from northwind_common.mcp_token import CATALOG_SERVER, Claims
 from northwind_mcp_catalog.live import FixtureCatalog
 from northwind_mcp_catalog.server import CatalogServer, error_result
-from northwind_mcp_catalog.testing import KEY, connect, running, token
+from northwind_mcp_catalog.testing import KEY, body_of, connect, running, token
 from northwind_mcp_catalog.tools import TOOLS
 
 pytestmark = [pytest.mark.req("CC-10"), pytest.mark.req("RAG-11"), pytest.mark.req("NFR-01")]
@@ -151,7 +151,7 @@ def test_search_never_returns_p0009(url: str, region: str) -> None:
     returned = 0
     for args, (is_error, text) in zip(all_args, out, strict=True):
         assert is_error is False, args
-        body = json.loads(text)
+        body = body_of(text)
         returned += len(body["products"])
         assert "P0009" not in [p["product_id"] for p in body["products"]], args
         assert TITLE not in text and CANARY not in text, args
@@ -164,14 +164,14 @@ def test_search_by_gender_is_a_valid_search_and_never_returns_p0009(url: str, ge
     # result is never `tool_failed`).
     [(is_error, text)] = session(url, "UK", [("search_products", {"gender": gender, "limit": 20})])
     assert is_error is False, text
-    body = json.loads(text)
+    body = body_of(text)
     assert body["products"]
     assert "P0009" not in [p["product_id"] for p in body["products"]]
 
 
 def test_search_by_the_internal_name_is_an_empty_valid_result(url: str) -> None:
     [(is_error, text)] = session(url, "UK", [("search_products", {"text": TITLE})])
-    assert (is_error, json.loads(text)) == (False, {"products": [], "returned": 0, "more": False})
+    assert (is_error, body_of(text)) == (False, {"products": [], "returned": 0, "more": False})
 
 
 # ---- a staff caller does see it (no staff agent is scoped, so the handler is called directly) --
@@ -189,7 +189,7 @@ def staff_call(name: str, args: dict[str, Any], region: str | None = None) -> tu
 
     result = asyncio.run(go())
     [block] = result.content
-    return bool(result.is_error), json.loads(block.text)
+    return bool(result.is_error), body_of(block.text)
 
 
 def test_staff_search_finds_p0009() -> None:

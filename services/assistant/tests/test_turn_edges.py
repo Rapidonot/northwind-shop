@@ -153,7 +153,7 @@ def test_three_searches_and_an_answer_fit_in_the_cap(tmp_path: Path) -> None:
 def test_the_options_carry_the_cap_the_mode_and_no_builtin_tools(tmp_path: Path) -> None:
     with ScriptedLLM() as llm:
         options = assistant_options(US, "http://127.0.0.1:9/mcp", "t", runtime_for(llm, tmp_path))
-    assert options.max_turns == 4
+    assert options.max_turns == 6  # 4 until row #12 (the user's D2)
     assert options.permission_mode == "dontAsk"
     assert options.tools == []
     assert options.allowed_tools == [ALLOWED_TOOL]

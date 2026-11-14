@@ -218,11 +218,12 @@ async def search_products(
         p for p in server.catalog.products() if _sees(claims, p.visibility) and _matches(p, filters)
     ]
     return json_result(
+        SEARCH_PRODUCTS,
         {
             "products": [_summary(p) for p in found[:limit]],
             "returned": min(len(found), limit),
             "more": len(found) > limit,
-        }
+        },
     )
 
 
@@ -240,6 +241,7 @@ async def get_product(
         if _sees(claims, v.visibility)
     ]
     return json_result(
+        GET_PRODUCT,
         {
             **_summary(product),
             "gender": product.gender,
@@ -252,7 +254,7 @@ async def get_product(
             "care_guide_id": product.care_guide_id,
             "size_guide_id": product.size_guide_id,
             "variant_ids": variants,
-        }
+        },
     )
 
 
@@ -264,7 +266,7 @@ async def get_variant(
     variant = _visible_variant(server, claims, variant_id)
     if variant is None:
         raise variant_not_found()
-    return json_result(_variant_view(variant))
+    return json_result(GET_VARIANT, _variant_view(variant))
 
 
 def _priced_variant(server: CatalogServer, claims: Claims, args: Mapping[str, Any]) -> str:
@@ -287,12 +289,13 @@ async def get_price(
     if price is None:
         raise not_sold_in_region()
     return json_result(
+        GET_PRICE,
         {
             "variant_id": variant_id,
             "region": region,
             "amount": price.amount,
             "currency": price.currency,
-        }
+        },
     )
 
 
@@ -306,7 +309,8 @@ async def check_stock(
         raise not_sold_in_region()
     on_hand = server.catalog.stock(variant_id, region) or 0  # live, on every call
     return json_result(
-        {"variant_id": variant_id, "region": region, "on_hand": on_hand, "in_stock": on_hand > 0}
+        CHECK_STOCK,
+        {"variant_id": variant_id, "region": region, "on_hand": on_hand, "in_stock": on_hand > 0},
     )
 
 

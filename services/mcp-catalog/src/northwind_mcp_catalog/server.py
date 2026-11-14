@@ -29,7 +29,7 @@ import mcp.types as t
 from mcp.server.lowlevel import Server
 from mcp.shared.exceptions import MCPError
 
-from northwind_common import mcp_gate
+from northwind_common import catalog_tool, mcp_gate
 from northwind_common.errors import ToolError
 from northwind_common.mcp_gate import ASGIApp
 from northwind_common.mcp_token import CATALOG_SERVER, Claims
@@ -71,10 +71,11 @@ def error_result(error: ToolError) -> t.CallToolResult:
     )
 
 
-def json_result(value: Any) -> t.CallToolResult:
-    """A success is JSON text only (sorted keys, ASCII), with no `structuredContent` (S0 item 5).
-    Labelling it as data for the model is the assistant's, at #12 (hard rule 6)."""
-    text = json.dumps(value, sort_keys=True, separators=(",", ":"))
+def json_result(tool: str, value: Any) -> t.CallToolResult:
+    """A success is text only, with no `structuredContent` (S0 item 5): the JSON inside a
+    `<catalog_data tool="…">` label, so the model reads it as data (row #12, #10b security review
+    L6, hard rule 6). The format is `northwind_common.catalog_tool`'s."""
+    text = catalog_tool.label(tool, value)
     return t.CallToolResult(content=[t.TextContent(type="text", text=text)], is_error=False)
 
 

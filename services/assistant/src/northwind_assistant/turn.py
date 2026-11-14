@@ -21,6 +21,7 @@ from claude_agent_sdk import AssistantMessage, ClaudeSDKError, ResultMessage, Us
 from claude_agent_sdk.types import StreamEvent, ToolResultBlock, ToolUseBlock
 
 from northwind_assistant.caller import Caller
+from northwind_assistant.catalog_client import CatalogEndpoint
 from northwind_assistant.output_check import OutputCheck
 from northwind_assistant.prompt import system_prompt, user_prompt
 from northwind_assistant.rag_client import McpRagSearcher, RagEndpoint
@@ -33,14 +34,18 @@ from northwind_assistant.tools import (
     search_sources,
 )
 from northwind_assistant.usage import TurnUsage
+from northwind_common import catalog_tool
 from northwind_common.llm import ASSISTANT_MODEL, AgentRuntime, agent_options
 from northwind_common.mcp_token import bearer
 
 log = logging.getLogger(__name__)
 
-# Two refinement searches, one refused search and the answer. mcp-rag holds RAG-10's cap of 3
-# searches per turn, and the refused one tells the model to answer, which takes this extra turn.
-MAX_TURNS = 4
+# Model calls per turn. Before row #12 this was 4: two refinement searches, one refused search and
+# the answer. A live price answer adds catalog rounds (`get_product`, then `get_price` and
+# `check_stock` together), so row #12 raised it to 6 (the user's D2). mcp-rag still holds RAG-10's
+# cap of 3 searches per turn; this cap is also the interim bound on catalog calls until hardening
+# adds a per-turn catalog cap.
+MAX_TURNS = 6
 # Anything else, such as max_tokens or a refusal, is not a finished answer.
 FINISHED_STOPS = frozenset({"end_turn", "tool_use"})
 
@@ -89,17 +94,34 @@ def cited_ids(answer: str, seen: set[str]) -> tuple[str, ...]:
     return cited
 
 
-def assistant_options(caller: Caller, url: str, token: str, runtime: AgentRuntime) -> Any:
-    """mcp-rag is the one server, over HTTP with this turn's token; `retrieve_context` the one tool
-    (NFR-01). The CLI gets the token, never the key."""
-    server = {"type": "http", "url": url, "headers": bearer(token)}
+def assistant_options(
+    caller: Caller,
+    url: str,
+    token: str,
+    runtime: AgentRuntime,
+    catalog: tuple[str, str] | None = None,
+) -> Any:
+    """mcp-rag over HTTP with this turn's token, `retrieve_context` its one tool; and, given
+    `catalog` (URL, token), mcp-catalog with its five read-only tools (row #12, RAG-09; PRD §7,
+    NFR-01). Each server gets its own token, which the other refuses. The CLI gets the tokens, never
+    the key."""
+    servers: dict[str, Any] = {SERVER_NAME: {"type": "http", "url": url, "headers": bearer(token)}}
+    allowed = [ALLOWED_TOOL]
+    if catalog is not None:
+        catalog_url, catalog_token = catalog
+        servers[catalog_tool.SERVER_NAME] = {
+            "type": "http",
+            "url": catalog_url,
+            "headers": bearer(catalog_token),
+        }
+        allowed.extend(catalog_tool.ALLOWED_TOOLS)
     return agent_options(
         system_prompt=system_prompt(caller.region),
         model=ASSISTANT_MODEL,
         tools=[],
         runtime=runtime,
-        mcp_servers={SERVER_NAME: server},
-        allowed_tools=[ALLOWED_TOOL],
+        mcp_servers=servers,
+        allowed_tools=allowed,
         permission_mode="dontAsk",
         include_partial_messages=True,
         max_turns=MAX_TURNS,
@@ -214,8 +236,14 @@ async def run_turn(
 
 
 async def stream_answer(
-    message: str, caller: Caller, rag: RagEndpoint, runtime: AgentRuntime
+    message: str,
+    caller: Caller,
+    rag: RagEndpoint,
+    runtime: AgentRuntime,
+    catalog: CatalogEndpoint | None = None,
 ) -> AsyncIterator[TurnEvent]:
+    """`catalog` attaches mcp-catalog (row #12). The gateway and the eval answerer always pass one
+    (pinned by tests); `None` is the one-server surface that tests written before #12 use."""
     state = ToolState()
     token = rag.mint(caller)
     found = await search_sources(message, McpRagSearcher(rag.url, token), state)
@@ -233,7 +261,8 @@ async def stream_answer(
         usage.report("retrieval_failed")
         yield TurnError("retrieval_failed")
         return
-    options = assistant_options(caller, rag.url, token, runtime)
+    attached = None if catalog is None else (catalog.url, catalog.mint(caller))
+    options = assistant_options(caller, rag.url, token, runtime, attached)
     usage = TurnUsage(deferred=True)
     check = OutputCheck(state.seen, state.sources)
     try:

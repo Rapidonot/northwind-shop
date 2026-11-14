@@ -18,7 +18,7 @@ import pytest
 from northwind_common.errors import ENVELOPE_KEYS
 from northwind_mcp_catalog.live import FixtureCatalog, Price, Product, Variant
 from northwind_mcp_catalog.server import CatalogServer
-from northwind_mcp_catalog.testing import KEY, connect, running, token
+from northwind_mcp_catalog.testing import KEY, body_of, connect, running, token
 from northwind_mcp_catalog.tools import TOOLS
 
 pytestmark = pytest.mark.req("CC-10")
@@ -186,7 +186,7 @@ def test_the_assistant_lists_the_five_tools_over_the_wire(url: str) -> None:
 
 def test_search_products_finds_a_public_product_by_name(url: str) -> None:
     is_error, text, structured = one(url, "search_products", {"text": "Tidewick Harbor"})
-    body = json.loads(text)
+    body = body_of(text)
     assert (is_error, structured) == (False, None)
     assert set(body) == {"products", "returned", "more"}
     assert [p["product_id"] for p in body["products"]] == ["P0001"]
@@ -203,17 +203,17 @@ def test_search_products_finds_a_public_product_by_name(url: str) -> None:
 
 def test_search_products_limits_and_orders_by_product_id(url: str) -> None:
     _, text, _ = one(url, "search_products", {"limit": 3})
-    body = json.loads(text)
+    body = body_of(text)
     ids = [p["product_id"] for p in body["products"]]
     assert (body["returned"], body["more"]) == (3, True)
     assert ids == sorted(ids)
     _, default_text, _ = one(url, "search_products", {})
-    assert json.loads(default_text)["returned"] == 10
+    assert body_of(default_text)["returned"] == 10
 
 
 def test_search_products_carries_no_price_or_stock(url: str) -> None:
     _, text, _ = one(url, "search_products", {"limit": 20})
-    for product in json.loads(text)["products"]:
+    for product in body_of(text)["products"]:
         assert set(product) == {
             "product_id",
             "name",
@@ -226,7 +226,7 @@ def test_search_products_carries_no_price_or_stock(url: str) -> None:
 
 def test_get_product_returns_the_record_and_its_variant_ids(url: str) -> None:
     is_error, text, structured = one(url, "get_product", {"product_id": "P0001"})
-    body = json.loads(text)
+    body = body_of(text)
     expected = sorted(
         v["variant_id"] for v in jsonl("variants.jsonl") if v["product_id"] == "P0001"
     )
@@ -240,7 +240,7 @@ def test_get_product_returns_the_record_and_its_variant_ids(url: str) -> None:
 def test_get_variant_returns_its_attributes(url: str) -> None:
     is_error, text, structured = one(url, "get_variant", {"variant_id": "P0001-BLK-REG-L"})
     assert (is_error, structured) == (False, None)
-    assert json.loads(text) == {
+    assert body_of(text) == {
         "variant_id": "P0001-BLK-REG-L",
         "product_id": "P0001",
         "sku": "NW-0001-BLK-REG-L",
@@ -256,7 +256,7 @@ def test_get_price_reads_the_token_region(url: str, region: str) -> None:
     row = fixture_price("P0001-BLK-REG-L", region)
     is_error, text, structured = one(url, "get_price", {"variant_id": "P0001-BLK-REG-L"}, region)
     assert (is_error, structured) == (False, None)
-    assert json.loads(text) == {
+    assert body_of(text) == {
         "variant_id": "P0001-BLK-REG-L",
         "region": region,
         "amount": row["amount"],
@@ -270,7 +270,7 @@ def test_check_stock_reads_the_token_region(url: str, region: str) -> None:
     on_hand = fixture_stock("P0001-BLK-REG-L", region)
     is_error, text, structured = one(url, "check_stock", {"variant_id": "P0001-BLK-REG-L"}, region)
     assert (is_error, structured) == (False, None)
-    assert json.loads(text) == {
+    assert body_of(text) == {
         "variant_id": "P0001-BLK-REG-L",
         "region": region,
         "on_hand": on_hand,
@@ -289,7 +289,7 @@ def test_a_caller_key_cannot_pick_the_region(url: str) -> None:
 def test_an_empty_search_is_not_an_error(url: str) -> None:
     is_error, text, structured = one(url, "search_products", {"text": "zzzz no such product"})
     assert (is_error, structured) == (False, None)
-    assert json.loads(text) == {"products": [], "returned": 0, "more": False}
+    assert body_of(text) == {"products": [], "returned": 0, "more": False}
 
 
 @pytest.mark.parametrize(
@@ -469,9 +469,9 @@ def test_price_and_stock_follow_the_live_store_with_no_file_edit() -> None:
     with running(instance) as live_url:
         assert instance.catalog is catalog
         _, text, _ = one(live_url, "get_price", {"variant_id": vid})
-        assert json.loads(text)["amount"] == before["amount"]
+        assert body_of(text)["amount"] == before["amount"]
         _, text, _ = one(live_url, "check_stock", {"variant_id": vid})
-        assert json.loads(text)["on_hand"] == fixture_stock(vid, "UK")
+        assert body_of(text)["on_hand"] == fixture_stock(vid, "UK")
 
         new_amount = "1.07" if before["amount"] != "1.07" else "2.07"
         new_stock = 7 if fixture_stock(vid, "UK") != 7 else 8
@@ -479,22 +479,22 @@ def test_price_and_stock_follow_the_live_store_with_no_file_edit() -> None:
         instance.catalog.set_stock(vid, "UK", new_stock)
 
         _, text, _ = one(live_url, "get_price", {"variant_id": vid})
-        assert json.loads(text) == {
+        assert body_of(text) == {
             "variant_id": vid,
             "region": "UK",
             "amount": new_amount,
             "currency": "GBP",
         }
         _, text, _ = one(live_url, "check_stock", {"variant_id": vid})
-        body = json.loads(text)
+        body = body_of(text)
         assert (body["on_hand"], body["in_stock"]) == (new_stock, True)
         # another region is untouched
         _, text, _ = one(live_url, "get_price", {"variant_id": vid}, "US")
-        assert json.loads(text)["amount"] == fixture_price(vid, "US")["amount"]
+        assert body_of(text)["amount"] == fixture_price(vid, "US")["amount"]
 
         instance.catalog.set_stock(vid, "UK", 0)
         _, text, _ = one(live_url, "check_stock", {"variant_id": vid})
-        body = json.loads(text)
+        body = body_of(text)
         assert (body["on_hand"], body["in_stock"]) == (0, False)
 
 
