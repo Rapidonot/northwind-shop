@@ -234,7 +234,8 @@ filters, D5) and stock 0, after `_asks` was tightened. The member wordings had 0
 - The question rule reads only the 60 characters before "available".
 
 **After security review pass 1 (2026-11-14; `docs/reviews/2026-11-14-12-security-review.raw.md`).** Two high findings
-and three medium were fixed. All fixes tighten the check; none loosens it.
+and three medium were fixed. The scoped re-review found that two of these fixes loosened the check: the
+"which … and" rule (N1) and negation (N3). Both are fixed in the next section.
 - **Money, every way round (finding 1):**
   - code before the amount ("USD 279") and sign after it ("130,66 €");
   - digits with "pounds", unless the sentence is about weight;
@@ -270,3 +271,30 @@ and three medium were fixed. All fixes tighten the check; none loosens it.
     limits this row);
   - a price-table cell with no currency or price word passes;
   - "a hundred dollars" and other round spelled hundreds are always blocked, even when live.
+
+
+**After the scoped re-review (2026-11-14; `docs/reviews/2026-11-14-12-security-rereview.raw.md`).** It found two
+high findings, N1 (a regression from pass 1's "and" rule) and N2. That is stop 10: the chain stops for the user. The
+fixes below were made locally before stopping, as CLAUDE.md asks. They are tested and committed, but no reviewer has
+read them.
+- **N1:** a question's "and" is allowed only in a noun phrase from a closed list ("which size and colour
+  combinations are"). Anything else ends the clause.
+- **N2:**
+  - an amount, then one or two words, then a currency unit ("279 Canadian dollars", "199 British pounds", "279 US$")
+    is read through a closed qualifier map, and passes only in the currency the qualifier and the unit agree on;
+  - "279 (USD)" is read too;
+  - other currencies' signs and codes next to a digit (¥, ₹, CHF, kr, yen, …) are always blocked.
+- **N3:** only a negation that governs the phrase ("isn't in stock", "is not available", "no longer in stock")
+  reverses polarity. Any other negation in the clause makes the claim unvouched. Dashes and brackets end the clause.
+- **N4:** a personal pronoun between the asking word and the question's own subject means another clause sits in
+  between, so the phrase is a claim. Brackets, slashes and quotes end the clause.
+- **N5:** "N pounds" is a weight only when a weight verb or noun governs it ("weighs about 2.1 pounds", "its
+  weight is 3 pounds"). Light, lightweight and heavy no longer count.
+- **N6:** up to two hedge words between a price word and its amount ("costs just 279").
+- **N7:** some, lot(s), tons and "limited stock", with sizes/colours/of them in between, are always blocked.
+- **N8:** the eval catalog guard also refuses any internal source ID in a result's text.
+- **N9:** an `availability` match that a question exempts is held until its sentence ends or 60 characters pass,
+  so a late colon still counts.
+- **Re-measured:** money 2 (EV-029, EV-030), stock 0.
+- **New residuals:** "starting at" and "as low as" before a bare amount (they would push the pattern past L); a
+  qualifier outside the closed map ("279 Kiwi dollars") is blocked even when live.

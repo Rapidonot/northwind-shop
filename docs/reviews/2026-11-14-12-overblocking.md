@@ -77,3 +77,7 @@ EV-029 and EV-030 are also on the user's W3 watch list: their reference facts sa
   "available" needs an embedded-question frame. It also handles negation and reads quantities.
 - Re-measured, 143 calls: new hits **money 2** (EV-029, EV-030), **stock 0**, member wordings 0.
 - The five measured questions still pass.
+
+## Fifth pass: after the scoped re-review's fixes (N1-N9), 2026-11-14
+Re-measured on 143 calls: new hits **money 2** (EV-029, EV-030), **stock 0**, member wordings 0. The five measured
+questions still pass.

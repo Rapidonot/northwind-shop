@@ -91,3 +91,49 @@ FAILED evals/tests/test_rag09_live_sources.py::test_a_guard_that_cannot_run_coun
 FAILED evals/tests/test_rag09_live_sources.py::test_a_flagged_leak_fails_the_item
 FAILED evals/tests/test_rag09_live_sources.py::test_only_price_and_stock_results_reach_the_judge
 46 failed, 33 passed, 1 skipped in 2.20s
+
+== security re-review (N1-N9): the new tests in test_rag09_security_fixes.py at d4e1c4f, before the fixes ==
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n1_which_and_with_a_verb_or_subject_is_a_claim[Check which fits you best and the M is available now.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n1_which_and_with_a_verb_or_subject_is_a_claim[See which colour you prefer and the M is available today.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n1_which_and_with_a_verb_or_subject_is_a_claim[Check which size fits and it is available now.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n2_a_qualified_or_foreign_price_is_money[The Summit Shell is 279 Canadian dollars.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n2_a_qualified_or_foreign_price_is_money[It is 279 US dollars.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n2_a_qualified_or_foreign_price_is_money[It is 49 Australian dollars.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n2_a_qualified_or_foreign_price_is_money[It is 199 British pounds.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n2_a_qualified_or_foreign_price_is_money[It is 279 US$.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n2_a_qualified_or_foreign_price_is_money[It is 279 (USD).]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n2_a_qualified_or_foreign_price_is_money[It is \xa540,000.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n2_a_qualified_or_foreign_price_is_money[It is CHF 279.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n2_a_qualified_or_foreign_price_is_money[It is 279 kr.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n2_a_qualified_or_foreign_price_is_money[It is 279 yen.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n2_a_qualified_or_foreign_price_is_money[It is \u20b92,500.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n2_a_qualified_price_passes_only_in_its_own_currency[It is 279 Canadian dollars.-price0]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n2_a_qualified_price_passes_only_in_its_own_currency[It is 279 US dollars.-price1]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n2_a_qualified_price_passes_only_in_its_own_currency[It is 199 British pounds.-price2]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n2_a_qualified_price_passes_only_in_its_own_currency[It is 279 (USD).-price3]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n2_a_us_price_does_not_vouch_canadian_dollars
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n3_a_negation_that_does_not_govern_blocks_at_any_stock[There's no doubt the M is in stock.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n3_a_dash_ends_the_negations_clause[No worries \u2014 the M is in stock.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n3_a_dash_ends_the_negations_clause[Don't wait \u2014 the M is available now.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n4_another_clause_after_the_asking_word_leaves_a_claim[Not sure if you noticed the M is available now.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n4_another_clause_after_the_asking_word_leaves_a_claim[Let me know if you need it today the M is available now.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n4_another_clause_after_the_asking_word_leaves_a_claim[Check whether it fits (the M is available now).]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n5_a_price_near_a_weight_word_is_still_money[This lightweight shell is just 149 pounds.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n5_a_price_near_a_weight_word_is_still_money[Weighing just 400 g, it's 149 pounds.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n5_a_price_near_a_weight_word_is_still_money[It weighs 2 pounds and sells for 199 pounds.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n6_a_hedged_bare_price_is_money[It costs just 279.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n6_a_hedged_bare_price_is_money[The price is now 279.00.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n6_a_hedged_bare_price_is_money[It's priced at only 279.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n6_a_hedged_bare_price_is_money[The price is around 280.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n7_more_quantities_are_blocked[There are still some left.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n7_more_quantities_are_blocked[There are a lot left.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n7_more_quantities_are_blocked[There are a few sizes left.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n7_more_quantities_are_blocked[There are tons in stock.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n7_more_quantities_are_blocked[It is limited stock.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n9_a_late_colon_after_a_question_is_still_seen
+38 failed, 5 passed, 62 deselected in 0.27s
+(already passing before the fix, kept as guards: the comma case of N3, N4's own-subject question, N5's three governed weights)
+
+== security re-review N8: test_rag09_live_sources.py at d4e1c4f (the skip is the origin/main judge.py compare, which needs a git checkout) ==
+FAILED evals/tests/test_rag09_live_sources.py::test_a_catalog_result_naming_an_internal_id_is_refused_without_a_canary
+1 failed, 17 passed, 1 skipped in 2.89s

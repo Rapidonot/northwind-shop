@@ -189,3 +189,182 @@ def test_a_question_about_availability_is_not_a_live_backed_claim() -> None:
     live = LiveValues(stock={"v": 4})
     assert live_backed("I can check whether the S is available too.", live) == 0
     assert live_backed("The M is available now.", live) == 1
+
+
+# ==== the scoped re-review (`docs/reviews/2026-11-14-12-security-rereview.raw.md`) ================
+
+# ---- N1 (high, a regression): "which ... and" only as a noun phrase ------------------------------
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Check which fits you best and the M is available now.",
+        "See which colour you prefer and the M is available today.",
+        "Check which size fits and it is available now.",
+    ],
+)
+def test_n1_which_and_with_a_verb_or_subject_is_a_claim(text: str) -> None:
+    assert check_text(text) == STOCK
+
+
+# ---- N2 (high): a word between the amount and the currency ---------------------------------------
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "The Summit Shell is 279 Canadian dollars.",
+        "It is 279 US dollars.",
+        "It is 49 Australian dollars.",
+        "It is 199 British pounds.",
+        "It is 279 US$.",
+        "It is 279 (USD).",
+        "It is ¥40,000.",
+        "It is CHF 279.",
+        "It is 279 kr.",
+        "It is 279 yen.",
+        "It is ₹2,500.",
+    ],
+)
+def test_n2_a_qualified_or_foreign_price_is_money(text: str) -> None:
+    assert hits(text) == {"money": 1}
+
+
+@pytest.mark.parametrize(
+    ("text", "price"),
+    [
+        ("It is 279 Canadian dollars.", (Decimal("279.00"), "CAD")),
+        ("It is 279 US dollars.", (Decimal("279.00"), "USD")),
+        ("It is 199 British pounds.", (Decimal("199.00"), "GBP")),
+        ("It is 279 (USD).", (Decimal("279.00"), "USD")),
+    ],
+)
+def test_n2_a_qualified_price_passes_only_in_its_own_currency(
+    text: str, price: tuple[Decimal, str]
+) -> None:
+    assert hits(text, live=LiveValues(prices={price})) == {}
+    other = (price[0], "AUD")
+    assert hits(text, live=LiveValues(prices={other})) == {"money": 1}
+
+
+def test_n2_a_us_price_does_not_vouch_canadian_dollars() -> None:
+    live = LiveValues(prices={(Decimal("279.00"), "USD")})
+    assert hits("The price is 279 Canadian dollars.", live=live) == {"money": 1}
+
+
+# ---- N3 (medium, a regression): only a governing negation flips polarity -------------------------
+
+
+@pytest.mark.parametrize(
+    "text", ["There's no doubt the M is in stock.", "Never mind, it is in stock now."]
+)
+def test_n3_a_negation_that_does_not_govern_blocks_at_any_stock(text: str) -> None:
+    if text.startswith("Never mind,"):  # the comma ends the clause: a plain claim, checked as one
+        assert check_text(text, live=LiveValues(stock={"v": 0})) == STOCK
+        assert check_text(text, live=LiveValues(stock={"v": 5})) == text
+        return
+    assert check_text(text, live=LiveValues(stock={"v": 0})) == STOCK
+    assert check_text(text, live=LiveValues(stock={"v": 5})) == STOCK
+
+
+@pytest.mark.parametrize(
+    "text", ["No worries — the M is in stock.", "Don't wait — the M is available now."]
+)
+def test_n3_a_dash_ends_the_negations_clause(text: str) -> None:
+    # The claim after the dash stands alone: false at zero, true above it.
+    assert check_text(text, live=LiveValues(stock={"v": 0})) == STOCK
+    assert check_text(text, live=LiveValues(stock={"v": 5})) == text
+
+
+# ---- N4 (medium): a full clause between the asking word and "available" --------------------------
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Not sure if you noticed the M is available now.",
+        "Let me know if you need it today the M is available now.",
+        "Check whether it fits (the M is available now).",
+    ],
+)
+def test_n4_another_clause_after_the_asking_word_leaves_a_claim(text: str) -> None:
+    assert check_text(text) == STOCK
+
+
+def test_n4_a_pronoun_as_the_questions_own_subject_still_asks() -> None:
+    assert hits("Check whether it is available in your region.") == {}
+
+
+# ---- N5 (medium): only a weight verb or noun governing the figure makes pounds a weight ----------
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "This lightweight shell is just 149 pounds.",
+        "Weighing just 400 g, it's 149 pounds.",
+        "It weighs 2 pounds and sells for 199 pounds.",
+    ],
+)
+def test_n5_a_price_near_a_weight_word_is_still_money(text: str) -> None:
+    assert hits(text) == {"money": 1}
+
+
+@pytest.mark.parametrize(
+    "text", ["It weighs about 2.1 pounds.", "Its weight is 3 pounds.", "It weighs in at 2 pounds."]
+)
+def test_n5_a_governed_weight_is_not_money(text: str) -> None:
+    assert hits(text) == {}
+
+
+# ---- N6 (medium): a hedge word between the price word and the amount -----------------------------
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "It costs just 279.",
+        "The price is now 279.00.",
+        "It's priced at only 279.",
+        "The price is around 280.",
+    ],
+)
+def test_n6_a_hedged_bare_price_is_money(text: str) -> None:
+    assert hits(text) == {"money": 1}
+
+
+# ---- N7 (low): more quantity words ---------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "There are still some left.",
+        "There are a lot left.",
+        "There are a few sizes left.",
+        "There are tons in stock.",
+        "It is limited stock.",
+    ],
+)
+def test_n7_more_quantities_are_blocked(text: str) -> None:
+    assert check_text(text, live=LiveValues(stock={"v": 12})) == STOCK
+
+
+# ---- N9 (low): a colon after "available" is seen even when it arrives late ---------------------
+
+
+def test_n9_a_late_colon_after_a_question_is_still_seen() -> None:
+    """The colon arrives 57 characters after "available", past the trigger's hold window, with no
+    other trigger in between (measured: 55-60 leaked before the fix)."""
+    from northwind_assistant.output_check import OutputCheck
+
+    filler = " and see the page where it shows up for you there xxxxxxx"[:57]
+    text = "Check whether the M is available" + filler + ": it is."
+    check = OutputCheck(set(), [])
+    sent: list[str] = []
+    for i in range(0, len(text), 3):
+        sent += [p for p in check.feed(text[i : i + 3]) if p is not None]
+    sent += [p for p in check.finish() if p is not None]
+    assert STOCK in check.shown
+    assert "available" not in "".join(sent)

@@ -353,3 +353,48 @@ def test_the_report_prints_citation_ok_both_ways(capsys: pytest.CaptureFixture[s
     _print_answer_report(results, {}, containment=False)
     out = capsys.readouterr().out
     assert "citation_ok 2/3; counting live-backed claims 1/3 (reported, not gated)" in out
+
+
+def test_a_catalog_result_naming_an_internal_id_is_refused_without_a_canary() -> None:
+    """Re-review N8: internal variants carry no canary, so the guard in the catalog also refuses
+    any internal source ID in a result's text, whatever the canary guard says."""
+    import asyncio
+    import dataclasses
+
+    from northwind_assistant.caller import Caller
+    from northwind_assistant.catalog_client import CatalogEndpoint
+    from northwind_data.dataset import FIXTURES_DIR
+    from northwind_evals.answerers import serve_catalog
+    from northwind_evals.contexts import internal_sources
+    from northwind_mcp_catalog.live import FixtureCatalog, Product
+    from northwind_mcp_catalog.testing import connect
+
+    internal_id = sorted(internal_sources(FIXTURES_DIR))[0]
+
+    class Leaky(FixtureCatalog):
+        def product(self, product_id: str) -> Product | None:
+            found = super().product(product_id)
+            if found is None or product_id != "P0011":
+                return found
+            return dataclasses.replace(found, description=f"See {internal_id}.")
+
+    import northwind_mcp_catalog.live as live_module
+
+    key = b"k" * 40
+    log = CatalogLog()
+    original = live_module.FixtureCatalog
+    live_module.FixtureCatalog = Leaky  # type: ignore[misc]
+    try:
+        with serve_catalog(key, log, lambda _chunks: False) as url:
+            token = CatalogEndpoint(url, key).mint(Caller(region="US"))
+
+            async def call() -> Any:
+                async with connect(url, token) as client:
+                    return await client.call_tool("get_product", {"product_id": "P0011"})
+
+            result = asyncio.run(call())
+    finally:
+        live_module.FixtureCatalog = original  # type: ignore[misc]
+    [block] = result.content
+    assert result.is_error is True and internal_id not in block.text
+    assert log.leak is True

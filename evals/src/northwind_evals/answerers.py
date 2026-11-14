@@ -489,10 +489,19 @@ def serve_catalog(
     from northwind_mcp_catalog.server import CatalogServer, error_result, tool_failed
     from northwind_mcp_catalog.tools import TOOLS
 
+    internal: list[frozenset[str]] = []
+
     def leaking(name: str, text: str) -> bool:
         if leaks is None:
             return False
         try:
+            if not internal:  # on first use; internal variants carry no canary (re-review N8)
+                from northwind_data.dataset import FIXTURES_DIR
+                from northwind_evals.contexts import internal_sources
+
+                internal.append(frozenset(internal_sources(FIXTURES_DIR)))
+            if any(source_id in text for source_id in internal[0]):
+                return True
             return bool(leaks((ContextChunk(name, name, LIVE_SOURCE_TYPE, text),)))
         except Exception:  # noqa: BLE001 - a guard that cannot run counts as a leak
             return True
