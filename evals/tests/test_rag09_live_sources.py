@@ -70,10 +70,10 @@ class Fixed:
         return self._answer
 
 
-class SeeingJudge:
+class SeeingJudge(Judge):
     """Records the sources it was given, and answers with a fixed verdict."""
 
-    def __init__(self, text: str) -> None:
+    def __init__(self, text: str) -> None:  # noqa: D107 - no client: never calls a model
         self.text = text
         self.seen: list[tuple[ContextChunk, ...]] = []
 

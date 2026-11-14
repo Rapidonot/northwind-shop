@@ -1,0 +1,23 @@
+Row #12, plan §5.2: every suite's first searches, recorded vs now (no LLM, no spend). 2026-11-14.
+
+Index, read-only check first: index_version 389cae01996a2dd6, data_version 2,
+dataset_sha256 3ac5e2e18f2b089242456a5946f4dbd85cb0e2d5ed3f8081f1c9454c61500425 = data/fixtures/manifest.json.
+
+Recorded: the <sources> block of the first user message (the server's own first search) in every
+assistant cassette of cassettes/{assistant-smoke,assistant-redteam,a2a-05-partner,eval-answers},
+with its shopper message and the region from the system prompt.
+Now: the same search through the production path (search_sources -> McpRagSearcher -> mcp-rag
+render), over:
+  - assistant-smoke, assistant-redteam: the shared index (CallerIndex, frozen vectors);
+  - eval-answers: each item's saved context (evals/contexts/dense-only.jsonl), keyed by query and region,
+    which is what SavedFirstIndex serves;
+  - a2a-05-partner: each fixture's recorded context, which is what its replay serves.
+Script: the session scratchpad first_search_diff.py.
+
+first searches compared 152 (by suite: a2a-05-partner 9, assistant-redteam 28, assistant-smoke 13, eval-answers 102), moved 0
+
+A first run reported 13 moves. Both causes were in the script, and neither moved anything:
+  - eval-answers 4: the same query exists for several regions, and the script had keyed saved contexts by query alone.
+  - a2a-05-partner 9: the script searched the live index, but replay serves the fixture's context. These
+    queries have no frozen vector, and the sandbox refused the model download.
+So the only model-input changes in W1-W3 are the prompt, the tool list and the tool results.
