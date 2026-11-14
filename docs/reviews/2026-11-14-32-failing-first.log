@@ -805,3 +805,6 @@ FAILED evals/tests/test_rag12_eval_300.py::test_new_policy_items_only_label_docu
   KILLED: EV-279 regex swapped for a word in its product's text -> ['1 failed, 47 deselected in 0.13s']
   KILLED: EV-281 regex swapped for a word in its product's text -> ['1 failed, 47 deselected in 0.10s']
   KILLED: EV-282 removed from the table -> test_every_unanswerable_id_has_a_regex: ['1 failed, 46 deselected in 0.09s']
+
+--- note on the advisor-finding-1 entries above (2026-11-14) ---
+  Each wiring mutation ran: pytest -k 'test_unanswerable_attribute_is_absent and <ID>'. The word swapped in for the regex: EV-267 'hiking' (P0071's name), EV-273 'puffer' (P0029's name), EV-279 'fleece' (whole corpus), EV-281 'throw' (P0164's name). The key-set case removed the EV-282 entry and ran -k test_every_unanswerable_id_has_a_regex.
