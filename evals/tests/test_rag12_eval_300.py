@@ -47,6 +47,11 @@ def _records(name: str) -> list[dict[str, Any]]:
     return [json.loads(line) for line in lines]
 
 
+def _text(record: dict[str, Any]) -> str:
+    """Searchable text: non-ASCII kept as is, so a regex alternative like `°` can match (L2)."""
+    return json.dumps(record, ensure_ascii=False)
+
+
 def _product_of(source: str) -> str | None:
     match = _PRODUCT_SOURCE.match(source)
     return match.group(1) if match else None
@@ -154,17 +159,22 @@ def test_unanswerable_attribute_is_absent_from_the_fixtures(item_id: str) -> Non
 
     if product is not None:
         assert product in item.all_sources, f"{item_id}: {product} not in relevant_sources"
+        records = [r for r in _records("products.jsonl") if r["product_id"] == product]
+        assert records, f"{product} has no fixture text"
+        # The product's own care and size guides can answer it too (security review L3).
+        guides = {records[0].get("care_guide_id"), records[0].get("size_guide_id")} - {None}
         texts = (
-            [json.dumps(r) for r in _records("products.jsonl") if r["product_id"] == product]
-            + [json.dumps(r) for r in _records("variants.jsonl") if r["product_id"] == product]
-            + [json.dumps(r) for r in _records("reviews.jsonl") if r["product_id"] == product]
+            [_text(r) for r in records]
+            + [_text(r) for r in _records("variants.jsonl") if r["product_id"] == product]
+            + [_text(r) for r in _records("reviews.jsonl") if r["product_id"] == product]
+            + [_text(d) for d in _records("documents.jsonl") if d["doc_id"] in guides]
         )
-        assert texts, f"{product} has no fixture text"
+        assert len(texts) > len(records), f"{product}: no guide or other text found"
     else:
         manifest = json.loads((FIXTURES / "manifest.json").read_text(encoding="utf-8"))
         texts = []
         for name in manifest["ingestible"]:
-            texts.extend(json.dumps(r) for r in _records(name))
+            texts.extend(_text(r) for r in _records(name))
     hits = [t[max(0, m.start() - 30) : m.end() + 30] for t in texts if (m := regex.search(t))]
     assert not hits, f"{item_id} /{pattern}/ found in fixtures: {hits[:3]}"
 
@@ -238,3 +248,29 @@ def test_new_policy_items_only_label_documents_for_their_own_region() -> None:
             if regional and doc["region"] != "ALL" and doc["region"] != item.region:
                 bad.append(f"{item.id}: {source} is {doc['region']}, item is {item.region}")
     assert not bad, bad
+
+
+@pytest.mark.req("RAG-12")
+def test_new_items_only_label_products_sold_in_their_region() -> None:
+    """Hard rule 7's regional half for products (security review L4)."""
+    assert NEW, "no new items yet"
+    regions = {p["product_id"]: p["regions"] for p in _records("products.jsonl")}
+    bad = [
+        f"{item.id}: {source} is not sold in {item.region}"
+        for item in NEW
+        for source in item.all_sources
+        if (pid := _product_of(source)) is not None and item.region not in regions.get(pid, [])
+    ]
+    assert not bad, bad
+
+
+_LIVE = re.compile(r"live (?:price|stock) check|cannot confirm", re.IGNORECASE)
+
+
+@pytest.mark.req("RAG-12")
+@pytest.mark.parametrize("item_id", ["EV-224", "EV-245", "EV-291", "EV-292"])
+def test_price_and_stock_items_say_the_value_is_live_only(item_id: str) -> None:
+    """Change 4: price and stock come only from the live check (security review L4)."""
+    item = BY_ID.get(item_id)
+    assert item is not None, f"{item_id} does not exist yet"
+    assert any(_LIVE.search(fact) for fact in item.reference_facts), item.reference_facts

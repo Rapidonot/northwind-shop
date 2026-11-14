@@ -779,3 +779,12 @@ FAILED evals/tests/test_rag12_eval_300.py::test_new_policy_items_only_label_docu
   KILLED: 7 EV-103 moved to P0002 -> test_planted_review_product_has_two_spec_items: ['1 failed, 9 passed, 33 deselected in 0.08s']
   KILLED: 8 EV-225 (CA) labels the US shipping policy -> test_new_policy_items_only_label: ['1 failed, 42 deselected in 0.08s']
   Note: 4c is not a distinct case. Every table_linen product name ends in "Tablecloth", so the name check adds nothing beyond the word check today.
+
+--- after the security-review fixes L1-L4 (2026-11-14) ---
+48 passed in 0.21s
+--- mutation checks for the fixed assertions (the 'pocket' and en-dash matches were confirmed to come only from the products' guides, not their own text) ---
+  KILLED: L3 EV-278 regex 'pocket' (only in P0137's size guide SG-BEDDING) -> test_unanswerable_attribute_is_absent: ['1 failed, 17 passed, 30 deselected in 0.24s']
+  KILLED: L2 EV-265 regex an en dash (non-ASCII, only in P0005's size guide) -> test_unanswerable_attribute_is_absent: ['1 failed, 17 passed, 30 deselected in 0.24s']
+  KILLED: L4 EV-209 (P0010, US/CA only) moved to UK -> test_new_items_only_label_products_sold: ['1 failed, 47 deselected in 0.08s']
+  KILLED: L4 EV-245 live-check wording dropped -> test_price_and_stock_items_say: ['1 failed, 3 passed, 44 deselected in 0.08s']
+  KILLED: L4 EV-224 live-check wording dropped -> test_price_and_stock_items_say: ['1 failed, 3 passed, 44 deselected in 0.08s']
