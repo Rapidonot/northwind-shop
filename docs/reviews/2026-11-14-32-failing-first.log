@@ -792,3 +792,16 @@ FAILED evals/tests/test_rag12_eval_300.py::test_new_policy_items_only_label_docu
 --- re-review fix N1 (2026-11-14): the guide guard asserts every guide ID resolves ---
 48 passed in 0.21s
   KILLED: N1, SG-BEDDING made unresolvable in the test (simulates a renamed guide) -> test_unanswerable_attribute_is_absent: 5 failed, 13 passed, 30 deselected in 0.21s
+
+--- advisor finding 1: the second edit to the UNANSWERABLE table (2026-11-14) ---
+  Timing: after the 41-failed rerun above and before the items were appended, the table changed again: EV-267 P0035 fleece weight -> P0071 pockets; EV-273 P0125 thread count -> P0029 temperature rating (EV-274..277 keep thread count for P0129, P0131, P0133, P0136); EV-278 P0105 -> P0137 corner loops; EV-279 OEKO-TEX -> bluesign; EV-281 hypoallergenic -> P0164 mulesing-free. Reason: three repeated existing traps (TRAP-MISS-006, 004, 005 = EV-076, EV-074, EV-075), and two repeated attributes already tested (EV-082, EV-083). No red run was logged between that edit and '43 passed'; the checks below supply the evidence that each new regex can fail.
+  regex catches the attribute: EV-267 /pocket/ matches 'These pants have four zip pockets.'
+  regex catches the attribute: EV-273 /temperature|degrees|comfort rating|°|rated to/ matches 'Comfort rating: -5°C.'
+  regex catches the attribute: EV-278 /loop|ties\b|corner/ matches 'Corner ties keep it in the cover.'
+  regex catches the attribute: EV-279 /bluesign/ matches 'This fleece is bluesign approved.'
+  regex catches the attribute: EV-281 /mules/ matches 'Made from mulesing-free wool.'
+  KILLED: EV-267 regex swapped for a word in its product's text -> ['1 failed, 47 deselected in 0.10s']
+  KILLED: EV-273 regex swapped for a word in its product's text -> ['1 failed, 47 deselected in 0.10s']
+  KILLED: EV-279 regex swapped for a word in its product's text -> ['1 failed, 47 deselected in 0.13s']
+  KILLED: EV-281 regex swapped for a word in its product's text -> ['1 failed, 47 deselected in 0.10s']
+  KILLED: EV-282 removed from the table -> test_every_unanswerable_id_has_a_regex: ['1 failed, 46 deselected in 0.09s']
