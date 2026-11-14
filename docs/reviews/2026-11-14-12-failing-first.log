@@ -137,3 +137,14 @@ FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n9_a_late_col
 == security re-review N8: test_rag09_live_sources.py at d4e1c4f (the skip is the origin/main judge.py compare, which needs a git checkout) ==
 FAILED evals/tests/test_rag09_live_sources.py::test_a_catalog_result_naming_an_internal_id_is_refused_without_a_canary
 1 failed, 17 passed, 1 skipped in 2.89s
+
+== second re-review, M1/M2 (regressions against d4e1c4f): the new tests at 206ac64, before the fix ==
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_m1_bare_price_forms_blocked_before_n6_stay_blocked[The price will be 279.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_m1_bare_price_forms_blocked_before_n6_stay_blocked[The cost will be 279.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_m1_bare_price_forms_blocked_before_n6_stay_blocked[The price is ***279***.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_m2_a_negation_across_an_aside_is_unvouched[The M is not (yet) in stock.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_m2_a_negation_across_an_aside_is_unvouched[The M isn't (currently) available.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_m2_a_negation_across_an_aside_is_unvouched[The M is not \u2014 for now \u2014 in stock.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_m2_a_negation_across_an_aside_is_unvouched[The M is not, sadly, in stock.]
+7 failed, 1 passed, 105 deselected in 0.14s
+(the M2 input "The M isn't (currently) available." was replaced by "The M isn't (yet) available now.": the former matched no pattern at d4e1c4f either, so it is H3's gap, not a regression; checked against a git archive of d4e1c4f)

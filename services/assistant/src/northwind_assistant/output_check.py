@@ -376,8 +376,8 @@ PATTERNS: tuple[Pattern, ...] = (
     #    A bare amount said to be a price or cost: "The price is 279.00", "It costs 279".
     _p(
         "money",
-        rf"\b(?:prices?|costs?)(?:\s{{1,3}}(?:is|was|are|of|at|comes{_S}to)|\s{{0,2}}[:=])"
-        rf"{_HEDGE}\s{{0,3}}[*_~`]{{0,2}}{_AMOUNT}",
+        rf"\b(?:prices?|costs?)(?:\s{{1,3}}(?:is|was|are|of|at|comes{_S}to|will{_S}be)|\s{{0,2}}[:=])"
+        rf"{_HEDGE}\s{{0,3}}{_MK}{_AMOUNT}",
         "bare_price",
     ),
     _p(
@@ -687,12 +687,23 @@ _GOVERNING_NEGATION = re.compile(
 _NEGATION_CUT = re.compile(r"[.!?;,:\n()]|\s[-‐‑]\s|[‒–—―]")
 
 
+# A governing negation separated from its phrase by an aside: "is not (yet) in stock", "is not —
+# for now — in stock", "is not, sadly, in stock" (second re-review M2). Read before any cut.
+_NEGATED_ASIDE = re.compile(
+    r"(?:n['’]t|\bnot|\bno\s{1,3}longer|\bnever)\s{0,3}"
+    r"(?:\([^()]{0,30}\)|,[^,]{0,30},|[‒–—―][^‒–—―]{0,30}[‒–—―]|\s-\s[^-]{0,30}\s-)"
+    r"\s{0,3}(?:(?:currently|still|yet)\s{1,3})?$"
+)
+
+
 def _negated(view: str, start: int) -> bool | None:
     """True when a negation governs the phrase at `start`; None when another negation sits earlier
     in the same clause ("there's no doubt the M is in stock"), which makes the claim unvouched;
     False when the clause holds none. A clause ends at punctuation or a dash, at most 40
     characters back."""
     before = view[max(0, start - 40) : start]
+    if _NEGATED_ASIDE.search(before):
+        return None  # a negation across an aside: unvouched, blocked at any stock level
     for cut in _NEGATION_CUT.finditer(before):
         before = before[cut.end() :]
     if _GOVERNING_NEGATION.search(before):

@@ -192,8 +192,9 @@ measured first on the recorded answers (`docs/reviews/2026-11-14-12-overblocking
 - Exemption `live_price`: the amount and one of its currencies equal a `get_price` result this turn.
 - **D5 (the user, option 1):** a figure the shopper wrote is blocked too ("under $100"). The prompt asks for each
   live price instead of the shopper's limit.
-- "pounds" is not a currency word, because "weighs 2 pounds" is an attribute. Residual: "twenty pounds" as money
-  passes.
+- "pounds" (as first written) was not a currency word, because "weighs 2 pounds" is an attribute. *Superseded after
+  security review pass 1:* "N pounds" is money unless a weight verb or noun governs it, so "twenty pounds" is blocked
+  unless it is live (GBP).
 
 **Class 4, `stock`, extended.**
 - Counts in digits or words before left / remaining / in stock / available / on hand ("three left", "12 in
@@ -229,7 +230,7 @@ filters, D5) and stock 0, after `_asks` was tightened. The member wordings had 0
 **Residuals (logged in PROGRESS "Open items"):**
 - A price passes if it equals *any* `get_price` result this turn, not necessarily for the variant named (the user's
   change 6).
-- "twenty pounds" as money passes.
+- ~~"twenty pounds" as money passes.~~ (Stale since pass 1: it is blocked unless live.)
 - A stock count matches *any* checked variant's units.
 - The question rule reads only the 60 characters before "available".
 
@@ -298,3 +299,26 @@ read them.
 - **Re-measured:** money 2 (EV-029, EV-030), stock 0.
 - **New residuals:** "starting at" and "as low as" before a bare amount (they would push the pattern past L); a
   qualifier outside the closed map ("279 Kiwi dollars") is blocked even when live.
+
+
+**After the second scoped re-review (2026-11-14; `docs/reviews/2026-11-14-12-security-rereview-2.raw.md`).** This
+was the last pass the user allowed. It found three high findings, all unsafe under hard rule 2, so the chain stops
+again (stop 10, no third pass). None of the three is a regression, and none is fixed in this row:
+- **H1:** the affirmative question frames (confirm, tell, know, say, sure) let an answer ride in the same sentence or
+  the next one ("I can confirm whether the M is available now, and it is.", "Want to know which size is available
+  now? The M.").
+- **H2:** the `_RANGE` narrowing exempts a specific size or colour ("available in size M").
+- **H3:** the availability patterns see only a literal "is"/"are" ("it's available", "they're available", "remains
+  available", "isn't (currently) available").
+
+Its two regressions against `d4e1c4f` are fixed: **M1** ("The price will be 279.", markdown before a bare price) and
+**M2** (a governing negation across an aside: "is not (yet) in stock", "is not — for now — in stock", "is not, sadly,
+in stock", now unvouched at any stock level). Re-measured: money 2 (EV-029, EV-030), stock 0.
+
+Logged as residuals (the user's rule: lower findings are logged): M3 (only one figure of a money range is checked),
+M4 (other currencies with an adjective or unlisted word, brackets, a comma), M5 (an asking clause with no listed
+pronoun, "&"/"plus"), M6 (bare-price wording outside the list: "price of the M is 279", "sells for 279"), M7 (a size
+token between count and stock word: "only 2 Ms left", "plenty of stock"), L1 ("weighing in at 199 pounds"), L2
+(double negation), L3 (the N9 hold has no raw-length cap), L4 (the look-ahead stops at "e.g."), L5 (other
+currencies start before a trigger: a flicker), L6 ("under $279" passes with live 279), L7 ("1 279 €"), and the
+over-blocking it noted ("whether it's available", "won 2 awards").

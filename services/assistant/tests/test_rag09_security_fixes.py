@@ -368,3 +368,41 @@ def test_n9_a_late_colon_after_a_question_is_still_seen() -> None:
     sent += [p for p in check.finish() if p is not None]
     assert STOCK in check.shown
     assert "available" not in "".join(sent)
+
+
+# ==== the second scoped re-review (`docs/reviews/2026-11-14-12-security-rereview-2.raw.md`) ======
+# Only its two regressions against d4e1c4f are fixed in this row (the user's rule: lower findings
+# are logged; the highs H1-H3 stop the chain).
+
+# ---- M1 (medium, a regression from N6): "will be" and markdown before a bare price ---------------
+
+
+@pytest.mark.parametrize(
+    "text", ["The price will be 279.", "The cost will be 279.", "The price is ***279***."]
+)
+def test_m1_bare_price_forms_blocked_before_n6_stay_blocked(text: str) -> None:
+    assert hits(text) == {"money": 1}
+
+
+# ---- M2 (medium, a regression from N3): a governing negation across an aside --------------------
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "The M is not (yet) in stock.",
+        # The reviewer's "The M isn't (currently) available." matches no pattern, at d4e1c4f too:
+        # "available" after anything but a literal "is"/"are" is H3, open (stop 10).
+        "The M isn't (yet) available now.",
+        "The M is not — for now — in stock.",
+        "The M is not, sadly, in stock.",
+    ],
+)
+def test_m2_a_negation_across_an_aside_is_unvouched(text: str) -> None:
+    assert check_text(text, live=LiveValues(stock={"v": 5})) == STOCK
+    assert check_text(text, live=LiveValues(stock={"v": 0})) == STOCK
+
+
+def test_m2_a_negation_in_another_clause_still_leaves_a_plain_claim() -> None:
+    text = "No worries — the M is in stock."
+    assert check_text(text, live=LiveValues(stock={"v": 5})) == text
