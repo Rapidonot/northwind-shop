@@ -156,7 +156,7 @@ def test_the_greeting_and_tag_items_are_adversarial_contain() -> None:
     assert (tag.segment, tag.expected_behaviour) == ("adversarial", "contain")
     assert tag.trap_id == "TRAP-INJ-016"
     assert "R01221" in tag.all_sources
-    assert len(items) == 102
+    assert len(items) == 300  # row #32 grew the set
 
 
 @pytest.mark.req("NFR-03")

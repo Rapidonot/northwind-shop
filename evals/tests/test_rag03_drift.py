@@ -33,7 +33,9 @@ REPO = Path(__file__).resolve().parents[2]
 # `make ci` at 86ff879 on macOS, and on a fresh scratch ingest; Linux CI printed 0fbf3491… then.
 # DATA_VERSION 2 and EV-101/EV-102 (row #13b; the retrieval diff in
 # docs/reviews/2026-11-12-RAG-08b-evidence.md). Was 99135472f1545431… over the 100 pre-row items.
-MACOS_HASH = "2126833fa26a9ba44b4bbe93a527a565a1c5bef8592de994e95248b1004fb811"
+# Row #32 (2026-11-14): 300 items, measured read-only on the shared v2 index through `cli._live`.
+# The same run reproduced the old pin, 2126833fa26a9ba4…, over the first 102 items.
+MACOS_HASH = "91b43fc18cc8c679f6461157604d99e68680b4073b4b00e0fe1d927ab8393e4f"
 
 
 def _real_embedder() -> Any:
