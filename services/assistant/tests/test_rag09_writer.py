@@ -197,7 +197,10 @@ def test_stock_split_across_deltas_is_held_until_it_can_be_judged() -> None:
     ],
 )
 def test_an_asking_word_that_governs_the_clause_makes_it_a_question(text: str) -> None:
-    assert hits(text) == {}
+    # Row #12, second re-review H1 (the user's decision): no asking word exempts any more. A
+    # question about availability gets the stock sentence unless every stock check agrees.
+    assert hits(text) == {"stock": 1}
+    assert hits(text, live=LiveValues(stock={"v": 3})) == {}
 
 
 @pytest.mark.parametrize(

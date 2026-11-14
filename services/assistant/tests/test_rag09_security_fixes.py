@@ -131,8 +131,11 @@ def test_an_asking_word_without_an_embedded_question_leaves_a_claim(text: str) -
         "told to offer, so I can't say whether any is available.",
     ],
 )
-def test_the_five_measured_questions_still_pass(text: str) -> None:
-    assert hits(text) == {}
+def test_the_five_measured_questions_now_need_live_stock(text: str) -> None:
+    # Second re-review H1 (the user's decision): the asking exemption is gone.
+    assert hits(text) == {"stock": 1}
+    expected = {"stock": 1} if "can't say" in text else {}  # "can't" in the clause: unvouched
+    assert hits(text, live=LiveValues(stock={"v": 3})) == expected
 
 
 # ---- finding 3 (medium): negated stock claims ---------------------------------------------------
@@ -186,9 +189,12 @@ def test_a_long_count_is_read_whole(text: str, on_hand: int) -> None:
 
 
 def test_a_question_about_availability_is_not_a_live_backed_claim() -> None:
+    # Second re-review H1 (the user's decision): with no asking exemption, a sentence the live
+    # stock vouches for is a live-backed claim, question-shaped or not.
     live = LiveValues(stock={"v": 4})
-    assert live_backed("I can check whether the S is available too.", live) == 0
+    assert live_backed("I can check whether the S is available too.", live) == 1
     assert live_backed("The M is available now.", live) == 1
+    assert live_backed("The M is available now.", LiveValues()) == 0
 
 
 # ==== the scoped re-review (`docs/reviews/2026-11-14-12-security-rereview.raw.md`) ================
@@ -293,7 +299,10 @@ def test_n4_another_clause_after_the_asking_word_leaves_a_claim(text: str) -> No
 
 
 def test_n4_a_pronoun_as_the_questions_own_subject_still_asks() -> None:
-    assert hits("Check whether it is available in your region.") == {}
+    # Second re-review H1 (the user's decision): no question is exempt; live stock decides.
+    text = "Check whether it is available in your region."
+    assert hits(text) == {"stock": 1}
+    assert hits(text, live=LiveValues(stock={"v": 2})) == {}
 
 
 # ---- N5 (medium): only a weight verb or noun governing the figure makes pounds a weight ----------
@@ -406,3 +415,65 @@ def test_m2_a_negation_across_an_aside_is_unvouched(text: str) -> None:
 def test_m2_a_negation_in_another_clause_still_leaves_a_plain_claim() -> None:
     text = "No worries — the M is in stock."
     assert check_text(text, live=LiveValues(stock={"v": 5})) == text
+
+
+# ==== H1-H3, the user's decision after the second re-review =====================================
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "I can confirm whether the M is available now, and it is.",
+        "I can tell you which sizes are available today, the M and the L.",
+        "I can check which sizes are available now (M and L).",
+        "Want to know which size is available now? The M.",
+        "Wondering whether the M is available? It is.",
+    ],
+)
+def test_h1_no_question_frame_exempts_a_stock_claim(text: str) -> None:
+    assert hits(text) == {"stock": 1}
+    assert hits(text, live=LiveValues(stock={"v": 0})) == {"stock": 1}
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "The Summit Shell is available in size M.",
+        "It is available in sizes M and L right now.",
+        "The M is available in colour Sage today.",
+        "It is available in fit regular.",
+    ],
+)
+def test_h2_a_specific_size_colour_or_fit_needs_check_stock(text: str) -> None:
+    assert hits(text) == {"stock": 1}
+    assert hits(text, live=LiveValues(stock={"v": 3})) == {}
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "It is available in sizes XS to XL.",
+        "It is available in three colours.",
+        "It is available in a range of fits.",
+        "It comes in size M.",
+        "It is offered in colour Sage.",
+    ],
+)
+def test_h2_comes_in_offered_in_and_plural_ranges_are_the_range(text: str) -> None:
+    assert hits(text) == {}
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Yes, it's available.",
+        "The M's available in Sage.",
+        "They're available.",
+        "The M remains available.",
+        "It should be available.",
+        "The M isn't available.",
+        "The M is not available.",
+    ],
+)
+def test_h3_every_copula_spelling_is_seen(text: str) -> None:
+    assert hits(text) == {"stock": 1}

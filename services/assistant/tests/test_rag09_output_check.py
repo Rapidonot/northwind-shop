@@ -193,7 +193,22 @@ def test_an_availability_claim_is_stock_and_needs_a_live_check(text: str) -> Non
 @pytest.mark.parametrize(
     "text",
     [
-        # the five false positives measured on the recorded answers (plan §5.1)
+        # the range offered, not stock: a plural range with no time word (H2)
+        "It is available in sizes XS to XL.",
+        "They are available in colours Sage and Black.",
+        "It is available in three colours.",
+    ],
+)
+def test_naming_the_range_offered_is_not_a_claim(text: str) -> None:
+    assert hits(text) == {}
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        # the five hedges measured on the recorded answers (plan §5.1). The asking exemption is gone
+        # (second re-review H1, the user's decision): each gets the stock sentence, which says the
+        # same thing, and passes when every `check_stock` result this turn agrees (D3).
         "Check the product page to see whether that size is available right now.",
         "The live product page will show whether Glacier Blue is available in 4XL right now.",
         "I can't see stock levels, so check the live product page to see whether the M is "
@@ -202,13 +217,15 @@ def test_an_availability_claim_is_stock_and_needs_a_live_check(text: str) -> Non
         "also has current stock.",
         "I couldn't find anything on compensation for late deliveries, or on what care agents are "
         "told to offer, so I can't say whether any is available.",
-        # the range offered, not stock
-        "It is available in sizes XS to XL.",
-        "They are available in colours Sage and Black.",
     ],
 )
-def test_asking_about_availability_or_naming_the_range_is_not_a_claim(text: str) -> None:
-    assert hits(text) == {}
+def test_h1_a_hedge_gets_the_stock_sentence_unless_live_stock_agrees(text: str) -> None:
+    assert hits(text) == {"stock": 1}
+    assert STOCK in check_text(text)
+    if "can't say" in text:  # a negation elsewhere in the clause: unvouched at any stock (N3)
+        assert hits(text, live=THREE) == {"stock": 1}
+    else:
+        assert hits(text, live=THREE) == {}
 
 
 # ---- member-price wordings (#13b R4) ------------------------------------------------------------

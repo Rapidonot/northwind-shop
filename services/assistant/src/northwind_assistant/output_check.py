@@ -277,7 +277,20 @@ def _p(cls: str, pattern: str, exempt: str | None = None, *, exact: bool = False
 
 
 # What "available in …" names when it is the range offered rather than stock (row #12).
-_RANGE = r"(?:sizes?|colou?rs?|fits?|lengths?|widths?)"
+# Only a plural range is the range offered ("available in sizes XS-XL", "in three colours", "in a
+# range of …"). A specific size, colour or fit is stock and needs `check_stock` (second re-review
+# H2, the user's decision).
+# A time word later in the sentence makes even a plural range a stock claim ("available in sizes M
+# and L right now"; second re-review H2).
+_TIMELY = (
+    r"[^.!?\n]{0,40}\b(?:now|today|tonight|at\s{1,3}the\s{1,3}moment|currently|still|"
+    r"in\s{1,3}stock)\b"
+)
+_RANGE = (
+    r"(?:(?:sizes|colou?rs|fits|lengths|widths)\b|(?:\d{1,2}|two|three|four|five|six|seven|eight|"
+    r"nine|ten|several|many|all|most)\s{1,3}(?:sizes|colou?rs|fits|lengths|widths)\b|"
+    r"a\s{1,3}range\s{1,3}of\b)"
+)
 
 # Fixed with the row #13 plan before any recording; a change after one is stop 7 (decision 0015).
 # Row #12 extends them, approved with its plan (decision 0015 §7 and its #12 amendment).
@@ -386,27 +399,59 @@ PATTERNS: tuple[Pattern, ...] = (
         "bare_price",
     ),
     #    Stock counts and availability (#15 L5, L9): pass only as a `check_stock` result this turn
-    #    says (`live_stock`). "Available in sizes/colours/fits" is the range offered, not stock, and
-    #    "whether/if/which … is available" asks rather than claims (`availability`; measured on
-    #    the recorded answers, plan §5.1).
+    #    says (`live_stock`). Only a plural range is the range offered (`_RANGE`).
     _p(
         "stock",
         rf"\b{_COUNT}\s{{1,3}}(?:(?:units?|items?|pieces?|pairs?){_S})?"
         rf"(?:left|remaining|in{_S}stock|available|on{_S}hand)\b",
         "live_stock",
     ),
+    #    "available" after a copula, in every spelling the second re-review found (H3): is, are,
+    #    's, 're, remains, be, and a negation (n't, not). No question passes as such any more (H1,
+    #    the user's decision): a hedge gets the stock sentence, which says the same thing, and a
+    #    claim agreeing with every `check_stock` result this turn passes (D3).
     _p(
         "stock",
-        rf"(?<=\bis\s)(?:(?:currently|still){_S})?available\b(?!{_S}in{_S}{_RANGE})",
-        "availability",
+        rf"(?<=\bis\s)(?:(?:currently|still){_S})?available\b(?!{_S}in{_S}{_RANGE}(?!{_TIMELY}))",
+        "live_stock",
     ),
     _p(
         "stock",
-        rf"(?<=\bare\s)(?:(?:currently|still){_S})?available\b(?!{_S}in{_S}{_RANGE})",
-        "availability",
+        rf"(?<=\bare\s)(?:(?:currently|still){_S})?available\b(?!{_S}in{_S}{_RANGE}(?!{_TIMELY}))",
+        "live_stock",
     ),
-    _p("stock", rf"\b(?:currently|still){_S}available\b", "availability"),
-    _p("stock", rf"\bavailable{_S}(?:now|today|to{_S}order)\b", "availability"),
+    _p(
+        "stock",
+        rf"(?<=['’]s\s)(?:(?:currently|still){_S})?available\b(?!{_S}in{_S}{_RANGE}(?!{_TIMELY}))",
+        "live_stock",
+    ),
+    _p(
+        "stock",
+        rf"(?<=['’]re\s)(?:(?:currently|still){_S})?available\b(?!{_S}in{_S}{_RANGE}(?!{_TIMELY}))",
+        "live_stock",
+    ),
+    _p(
+        "stock",
+        rf"(?<=\bremains\s)(?:(?:currently|still){_S})?available\b(?!{_S}in{_S}{_RANGE}(?!{_TIMELY}))",
+        "live_stock",
+    ),
+    _p(
+        "stock",
+        rf"(?<=\bbe\s)(?:(?:currently|still){_S})?available\b(?!{_S}in{_S}{_RANGE}(?!{_TIMELY}))",
+        "live_stock",
+    ),
+    _p(
+        "stock",
+        rf"(?<=n['’]t\s)(?:(?:currently|still){_S})?available\b(?!{_S}in{_S}{_RANGE}(?!{_TIMELY}))",
+        "live_stock",
+    ),
+    _p(
+        "stock",
+        rf"(?<=\bnot\s)(?:(?:currently|still){_S})?available\b(?!{_S}in{_S}{_RANGE}(?!{_TIMELY}))",
+        "live_stock",
+    ),
+    _p("stock", rf"\b(?:currently|still){_S}available\b", "live_stock"),
+    _p("stock", rf"\bavailable{_S}(?:now|today|to{_S}order)\b", "live_stock"),
     #    Quantities no tool returns (security review pass 1, finding 4): always blocked.
     _p(
         "stock",
@@ -711,83 +756,6 @@ def _negated(view: str, start: int) -> bool | None:
     return None if _NEGATION.search(before) else False
 
 
-_ASKING = re.compile(r"\b(whether|if|which)\b")
-# An embedded question needs a verb that asks or shows, directly or within two words before the
-# asking word (security review pass 1, finding 2): "to see whether", "will show whether", "shows
-# which", "can't say whether". A sentence-initial or concessive "if"/"whether" never asks.
-_FRAME = re.compile(
-    r"\b(?:see|check|checking|show|shows|showing|confirm|know|say|tell|ask|find\s{1,3}out|sure|"
-    r"wonder|wondering)(?:\s{1,3}[a-z'’]{1,12}){0,2}\s{1,3}$"
-)
-# What ends the asking word's clause before "available": punctuation, a dash (not a hyphen inside
-# a word), or a conjunction. "and" is handled apart (`_asks`).
-_CLAUSE_BREAK = re.compile(
-    r"[,;:、()\[\]/\"“”]|(?<![\w])[-‐‑‒–—―]|[-‐‑‒–—―](?![\w])|[‒–—―]|"
-    r"\b(?:but|so|or|nor|then|yet|because|since|although|though|while|as|until|unless|when|"
-    r"once|whereas)\b"
-)
-_AND = re.compile(r"\band\b")
-# The one "and" a question may hold: a noun phrase from a closed list after "which", before its
-# copula ("which size and colour combinations are", re-review N1).
-_NOUN = r"(?:sizes?|colou?rs?|fits?|lengths?|widths?|combinations?|variants?|options?|styles?)"
-_NOUN_PHRASE = re.compile(
-    rf"\s{{1,3}}(?:{_NOUN}\s{{1,3}}){{1,2}}and\s{{1,3}}(?:{_NOUN}\s{{1,3}}){{1,2}}(?:is|are)\s{{1,3}}"
-    r"(?:(?:currently|still)\s{1,3})?"
-)
-# A personal pronoun before the question's own subject means another clause sits in between
-# ("if you noticed the M is available", re-review N4).
-_PRONOUN = re.compile(
-    r"\b(?:you|i|we|they|he|she|it|me|us|them|you['’](?:re|ve|d|ll)|i['’](?:m|ve|d|ll)|"
-    r"we['’](?:re|ve|d|ll)|they['’](?:re|ve|d|ll)|it['’]s)\b"
-)
-_OWN_SUBJECT = re.compile(r"\S+\s{1,3}(?:is|are)\s{1,3}(?:(?:currently|still)\s{1,3})?$")
-# A sentence ends at these for this rule, with or without a space after (a missing space after "?"
-# must not let the previous sentence's "if" govern).
-_HARD_BOUNDARY = re.compile(r"[.!?؟。\u2028\u2029\n]")
-# "which" right before a verb is a relative clause ("which is available today"), not a question.
-_RELATIVE_WHICH = re.compile(r"\s*(?:is|are|was|were|will|has|have)\b")
-
-
-def _asks(view: str, start: int, end: int | None = None) -> bool:
-    """Whether "available" at `start` sits in an embedded question: "check whether the M is
-    available" or "shows which sizes are available" ask; they do not claim stock.
-
-    All of these must hold (the user's rules, tightened after security review pass 1):
-    - the asking word is in the same sentence, at most 60 characters back;
-    - a verb that asks or shows comes right before it (`_FRAME`);
-    - nothing between it and the match ends the clause (`_CLAUSE_BREAK`); "and" does only after
-      a question "which" and before any verb ("which size and colour combinations are");
-    - "which" is a question: never after a comma, never directly before a verb;
-    - no colon or dash follows the match in its sentence ("which size is available now: the M").
-    Anything else is a claim, and passes only as `check_stock` says (fail closed)."""
-    before = view[max(0, start - 60) : start]
-    for boundary in _HARD_BOUNDARY.finditer(before):
-        before = before[boundary.end() :]
-    if end is not None:
-        after = view[end : end + 60]
-        cut = _HARD_BOUNDARY.search(after)
-        if re.search(r"[:‒–—―]|\s-\s", after[: cut.start()] if cut else after):
-            return False
-    for word in _ASKING.finditer(before):
-        if not _FRAME.search(before[: word.start()]):
-            continue
-        between = before[word.end() :]
-        if _CLAUSE_BREAK.search(between):
-            continue
-        is_which = word.group(1) == "which"
-        if _AND.search(between) and not (is_which and _NOUN_PHRASE.fullmatch(between)):
-            continue
-        own = _OWN_SUBJECT.search(between)
-        if _PRONOUN.search(between[: own.start()] if own else between):
-            continue
-        if is_which and (
-            before[: word.start()].rstrip().endswith(",") or _RELATIVE_WHICH.match(between)
-        ):
-            continue
-        return True
-    return False
-
-
 def stems_of(text: str) -> frozenset[str]:
     return frozenset(POLICY_STEMS.findall(normal(text)))
 
@@ -1069,10 +1037,7 @@ class OutputCheck:
             )
         if pattern.exempt == "live_stock":
             return stock_vouched(span, self.live, _negated(view.text, start))
-        if pattern.exempt == "availability":
-            return _asks(view.text, start, end) or stock_vouched(
-                span, self.live, _negated(view.text, start)
-            )
+
         raise ValueError(f"unknown exemption: {pattern.exempt}")  # fail closed on a new kind
 
     def _vouched(self, text: str, match: re.Match[str]) -> bool:
@@ -1230,18 +1195,6 @@ class OutputCheck:
                         continue
                     if not stems or self._vouched(view.text, found):
                         continue
-                if (
-                    pattern.exempt == "availability"
-                    and not final
-                    and _asks(view.text, found.start(), found.end())
-                    and not _HARD_BOUNDARY.search(self._raw, end)
-                    and self._wide(end, len(self._raw)) <= 60
-                ):
-                    # A colon or dash up to 60 characters on would make it a claim: hold it until
-                    # its sentence ends or that window has passed (re-review N9).
-                    if self._undecided is None or start < self._undecided:
-                        self._undecided = start
-                    continue
                 if self._exempt(pattern, view, found, self._raw[start:end]):
                     continue
                 if best is None or start < best.start:
@@ -1468,9 +1421,7 @@ def hits(
     return {cls: n for cls, n in check.counts.items() if cls != "marker"}
 
 
-LIVE_EXEMPTIONS = frozenset(
-    {"live_price", "live_stock", "availability", "pounds", "bare_price", "qualified"}
-)
+LIVE_EXEMPTIONS = frozenset({"live_price", "live_stock", "pounds", "bare_price", "qualified"})
 
 
 def live_backed(text: str, live: LiveValues) -> int:
@@ -1488,13 +1439,7 @@ def live_backed(text: str, live: LiveValues) -> int:
             continue
         for found in pattern.regex.finditer(view.text):
             start, end = view.raw_span(found.start(), found.end())
-            span = re.sub(r"\s+", " ", view.text[found.start() : found.end()])
-            if pattern.exempt == "availability":
-                # A question passes the check but claims nothing (security review pass 1, 7).
-                backed = not _asks(view.text, found.start(), found.end()) and stock_vouched(
-                    span, live, _negated(view.text, found.start())
-                )
-            elif pattern.exempt == "pounds" and _about_weight(view.text, found.start()):
+            if pattern.exempt == "pounds" and _about_weight(view.text, found.start()):
                 backed = False  # a weight, not a price
             else:
                 backed = check._exempt(pattern, view, found, text[start:end])

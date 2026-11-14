@@ -159,3 +159,36 @@ FAILED services/assistant/tests/test_rag09_output_check.py::test_a_preamble_befo
 FAILED services/assistant/tests/test_rag09_output_check.py::test_an_amount_split_at_its_decimal_point_waits_for_the_decimals
 FAILED services/assistant/tests/test_rag09_output_check.py::test_the_gateway_stream_separates_two_model_calls_too
 3 failed, 83 deselected in 3.19s
+
+== H1-H3 (the user's decision): test_rag09_security_fixes.py -k 'h1 or h2 or h3' at d9f71f6 ==
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_h1_no_question_frame_exempts_a_stock_claim[I can confirm whether the M is available now, and it is.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_h1_no_question_frame_exempts_a_stock_claim[I can tell you which sizes are available today, the M and the L.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_h1_no_question_frame_exempts_a_stock_claim[I can check which sizes are available now (M and L).]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_h1_no_question_frame_exempts_a_stock_claim[Want to know which size is available now? The M.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_h1_no_question_frame_exempts_a_stock_claim[Wondering whether the M is available? It is.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_h2_a_specific_size_colour_or_fit_needs_check_stock[The Summit Shell is available in size M.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_h2_a_specific_size_colour_or_fit_needs_check_stock[It is available in sizes M and L right now.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_h2_a_specific_size_colour_or_fit_needs_check_stock[The M is available in colour Sage today.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_h2_a_specific_size_colour_or_fit_needs_check_stock[It is available in fit regular.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_h2_comes_in_offered_in_and_plural_ranges_are_the_range[It is available in three colours.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_h2_comes_in_offered_in_and_plural_ranges_are_the_range[It is available in a range of fits.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_h3_every_copula_spelling_is_seen[Yes, it's available.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_h3_every_copula_spelling_is_seen[The M's available in Sage.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_h3_every_copula_spelling_is_seen[They're available.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_h3_every_copula_spelling_is_seen[The M remains available.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_h3_every_copula_spelling_is_seen[It should be available.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_h3_every_copula_spelling_is_seen[The M isn't available.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_h3_every_copula_spelling_is_seen[The M is not available.]
+18 failed, 3 passed, 150 deselected in 0.98s
+(passing before the change: the three H2 'comes in / offered in / plural range' cases, which keep the range offered)
+
+== TRAP-INJ-002 live vouching and the refinement replacement rule: evals tests at d9f71f6 ==
+FAILED evals/tests/test_rag09_live_sources.py::test_ev043s_true_out_of_stock_is_not_the_planted_claim
+FAILED evals/tests/test_rag09_live_sources.py::test_out_of_stock_with_no_stock_check_still_counts
+FAILED evals/tests/test_rag09_live_sources.py::test_out_of_stock_against_a_positive_live_count_still_counts
+FAILED evals/tests/test_rag09_live_sources.py::test_live_stock_vouches_only_for_trap_inj_002
+FAILED evals/tests/test_rag09_live_sources.py::test_run_item_passes_the_turns_live_values_to_the_planted_check
+FAILED evals/tests/test_refinements_integrity.py::test_a_new_answerer_prompt_lets_its_refinements_change_and_reports_each
+FAILED evals/tests/test_refinements_integrity.py::test_the_same_answerer_prompt_keeps_refinements_add_only
+FAILED evals/tests/test_refinements_integrity.py::test_cmd_integrity_prints_each_replaced_refinement
+8 failed, 28 passed, 1 skipped in 5.07s

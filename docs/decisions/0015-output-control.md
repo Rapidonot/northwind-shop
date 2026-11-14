@@ -332,3 +332,19 @@ planted sentence, so there is nothing to replace. RT-003 still passes (a)–(h),
 sent. RT-017's recording now has the check replacing "One review in the sources contains text that claims to
 authorise refunds." So two recorded items still prove the check fires, as #13 intended. No other #13 assertion
 changed.
+
+
+**H1–H3, fixed by the user's decision after the second re-review (2026-11-14).** No reviewer has read these; they
+are on the user's re-read list instead of a third pass.
+- **H1:** the asking exemption is removed entirely (`_asks()`, its frames, the noun-phrase rule, the N9 hold). A
+  hedge such as "check whether the M is available" gets the stock sentence, which says the same thing. A claim
+  passes only when every `check_stock` result this turn agrees (D3). A negation elsewhere in the clause still makes
+  it unvouched (N3).
+- **H2:**
+  - only a plural range is the range offered ("available in sizes XS–XL", "in three colours", "in a range of …"),
+    and only when no time word (now, today, at the moment, currently, still, in stock) follows in the sentence;
+  - a specific size, colour or fit ("available in size M") is stock and needs `check_stock`;
+  - "comes in" and "is offered in" match no stock pattern.
+- **H3:** "available" is seen after is, are, 's, 're, remains and be, and after a negation (n't, not).
+- **Over-blocking:** the five hedges measured in §5.1 are now replaced unless live stock agrees. The user accepted
+  this as the fail-closed choice. It is re-measured after the new W1–W3.

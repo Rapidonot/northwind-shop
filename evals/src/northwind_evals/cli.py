@@ -72,6 +72,7 @@ from northwind_evals.integrity import (
     added_known_failures,
     integrity_problems,
     merge_base,
+    replaced_refinements,
 )
 from northwind_evals.items import (
     MIN_HUMAN_REVIEWED,
@@ -757,11 +758,14 @@ def cmd_integrity(args: argparse.Namespace) -> int:
         problems = integrity_problems(args.base, BASELINE)
         problems += _vouch(added_frozen_vectors(merge_base(args.base)))
         added = added_known_failures(merge_base(args.base), KNOWN_FAILURES)
+        replaced = replaced_refinements(merge_base(args.base), BASELINE)
     except RuntimeError as error:
         print(f"eval-integrity FAILED: {error}", file=sys.stderr)
         return 1
     for entry in added:  # one JSON line each, so text inside an entry cannot pose as output
         print(f"  known failure added: {json.dumps(entry, sort_keys=True)}")
+    for entry in replaced:  # row #12: a re-recorded answerer replaced these refinements
+        print(f"  refinement replaced: {json.dumps(entry, sort_keys=True)}")
     for problem in problems:
         print(f"  {problem}", file=sys.stderr)
     print(f"eval-integrity {'FAILED' if problems else 'passed'} against {args.base}")

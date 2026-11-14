@@ -62,6 +62,8 @@ class Answer:
     # a live price or stock value, which no retrieved source can be cited for (change 3).
     live: tuple[ContextChunk, ...] = ()
     live_claims: int = 0
+    # The turn's `LiveValues` (row #12): the planted-claim check reads them (TRAP-INJ-002).
+    live_values: Any = None
 
     @property
     def text(self) -> str:
@@ -434,6 +436,7 @@ class AssistantAnswerer:
             payload_hits(text, streamed, sources, live),
             blocks,
             live_backed(text, live),
+            live,
         )
 
 
