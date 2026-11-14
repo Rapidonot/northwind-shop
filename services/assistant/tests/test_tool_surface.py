@@ -36,6 +36,37 @@ GOLDEN = [
         "417da8f2c6b94ea7f2a3fbb85d0e309c5378b35ce28ca011eb616ce3a0e7d16a",
     )
 ]
+# Row #12 (RAG-09; the user's approval under stop 5, 2026-11-14): with mcp-catalog attached, as the
+# gateway and the evals always run, the CLI sends these six, re-frozen from the W1 recording at this
+# head. `GOLDEN` above stays the surface with no catalog.
+ATTACHED = [
+    (
+        "mcp__northwind-catalog__check_stock",
+        "3ca59182b19f7184392e7fd2cff24101e07c61d68ce31739fc3d2e5cf95de671",
+        "4ed0912153ead4e8018c78cd2e31495c25f1774aae0e754ee54b883691bc3d58",
+    ),
+    (
+        "mcp__northwind-catalog__get_price",
+        "83d66f5cff6811a6eed2ac75c50aaae10ca4d591b20663920becb0e0f9b5fd31",
+        "4ed0912153ead4e8018c78cd2e31495c25f1774aae0e754ee54b883691bc3d58",
+    ),
+    (
+        "mcp__northwind-catalog__get_product",
+        "fa3abc1cc0eb9e7f4d1723d02cb96bbddb3d73f2eab2f5a55a667e7f6a965791",
+        "69b3a2699535310a93dde26df21c8be2d59aba444de5f73b67caba5eeaf6bfe9",
+    ),
+    (
+        "mcp__northwind-catalog__get_variant",
+        "35f139456c6291f447d2c49e43a307eea73d369c1a704597caa715f88e768149",
+        "4ed0912153ead4e8018c78cd2e31495c25f1774aae0e754ee54b883691bc3d58",
+    ),
+    (
+        "mcp__northwind-catalog__search_products",
+        "11adb9122eefcc30023f1763c9ec5e52686aa3fdd1ae52d683274a1823e8746b",
+        "c24ea675aba27bae5482a38385e8ca12fb2381fe4aadd6f5ad4a01bbe8018788",
+    ),
+    *GOLDEN,
+]
 RECORDED_SUITES = ("assistant-smoke", "assistant-redteam")
 
 
@@ -92,4 +123,28 @@ def test_every_recorded_request_offers_the_frozen_surface(suite: str) -> None:
     for path in cassettes:
         raw = json.loads(path.read_text(encoding="utf-8"))["match"]["body"]
         body = json.loads(raw) if isinstance(raw, str) else raw
-        assert surface(body["tools"]) == GOLDEN, path.name
+        assert surface(body["tools"]) == ATTACHED, path.name
+
+
+@pytest.mark.req("RAG-09")
+def test_the_attached_surface_is_frozen(tmp_path: Path) -> None:
+    """What a live turn with the catalog attached sends today equals what the recordings hold."""
+    from northwind_assistant.catalog_client import CatalogEndpoint
+    from northwind_mcp_catalog import testing as catalog_testing
+
+    with (
+        ScriptedLLM() as llm,
+        serve_retriever(One(), Caller) as (url, _),
+        catalog_testing.running(catalog_testing.server(key=KEY)) as catalog_url,
+    ):
+        llm.reply_stream("ok")
+        runtime = agent_runtime(base_url=llm.url, root=tmp_path)
+        catalog = CatalogEndpoint(catalog_url, KEY)
+
+        async def go() -> None:
+            caller = Caller(region="US")
+            async for _ in stream_answer("hi", caller, RagEndpoint(url, KEY), runtime, catalog):
+                pass
+
+        asyncio.run(go())
+    assert surface(llm.requests[0]["body"]["tools"]) == ATTACHED

@@ -153,3 +153,9 @@ FAILED services/assistant/tests/test_rag09_security_fixes.py::test_m2_a_negation
 test_a_preamble_before_a_tool_call_is_not_glued_to_the_answer: FAILED (shown 'It comes in five sizes [P0011]. I've left out a link or contact detail here.': 'price.The' read as a bare domain)
 test_an_amount_split_at_its_decimal_point_waits_for_the_decimals: FAILED ('$263.' at the delta end read as $263 and blocked against the live 263.40)
 replay of test_smoke_e2e.py before the fixes: test_a_price_changed_while_the_catalog_runs_is_the_one_quoted FAILED (first the link sentence, then the money sentence); after both fixes and removing the 13 superseded cassettes: 16 passed, no miss
+
+== the user's point 3 (gateway path) and the W1 fixes: test_rag09_output_check.py at 72285d7 (before the separator and decimal-hold fixes) ==
+FAILED services/assistant/tests/test_rag09_output_check.py::test_a_preamble_before_a_tool_call_is_not_glued_to_the_answer
+FAILED services/assistant/tests/test_rag09_output_check.py::test_an_amount_split_at_its_decimal_point_waits_for_the_decimals
+FAILED services/assistant/tests/test_rag09_output_check.py::test_the_gateway_stream_separates_two_model_calls_too
+3 failed, 83 deselected in 3.19s

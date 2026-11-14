@@ -8,8 +8,10 @@ message (the user's D5). #13's tests are unchanged; these add the #12 classes an
 from __future__ import annotations
 
 import asyncio
+import json
 from decimal import Decimal
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -387,7 +389,7 @@ def test_a_preamble_before_a_tool_call_is_not_glued_to_the_answer(tmp_path: Path
 
     live = FixtureCatalog()
     live.set_price(VARIANT, "US", "263.40", "USD")
-    preamble = [
+    preamble: list[dict[str, Any]] = [
         {"type": "text", "chunks": ["It comes in five sizes [P0011].", " I'll check the price."]},
         {
             "type": "tool_use",
@@ -447,3 +449,57 @@ def test_an_amount_that_ends_its_sentence_is_still_read_when_the_next_text_arriv
     assert shown == "It costs $263. Fine."
     _sent, shown = _streamed(["It costs $264.", " Fine."], live)
     assert shown.startswith(MONEY)
+
+
+def test_the_gateway_stream_separates_two_model_calls_too(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The gateway streams `stream_answer`, which feeds `run_turn`'s events, separator included,
+    into the output check: the shopper's SSE text never glues "…the price." to "The jacket…"."""
+    from fastapi.testclient import TestClient
+
+    from northwind_gateway.app import app
+    from northwind_gateway.chat import ChatServices, chat_services
+    from northwind_llm_replay.scripted import blocks_sse
+
+    monkeypatch.setenv("DEV_SHOPPER_REGION", "US")
+    live = FixtureCatalog()
+    live.set_price(VARIANT, "US", "263.40", "USD")
+    preamble: list[dict[str, Any]] = [
+        {"type": "text", "chunks": ["It comes in five sizes [P0011].", " I'll check the price."]},
+        {
+            "type": "tool_use",
+            "id": "toolu_p",
+            "name": catalog_tool.PRICE_TOOL,
+            "input": {"variant_id": VARIANT},
+        },
+    ]
+    usage = {"input_tokens": 10, "output_tokens": 5}
+    with (
+        catalog_testing.running(catalog_testing.server(live, key=KEY)) as catalog_url,
+        serve_retriever(OneSource(), Caller) as (rag_url, _),
+        ScriptedLLM() as llm,
+    ):
+        llm.reply_raw(
+            200, blocks_sse("scripted", preamble, "tool_use", usage, "msg_pre"), "text/event-stream"
+        )
+        llm.reply_stream("The jacket costs $263.40 USD [P0011].")
+        services = ChatServices(
+            RagEndpoint(rag_url, KEY),
+            agent_runtime(base_url=llm.url, root=tmp_path),
+            CatalogEndpoint(catalog_url, KEY),
+        )
+        app.dependency_overrides[chat_services] = lambda: services
+        try:
+            response = TestClient(app).post("/api/chat", json={"message": "How much?"})
+        finally:
+            app.dependency_overrides.clear()
+    tokens = [
+        json.loads(line[len("data: ") :])["text"]
+        for frame in response.text.split("\n\n")
+        for line in frame.splitlines()
+        if line.startswith("data: ") and "event: token" in frame
+    ]
+    shown = "".join(tokens)
+    assert "price.\n\nThe jacket costs $263.40 USD" in shown
+    assert FIXED_SENTENCES["link"] not in shown and FIXED_SENTENCES["money"] not in shown
