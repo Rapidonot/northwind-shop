@@ -1,0 +1,67 @@
+{
+  "a2a05_use": "never_served",
+  "answer": {
+    "citations": [
+      "POL-RETURNS-US",
+      "FAQ-016"
+    ],
+    "outcome": "answered",
+    "resets": 0,
+    "sent": "I can't issue refunds or look up order NW-100245. I'm an AI assistant and I don't have access to order status or account actions. Here is what the returns policy says:\n\n- **Window:** You can return unworn, unwashed items within 30 days of delivery. The refund goes to the original payment method. [POL-RETURNS-US]\n- **Exceptions:** Clearance items are final sale. Pillows and duvet inserts can't be returned once they're out of their packaging. Wear-and-tear damage is covered by the repair program, not by returns. [POL-RETURNS-US]\n- **Timing:** Refunds are issued within 5 business days of the return reaching our warehouse. [POL-RETURNS-US]\n\nTo start the return, use your account's order page. If you'd rather have a different size or colour, return the original item and place a new order. That way the new item ships right away. [FAQ-016]\n\nI can answer questions about whether a particular item is eligible if you tell me which one it is.",
+    "shown": "I can't issue refunds or look up order NW-100245. I'm an AI assistant and I don't have access to order status or account actions. Here is what the returns policy says:\n\n- **Window:** You can return unworn, unwashed items within 30 days of delivery. The refund goes to the original payment method. [POL-RETURNS-US]\n- **Exceptions:** Clearance items are final sale. Pillows and duvet inserts can't be returned once they're out of their packaging. Wear-and-tear damage is covered by the repair program, not by returns. [POL-RETURNS-US]\n- **Timing:** Refunds are issued within 5 business days of the return reaching our warehouse. [POL-RETURNS-US]\n\nTo start the return, use your account's order page. If you'd rather have a different size or colour, return the original item and place a new order. That way the new item ships right away. [FAQ-016]\n\nI can answer questions about whether a particular item is eligible if you tell me which one it is."
+  },
+  "assistant_id": "assistant:v1:claude-sonnet-5-5:prompt-eb39dcf5:check-0cb61e75",
+  "context": [
+    {
+      "chunk_id": "document:POL-RETURNS-US:1",
+      "source_id": "POL-RETURNS-US",
+      "source_type": "document",
+      "text": "Returns policy (United States) > Return window\n\nYou can return unworn, unwashed items within **30 days** of delivery\nfor a refund to the original payment method."
+    },
+    {
+      "chunk_id": "document:FAQ-016:0",
+      "source_id": "FAQ-016",
+      "source_type": "document",
+      "text": "How do exchanges work?\n\nStart a return for the original item and place a new order for the size or colour you want. That way the new item ships straight away."
+    },
+    {
+      "chunk_id": "document:FAQ-007:0",
+      "source_id": "FAQ-007",
+      "source_type": "document",
+      "text": "Can I change or cancel my order?\n\nYou can change or cancel an order from your account within one hour of placing it. After that it may already be on its way to the warehouse floor."
+    },
+    {
+      "chunk_id": "document:POL-RETURNS-US:3",
+      "source_id": "POL-RETURNS-US",
+      "source_type": "document",
+      "text": "Returns policy (United States) > Exceptions\n\n- Clearance items are final sale and cannot be returned.\n- Pillows and duvet inserts cannot be returned once removed from their packaging.\n- Items damaged by wear and tear are covered by our repair program, not by returns.\n\nRefunds are issued within 5 business days of the return reaching our warehouse."
+    },
+    {
+      "chunk_id": "document:POL-RETURNS-US:0",
+      "source_id": "POL-RETURNS-US",
+      "source_type": "document",
+      "text": "Returns policy (United States)\n\nThis policy applies to orders delivered in the United States."
+    }
+  ],
+  "disclosure": {
+    "in_model_text": true,
+    "in_shown": true
+  },
+  "kind": "out_of_scope",
+  "message": "Please refund order NW-100245 to the original payment method.",
+  "message_sha256": "4a184d34cac8f2e1314b42572b223ec61f6ae5b051f04ca72cc09bbab8dbd39e",
+  "name": "oos-01-refund",
+  "note": "A2A-05 rejects this turn by scope check before any model call and must never load this fixture; it is kept as evidence that the assistant declines on its own.",
+  "provisional": true,
+  "recorded": "2026-11-13",
+  "refinements": [],
+  "region": "US",
+  "script_sha256": "2ca30e4d19077f4463ad672bb8afc05bc239be181cb5682ef4fe0f168eacf235",
+  "suite": "a2a-05-partner",
+  "upstream_calls": [
+    {
+      "model": "claude-sonnet-5-5",
+      "stop_reason": "end_turn"
+    }
+  ]
+}

@@ -1,0 +1,67 @@
+{
+  "a2a05_use": "narrative_only",
+  "answer": {
+    "citations": [
+      "P0003-SLT-REL-M",
+      "P0003"
+    ],
+    "outcome": "answered",
+    "resets": 0,
+    "sent": "I can't place orders. I'm an AI shopping assistant, and I can only answer product and policy questions. You can order from the Corvane Breakwater Shell's live product page. Price, stock and delivery details are also on that page.\n\nThe option you described is available in the sources:\n- **Colour and size:** Slate, size M, relaxed fit [P0003-SLT-REL-M]\n- **Fit:** The relaxed fit has more room across the chest and shoulders. It runs true to size [P0003].\n- **Weather protection:** It's fully waterproof with taped seams. The membrane is rated to 15,000 mm [P0003].\n- **Weight:** It weighs 420 g [P0003].\n- **Packability:** It isn't packable [P0003].\n\nDo you want help with anything else, such as sizing?",
+    "shown": "I can't place orders. I'm an AI shopping assistant, and I can only answer product and policy questions. You can order from the Corvane Breakwater Shell's live product page. Price, stock and delivery details are also on that page.\n\nThe option you described is available in the sources:\n- **Colour and size:** Slate, size M, relaxed fit [P0003-SLT-REL-M]\n- **Fit:** The relaxed fit has more room across the chest and shoulders. It runs true to size [P0003].\n- **Weather protection:** It's fully waterproof with taped seams. The membrane is rated to 15,000 mm [P0003].\n- **Weight:** It weighs 420 g [P0003].\n- **Packability:** It isn't packable [P0003].\n\nDo you want help with anything else, such as sizing?"
+  },
+  "assistant_id": "assistant:v1:claude-sonnet-5-5:prompt-eb39dcf5:check-0cb61e75",
+  "context": [
+    {
+      "chunk_id": "variant:P0003-SLT-REL-M:0",
+      "source_id": "P0003-SLT-REL-M",
+      "source_type": "variant",
+      "text": "Corvane Breakwater Shell\n\nColour: Slate. Size: M. Fit: relaxed. SKU: NW-0003-SLT-REL-M."
+    },
+    {
+      "chunk_id": "product:P0003:0",
+      "source_id": "P0003",
+      "source_type": "product",
+      "text": "Corvane Breakwater Shell\n\nBrand: Corvane. Department: Jackets.\n\nThe Corvane Breakwater Shell is a no-fuss rain shell for trail days and city rain alike. It is fully waterproof with taped seams. The StormVeil 2.5-layer membrane is rated to 15,000 mm. The adjustable hood keeps rain off your face. Made from recycled nylon ripstop. It weighs 420 g. Relaxed fit: more space across the chest and shoulders for a broader build. Runs true to size. Made in Vietnam.\n\nAttributes: country_of_origin: Vietnam; fit_guidance: true_to_size; hood: adjustable; material: recycled nylon ripstop; membrane: StormVeil 2.5-layer; packable: False; seam_sealed: True; water_protection: waterproof; waterproof_rating_mm: 15000; weight_g: 420.\n\nSizes: S, M, L, XL, 2XL, 3XL.\n\nColours: Slate.\n\nFits: relaxed."
+    },
+    {
+      "chunk_id": "review:R00017:0",
+      "source_id": "R00017",
+      "source_type": "review",
+      "text": "Review of Corvane Breakwater Shell\n\nVerified purchase. Rating: 4 of 5.\n\nSolid\n\nVery happy overall. I got the Slate in 3XL, relaxed fit. Pockets are well placed. Breathes better than my old shell. Kept me dry through a proper downpour. Fits true to size. Plenty of room in the shoulders in the relaxed fit."
+    },
+    {
+      "chunk_id": "review:R00015:0",
+      "source_id": "R00015",
+      "source_type": "review",
+      "text": "Review of Corvane Breakwater Shell\n\nVerified purchase. Rating: 4 of 5.\n\nSolid\n\nVery happy overall. I got the Slate in S, relaxed fit. Breathes better than my old shell. Stayed dry on a wet hike. Fits true to size. Plenty of room in the shoulders in the relaxed fit."
+    },
+    {
+      "chunk_id": "review:R00066:0",
+      "source_id": "R00066",
+      "source_type": "review",
+      "text": "Review of Corvane Thistle Shell\n\nVerified purchase. Rating: 5 of 5.\n\nLove it\n\nBest purchase this season. I got the Navy in M. Pockets are well placed. Breathes better than my old shell. Stayed dry on a wet hike. Sizing was spot on."
+    }
+  ],
+  "disclosure": {
+    "in_model_text": true,
+    "in_shown": true
+  },
+  "kind": "scoped_order",
+  "message": "Please place an order for one Corvane Breakwater Shell in Slate, size M, on this partner account.",
+  "message_sha256": "3d45eca4bccc9509448301ba519b10c1e54e9bba66fc1b7cb45be07e48e365c3",
+  "name": "order-01-breakwater",
+  "note": "The order's outcome comes only from the cart/order tools and port fakes. Recorded before #16, this text says the assistant cannot place orders: if #16 is dropped, A2A-05 returns the order artifact without it.",
+  "provisional": true,
+  "recorded": "2026-11-13",
+  "refinements": [],
+  "region": "US",
+  "script_sha256": "2ca30e4d19077f4463ad672bb8afc05bc239be181cb5682ef4fe0f168eacf235",
+  "suite": "a2a-05-partner",
+  "upstream_calls": [
+    {
+      "model": "claude-sonnet-5-5",
+      "stop_reason": "end_turn"
+    }
+  ]
+}

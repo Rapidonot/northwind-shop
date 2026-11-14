@@ -1,0 +1,68 @@
+{
+  "a2a05_use": "answer",
+  "answer": {
+    "citations": [
+      "P0164",
+      "P0175",
+      "P0165"
+    ],
+    "outcome": "answered",
+    "resets": 0,
+    "sent": "No. The Larchpell Highland Wool Throw is dry clean only, so don't machine wash it [P0164].\n\nIf you want a throw you can machine wash, two options are listed as machine washable on a cold, gentle cycle:\n- Larchpell Heath Blanket Throw, in cotton waffle knit [P0175]\n- Emberquay Cosy Wool-Blend Throw, in 60% wool and 40% acrylic [P0165]",
+    "shown": "No. The Larchpell Highland Wool Throw is dry clean only, so don't machine wash it [P0164].\n\nIf you want a throw you can machine wash, two options are listed as machine washable on a cold, gentle cycle:\n- Larchpell Heath Blanket Throw, in cotton waffle knit [P0175]\n- Emberquay Cosy Wool-Blend Throw, in 60% wool and 40% acrylic [P0165]"
+  },
+  "assistant_id": "assistant:v1:claude-sonnet-5-5:prompt-eb39dcf5:check-0cb61e75",
+  "context": [
+    {
+      "chunk_id": "product:P0164:0",
+      "source_id": "P0164",
+      "source_type": "product",
+      "text": "Larchpell Highland Wool Throw\n\nBrand: Larchpell. Department: Living.\n\nThe Larchpell Highland Wool Throw is a soft throw for the sofa or the foot of the bed. Made from 100% wool. Measures 50 x 60 in. Dry clean only. Made in Lithuania.\n\nAttributes: care: dry_clean_only; country_of_origin: Lithuania; dimensions: 50 x 60 in; material: 100% wool.\n\nSizes: One Size.\n\nColours: Heather Grey."
+    },
+    {
+      "chunk_id": "product:P0175:0",
+      "source_id": "P0175",
+      "source_type": "product",
+      "text": "Larchpell Heath Blanket Throw\n\nBrand: Larchpell. Department: Living.\n\nThe Larchpell Heath Blanket Throw is a soft throw for the sofa or the foot of the bed. Made from cotton waffle knit. Measures 50 x 60 in. Machine washable on a cold, gentle cycle. Made in Lithuania.\n\nAttributes: care: machine_washable; country_of_origin: Lithuania; dimensions: 50 x 60 in; material: cotton waffle knit.\n\nSizes: One Size.\n\nColours: Rust."
+    },
+    {
+      "chunk_id": "product:P0165:0",
+      "source_id": "P0165",
+      "source_type": "product",
+      "text": "Emberquay Cosy Wool-Blend Throw\n\nBrand: Emberquay. Department: Living.\n\nThe Emberquay Cosy Wool-Blend Throw is a soft throw for the sofa or the foot of the bed. Made from 60% wool, 40% acrylic. Measures 50 x 60 in. Machine washable on a cold, gentle cycle. Made in Turkey.\n\nAttributes: care: machine_washable; country_of_origin: Turkey; dimensions: 50 x 60 in; material: 60% wool, 40% acrylic.\n\nSizes: One Size.\n\nColours: Clay, Ivory."
+    },
+    {
+      "chunk_id": "product:P0174:0",
+      "source_id": "P0174",
+      "source_type": "product",
+      "text": "Larchpell Spindle Throw\n\nBrand: Larchpell. Department: Living.\n\nThe Larchpell Spindle Throw adds warmth and texture to any room. Made from cotton waffle knit. Measures 50 x 60 in. Dry clean only. Made in Lithuania.\n\nAttributes: care: dry_clean_only; country_of_origin: Lithuania; dimensions: 50 x 60 in; material: cotton waffle knit.\n\nSizes: One Size.\n\nColours: Forest."
+    },
+    {
+      "chunk_id": "variant:P0164-HGY-ONESIZE:0",
+      "source_id": "P0164-HGY-ONESIZE",
+      "source_type": "variant",
+      "text": "Larchpell Highland Wool Throw\n\nColour: Heather Grey. Size: One Size. SKU: NW-0164-HGY-ONESIZE."
+    }
+  ],
+  "disclosure": {
+    "in_model_text": false,
+    "in_shown": false
+  },
+  "kind": "product_question",
+  "message": "Can I machine wash the Larchpell Highland Wool Throw?",
+  "message_sha256": "c9eceb4a2cca095b6fc7ea41f8b90d8f258043e3279f77e4d42e3cca86f7bb29",
+  "name": "pq-07-highland-throw-care",
+  "note": "A2A-05 replays this text by name; never when assistant_id is not current.",
+  "provisional": true,
+  "recorded": "2026-11-13",
+  "refinements": [],
+  "region": "US",
+  "script_sha256": "2ca30e4d19077f4463ad672bb8afc05bc239be181cb5682ef4fe0f168eacf235",
+  "suite": "a2a-05-partner",
+  "upstream_calls": [
+    {
+      "model": "claude-sonnet-5-5",
+      "stop_reason": "end_turn"
+    }
+  ]
+}
