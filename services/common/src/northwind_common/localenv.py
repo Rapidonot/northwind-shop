@@ -10,6 +10,8 @@
   the dev proxy span).
 - An mcp-rag port per worktree (CC-10): `MCP_RAG_PORT`, default derived from the worktree's path in
   its own span, above the proxy's; `MCP_RAG_URL` overrides the whole URL. Tests use random ports.
+- An mcp-catalog port per worktree (#10b): `MCP_CATALOG_PORT`, default derived the same way in a
+  span above mcp-rag's.
 """
 
 from __future__ import annotations
@@ -23,6 +25,7 @@ PORT_BASE = 20000
 PORT_SPAN = 10000
 RUNNER_PORT = 19990
 MCP_RAG_PORT_BASE = 30000
+MCP_CATALOG_PORT_BASE = 40000
 
 
 def _git(args: list[str], cwd: Path) -> str | None:
@@ -107,3 +110,12 @@ def mcp_rag_port(cwd: Path | None = None) -> int:
 
 def mcp_rag_url(cwd: Path | None = None) -> str:
     return os.environ.get("MCP_RAG_URL") or f"http://127.0.0.1:{mcp_rag_port(cwd)}/mcp"
+
+
+def mcp_catalog_port(cwd: Path | None = None) -> int:
+    """mcp-catalog's port for this worktree (#10b): `MCP_CATALOG_PORT`, else derived from the path
+    like mcp-rag's, on its own base so the two never collide."""
+    override = os.environ.get("MCP_CATALOG_PORT")
+    if override:
+        return int(override)
+    return MCP_CATALOG_PORT_BASE + _worktree_offset(cwd)

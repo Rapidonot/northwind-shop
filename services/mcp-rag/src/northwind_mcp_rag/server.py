@@ -21,18 +21,21 @@ import logging
 import time
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Protocol, cast
 
 import mcp.types as t
 import psycopg
 from mcp.server.lowlevel import Server
 from mcp.shared.exceptions import MCPError
-from starlette.datastructures import Headers
-from starlette.types import ASGIApp, Receive, Scope, Send
 
+from northwind_common import mcp_gate
 from northwind_common.errors import ToolError
-from northwind_common.mcp_token import Claims, TokenError, verify
+from northwind_common.mcp_gate import ASGIApp
+from northwind_common.mcp_token import RAG_SERVER, Claims
 from northwind_common.tool_scopes import allowed_resources, allowed_tools
+from northwind_data.dataset import FIXTURES_DIR
+from northwind_data.ingest_guard import verify_dataset
 from northwind_mcp_rag.ledger import SearchLedger
 from northwind_rag import store
 from northwind_rag.embedding import Embedder
@@ -46,9 +49,9 @@ from northwind_rag.retrieval import (
 
 log = logging.getLogger("northwind_mcp_rag")
 
-SERVER_NAME = "northwind-rag"
+SERVER_NAME = RAG_SERVER
 MANIFEST_URI = "northwind-rag://index/manifest"
-CLAIMS_KEY = "northwind_claims"
+CLAIMS_KEY = mcp_gate.CLAIMS_KEY
 
 
 # Fixed text only. Each call builds a fresh error, so no raised object is shared between requests.
@@ -82,6 +85,8 @@ class Backend:
 
     connect: Callable[[], psycopg.Connection]
     embedder: Embedder
+    # Q4 (#10b): the fixtures the manifest's `dataset_sha256` is checked against.
+    fixtures_dir: Path = FIXTURES_DIR
 
 
 class Searcher(Protocol):
@@ -255,9 +260,19 @@ class RagServer:
         return {
             **manifest,
             "retriever_id": retriever_id(self.backend.embedder),
-            # Q4: verifying `dataset_sha256` against the fixtures is #10b's.
-            "dataset_verified": False,
+            "dataset_verified": self._dataset_verified(manifest.get("dataset_sha256")),
         }
+
+    def _dataset_verified(self, stored: object) -> bool:
+        """Q4 (#10b, decision D4): true only when the index's stored `dataset_sha256` is the hash of
+        the fixtures on disk, recomputed from their bytes now. Any mismatch or failure is false,
+        never an error, so the manifest stays readable."""
+        try:
+            verified = verify_dataset(self.backend.fixtures_dir)
+        except Exception as error:  # noqa: BLE001 - unverifiable is false; its text is not logged
+            log.warning("dataset not verified: %s", type(error).__name__)
+            return False
+        return isinstance(stored, str) and stored == verified
 
     # ---- wiring --------------------------------------------------------------------------------
 
@@ -276,38 +291,6 @@ class RagServer:
 
 
 def token_gate(app: ASGIApp, key: bytes, clock: Callable[[], float]) -> ASGIApp:
-    """A bare 401 for any HTTP request without a valid token; the verified claims ride in the
-    request scope's state. Lifespan events pass through; a websocket is closed, so a later route of
-    that kind could never be reached ungated (security review L3)."""
-
-    async def gate(scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] == "lifespan":
-            await app(scope, receive, send)
-            return
-        if scope["type"] == "websocket":
-            log.warning("request refused: websocket")
-            await send({"type": "websocket.close", "code": 1008})
-            return
-        if scope["type"] != "http":
-            return
-        scheme, _, token = Headers(scope=scope).get("authorization", "").partition(" ")
-        try:
-            if scheme != "Bearer":
-                raise TokenError
-            claims = verify(token, key=key, now=clock())
-        except TokenError:
-            log.warning("request refused: token")
-            await send(
-                {
-                    "type": "http.response.start",
-                    "status": 401,
-                    "headers": [(b"www-authenticate", b"Bearer"), (b"content-length", b"0")],
-                }
-            )
-            await send({"type": "http.response.body", "body": b""})
-            return
-        state = dict(scope.get("state") or {})
-        state[CLAIMS_KEY] = claims
-        await app({**scope, "state": state}, receive, send)
-
-    return gate
+    """The shared gate (`northwind_common.mcp_gate`, moved there at #10b), bound to this server:
+    a token minted for another server is a bare 401 here (security review L4)."""
+    return mcp_gate.token_gate(app, key=key, clock=clock, server=SERVER_NAME)

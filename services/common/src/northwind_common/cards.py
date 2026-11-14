@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from collections.abc import Iterator, Mapping
+from typing import Any
 
 MIN_PAN_DIGITS = 13
 MAX_PAN_DIGITS = 19
@@ -93,3 +95,25 @@ def contains_cvv(text: str) -> bool:
 
 def contains_card_data(text: str) -> bool:
     return contains_pan(text) or contains_cvv(text)
+
+
+def argument_texts(value: Any) -> Iterator[str]:
+    """Every key and scalar leaf of tool arguments, as raw text. Raw, not a JSON encoding: JSON
+    writes a newline or tab between digit groups as `\\n` or `\\t`, which hides a split card number
+    from the card check (CC-10 security re-review M1). Moved here from mcp-rag at #10b, unchanged,
+    so every MCP server runs the same check."""
+    if isinstance(value, Mapping):
+        for key, item in value.items():
+            yield str(key)
+            yield from argument_texts(item)
+    elif isinstance(value, list | tuple):
+        for item in value:
+            yield from argument_texts(item)
+    elif value is not None:
+        yield str(value)
+
+
+def holds_card_data(args: Mapping[str, Any]) -> bool:
+    """Card data in any key or value, or split across them (hard rule 1 names tool arguments)."""
+    texts = list(argument_texts(args))
+    return any(contains_card_data(text) for text in texts) or contains_card_data("\n".join(texts))

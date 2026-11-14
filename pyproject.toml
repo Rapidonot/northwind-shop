@@ -13,6 +13,7 @@ dependencies = [
     "northwind-evals",
     "northwind-gateway",
     "northwind-llm-replay",
+    "northwind-mcp-catalog",
     "northwind-mcp-rag",
     "northwind-rag",
 ]
@@ -25,6 +26,7 @@ northwind-data = { workspace = true }
 northwind-evals = { workspace = true }
 northwind-gateway = { workspace = true }
 northwind-llm-replay = { workspace = true }
+northwind-mcp-catalog = { workspace = true }
 northwind-mcp-rag = { workspace = true }
 northwind-rag = { workspace = true }
 

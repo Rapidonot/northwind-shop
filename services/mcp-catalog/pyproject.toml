@@ -1,0 +1,19 @@
+[project]
+name = "northwind-mcp-catalog"
+version = "0.0.0"
+description = "northwind-catalog MCP server: read-only catalog, live price and stock over HTTP (CC-10, #10b)"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "mcp>=2.3,<3",
+    "northwind-common",
+    "northwind-data",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[tool.uv.sources]
+northwind-common = { workspace = true }
+northwind-data = { workspace = true }
+
+[build-system]
+requires = ["uv_build>=0.12,<0.13"]
+build-backend = "uv_build"

@@ -18,6 +18,8 @@ from northwind_rag.retrieval import SHOPPER_REGIONS, retrieve_context
 from northwind_rag.sources import build_chunks
 from northwind_rag.testing import FakeEmbedder
 
+from .fixture_signing import rehash  # noqa: TID252
+
 pytestmark = [pytest.mark.integration, pytest.mark.req("SA-02")]
 
 EVERYTHING = 5000
@@ -32,7 +34,9 @@ def internal_in_own_region(fixtures_copy: Path, edit: Callable[..., Path]) -> tu
                 record["region"] = sorted(SHOPPER_REGIONS)[number % 4]
                 moved.add(record["doc_id"])
 
-    return edit("documents.jsonl", change), moved
+    # The copy is changed on purpose, so it is re-signed to pass ingest's dataset check (#10b,
+    # Q4; the user's stop-5 decision, 2026-11-13). The assertions are unchanged.
+    return rehash(edit("documents.jsonl", change)), moved
 
 
 @pytest.fixture
