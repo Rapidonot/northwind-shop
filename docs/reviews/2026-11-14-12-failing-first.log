@@ -37,3 +37,8 @@ wide _asks (first narrowing): PASSES (test expects blocked: FAIL) | The Glacier 
 tightened _asks (commit 3): BLOCKED | If you need it soon, the Sage M is available now.
 tightened _asks (commit 3): BLOCKED | Not sure if you saw, but the M is available.
 tightened _asks (commit 3): BLOCKED | The Glacier Blue 4XL, which is available today, is warm.
+
+== commit 4 (evals): test_rag09_live_sources.py against 3043f3a's sources ==
+ImportError while importing test module '/private/tmp/claude-502/head12c4/evals/tests/test_rag09_live_sources.py'.
+E   ImportError: cannot import name 'CatalogLog' from 'northwind_evals.answerers' (/tmp/claude-502/head12c4/evals/src/northwind_evals/answerers.py)
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!

@@ -179,6 +179,9 @@ class ItemResult:
     behaviour_ok: bool | None = None
     false_refusal: bool | None = None  # None on items with no answer to give
     citation_ok: bool | None = None
+    # Row #12: `citation_ok` with claims backed only by live values counted too. Reported, never
+    # gated (the user's change 3).
+    citation_ok_counting_live: bool | None = None
     fabricated_ok: bool | None = None
     error_code: str | None = None
     sent: str | None = None
@@ -226,7 +229,9 @@ def run_item(item: EvalItem, context: SavedContext, answerer: Answerer, judge: J
     try:
         answer = answerer.answer(item, context.chunks)
         sources = answer.sources or context.chunks
-        verdict = judge.judge(item, sources, answer.shown)
+        # The judge also sees what the catalog tools returned (row #12, D6), so a live price is a
+        # supported claim. Steering and citations read retrieved sources only.
+        verdict = judge.judge(item, (*sources, *answer.live), answer.shown)
     except StaleAnswer as error:
         return ItemResult(item.id, "stale", None, str(error), error_code="stale")
     except anthropic.APIStatusError as error:
@@ -242,6 +247,7 @@ def run_item(item: EvalItem, context: SavedContext, answerer: Answerer, judge: J
         return ItemResult(item.id, "error", shown, str(error), error_code="judge")
     shown, sent = answer.shown, answer.sent or answer.shown
     source_ids = tuple(chunk.source_id for chunk in sources)
+    citable = verdict.claims_total if verdict.citable is None else verdict.citable
     # "Not available" passes only where that is true. On an answerable item it is a false refusal,
     # whatever the judge scored: an honest refusal must not read as a relevant answer.
     false_refusal = item.answerable and verdict.declined
@@ -274,12 +280,16 @@ def run_item(item: EvalItem, context: SavedContext, answerer: Answerer, judge: J
         false_refusal=false_refusal if item.answerable else None,
         # Citations scale with the claims a source could back: product and policy, never site or
         # other (the user's (a)). Groundedness still counts every claim.
+        # A claim backed only by a live value has no retrieved source to cite, so it does not
+        # count toward the requirement (row #12, the user's change 3); the rule that no citation
+        # may name a source the turn did not return is unchanged.
         citation_ok=citations_ok(
             shown,
-            verdict.claims_total if verdict.citable is None else verdict.citable,
+            max(0, citable - answer.live_claims),
             sources,
             verdict.declined,
         ),
+        citation_ok_counting_live=citations_ok(shown, citable, sources, verdict.declined),
         fabricated_ok=fabricated_ok,
         sent=sent,
         sources=source_ids,
