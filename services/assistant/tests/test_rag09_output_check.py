@@ -373,3 +373,77 @@ def test_after_a_price_and_stock_change_only_the_new_values_pass(tmp_path: Path)
     assert first == "It costs $250.00 and there are 4 left [P0011]."
     assert "250" not in stale and stale.startswith(MONEY)
     assert fresh == "It costs $199.00, and it is out of stock [P0011]."
+
+
+# ---- W1 finding: text from two model calls is joined with a paragraph break ---------------------
+
+
+def test_a_preamble_before_a_tool_call_is_not_glued_to_the_answer(tmp_path: Path) -> None:
+    """W1 (2026-11-14): the model wrote "…I'll check the price for each size." before its
+    `get_price` calls and "The … costs $263.40 USD." after them. Joined with no space, "size.The"
+    read as a bare domain and the link sentence replaced the live price. The calls' text is now
+    joined with a paragraph break, so each sentence is checked on its own."""
+    from northwind_llm_replay.scripted import blocks_sse
+
+    live = FixtureCatalog()
+    live.set_price(VARIANT, "US", "263.40", "USD")
+    preamble = [
+        {"type": "text", "chunks": ["It comes in five sizes [P0011].", " I'll check the price."]},
+        {
+            "type": "tool_use",
+            "id": "toolu_p",
+            "name": catalog_tool.PRICE_TOOL,
+            "input": {"variant_id": VARIANT},
+        },
+    ]
+    usage = {"input_tokens": 10, "output_tokens": 5}
+    with (
+        catalog_testing.running(catalog_testing.server(live, key=KEY)) as url,
+        ScriptedLLM() as llm,
+    ):
+        llm.reply_raw(
+            200, blocks_sse("scripted", preamble, "tool_use", usage, "msg_pre"), "text/event-stream"
+        )
+        llm.reply_stream("The jacket costs $263.40 USD [P0011].")
+        runtime = agent_runtime(base_url=llm.url, root=tmp_path)
+
+        async def collect(rag: RagEndpoint) -> list[TurnEvent]:
+            catalog = CatalogEndpoint(url, KEY)
+            return [e async for e in stream_answer("How much?", US, rag, runtime, catalog)]
+
+        with serve_retriever(OneSource(), Caller) as (rag_url, _):
+            events = asyncio.run(collect(RagEndpoint(rag_url, KEY)))
+    shown = "".join(e.text for e in events if isinstance(e, TextDelta))
+    assert shown == (
+        "It comes in five sizes [P0011]. I'll check the price."
+        "\n\nThe jacket costs $263.40 USD [P0011]."
+    )
+    assert FIXED_SENTENCES["link"] not in shown and FIXED_SENTENCES["money"] not in shown
+
+
+def _streamed(pieces: list[str], live: LiveValues) -> tuple[str, str]:
+    check = OutputCheck(set(), [], live=live)
+    sent: list[str] = []
+    for piece in pieces:
+        sent += [p for p in check.feed(piece) if p is not None]
+    sent += [p for p in check.finish() if p is not None]
+    return "".join(sent), check.shown
+
+
+def test_an_amount_split_at_its_decimal_point_waits_for_the_decimals() -> None:
+    """W1 (2026-11-14): the recorded deltas split "$263.40 USD" as "$263." and "40 USD.". The
+    amount pattern ends on a digit, so "$263" read as complete and was blocked against the live
+    263.40. A money match followed only by "." or "," at the buffer end is now held."""
+    live = LiveValues(prices={(Decimal("263.40"), "USD")})
+    sent, shown = _streamed(["It costs $263.", "40 USD. Fine."], live)
+    assert shown == "It costs $263.40 USD. Fine." and MONEY not in sent
+    sent, shown = _streamed(["It costs $263.", "40 USD. Fine."], LiveValues())
+    assert "263" not in sent and shown.startswith(MONEY)
+
+
+def test_an_amount_that_ends_its_sentence_is_still_read_when_the_next_text_arrives() -> None:
+    live = LiveValues(prices={(Decimal("263.00"), "USD")})
+    _sent, shown = _streamed(["It costs $263.", " Fine."], live)
+    assert shown == "It costs $263. Fine."
+    _sent, shown = _streamed(["It costs $264.", " Fine."], live)
+    assert shown.startswith(MONEY)

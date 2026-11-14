@@ -1220,6 +1220,8 @@ class OutputCheck:
                     continue
                 if end >= len(self._raw) and not final:
                     continue  # it may go on: it is held, and is checked when it ends
+                if pattern.cls == "money" and not final and re.fullmatch(r"[.,]", self._raw[end:]):
+                    continue  # "$263." at the end of a delta may go on with its decimals (W1)
                 if pattern.exempt == "duration":
                     stems = self._policy_context(start, end, final)
                     if stems is None:  # hold it until its sentence shows whether it is policy

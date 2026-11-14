@@ -47,6 +47,10 @@ log = logging.getLogger(__name__)
 # cap of 3 searches per turn; this cap is also the interim bound on catalog calls until hardening
 # adds a per-turn catalog cap.
 MAX_TURNS = 6
+# Text from the next model call after a finished one (a tool call between them) starts a new
+# paragraph. Glued on, "…for each size." and "The jacket…" read as one word, "size.The", which the
+# output check takes for a bare domain (row #12, W1).
+CALL_SEPARATOR = "\n\n"
 # Anything else, such as max_tokens or a refusal, is not a finished answer.
 FINISHED_STOPS = frozenset({"end_turn", "tool_use"})
 
@@ -186,6 +190,7 @@ async def run_turn(
     # A cut stream still ends in `message_stop` and a `success` result, so a stop reason in
     # `message_delta` is the only sign that an attempt reached its end.
     complete = True
+    separate = False  # the next text starts a new call after text that did not end in whitespace
     ours: set[str] = set()  # tool_use ids of this turn's `retrieve_context` calls
     live: dict[str, str] = {}  # tool_use id -> name, for this turn's price and stock calls
     try:
@@ -197,13 +202,20 @@ async def run_turn(
                     usage.call_started(item.event.get("message") or {})
                     if not complete and parts:
                         parts.clear()
+                        separate = False
                         yield Reset()
+                    elif parts and not parts[-1][-1:].isspace():
+                        separate = True
                     complete = False
                 elif kind == "message_delta":
                     usage.call_updated(item.event.get("usage") or {})
                     complete = item.event.get("delta", {}).get("stop_reason") in FINISHED_STOPS
                 text = _text_delta(item)
                 if text:
+                    if separate:
+                        separate = False
+                        parts.append(CALL_SEPARATOR)
+                        yield TextDelta(CALL_SEPARATOR)
                     parts.append(text)
                     yield TextDelta(text)
             elif isinstance(item, AssistantMessage):
