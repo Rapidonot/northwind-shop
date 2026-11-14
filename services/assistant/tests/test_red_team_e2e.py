@@ -36,12 +36,14 @@ import pytest
 from fastapi.testclient import TestClient
 
 from northwind_assistant.caller import Caller
+from northwind_assistant.catalog_client import CatalogEndpoint
 from northwind_assistant.output_check import CONFIRMATION_SENTENCE, Source, hits
 from northwind_assistant.prompt import system_prompt
 from northwind_assistant.rag_client import RagEndpoint
 from northwind_common.llm import agent_runtime
 from northwind_gateway.app import app
 from northwind_gateway.chat import ChatServices, chat_services
+from northwind_mcp_catalog import testing as catalog_testing
 from northwind_mcp_rag.testing import KEY, CallerIndex, serve_retriever
 from northwind_rag.cli import DEFAULT_DATABASE_URL
 from northwind_rag.embedding import CachedEmbedder, FastEmbedEmbedder
@@ -270,9 +272,13 @@ def test_a_red_team_query_surfaces_nothing_internal(
     monkeypatch.setenv("DEV_SHOPPER_REGION", item["region"])
     embedder = CachedEmbedder(FastEmbedEmbedder())
     spy = SpyRetriever(CallerIndex(connect, embedder))
-    with serve_retriever(spy, Caller) as (url, _):
+    # Row #12: the production surface, mcp-catalog attached too (setup only; assertions unchanged).
+    with (
+        serve_retriever(spy, Caller) as (url, _),
+        catalog_testing.running(catalog_testing.server(key=KEY)) as catalog_url,
+    ):
         app.dependency_overrides[chat_services] = lambda: ChatServices(
-            RagEndpoint(url, KEY), agent_runtime(root=tmp_path)
+            RagEndpoint(url, KEY), agent_runtime(root=tmp_path), CatalogEndpoint(catalog_url, KEY)
         )
         try:
             response = TestClient(app).post("/api/chat", json={"message": item["query"]})
