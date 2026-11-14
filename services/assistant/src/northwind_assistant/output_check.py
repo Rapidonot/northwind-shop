@@ -29,6 +29,7 @@ from bisect import bisect_left, bisect_right
 from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
+from decimal import Decimal, InvalidOperation
 from functools import lru_cache
 
 L = 64
@@ -43,8 +44,12 @@ FIXED_SENTENCES: Mapping[str, str] = {
     "link": "I've left out a link or contact detail here.",
     "confirmation": CONFIRMATION_SENTENCE,
     "refund_authority": CONFIRMATION_SENTENCE,
-    "stock": "I can't check stock in chat.",
+    # Row #12 (the user's D4): the assistant now has `check_stock`, so "I can't check stock in chat"
+    # stopped being true; a stock claim the live check did not return gets this instead.
+    "stock": "I can only give stock from the live stock check.",
     "false_policy": "I couldn't match that policy term to Northwind's policy for your region.",
+    # Row #12 (RAG-09): a price the live price check did not return this turn.
+    "money": "I can only give a price from the live price check.",
 }
 CLASSES = tuple(FIXED_SENTENCES)
 COUNTED = (*CLASSES, "marker")
@@ -160,6 +165,18 @@ _SPELLED = (
     rf"|{_TENS_UNITS}|an|a)"
 )
 _NUMERAL = rf"(?:\d{{1,3}}(?:,\d{{3}}){{1,2}}|\d{{1,4}}|{_SPELLED})"
+# A spelled count without the bare article: "three", "a hundred", "twenty-one", never "a" or "an"
+# alone, so "an available size" is not a count (row #12).
+_SPELLED_COUNT = (
+    rf"(?:(?:a|an|{_UNITS})[\s-]{{1,2}}hundred(?:[\s-]{{1,2}}(?:and[\s-]{{1,2}})?{_TENS_UNITS})?"
+    rf"|{_TENS_UNITS})"
+)
+_COUNT = rf"(?:\d{{1,4}}|{_SPELLED_COUNT})"
+# An amount of money as written in digits: "279", "279.00", "1,299.5".
+_AMOUNT = r"(?:\d{1,3}(?:,\d{3}){1,2}|\d{1,7})(?:\.\d{1,2})?"
+# "pounds" is left out on purpose: "weighs 2 pounds" is a product attribute, and £ and GBP cover
+# sterling (a residual: "twenty pounds" as money passes).
+_CURRENCY_WORD = r"(?:usd|gbp|eur|aud|cad|dollars?|bucks?|quid|euros?)"
 _NUMBER = _either_words(_NUMBER_WORDS)
 DURATION = re.compile(
     rf"\b(?P<n>{_NUMERAL})(?:[\s-]{{1,2}}(?:full|calendar))?[\s-]{{1,2}}"
@@ -238,7 +255,11 @@ def _p(cls: str, pattern: str, exempt: str | None = None, *, exact: bool = False
     return Pattern(cls, re.compile(pattern), exempt, exact)
 
 
+# What "available in …" names when it is the range offered rather than stock (row #12).
+_RANGE = r"(?:sizes?|colou?rs?|fits?|lengths?|widths?)"
+
 # Fixed with the row #13 plan before any recording; a change after one is stop 7 (decision 0015).
+# Row #12 extends them, approved with its plan (decision 0015 §7 and its #12 amendment).
 PATTERNS: tuple[Pattern, ...] = (
     # 1. Promotions come only from live tools (hard rule 2): class-level, no exemption.
     _p("promotion", r"discount"),
@@ -279,13 +300,13 @@ PATTERNS: tuple[Pattern, ...] = (
     _p("refund_authority", rf"\brefunds?{_GAP}{_WORDS}(?:authori[sz]ed|approved)\b", "policy_span"),
     _p("refund_authority", rf"\bapprov\w{{0,4}}{_GAP}{_WORDS}refunds?\b", "policy_span"),
     _p("refund_authority", r"issue_refund|apply_discount"),
-    _p("stock", rf"\bout{_S}of{_S}stock\b"),
-    _p("stock", rf"\bsold{_S}out\b"),
-    _p("stock", rf"\bin{_S}stock\b"),
-    _p("stock", rf"\bonly{_S}\d{{1,4}}{_S}left\b"),
-    _p("stock", rf"\blow{_S}stock\b"),
-    _p("stock", rf"\bjust{_S}\d{{1,4}}{_S}left\b"),
-    _p("stock", rf"\bstock{_S}is{_S}(?:running{_S})?low\b"),
+    _p("stock", rf"\bout{_S}of{_S}stock\b", "live_stock"),
+    _p("stock", rf"\bsold{_S}out\b", "live_stock"),
+    _p("stock", rf"\bin{_S}stock\b", "live_stock"),
+    _p("stock", rf"\bonly{_S}\d{{1,4}}{_S}left\b", "live_stock"),
+    _p("stock", rf"\blow{_S}stock\b", "live_stock"),
+    _p("stock", rf"\bjust{_S}\d{{1,4}}{_S}left\b", "live_stock"),
+    _p("stock", rf"\bstock{_S}is{_S}(?:running{_S})?low\b", "live_stock"),
     # 5. False policy: a duration in a policy sentence, or a free-returns term, that no public
     #    document returned this turn states.
     Pattern("false_policy", DURATION, "duration"),
@@ -296,6 +317,38 @@ PATTERNS: tuple[Pattern, ...] = (
         "free_terms",
     ),
     _p("false_policy", rf"\bprepaid{_S}(?:return{_S})?labels?\b", "free_terms"),
+    # 6. Row #12 (RAG-09, decision 0015 §7). Money: any amount passes only when a `get_price` result
+    #    this turn has the same amount and currency (`live_price`); a figure from a source, from
+    #    memory or from the shopper's own message does not (the user's D5).
+    _p("money", rf"[$£€]\s{{0,2}}{_AMOUNT}(?![\d,.]\d)", "live_price"),
+    _p("money", rf"(?<![\w.,]){_AMOUNT}\s{{0,2}}{_CURRENCY_WORD}\b", "live_price"),
+    _p("money", rf"\b{_SPELLED_COUNT}[\s-]{{1,2}}(?:dollars?|euros?|bucks?|quid)\b", "live_price"),
+    #    Stock counts and availability (#15 L5, L9): pass only as a `check_stock` result this turn
+    #    says (`live_stock`). "Available in sizes/colours/fits" is the range offered, not stock, and
+    #    "whether/if/which … is available" asks rather than claims (`availability`; measured on
+    #    the recorded answers, plan §5.1).
+    _p(
+        "stock",
+        rf"\b{_COUNT}\s{{1,3}}(?:(?:units?|items?|pieces?|pairs?){_S})?"
+        rf"(?:left|remaining|in{_S}stock|available|on{_S}hand)\b",
+        "live_stock",
+    ),
+    _p(
+        "stock",
+        rf"(?<=\bis\s)(?:(?:currently|still){_S})?available\b(?!{_S}in{_S}{_RANGE})",
+        "availability",
+    ),
+    _p(
+        "stock",
+        rf"(?<=\bare\s)(?:(?:currently|still){_S})?available\b(?!{_S}in{_S}{_RANGE})",
+        "availability",
+    ),
+    _p("stock", rf"\b(?:currently|still){_S}available\b", "availability"),
+    _p("stock", rf"\bavailable{_S}(?:now|today|to{_S}order)\b", "availability"),
+    #    More member-price wordings (#13b R4 left these to #12), class 1: no exemption.
+    _p("promotion", rf"\bmembers?[\s-]{{1,3}}only{_S}(?:rates?|prices?|pricing|deals?|offers?)\b"),
+    _p("promotion", rf"\bmember{_S}(?:rates?|deals?|offers?|savings?|exclusives?)\b"),
+    _p("promotion", rf"\bloyalty{_S}(?:prices?|pricing|rates?|discounts?|rewards?|points?)\b"),
 )
 # A public document that says returns are free, in any of these words, lets the terms above pass:
 # the US policy says "prepaid return label" and answers say "the prepaid label".
@@ -309,6 +362,7 @@ _SPELLED_WORDS = "|".join(sorted((w for w in _NUMBER_WORDS if len(w) > 2), key=l
 TRIGGER = re.compile(
     r"disc|coupon|promo|vouch|staff|member|free|prepaid|%|http|www|authori|approv|refund|order|"
     r"payment|confirm|process|appl|placed|issued|stock|sold|issue_|hour|day|week|month|year|"
+    r"\$|£|€|avail|currently|still|loyal|"
     rf"code|\d|\bi['’\s]|\bwe['’\s]|\[|\+|\(|\b(?:{_SPELLED_WORDS}|hundred|dozen|night|out|only|low|half|clearance)\b"
 )
 # A duration is a policy term only in a sentence that holds one of these stems (the user's list,
@@ -381,6 +435,126 @@ class Source:
         return self.source_type == "document" and self.source_id.startswith("POL-")
 
 
+@dataclass
+class LiveValues:
+    """Price and stock values the catalog tools returned this turn (row #12, RAG-09; hard rule 2).
+
+    Filled only from successful `get_price` and `check_stock` results for the shopper's own region
+    (`tools.record_live`), never from text: the model cannot write one. The check reads it live, as
+    it reads `seen`. `stock` keeps the last reading per variant."""
+
+    prices: set[tuple[Decimal, str]] = field(default_factory=set)
+    stock: dict[str, int] = field(default_factory=dict)
+
+
+_DOLLARS = frozenset({"USD", "CAD", "AUD"})
+_CURRENCY_OF_WORD = {
+    "usd": frozenset({"USD"}),
+    "cad": frozenset({"CAD"}),
+    "aud": frozenset({"AUD"}),
+    "gbp": frozenset({"GBP"}),
+    "quid": frozenset({"GBP"}),
+    "eur": frozenset({"EUR"}),
+    "euro": frozenset({"EUR"}),
+    "euros": frozenset({"EUR"}),
+}
+_DOLLAR_PREFIX = re.compile(r"(?:^|[^a-z])(us|ca|c|a)$")
+_CENT = Decimal("0.01")
+
+
+def money_value(span: str, before: str) -> tuple[Decimal, frozenset[str]] | None:
+    """The amount and the currencies a money match can mean, from the matching view (casefolded).
+    `$` alone is any dollar; `US$`, `C$`/`CA$` and `A$` narrow it. None if it cannot be read
+    exactly (fail closed: an unread amount is never vouched)."""
+    text = re.sub(r"\s+", " ", span).strip()
+    if text[0] in "$£€":
+        number = text[1:].strip()
+        if text[0] == "£":
+            currencies = frozenset({"GBP"})
+        elif text[0] == "€":
+            currencies = frozenset({"EUR"})
+        else:
+            prefix = _DOLLAR_PREFIX.search(before)
+            narrowed = {"us": "USD", "ca": "CAD", "c": "CAD", "a": "AUD"}
+            currencies = frozenset({narrowed[prefix.group(1)]}) if prefix else _DOLLARS
+    else:
+        found = re.fullmatch(rf"(.+?)[\s-]*({_CURRENCY_WORD})", text)
+        if found is None:
+            return None
+        number, word = found.group(1).strip(), found.group(2)
+        currencies = _CURRENCY_OF_WORD.get(word, _DOLLARS)  # dollars, bucks
+    digits = number.replace(",", "")
+    try:
+        if re.fullmatch(r"\d+(?:\.\d{1,2})?", digits):
+            amount = Decimal(digits)
+        else:
+            value = number_value(number)
+            if value <= 0:
+                return None
+            amount = Decimal(value)
+    except InvalidOperation:
+        return None
+    return amount.quantize(_CENT), currencies
+
+
+_COUNT_IN = re.compile(rf"\d{{1,4}}|{_SPELLED_COUNT}")
+_NEGATIVE = re.compile(rf"\bout{_S}of{_S}stock\b|\bsold{_S}out\b")
+_LOW = re.compile(r"\blow\b")
+
+
+def stock_vouched(span: str, live: LiveValues) -> bool:
+    """A stock claim passes only as this turn's `check_stock` results say (the user's D3): a count
+    must equal a variant's units on hand; "out of stock" or "sold out" needs every checked variant
+    at zero, and "in stock" or "available" every checked variant above zero; "low" never passes, as
+    no tool says it. With nothing checked, nothing passes."""
+    if not live.stock:
+        return False
+    text = re.sub(r"\s+", " ", span)
+    if _LOW.search(text):
+        return False
+    count = _COUNT_IN.search(text)
+    if count is not None:
+        return number_value(count.group()) in set(live.stock.values())
+    if _NEGATIVE.search(text):
+        return all(n == 0 for n in live.stock.values())
+    return all(n > 0 for n in live.stock.values())
+
+
+_ASKING = re.compile(r"\b(whether|if|which)\b")
+# What opens a new clause between the asking word and "available" (the user, row #12): a comma,
+# semicolon, colon or spaced dash, or "but", "and" or "so" followed by a subject word. A bare "and"
+# inside a noun phrase ("which size and colour combinations are") does not.
+_CLAUSE_BREAK = re.compile(
+    r"[,;:]|\s[-–—]\s|[–—]|\b(?:but|and|so)\s{1,3}"
+    r"(?:the|it|its|this|that|these|those|they|we|you|i|he|she|there|your|our|my|a|an)\b"
+)
+# "which" right before a verb is a relative clause ("which is available today"), not a question.
+_RELATIVE_WHICH = re.compile(r"\s*(?:is|are|was|were|will|has|have)\b")
+
+
+def _asks(view: str, start: int) -> bool:
+    """Whether "available" at `start` sits in a clause governed by an asking word: "check whether
+    the M is available" or "shows which sizes are available" ask; they do not claim stock.
+    The asking word must be in the same sentence, at most 60 characters back, with nothing between
+    it and the match that opens a new clause (`_CLAUSE_BREAK`). "which" counts only as a question:
+    never after a comma, and never directly before a verb. So "If you need it soon, the M is
+    available now", "Not sure if you saw, but the M is available" and "The 4XL, which is available
+    today" are claims, and pass only as `check_stock` says (fail closed)."""
+    before = view[max(0, start - 60) : start]
+    for boundary in _BOUNDARY.finditer(before):
+        before = before[boundary.end() :]
+    for word in _ASKING.finditer(before):
+        between = before[word.end() :]
+        if _CLAUSE_BREAK.search(between):
+            continue
+        if word.group(1) == "which" and (
+            before[: word.start()].rstrip().endswith(",") or _RELATIVE_WHICH.match(between)
+        ):
+            continue
+        return True
+    return False
+
+
 def stems_of(text: str) -> frozenset[str]:
     return frozenset(POLICY_STEMS.findall(normal(text)))
 
@@ -413,6 +587,7 @@ class OutputCheck:
     seen: set[str]
     sources: list[Source]
     counts: Counter[str] = field(default_factory=Counter)
+    live: LiveValues = field(default_factory=LiveValues)  # row #12: read live, as `seen` is
     _raw: str = ""
     _deltas: list[tuple[int, int]] = field(default_factory=list)
     _consumed: int = 0  # raw text before this is decided: sent, or dropped and replaced
@@ -636,6 +811,16 @@ class OutputCheck:
             )
         if pattern.exempt == "policy_span":
             return any(s.public_policy and span in normal(s.text) for s in self.sources)
+        if pattern.exempt == "live_price":
+            value = money_value(span, view.text[max(0, start - 3) : start])
+            if value is None:
+                return False
+            amount, currencies = value
+            return any((amount, currency) in self.live.prices for currency in currencies)
+        if pattern.exempt == "live_stock":
+            return stock_vouched(span, self.live)
+        if pattern.exempt == "availability":
+            return _asks(view.text, start) or stock_vouched(span, self.live)
         raise ValueError(f"unknown exemption: {pattern.exempt}")  # fail closed on a new kind
 
     def _vouched(self, text: str, match: re.Match[str]) -> bool:
@@ -947,9 +1132,20 @@ class OutputCheck:
                 end = len(self._raw) if boundary is None else boundary.start()
                 if boundary is not None and self._raw[boundary.start()] != "\n":
                     end = boundary.end()
-                sentence = self._lead + FIXED_SENTENCES[self._dropping.cls]
-                self._shown += sentence
-                out.append(sentence)
+                fixed = FIXED_SENTENCES[self._dropping.cls]
+                if _repeats(self._shown, fixed):
+                    # The same fixed sentence is already the last thing on screen, the model's own
+                    # copy or a replacement: say it once (row #12, EV-090). Still counted.
+                    while (
+                        end < len(self._raw)
+                        and self._raw[end] in " \t"
+                        and self._shown[-1:].isspace()
+                    ):
+                        end += 1
+                else:
+                    sentence = self._lead + fixed
+                    self._shown += sentence
+                    out.append(sentence)
                 self._consumed = self._plain_since = end
                 self._dropping, self._lead = None, ""
                 self._matched_to = self._words_to = end
@@ -974,17 +1170,62 @@ class OutputCheck:
             self._dropping, self._drop_from = match, match.end
 
 
-def check_text(text: str, sources: Sequence[Source] = (), seen: Iterable[str] = ()) -> str:
+def _repeats(shown: str, fixed: str) -> bool:
+    """Whether the text on screen already ends with `fixed`, compared in the matching view."""
+    tail = shown.rstrip()[-(len(fixed) + 16) :]
+    return bool(tail) and normal(tail).endswith(normal(fixed))
+
+
+def check_text(
+    text: str,
+    sources: Sequence[Source] = (),
+    seen: Iterable[str] = (),
+    live: LiveValues | None = None,
+) -> str:
     """The whole of `text` through the check at once: what the shopper would be left seeing."""
-    check = OutputCheck(set(seen), list(sources))
+    check = OutputCheck(set(seen), list(sources), live=live or LiveValues())
     check.feed(text)
     check.finish()
     return check.shown
 
 
-def hits(text: str, sources: Sequence[Source] = (), seen: Iterable[str] = ()) -> dict[str, int]:
+def hits(
+    text: str,
+    sources: Sequence[Source] = (),
+    seen: Iterable[str] = (),
+    live: LiveValues | None = None,
+) -> dict[str, int]:
     """What the check would block in `text`, by class. For tests and evidence: never logged."""
-    check = OutputCheck(set(seen), list(sources))
+    check = OutputCheck(set(seen), list(sources), live=live or LiveValues())
     check.feed(text)
     check.finish()
     return {cls: n for cls, n in check.counts.items() if cls != "marker"}
+
+
+LIVE_EXEMPTIONS = frozenset({"live_price", "live_stock", "availability"})
+
+
+def live_backed(text: str, live: LiveValues) -> int:
+    """How many sentences of `text` hold a claim that passes only because a catalog tool returned
+    it this turn: a money or stock match let through by `live_price` or `live_stock`. One per
+    sentence, so "3 left in stock" is one claim. The evals read it so that a live price, which no
+    retrieved source can back, does not count toward the citation requirement (row #12, the user's
+    change 3). Never logged."""
+    check = OutputCheck(set(), [], live=live)
+    view = view_of(text)
+    starts = [0, *(b.end() for b in _BOUNDARY.finditer(text))]
+    sentences: set[int] = set()
+    for pattern in PATTERNS:
+        if pattern.exempt not in LIVE_EXEMPTIONS:
+            continue
+        for found in pattern.regex.finditer(view.text):
+            start, end = view.raw_span(found.start(), found.end())
+            span = re.sub(r"\s+", " ", view.text[found.start() : found.end()])
+            backed = (
+                stock_vouched(span, live)  # a question passes too, but claims nothing
+                if pattern.exempt == "availability"
+                else check._exempt(pattern, view, found, text[start:end])
+            )
+            if backed:
+                sentences.add(bisect_right(starts, start) - 1)
+    return len(sentences)

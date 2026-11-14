@@ -31,6 +31,7 @@ from northwind_assistant.tools import (
     SearchFailure,
     ToolState,
     record,
+    record_live,
     search_sources,
 )
 from northwind_assistant.usage import TurnUsage
@@ -143,13 +144,24 @@ def _result_text(block: ToolResultBlock) -> str:
     return "".join(str(part.get("text", "")) for part in content or [] if isinstance(part, dict))
 
 
-def _note_tool_results(item: UserMessage, ours: set[str], state: ToolState) -> None:
-    """The model's `retrieve_context` results, read as the first search's is (C4')."""
+_LIVE_TOOLS = frozenset({catalog_tool.PRICE_TOOL, catalog_tool.STOCK_TOOL})
+
+
+def _note_tool_results(
+    item: UserMessage, ours: set[str], state: ToolState, live: dict[str, str] | None = None
+) -> None:
+    """The model's `retrieve_context` results, read as the first search's is (C4'); and its
+    `get_price` and `check_stock` results, whose values join `state.live` (row #12)."""
     if not isinstance(item.content, list):
         return
     for block in item.content:
-        if isinstance(block, ToolResultBlock) and block.tool_use_id in ours:
+        if not isinstance(block, ToolResultBlock):
+            continue
+        if block.tool_use_id in ours:
             record(state, is_error=bool(block.is_error), text=_result_text(block))
+        elif live and block.tool_use_id in live:
+            tool = live[block.tool_use_id]
+            record_live(state, tool, is_error=bool(block.is_error), text=_result_text(block))
 
 
 def _result_error(result: ResultMessage) -> ErrorCode | None:
@@ -175,6 +187,7 @@ async def run_turn(
     # `message_delta` is the only sign that an attempt reached its end.
     complete = True
     ours: set[str] = set()  # tool_use ids of this turn's `retrieve_context` calls
+    live: dict[str, str] = {}  # tool_use id -> name, for this turn's price and stock calls
     try:
         # Runs to the end even after an error: leaving early strands the SDK's generator.
         async for item in query(prompt=prompt, options=options):
@@ -199,8 +212,13 @@ async def run_turn(
                     for block in item.content
                     if isinstance(block, ToolUseBlock) and block.name == ALLOWED_TOOL
                 )
+                live.update(
+                    (block.id, block.name)
+                    for block in item.content
+                    if isinstance(block, ToolUseBlock) and block.name in _LIVE_TOOLS
+                )
             elif isinstance(item, UserMessage):
-                _note_tool_results(item, ours, state)
+                _note_tool_results(item, ours, state, live)
             elif isinstance(item, ResultMessage):
                 capped = item.subtype == "error_max_turns"
                 code = None if capped else _result_error(item)
@@ -244,7 +262,7 @@ async def stream_answer(
 ) -> AsyncIterator[TurnEvent]:
     """`catalog` attaches mcp-catalog (row #12). The gateway and the eval answerer always pass one
     (pinned by tests); `None` is the one-server surface that tests written before #12 use."""
-    state = ToolState()
+    state = ToolState(region=caller.region)
     token = rag.mint(caller)
     found = await search_sources(message, McpRagSearcher(rag.url, token), state)
     if isinstance(found, SearchFailure):
@@ -264,7 +282,7 @@ async def stream_answer(
     attached = None if catalog is None else (catalog.url, catalog.mint(caller))
     options = assistant_options(caller, rag.url, token, runtime, attached)
     usage = TurnUsage(deferred=True)
-    check = OutputCheck(state.seen, state.sources)
+    check = OutputCheck(state.seen, state.sources, live=state.live)
     try:
         async for event in run_turn(user_prompt(message, found), options, state, usage):
             if isinstance(event, TextDelta):

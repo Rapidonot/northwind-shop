@@ -21,10 +21,12 @@ import json
 import logging
 import re
 from dataclasses import dataclass, field
+from decimal import Decimal
 from typing import Any, Protocol
 
-from northwind_assistant.output_check import Source
+from northwind_assistant.output_check import LiveValues, Source
 from northwind_assistant.rag_client import SearchResult
+from northwind_common import catalog_tool
 from northwind_common.cards import contains_card_data
 from northwind_common.errors import ENVELOPE_KEYS
 from northwind_common.rag_tool import (
@@ -59,6 +61,7 @@ __all__ = [
     "Searcher",
     "ToolState",
     "record",
+    "record_live",
     "search_sources",
 ]
 
@@ -78,6 +81,10 @@ class ToolState:
     failed: bool = False
     searches: int = 0
     sources: list[Source] = field(default_factory=list)
+    # Row #12 (RAG-09): live price and stock from this turn's catalog results, for the shopper's
+    # `region` only; the output check reads them (`record_live`).
+    region: str | None = None
+    live: LiveValues = field(default_factory=LiveValues)
 
 
 # mcp-rag's rendering (`northwind_mcp_rag.render`): an ID and type line, the escaped text, a close.
@@ -127,6 +134,45 @@ def record(state: ToolState, *, is_error: bool, text: str) -> str | SearchFailur
     return SearchFailure(
         str(body["errorCategory"]), bool(body["isRetryable"]), str(body["message"])
     )
+
+
+_AMOUNT = re.compile(r"\d{1,7}\.\d{2}", re.ASCII)
+_CURRENCY = re.compile(r"[A-Z]{3}", re.ASCII)
+
+
+def record_live(state: ToolState, tool: str, *, is_error: bool, text: str) -> None:
+    """A `get_price` or `check_stock` result joins `state.live` only if it is a success, exactly one
+    `<catalog_data>` label for that tool, with well-formed values for the shopper's own region.
+    Anything else is ignored, so the check stays closed (hard rule 2)."""
+    if is_error or state.region is None:
+        return
+    labelled = catalog_tool.unlabel(text)
+    if labelled is None:
+        return
+    name, body = labelled
+    if not isinstance(body, dict) or body.get("region") != state.region:
+        return
+    variant = body.get("variant_id")
+    if not isinstance(variant, str) or not variant:
+        return
+    if tool == catalog_tool.PRICE_TOOL and name == "get_price":
+        amount, currency = body.get("amount"), body.get("currency")
+        if (
+            isinstance(amount, str)
+            and _AMOUNT.fullmatch(amount)
+            and isinstance(currency, str)
+            and _CURRENCY.fullmatch(currency)
+        ):
+            state.live.prices.add((Decimal(amount), currency))
+    elif tool == catalog_tool.STOCK_TOOL and name == "check_stock":
+        on_hand, in_stock = body.get("on_hand"), body.get("in_stock")
+        if (
+            isinstance(on_hand, int)
+            and not isinstance(on_hand, bool)
+            and on_hand >= 0
+            and in_stock is (on_hand > 0)
+        ):
+            state.live.stock[variant] = on_hand
 
 
 async def search_sources(query: Any, searcher: Searcher, state: ToolState) -> str | SearchFailure:

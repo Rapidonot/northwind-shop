@@ -1,0 +1,39 @@
+== commit 1 (tokens): new tests against origin/main's mcp_token.py plus a one-line '_verify = verify' shim ==
+E       Failed: DID NOT RAISE TypeError
+E       AssertionError: assert not True
+services/common/tests/test_mcp_token.py:253: AssertionError
+FAILED services/common/tests/test_mcp_token.py::test_mint_has_no_default_server
+FAILED services/common/tests/test_mcp_token.py::test_verify_is_not_a_public_name
+2 failed in 0.08s
+
+== commit 2 (attach, label, cap): the new and changed tests against d61cab2's sources (git archive, PYTHONPATH first) ==
+ERROR services/assistant/tests/test_rag09_catalog_attached.py
+ERROR services/common/tests/test_catalog_tool.py
+ERROR services/mcp-catalog/tests/test_labelled_output.py
+!!!!!!!!!!!!!!!!!!! Interrupted: 3 errors during collection !!!!!!!!!!!!!!!!!!!!
+3 errors in 0.64s
+E       assert 4 == 6
+E       AssertionError: assert 4 == 6
+E        +  where 4 = ClaudeAgentOptions(tools=[], allowed_tools=['mcp__northwind-rag__retrieve_context'], system_prompt='You are the AI sho...e_file_checkpointing=False, session_store=None, session_store_flush='batched', load_timeout_ms=60000, task_budget=None).max_turns
+FAILED services/assistant/tests/test_tool_loop.py::test_a_seventh_turn_never_happens
+FAILED services/assistant/tests/test_turn_edges.py::test_the_options_carry_the_cap_the_mode_and_no_builtin_tools
+2 failed in 22.80s
+imported from /tmp/claude-502/head12/services/common/src/northwind_common/__init__.py
+MAX_TURNS at d61cab2 = 4
+(Vitest [RAG-09] banner: written with the change; the old Chat.tsx has no PRICE_NOTE export, so the file fails to import there.)
+
+== commit 3 (output check): test_rag09_output_check.py against 8fb9f8e's sources ==
+==================================== ERRORS ====================================
+_____ ERROR collecting services/assistant/tests/test_rag09_output_check.py _____
+ImportError while importing test module '/private/tmp/claude-502/head12c3/services/assistant/tests/test_rag09_output_check.py'.
+E   ImportError: cannot import name 'LiveValues' from 'northwind_assistant.output_check' (/tmp/claude-502/head12c3/services/assistant/src/northwind_assistant/output_check.py)
+
+== commit 3: the user's three _asks sentences under the first, wider _asks (BOUNDARY-only), patched in for this run ==
+ERROR: Error importing plugin "wide_asks_plugin": No module named 'wide_asks_plugin'
+
+wide _asks (first narrowing): PASSES (test expects blocked: FAIL) | If you need it soon, the Sage M is available now.
+wide _asks (first narrowing): PASSES (test expects blocked: FAIL) | Not sure if you saw, but the M is available.
+wide _asks (first narrowing): PASSES (test expects blocked: FAIL) | The Glacier Blue 4XL, which is available today, is warm.
+tightened _asks (commit 3): BLOCKED | If you need it soon, the Sage M is available now.
+tightened _asks (commit 3): BLOCKED | Not sure if you saw, but the M is available.
+tightened _asks (commit 3): BLOCKED | The Glacier Blue 4XL, which is available today, is warm.

@@ -171,3 +171,64 @@ the model does; a deterministic check on what leaves is the control.
 - **`fabricated_ok`** (judge v5, product claims) is absolute on adversarial items, folded into `behaviour_ok`.
 - **What the check blocked in the promoted recording:** promotion on EV-090, EV-091 and EV-100; false_policy on
   EV-093 and EV-102; stock on EV-043, 044, 046 and 048. Listed in `docs/reviews/2026-11-13-RAG-08b-answers.md` §5.
+
+## #12 amendment (2026-11-14): live values, money and stock counts (RAG-09)
+
+Approved with the row #12 plan (`docs/reviews/2026-11-14-12-plan.md`; the user's D3, D4, D5 and change 2) and
+measured first on the recorded answers (`docs/reviews/2026-11-14-12-overblocking.md`). #13's tests are unchanged.
+
+**Live values.**
+- `ToolState.live` (`LiveValues`) holds this turn's `get_price` (amount, currency) and `check_stock` (variant, units
+  on hand) results.
+- They are recorded only from a successful tool result that is exactly one `<catalog_data>` label for that tool,
+  with well-formed values for the shopper's own region (`tools.record_live`). They never come from text.
+- The check reads them live, as it reads `seen`.
+
+**Class 6, `money` (new).**
+- What matches:
+  - a currency sign and an amount (`$`, `£`, `€`; `US$`, `C$`/`CA$` and `A$` narrow `$`);
+  - an amount and a code or word (USD, GBP, EUR, AUD, CAD, dollars, bucks, quid, euros);
+  - a spelled number and a currency word ("a hundred dollars").
+- Exemption `live_price`: the amount and one of its currencies equal a `get_price` result this turn.
+- **D5 (the user, option 1):** a figure the shopper wrote is blocked too ("under $100"). The prompt asks for each
+  live price instead of the shopper's limit.
+- "pounds" is not a currency word, because "weighs 2 pounds" is an attribute. Residual: "twenty pounds" as money
+  passes.
+
+**Class 4, `stock`, extended.**
+- Counts in digits or words before left / remaining / in stock / available / on hand ("three left", "12 in
+  stock").
+- "available" beside a variant (#15 L9): `is/are (currently|still)? available` (not "available in
+  sizes/colours/fits/lengths/widths"), "currently/still available", "available now/today/to order".
+- **Exemption `live_stock` (D3):**
+  - a count must equal a variant's units on hand;
+  - "out of stock" or "sold out" needs every checked variant at zero;
+  - "in stock" or "available" needs every checked variant above zero;
+  - "low" never passes.
+- #13's stock patterns get the same exemption. It applies only when a `check_stock` result exists, so #13's cases
+  are unchanged.
+- **Exemption `availability`:** the "available" patterns also pass when a question governs their clause:
+  "whether", "if" or a question "which". There may be no comma, semicolon, colon or dash between them, and no
+  "but/and/so" followed by a subject word. "which" never counts after a comma or directly before a verb.
+
+**Class 1 (promotions).** It gains `members-only rate/price/pricing/deal/offer`,
+`member rate/deal/offer/savings/exclusive` and `loyalty price/pricing/rate/discount/reward/points` (#13b R4). These
+had 0 hits on the recorded answers.
+
+**Fixed sentences (D4).**
+- `money`: "I can only give a price from the live price check."
+- `stock` changes from "I can't check stock in chat." (untrue once `check_stock` is attached) to "I can only give
+  stock from the live stock check."
+
+**One fixed sentence once (EV-090).** A replacement equal to the sentence already last on screen is not sent
+again. It is still counted.
+
+**Measured (no spend), 143 recorded assistant calls:** new hits are money 2 (EV-029, EV-030: shopper price
+filters, D5) and stock 0, after `_asks` was tightened. The member wordings had 0 hits.
+
+**Residuals (logged in PROGRESS "Open items"):**
+- A price passes if it equals *any* `get_price` result this turn, not necessarily for the variant named (the user's
+  change 6).
+- "twenty pounds" as money passes.
+- A stock count matches *any* checked variant's units.
+- The question rule reads only the 60 characters before "available".
