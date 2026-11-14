@@ -225,6 +225,7 @@ FOUND-2 spike gate (proxy path), parallel-worktree layout for LLM state (decisio
 - Low, from HARDEN-1's advisor re-read (low 1) and security re-review 2 (L4); owner: the next row that touches `services/llm-replay` or decision 0016: inside the runner, an unscrubbable body (`refused-scrub`) now counts toward `MAX_REFUSALS` and prints `REFUSED refused-scrub`. Stricter and fail-closed, nothing raw printed, but decision 0016 does not mention it and no test drives it with a gate set. Add both.
 - Low, from HARDEN-1's advisor re-read (low 2), the same kind as #21's open low (B); owner: hardening: the mutation check for `services/llm-replay/tests/test_harden1_extra.py` gives counts (10, 9, 1 killed), not test names, so at least 10 of its 30 tests are not shown able to fail.
 - Low, from HARDEN-1's `/req-done` (the S2 gap); owner: the next row that touches the control-surface tests: S2 has no `req("HARDEN-1")` test; its cases ride on the AUTO-1-tagged parametrized tests.
+- Low, from #32's security re-review (N2, 2026-11-14); owner: the next row that touches `services/llm-replay` (scanner): `make scan-cassettes CASSETTES_DIR=<path>` reports `scan clean: 0 finding(s)` and exits 0 when the path does not exist (`scan.py:216-217` returns nothing on `FileNotFoundError`). Make an explicitly given `--cassettes-dir` that is missing an error, which is stricter, not looser. Until then, #32's plan §9.3 records each variance folder's existence and file count next to its scan.
 
 ## Log
 

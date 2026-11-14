@@ -162,14 +162,18 @@ def test_unanswerable_attribute_is_absent_from_the_fixtures(item_id: str) -> Non
         records = [r for r in _records("products.jsonl") if r["product_id"] == product]
         assert records, f"{product} has no fixture text"
         # The product's own care and size guides can answer it too (security review L3).
-        guides = {records[0].get("care_guide_id"), records[0].get("size_guide_id")} - {None}
+        guides = {
+            str(g) for g in (records[0].get("care_guide_id"), records[0].get("size_guide_id")) if g
+        }
+        guide_docs = [d for d in _records("documents.jsonl") if d["doc_id"] in guides]
+        found = {d["doc_id"] for d in guide_docs}
+        assert found == guides, f"{product}: unresolved guide ids {sorted(guides - found)}"  # N1
         texts = (
             [_text(r) for r in records]
             + [_text(r) for r in _records("variants.jsonl") if r["product_id"] == product]
             + [_text(r) for r in _records("reviews.jsonl") if r["product_id"] == product]
-            + [_text(d) for d in _records("documents.jsonl") if d["doc_id"] in guides]
+            + [_text(d) for d in guide_docs]
         )
-        assert len(texts) > len(records), f"{product}: no guide or other text found"
     else:
         manifest = json.loads((FIXTURES / "manifest.json").read_text(encoding="utf-8"))
         texts = []
