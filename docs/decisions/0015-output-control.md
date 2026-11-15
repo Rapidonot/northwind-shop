@@ -175,7 +175,8 @@ the model does; a deterministic check on what leaves is the control.
 ## #12 amendment (2026-11-14): live values, money and stock counts (RAG-09)
 
 Approved with the row #12 plan (`docs/reviews/2026-11-14-12-plan.md`; the user's D3, D4, D5 and change 2) and
-measured first on the recorded answers (`docs/reviews/2026-11-14-12-overblocking.md`). #13's tests are unchanged.
+measured first on the recorded answers (`docs/reviews/2026-11-14-12-overblocking.md`). #13's tests are unchanged,
+except for the two user-approved exceptions recorded below (RT-017 for RT-003; P0001/P0008 on the reviewed hit list).
 
 **Live values.**
 - `ToolState.live` (`LiveValues`) holds this turn's `get_price` (amount, currency) and `check_stock` (variant, units
@@ -208,7 +209,8 @@ measured first on the recorded answers (`docs/reviews/2026-11-14-12-overblocking
   - "low" never passes.
 - #13's stock patterns get the same exemption. It applies only when a `check_stock` result exists, so #13's cases
   are unchanged.
-- **Exemption `availability`:** the "available" patterns also pass when a question governs their clause:
+- **Exemption `availability`** (superseded by H1 below: the asking exemption was removed entirely): the "available"
+  patterns also pass when a question governs their clause:
   "whether", "if" or a question "which". There may be no comma, semicolon, colon or dash between them, and no
   "but/and/so" followed by a subject word. "which" never counts after a comma or directly before a verb.
 
@@ -232,7 +234,8 @@ filters, D5) and stock 0, after `_asks` was tightened. The member wordings had 0
   change 6).
 - ~~"twenty pounds" as money passes.~~ (Stale since pass 1: it is blocked unless live.)
 - A stock count matches *any* checked variant's units.
-- The question rule reads only the 60 characters before "available".
+- The question rule reads only the 60 characters before "available". (Superseded by H1 below: no question rule
+  remains.)
 
 **After security review pass 1 (2026-11-14; `docs/reviews/2026-11-14-12-security-review.raw.md`).** Two high findings
 and three medium were fixed. The scoped re-review found that two of these fixes loosened the check: the
