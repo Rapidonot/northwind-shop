@@ -16,15 +16,28 @@ const modelEnv = {
   LLM_PROXY_URL: `http://127.0.0.1:${modelPort}`,
 };
 
-// mcp-rag (CC-10): the gateway's searches and the model's tool calls go to it. A fresh signing key
-// per run, never written anywhere; the gateway and mcp-rag share it through their environments.
+// A fresh signing key per run, never written anywhere; the gateway, mcp-rag and mcp-catalog share it
+// through their environments.
+const tokenKey = randomBytes(32).toString("hex");
+
+// mcp-rag (CC-10): the gateway's searches and the model's tool calls go to it.
 // Frozen vectors (decision 0012) so the first search ranks as the recording did.
 const ragPort = 18432;
 const ragEnv = {
-  NORTHWIND_MCP_TOKEN_KEY: randomBytes(32).toString("hex"),
+  NORTHWIND_MCP_TOKEN_KEY: tokenKey,
   MCP_RAG_PORT: String(ragPort),
   MCP_RAG_URL: `http://127.0.0.1:${ragPort}/mcp`,
   MCP_RAG_EMBEDDER: "cached",
+};
+
+// mcp-catalog (row #12, RAG-09): the gateway always attaches it, so the model's request offers its
+// five tools, as the recorded smoke turn did. Without it the turn's request differs from the
+// recording and replay misses.
+const catalogPort = 18433;
+const catalogEnv = {
+  NORTHWIND_MCP_TOKEN_KEY: tokenKey,
+  MCP_CATALOG_PORT: String(catalogPort),
+  MCP_CATALOG_URL: `http://127.0.0.1:${catalogPort}/mcp`,
 };
 
 const model = scripted
@@ -51,10 +64,17 @@ export default defineConfig({
       timeout: 120_000,
     },
     {
+      command: "uv run python -m northwind_mcp_catalog.app",
+      port: catalogPort,
+      cwd: repo,
+      env: catalogEnv,
+      timeout: 120_000,
+    },
+    {
       command: "uv run uvicorn northwind_gateway.app:app --port 8000",
       port: 8000,
       cwd: repo,
-      env: { ...modelEnv, ...ragEnv },
+      env: { ...modelEnv, ...ragEnv, ...catalogEnv },
       timeout: 60_000,
     },
     { command: "./node_modules/.bin/vite --port 5173 --strictPort", port: 5173, cwd: here },
