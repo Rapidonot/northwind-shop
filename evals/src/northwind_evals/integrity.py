@@ -15,8 +15,10 @@ Anything missing here fails closed: an unknown base branch is an error, not a pa
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
+import re
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -193,10 +195,68 @@ def _refinement_lines(text: str, source: str) -> dict[str, str]:
     return lines
 
 
-def changed_refinements(commit: str) -> list[str]:
+_PROMPT_PART = re.compile(r":prompt-([0-9a-f]{8})(?=:|$)")
+
+
+def _prompt_part(text: str | None) -> str | None:
+    """The `prompt-<sha8>` part of a baseline's `answerer_id`, or None if it cannot be read."""
+    if text is None:
+        return None
+    try:
+        answerer = json.loads(text).get("answerer_id", "")
+    except (ValueError, AttributeError):
+        return None
+    found = _PROMPT_PART.search(str(answerer))
+    return found.group(1) if found else None
+
+
+def answerer_replaced(commit: str, baseline: Path) -> bool:
+    """Whether the branch's promoted baseline, committed at HEAD and on disk, holds a different
+    answerer prompt part from the baseline at `commit` (row #12, the user's decision): then a
+    re-recorded answerer has replaced its own refinements. Anything unreadable is False."""
+    before = _git("show", f"{commit}:{baseline.as_posix()}")
+    head = _git("show", f"HEAD:{baseline.as_posix()}")
+    if before.returncode != 0 or head.returncode != 0 or not baseline.is_file():
+        return False
+    old = _prompt_part(before.stdout)
+    now = [_prompt_part(head.stdout), _prompt_part(baseline.read_text(encoding="utf-8"))]
+    return old is not None and all(part is not None and part != old for part in now)
+
+
+def _digest(line: str | None) -> str:
+    return "-" if line is None else hashlib.sha256(line.encode("utf-8")).hexdigest()[:16]
+
+
+def replaced_refinements(commit: str, baseline: Path) -> list[dict[str, Any]]:
+    """When `answerer_replaced`, every refinement at `commit` that the file on disk changed or
+    dropped: item, n, old and new digest (new "-" when dropped), for the report. Otherwise none."""
+    if not answerer_replaced(commit, baseline):
+        return []
+    shown = _git("show", f"{commit}:{REFINEMENTS}")
+    disk = Path(REFINEMENTS)
+    if shown.returncode != 0 or not disk.is_file():
+        return []
+    before = _refinement_lines(shown.stdout, f"{REFINEMENTS} at {commit}")
+    now = _refinement_lines(disk.read_text(encoding="utf-8"), f"{REFINEMENTS} (disk)")
+    replaced = []
+    for key, line in before.items():
+        if now.get(key) == line:
+            continue
+        item_id, n = key.rsplit("#", 1)
+        replaced.append(
+            {"item_id": item_id, "n": int(n), "old": _digest(line), "new": _digest(now.get(key))}
+        )
+    return replaced
+
+
+def changed_refinements(commit: str, baseline: Path | None = None) -> list[str]:
     """Every refinement recorded at `commit` must still be there with the same line, committed at
     HEAD and on disk (the user, row #13b). New entries pass; a base with no file protects
-    nothing."""
+    nothing. The one exception (row #12): when the promoted baseline's answerer prompt part
+    differs from `commit`'s (`answerer_replaced`), changed and dropped refinements pass, and
+    `replaced_refinements` lists every one for the report."""
+    if baseline is not None and answerer_replaced(commit, baseline):
+        return []
     shown = _git("show", f"{commit}:{REFINEMENTS}")
     if shown.returncode != 0:
         return []
@@ -229,5 +289,5 @@ def integrity_problems(base: str, baseline: Path) -> list[str]:
     problems = [f"{path}: an existing cassette was modified" for path in modified_cassettes(commit)]
     problems += [f"{path}: a cassette may not be a symlink" for path in linked_cassettes()]
     problems += changed_frozen_vectors(commit)
-    problems += changed_refinements(commit)
+    problems += changed_refinements(commit, baseline)
     return problems + lost_overrides(commit, baseline)

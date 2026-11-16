@@ -1,0 +1,134 @@
+   Building northwind-evals @ file:///Users/rapido/Projects/northwind-shop/evals
+      Built northwind-evals @ file:///Users/rapido/Projects/northwind-shop/evals
+Uninstalled 1 package in 1ms
+Installed 1 package in 2ms
+============================= test session starts ==============================
+platform darwin -- Python 3.12.16, pytest-9.2.0, pluggy-1.7.0
+rootdir: /Users/rapido/Projects/northwind-shop
+configfile: pyproject.toml
+plugins: northwind-llm-replay-0.0.0, Faker-40.44.0, anyio-4.16.0
+collected 13 items
+
+evals/tests/test_refinements_integrity.py ........FF..F                  [100%]
+
+=================================== FAILURES ===================================
+___ test_a_new_answerer_prompt_lets_its_refinements_change_and_reports_each ____
+
+promoted_repo = PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-340/test_a_new_answerer_prompt_let0')
+
+    @pytest.mark.req("RAG-09")
+    def test_a_new_answerer_prompt_lets_its_refinements_change_and_reports_each(
+        promoted_repo: Path,
+    ) -> None:
+>       from northwind_evals.integrity import replaced_refinements
+E       ImportError: cannot import name 'replaced_refinements' from 'northwind_evals.integrity' (/Users/rapido/Projects/northwind-shop/evals/src/northwind_evals/integrity.py)
+
+/Users/rapido/Projects/northwind-shop/evals/tests/test_refinements_integrity.py:142: ImportError
+___________ test_the_same_answerer_prompt_keeps_refinements_add_only ___________
+
+promoted_repo = PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-340/test_the_same_answerer_prompt_0')
+
+    @pytest.mark.req("RAG-09")
+    def test_the_same_answerer_prompt_keeps_refinements_add_only(promoted_repo: Path) -> None:
+>       from northwind_evals.integrity import replaced_refinements
+E       ImportError: cannot import name 'replaced_refinements' from 'northwind_evals.integrity' (/Users/rapido/Projects/northwind-shop/evals/src/northwind_evals/integrity.py)
+
+/Users/rapido/Projects/northwind-shop/evals/tests/test_refinements_integrity.py:157: ImportError
+______________ test_cmd_integrity_prints_each_replaced_refinement ______________
+
+promoted_repo = PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-340/test_cmd_integrity_prints_each0')
+capsys = <_pytest.capture.CaptureFixture object at 0x10b937020>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10b9369f0>
+
+    @pytest.mark.req("RAG-09")
+    def test_cmd_integrity_prints_each_replaced_refinement(
+        promoted_repo: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import argparse
+    
+        from northwind_evals import cli
+    
+        monkeypatch.setattr(cli, "added_frozen_vectors", lambda _commit: {})
+        monkeypatch.setattr(cli, "added_known_failures", lambda _commit, _path: [])
+        write(BASELINE, [baseline_with("bbbbbbbb")])
+        write(REFINEMENTS, [entry("EV-1", 1, "Re-recorded.")])
+        commit("promote")
+>       assert cli.cmd_integrity(argparse.Namespace(base="main")) == 0
+E       AssertionError: assert 1 == 0
+E        +  where 1 = <function cmd_integrity at 0x10e97bf60>(Namespace(base='main'))
+E        +    where <function cmd_integrity at 0x10e97bf60> = <module 'northwind_evals.cli' from '/Users/rapido/Projects/northwind-shop/evals/src/northwind_evals/cli.py'>.cmd_integrity
+E        +    and   Namespace(base='main') = <class 'argparse.Namespace'>(base='main')
+E        +      where <class 'argparse.Namespace'> = <module 'argparse' from '/opt/homebrew/Cellar/python@3.12/3.12.16/Frameworks/Python.framework/Versions/3.12/lib/python3.12/argparse.py'>.Namespace
+
+/Users/rapido/Projects/northwind-shop/evals/tests/test_refinements_integrity.py:200: AssertionError
+----------------------------- Captured stdout call -----------------------------
+eval-integrity FAILED against main
+----------------------------- Captured stderr call -----------------------------
+  evals/contexts/refinements.ndjson: refinement EV-2#1 removed (HEAD)
+  evals/contexts/refinements.ndjson: refinement EV-1#1 changed (HEAD)
+  evals/contexts/refinements.ndjson: refinement EV-2#1 removed (disk)
+  evals/contexts/refinements.ndjson: refinement EV-1#1 changed (disk)
+=========================== short test summary info ============================
+FAILED evals/tests/test_refinements_integrity.py::test_a_new_answerer_prompt_lets_its_refinements_change_and_reports_each
+FAILED evals/tests/test_refinements_integrity.py::test_the_same_answerer_prompt_keeps_refinements_add_only
+FAILED evals/tests/test_refinements_integrity.py::test_cmd_integrity_prints_each_replaced_refinement
+======================== 3 failed, 10 passed in 28.77s =========================
+PASSED evals/tests/test_refinements_integrity.py::test_an_unchanged_file_passes
+PASSED evals/tests/test_refinements_integrity.py::test_an_added_entry_passes
+PASSED evals/tests/test_refinements_integrity.py::test_a_committed_changed_entry_is_refused
+PASSED evals/tests/test_refinements_integrity.py::test_an_uncommitted_changed_entry_is_refused
+PASSED evals/tests/test_refinements_integrity.py::test_a_deleted_entry_is_refused
+PASSED evals/tests/test_refinements_integrity.py::test_a_deleted_file_is_refused
+PASSED evals/tests/test_refinements_integrity.py::test_a_duplicate_entry_is_refused
+PASSED evals/tests/test_refinements_integrity.py::test_a_base_with_no_refinements_file_has_nothing_to_protect
+PASSED evals/tests/test_refinements_integrity.py::test_an_uncommitted_baseline_change_does_not_open_the_exemption
+PASSED evals/tests/test_refinements_integrity.py::test_an_unreadable_answerer_id_keeps_refinements_add_only
+FAILED evals/tests/test_refinements_integrity.py::test_a_new_answerer_prompt_lets_its_refinements_change_and_reports_each
+FAILED evals/tests/test_refinements_integrity.py::test_the_same_answerer_prompt_keeps_refinements_add_only
+FAILED evals/tests/test_refinements_integrity.py::test_cmd_integrity_prints_each_replaced_refinement
+
+===== step 2: ported, 2026-11-16T04:08:27Z =====
+PASSED evals/tests/test_refinements_integrity.py::test_an_unchanged_file_passes
+PASSED evals/tests/test_refinements_integrity.py::test_an_added_entry_passes
+PASSED evals/tests/test_refinements_integrity.py::test_a_committed_changed_entry_is_refused
+PASSED evals/tests/test_refinements_integrity.py::test_an_uncommitted_changed_entry_is_refused
+PASSED evals/tests/test_refinements_integrity.py::test_a_deleted_entry_is_refused
+PASSED evals/tests/test_refinements_integrity.py::test_a_deleted_file_is_refused
+PASSED evals/tests/test_refinements_integrity.py::test_a_duplicate_entry_is_refused
+PASSED evals/tests/test_refinements_integrity.py::test_a_base_with_no_refinements_file_has_nothing_to_protect
+PASSED evals/tests/test_refinements_integrity.py::test_a_new_answerer_prompt_lets_its_refinements_change_and_reports_each
+PASSED evals/tests/test_refinements_integrity.py::test_the_same_answerer_prompt_keeps_refinements_add_only
+PASSED evals/tests/test_refinements_integrity.py::test_an_uncommitted_baseline_change_does_not_open_the_exemption
+PASSED evals/tests/test_refinements_integrity.py::test_an_unreadable_answerer_id_keeps_refinements_add_only
+PASSED evals/tests/test_refinements_integrity.py::test_cmd_integrity_prints_each_replaced_refinement
+13 passed in 3.11s
+
+===== M1: integrity_problems calls changed_refinements(commit) without baseline =====
+292c292
+<     problems += changed_refinements(commit, baseline)
+---
+>     problems += changed_refinements(commit)
+FAILED evals/tests/test_refinements_integrity.py::test_a_new_answerer_prompt_lets_its_refinements_change_and_reports_each
+FAILED evals/tests/test_refinements_integrity.py::test_cmd_integrity_prints_each_replaced_refinement
+2 failed, 11 passed in 3.03s
+
+===== M2: != becomes == in answerer_replaced's final comparison =====
+223c223
+<     return old is not None and all(part is not None and part != old for part in now)
+---
+>     return old is not None and all(part is not None and part == old for part in now)
+FAILED evals/tests/test_refinements_integrity.py::test_a_new_answerer_prompt_lets_its_refinements_change_and_reports_each
+FAILED evals/tests/test_refinements_integrity.py::test_the_same_answerer_prompt_keeps_refinements_add_only
+FAILED evals/tests/test_refinements_integrity.py::test_cmd_integrity_prints_each_replaced_refinement
+3 failed, 10 passed in 3.10s
+
+===== reverted: byte identity =====
+integrity.py+test diff lines vs 374dae8: 0
+ evals/src/northwind_evals/cli.py | 10 ----------
+ 1 file changed, 10 deletions(-)
+13 passed in 3.15s
+
+===== scratch (not committed): test-writer gaps G1, G2 =====
+..answerer_replaced: False
+.
+3 passed in 0.78s
