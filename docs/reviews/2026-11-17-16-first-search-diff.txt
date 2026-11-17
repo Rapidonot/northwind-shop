@@ -24,3 +24,7 @@ So the only model-input changes W1-W3 record are the tool list (four cart tools)
 lines and the tool results. assistant-cart (W4) is new: it has no recording, and its first search is
 served by a fixed retriever over the P0001 and P0008 product records (its messages have no frozen
 vectors, and data/embeddings/** is off-limits while #32 runs), so it does not depend on the index.
+
+Re-run before W1 (2026-11-17), after keys per turn (option A) and the totals prompt line; same index check
+(northwind_16: 389cae01996a2dd6, data_version 2, dataset_sha256 = manifest):
+first searches compared 153 (by suite: a2a-05-partner 9, assistant-redteam 28, assistant-smoke 14, eval-answers 102), moved 0

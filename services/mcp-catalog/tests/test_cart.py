@@ -72,8 +72,11 @@ def calls(
     steps: list[tuple[str, dict[str, Any]]],
     region: str = REGION,
     agent: str = "shopper-assistant",
+    bearer: str | None = None,
 ) -> list[Outcome]:
-    bearer = token(agent, region, session=session)[0]
+    """One connection with one token, so one turn (keys are remembered per turn). Pass `bearer`
+    to continue a turn whose token was minted earlier."""
+    bearer = bearer or token(agent, region, session=session)[0]
 
     async def go() -> list[Outcome]:
         out: list[Outcome] = []
@@ -617,18 +620,24 @@ def test_the_same_key_with_other_arguments_or_another_tool_is_a_conflict(
     session = new_session()
     stock(store, V, 50)
     key = "same-key-0001"
-    first = call(
-        url, session, "add_to_cart", {"variant_id": V, "quantity": 1, "idempotency_key": key}
-    )
-    assert not first[0]
     conflicts: list[tuple[str, dict[str, Any]]] = [
         ("add_to_cart", {"variant_id": V, "quantity": 2, "idempotency_key": key}),
         ("set_cart_quantity", {"variant_id": V, "quantity": 1, "idempotency_key": key}),
         ("remove_from_cart", {"variant_id": V, "idempotency_key": key}),
     ]
-    for name, args in conflicts:
-        assert_error(call(url, session, name, args), "validation", "idempotency_conflict")
-    [line] = data(call(url, session, "get_cart", {}), "get_cart")["lines"]
+    first, *refused, cart_now = calls(  # one turn
+        url,
+        session,
+        [
+            ("add_to_cart", {"variant_id": V, "quantity": 1, "idempotency_key": key}),
+            *conflicts,
+            ("get_cart", {}),
+        ],
+    )
+    assert not first[0]
+    for outcome in refused:
+        assert_error(outcome, "validation", "idempotency_conflict")
+    [line] = data(cart_now, "get_cart")["lines"]
     assert line["quantity"] == 1
 
 
@@ -666,9 +675,9 @@ def test_the_last_fifty_keys_per_cart_are_kept(url: str, store: FixtureCatalog) 
     session = new_session()
     stock(store, V, 50)
     first = {"variant_id": V, "quantity": 1, "idempotency_key": "keep-key-000"}
-    call(url, session, "add_to_cart", first)
+    # All in one turn: keys are remembered per (turn, key).
     # 50 more changes on this cart, each with its own key, push the first key out.
-    steps: list[tuple[str, dict[str, Any]]] = []
+    steps: list[tuple[str, dict[str, Any]]] = [("add_to_cart", first)]
     for n in range(MAX_KEYS):
         quantity = 2 if n % 2 == 0 else 1
         steps.append(
@@ -677,32 +686,44 @@ def test_the_last_fifty_keys_per_cart_are_kept(url: str, store: FixtureCatalog) 
                 {"variant_id": V, "quantity": quantity, "idempotency_key": f"keep-key-{n + 1:03d}"},
             )
         )
-    calls(url, session, steps)
-    # The first key is forgotten: the same add runs again (1 -> 2), rather than replaying.
-    again = data(call(url, session, "add_to_cart", first), "add_to_cart")
-    assert again["quantity"] == 2
-    # The last key is still kept: its replay changes nothing.
     last = steps[-1][1]
-    replay = data(call(url, session, "set_cart_quantity", last), "set_cart_quantity")
+    *_, again_out, replay_out, cart_now = calls(
+        url,
+        session,
+        [*steps, ("add_to_cart", first), ("set_cart_quantity", last), ("get_cart", {})],
+    )
+    # The first key is forgotten: the same add runs again (1 -> 2), rather than replaying.
+    assert data(again_out, "add_to_cart")["quantity"] == 2
+    # The last key is still kept: its replay changes nothing.
+    replay = data(replay_out, "set_cart_quantity")
     assert replay["result"] == "already_applied"
     assert replay["original"]["quantity"] == last["quantity"]
-    [line] = data(call(url, session, "get_cart", {}), "get_cart")["lines"]
+    [line] = data(cart_now, "get_cart")["lines"]
     assert line["quantity"] == 2
 
 
 def test_a_reused_key_after_remove_shows_the_live_cart_not_the_old_add(
     url: str, store: FixtureCatalog
 ) -> None:
-    """Security review F1: add (key A), remove, add again with key A. The replay changes nothing,
-    says so, and shows the cart as it is now: empty, never the first add's snapshot."""
+    """Security review F1, within one turn: add (key A), remove, add again with key A. The replay
+    changes nothing, says so, and shows the cart as it is now: empty, never the first add's
+    snapshot."""
     session = new_session()
     stock(store, V, 5)
     first = {"variant_id": V, "quantity": 1, "idempotency_key": "reused-key-01"}
-    call(url, session, "add_to_cart", first)
-    call(url, session, "remove_from_cart", {"variant_id": V, "idempotency_key": "reused-key-02"})
-    replay = data(call(url, session, "add_to_cart", first), "add_to_cart")
+    *_, replay_out, cart_now = calls(
+        url,
+        session,
+        [
+            ("add_to_cart", first),
+            ("remove_from_cart", {"variant_id": V, "idempotency_key": "reused-key-02"}),
+            ("add_to_cart", first),
+            ("get_cart", {}),
+        ],
+    )
+    replay = data(replay_out, "add_to_cart")
     assert replay["result"] == "already_applied" and replay["cart"]["lines"] == []
-    assert data(call(url, session, "get_cart", {}), "get_cart")["lines"] == []
+    assert data(cart_now, "get_cart")["lines"] == []
 
 
 def test_a_replay_shows_the_price_as_it_is_now(url: str, store: FixtureCatalog) -> None:
@@ -715,10 +736,14 @@ def test_a_replay_shows_the_price_as_it_is_now(url: str, store: FixtureCatalog) 
     )
     stock(store, variant, 5)
     args = {"variant_id": variant, "idempotency_key": "price-key-001"}
-    call(url, session, "add_to_cart", args)
+    bearer = token("shopper-assistant", REGION, session=session)[0]  # one turn, two calls
+    calls(url, session, [("add_to_cart", args)], bearer=bearer)
     store.set_price(variant, REGION, "12.34", "GBP")
-    [line] = data(call(url, session, "add_to_cart", args), "add_to_cart")["cart"]["lines"]
-    assert line["unit_price"] == "12.34"
+    [replay_out] = calls(url, session, [("add_to_cart", args)], bearer=bearer)
+    replay = data(replay_out, "add_to_cart")
+    assert replay["result"] == "already_applied"
+    [line] = replay["cart"]["lines"]
+    assert (line["unit_price"], line["quantity"]) == ("12.34", 1)
 
 
 def test_reading_a_cart_never_creates_one(url: str, store: FixtureCatalog) -> None:
@@ -752,3 +777,55 @@ def test_get_cart_over_the_server_never_creates_a_cart() -> None:
         assert len(server.carts) == 1
         [line] = data(call(small, kept, "get_cart", {}), "get_cart")["lines"]
     assert line["variant_id"] == V
+
+
+# ---- keys are remembered per turn (re-review N1; the user's option A) ---------------------------
+
+
+def test_the_same_key_in_a_new_turn_is_a_fresh_change(url: str, store: FixtureCatalog) -> None:
+    session = new_session()
+    stock(store, V, 50)
+    args = {"variant_id": V, "quantity": 1, "idempotency_key": "turn-key-0001"}
+    first = data(call(url, session, "add_to_cart", args), "add_to_cart")  # turn 1
+    again = data(call(url, session, "add_to_cart", args), "add_to_cart")  # turn 2
+    assert (first["result"], first["quantity"]) == ("added", 1)
+    assert (again["result"], again["quantity"]) == ("added", 2)
+
+
+def test_the_same_key_and_arguments_in_the_same_turn_replays(
+    url: str, store: FixtureCatalog
+) -> None:
+    session = new_session()
+    stock(store, V, 50)
+    args = {"variant_id": V, "quantity": 1, "idempotency_key": "turn-key-0002"}
+    first, second = calls(url, session, [("add_to_cart", args)] * 2)
+    assert data(first, "add_to_cart")["result"] == "added"
+    replay = data(second, "add_to_cart")
+    assert replay["result"] == "already_applied"
+    [line] = replay["cart"]["lines"]
+    assert line["quantity"] == 1
+
+
+def test_the_same_key_with_other_arguments_in_the_same_turn_conflicts(
+    url: str, store: FixtureCatalog
+) -> None:
+    session = new_session()
+    stock(store, V, 50)
+    key = "turn-key-0003"
+    first, second = calls(
+        url,
+        session,
+        [
+            ("add_to_cart", {"variant_id": V, "quantity": 1, "idempotency_key": key}),
+            ("add_to_cart", {"variant_id": V, "quantity": 3, "idempotency_key": key}),
+        ],
+    )
+    assert data(first, "add_to_cart")["quantity"] == 1
+    assert_error(second, "validation", "idempotency_conflict")
+
+
+def test_the_key_description_says_a_key_lives_for_one_turn() -> None:
+    schema = TOOLS["add_to_cart"].tool.input_schema
+    description = schema["properties"]["idempotency_key"]["description"]
+    assert "remembered only within this turn" in description
+    assert "retry a change whose result you did not get in this turn" in description

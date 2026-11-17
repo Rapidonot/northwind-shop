@@ -23,19 +23,19 @@ from typing import Any
 MAX_CARTS = 10_000
 MAX_LINES = 20
 MAX_QUANTITY = 10
-MAX_KEYS = 50  # idempotency keys kept per cart (hard rule 9)
+MAX_KEYS = 50  # (turn, idempotency key) pairs kept per cart (hard rule 9)
 
 CartKey = tuple[str, str]  # (session id, region)
 
 
 class Cart:
     """Lines in the order they were first added: variant ID -> quantity. `keys` holds the last
-    `MAX_KEYS` idempotency keys of writes that changed this cart: key -> (fingerprint, outcome),
-    where the outcome is `result`, `variant_id` and `quantity` only, never a cart view."""
+    `MAX_KEYS` idempotency keys of writes that changed this cart: (turn, key) -> (fingerprint,
+    outcome), where the outcome is `result`, `variant_id` and `quantity` only, never a cart view."""
 
     def __init__(self) -> None:
         self.lines: OrderedDict[str, int] = OrderedDict()
-        self.keys: OrderedDict[str, tuple[str, dict[str, Any]]] = OrderedDict()
+        self.keys: OrderedDict[tuple[str, str], tuple[str, dict[str, Any]]] = OrderedDict()
 
 
 class _Open:

@@ -260,6 +260,8 @@ def test_the_prompt_states_the_cart_rules_and_no_unprompted_capability() -> None
     assert "offer only the alternatives that result lists" in prompt
     assert "each by its product name and variant ID" in prompt  # security review F8
     assert 'A cart result of "already_applied" changed nothing now' in prompt  # re-review N1
+    # The user, before W1: totals are the panel's, never the answer's (F2 would block them).
+    assert "line totals and its total are shown in the cart panel: never state them" in prompt
     assert "or saying whether they are in stock" in prompt
     # "No orders in chat" only on the shopper's asking, never as a self-description.
     [sentence] = [s for s in re.split(r"(?<=\.)\s", prompt) if "orders can't be placed" in s]

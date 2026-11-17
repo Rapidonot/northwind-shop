@@ -633,14 +633,16 @@ def test_the_same_key_with_other_arguments_is_a_conflict_and_changes_nothing(
 ) -> None:
     store.set_stock(V1, "UK", 20)
     store.set_stock(V2, "UK", 20)
-    session = "f9" * 16
+    session = ("f9" if "quantity" in other else "a2") * 16  # each case its own cart
     key = "conflict-key-1"
-    call(url, session, "add_to_cart", {"variant_id": V1, "quantity": 1, "idempotency_key": key})
-    outcome = call(
+    # One `calls` is one token, so one turn: keys are remembered per turn (the user's option A).
+    _, outcome = calls(
         url,
         session,
-        "add_to_cart",
-        {"variant_id": V1, "quantity": 1, **other, "idempotency_key": key},
+        [
+            ("add_to_cart", {"variant_id": V1, "quantity": 1, "idempotency_key": key}),
+            ("add_to_cart", {"variant_id": V1, "quantity": 1, **other, "idempotency_key": key}),
+        ],
     )
     envelope = error_of(outcome)
     assert (envelope["errorCategory"], envelope["code"]) == ("validation", "idempotency_conflict")
@@ -652,8 +654,14 @@ def test_the_same_key_on_another_tool_is_a_conflict(url: str, store: FixtureCata
     store.set_stock(V1, "UK", 20)
     session = "a8" * 16
     key = "shared-key-001"
-    call(url, session, "add_to_cart", {"variant_id": V1, "quantity": 1, "idempotency_key": key})
-    outcome = call(url, session, "remove_from_cart", {"variant_id": V1, "idempotency_key": key})
+    _, outcome = calls(  # one turn (keys are remembered per turn)
+        url,
+        session,
+        [
+            ("add_to_cart", {"variant_id": V1, "quantity": 1, "idempotency_key": key}),
+            ("remove_from_cart", {"variant_id": V1, "idempotency_key": key}),
+        ],
+    )
     assert error_of(outcome)["code"] == "idempotency_conflict"
     assert [ln["quantity"] for ln in cart_of(url, session)["lines"]] == [1]
 
@@ -683,18 +691,14 @@ def test_the_last_fifty_keys_are_kept_and_an_older_one_is_forgotten(
         )
         for i in range(51)
     ]
-    calls(url, session, steps)
+    # All in one turn: keys are remembered per (turn, key) (the user's option A).
+    reused_args = {"variant_id": V1, "quantity": 7, "idempotency_key": "bounded-key-000"}
+    recent = {"variant_id": V1, "quantity": 9, "idempotency_key": "bounded-key-050"}
+    *_, reused, recent_outcome = calls(
+        url, session, [*steps, ("set_cart_quantity", reused_args), ("set_cart_quantity", recent)]
+    )
     # The 51st key evicted the first: its replay is no longer recognised, so a different
     # argument set under it is accepted as a new key rather than a conflict.
-    reused = call(
-        url,
-        session,
-        "set_cart_quantity",
-        {"variant_id": V1, "quantity": 7, "idempotency_key": "bounded-key-000"},
-    )
     assert not reused[0] or error_of(reused)["code"] != "idempotency_conflict"
     # A recent key is still remembered: other arguments under it conflict.
-    recent = {"variant_id": V1, "quantity": 9, "idempotency_key": "bounded-key-050"}
-    assert error_of(call(url, session, "set_cart_quantity", recent))["code"] == (
-        "idempotency_conflict"
-    )
+    assert error_of(recent_outcome)["code"] == "idempotency_conflict"

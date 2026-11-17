@@ -30,10 +30,13 @@ has stock for the quantity asked. The model never chooses or invents one.
 unknown keys, then each value's type and range. No error echoes an argument.
 
 **Idempotency (hard rule 9; the user, 2026-11-17).** Every write requires an `idempotency_key`, 8-64
-characters of `[A-Za-z0-9_-]`. The same key with the same arguments returns the stored result, and
-the cart changes once; the same key with other arguments, or for another tool, is an
-`idempotency_conflict`. The last `MAX_KEYS` keys per cart are kept. There is no dry run: a
-reversible cart write doesn't need one.
+characters of `[A-Za-z0-9_-]`. A key is remembered within the turn it was sent in (the `turn` of the
+verified token), never across turns: a model has no memory between turns, so it could not keep a
+key unique for a whole cart (re-review N1; the user's option A). Within one turn, the same key with
+the same arguments returns the stored outcome and the cart changes once; the same key with other
+arguments, or for another tool, is an `idempotency_conflict`. In a new turn the same key is a new
+change. The last `MAX_KEYS` (turn, key) pairs per cart are kept. There is no dry run: a reversible
+cart write doesn't need one.
 """
 
 from __future__ import annotations
@@ -99,7 +102,7 @@ def idempotency_conflict() -> ToolError:
     return _error(
         "validation",
         "idempotency_conflict",
-        "That idempotency_key was already used for a different cart change.",
+        "That idempotency_key was already used for a different cart change in this turn.",
     )
 
 
@@ -372,9 +375,11 @@ Write = Callable[
 def _idempotent(tool: str, arguments: frozenset[str], write: Write) -> Any:
     """A cart write behind its idempotency key (hard rule 9; plan R1, R8).
 
-    Card data and unknown arguments are refused first. Then the key is checked (`KEY`). Under the
-    cart's lock, a key this cart has seen returns its stored outcome when the tool and the other
-    arguments are the same, and `idempotency_conflict` when they are not; a new key runs the write.
+    Card data and unknown arguments are refused first. Then the key is checked (`KEY`). Keys are
+    remembered per (turn, key), the turn taken from the verified token (the user's option A for
+    re-review N1). Under the cart's lock, a pair this cart has seen returns its stored outcome when
+    the tool and the other arguments are the same, and `idempotency_conflict` when they are not; a
+    new pair runs the write.
     Only a write that changed the cart is stored (the last `MAX_KEYS` per cart): a refusal or an
     error is not, so retrying it with the same key checks again.
 
@@ -395,11 +400,12 @@ def _idempotent(tool: str, arguments: frozenset[str], write: Write) -> Any:
         rest = {k: v for k, v in args.items() if k != IDEMPOTENCY_KEY}
         fingerprint = json.dumps([tool, rest], sort_keys=True, separators=(",", ":"), default=str)
         with server.carts.open(session, region) as cart:
-            seen = cart.keys.get(key)
+            remembered = (claims.turn, key)
+            seen = cart.keys.get(remembered)
             if seen is not None:
                 if seen[0] != fingerprint:
                     raise idempotency_conflict()
-                cart.keys.move_to_end(key)
+                cart.keys.move_to_end(remembered)
                 replay = {
                     "result": "already_applied",
                     "original": dict(seen[1]),
@@ -410,7 +416,7 @@ def _idempotent(tool: str, arguments: frozenset[str], write: Write) -> Any:
             if isinstance(written, t.CallToolResult):  # a stock refusal: never stored
                 return written
             outcome = {k: written[k] for k in OUTCOME_KEYS if k in written}
-            cart.keys[key] = (fingerprint, outcome)
+            cart.keys[remembered] = (fingerprint, outcome)
             while len(cart.keys) > MAX_KEYS:
                 cart.keys.popitem(last=False)
             return json_result(tool, {**outcome, "cart": view(server, claims, region, cart)})
@@ -440,10 +446,10 @@ _KEY = {
     "maxLength": 64,
     "pattern": "^[A-Za-z0-9_-]+$",
     "description": (
-        "Make up a new random key of 8-64 letters and digits for every cart change. Keys are "
-        "remembered for this cart across turns, so never take one from an example or build one "
-        "from the item. Send the same key again only to retry a change whose result you did not "
-        'get. A result of "already_applied" means that key was used before: nothing changed now.'
+        "Make up a new random key of 8-64 letters and digits for every cart change; never take one "
+        "from an example. A key is remembered only within this turn: send the same key again only "
+        "to retry a change whose result you did not get in this turn. A result of "
+        '"already_applied" means that key was already used in this turn: nothing changed now.'
     ),
 }
 

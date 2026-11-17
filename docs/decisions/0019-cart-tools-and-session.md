@@ -18,19 +18,19 @@ with the amendments recorded there, 2026-11-17. 0018 is reserved for row #32.
      only the caller's cart: never the catalog, an order or a payment.
    - **Idempotency (hard rule 9).** Each write requires an `idempotency_key` of 8–64 characters from
      `[A-Za-z0-9_-]`:
-     - the same key with the same arguments returns the stored result, and the cart changes once;
-     - the same key with other arguments, or for another tool, gets `validation` / `idempotency_conflict`;
-     - the last 50 keys per cart are kept;
+     - a key is remembered within one turn only: the server keeps `(turn, key)`, the turn taken from the
+       verified token (the user's option A for re-review N1, 2026-11-17). A model has no memory across turns, so
+       it could not keep a key unique for a whole cart; in a new turn the same key is a new change;
+     - within the turn, the same key with the same arguments returns the stored outcome, and the cart changes
+       once; the same key with other arguments, or for another tool, gets `validation` / `idempotency_conflict`;
+     - the last 50 `(turn, key)` pairs per cart are kept;
      - only a write that changed the cart is stored, so a refusal retried with the same key checks stock again;
      - what is stored is the outcome only (`result`, `variant_id`, `quantity`), taken from the write's own value
        (re-review N2). A replay answers `"result": "already_applied"`, the first outcome under `"original"`, and the
        cart read live, never a stored view: it cannot carry an old price, stock level or line, nor read as a new
-       change (security review F1, F5; re-review N1). The key's description says keys are remembered for the cart
-       across turns, and its examples use a placeholder, not a copyable key; the prompt says an
-       `already_applied` result changed nothing.
-     - Open (a scope question for the user, re-review N1): a model with no memory across turns cannot guarantee a
-       key it has never used for this cart. A collision is safe (nothing changes; the result says so; the panel
-       reads live) but can make one change a no-op or an `idempotency_conflict` until 50 newer keys evict it.
+       change (security review F1, F5; re-review N1). The key's description says a key is remembered only within
+       this turn, to retry a change whose result did not arrive; its examples use a placeholder, not a copyable
+       key; the prompt says an `already_applied` result changed nothing.
      There is no `dry_run`: a reversible cart write doesn't need one ("where useful"). The user restored the key on
      2026-11-17, reversing an earlier scope cut.
 2. **Live values only (hard rule 2).**
@@ -76,8 +76,10 @@ with the amendments recorded there, 2026-11-17. 0018 is reserved for row #32.
    it on mount and after every turn, so the panel never shows text a model wrote. Any failure is one fixed 503
    ("Cart unavailable"), never an empty cart.
 6. **Prompt (model input).** The cart may change only when the shopper asks, and only with the cart tools. If the
-   shopper hasn't said which variant, the assistant asks first. A refused add offers only the listed alternatives.
-   "Orders can't be placed in chat" is said only when the shopper asks to order or check out (amendment 4).
+   shopper hasn't said which variant, the assistant asks first. A refused add offers only the listed alternatives,
+   by product name and variant ID. "Orders can't be placed in chat" is said only when the shopper asks to order or
+   check out (amendment 4). An `already_applied` result is never reported as a new change. Line totals and the
+   cart total are the panel's and are never stated in the answer (the user, before W1: F2 would replace them).
 
 ## Exceptions and open items
 
