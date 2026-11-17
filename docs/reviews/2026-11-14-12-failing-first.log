@@ -1,0 +1,271 @@
+== commit 1 (tokens): new tests against origin/main's mcp_token.py plus a one-line '_verify = verify' shim ==
+E       Failed: DID NOT RAISE TypeError
+E       AssertionError: assert not True
+services/common/tests/test_mcp_token.py:253: AssertionError
+FAILED services/common/tests/test_mcp_token.py::test_mint_has_no_default_server
+FAILED services/common/tests/test_mcp_token.py::test_verify_is_not_a_public_name
+2 failed in 0.08s
+
+== commit 2 (attach, label, cap): the new and changed tests against d61cab2's sources (git archive, PYTHONPATH first) ==
+ERROR services/assistant/tests/test_rag09_catalog_attached.py
+ERROR services/common/tests/test_catalog_tool.py
+ERROR services/mcp-catalog/tests/test_labelled_output.py
+!!!!!!!!!!!!!!!!!!! Interrupted: 3 errors during collection !!!!!!!!!!!!!!!!!!!!
+3 errors in 0.64s
+E       assert 4 == 6
+E       AssertionError: assert 4 == 6
+E        +  where 4 = ClaudeAgentOptions(tools=[], allowed_tools=['mcp__northwind-rag__retrieve_context'], system_prompt='You are the AI sho...e_file_checkpointing=False, session_store=None, session_store_flush='batched', load_timeout_ms=60000, task_budget=None).max_turns
+FAILED services/assistant/tests/test_tool_loop.py::test_a_seventh_turn_never_happens
+FAILED services/assistant/tests/test_turn_edges.py::test_the_options_carry_the_cap_the_mode_and_no_builtin_tools
+2 failed in 22.80s
+imported from /tmp/claude-502/head12/services/common/src/northwind_common/__init__.py
+MAX_TURNS at d61cab2 = 4
+(Vitest [RAG-09] banner: written with the change; the old Chat.tsx has no PRICE_NOTE export, so the file fails to import there.)
+
+== commit 3 (output check): test_rag09_output_check.py against 8fb9f8e's sources ==
+==================================== ERRORS ====================================
+_____ ERROR collecting services/assistant/tests/test_rag09_output_check.py _____
+ImportError while importing test module '/private/tmp/claude-502/head12c3/services/assistant/tests/test_rag09_output_check.py'.
+E   ImportError: cannot import name 'LiveValues' from 'northwind_assistant.output_check' (/tmp/claude-502/head12c3/services/assistant/src/northwind_assistant/output_check.py)
+
+== commit 3: the user's three _asks sentences under the first, wider _asks (BOUNDARY-only), patched in for this run ==
+ERROR: Error importing plugin "wide_asks_plugin": No module named 'wide_asks_plugin'
+
+wide _asks (first narrowing): PASSES (test expects blocked: FAIL) | If you need it soon, the Sage M is available now.
+wide _asks (first narrowing): PASSES (test expects blocked: FAIL) | Not sure if you saw, but the M is available.
+wide _asks (first narrowing): PASSES (test expects blocked: FAIL) | The Glacier Blue 4XL, which is available today, is warm.
+tightened _asks (commit 3): BLOCKED | If you need it soon, the Sage M is available now.
+tightened _asks (commit 3): BLOCKED | Not sure if you saw, but the M is available.
+tightened _asks (commit 3): BLOCKED | The Glacier Blue 4XL, which is available today, is warm.
+
+== commit 4 (evals): test_rag09_live_sources.py against 3043f3a's sources ==
+ImportError while importing test module '/private/tmp/claude-502/head12c4/evals/tests/test_rag09_live_sources.py'.
+E   ImportError: cannot import name 'CatalogLog' from 'northwind_evals.answerers' (/tmp/claude-502/head12c4/evals/src/northwind_evals/answerers.py)
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+
+== security fixes (pass 1): test_rag09_security_fixes.py and the changed test_rag09_live_sources.py against e153442's sources ==
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_every_price_format_is_money_and_blocked_without_a_live_price[It costs USD 279.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_every_price_format_is_money_and_blocked_without_a_live_price[It is EUR 130.66 now.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_every_price_format_is_money_and_blocked_without_a_live_price[It is CAD 189.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_every_price_format_is_money_and_blocked_without_a_live_price[It costs 130.66 \u20ac.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_every_price_format_is_money_and_blocked_without_a_live_price[It costs 130,66 \u20ac.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_every_price_format_is_money_and_blocked_without_a_live_price[It costs 279$.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_every_price_format_is_money_and_blocked_without_a_live_price[It costs 199 pounds.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_every_price_format_is_money_and_blocked_without_a_live_price[The price is 279.00.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_every_price_format_is_money_and_blocked_without_a_live_price[It costs 279.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_every_price_format_is_money_and_blocked_without_a_live_price[It is priced at 279.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_every_price_format_is_money_and_blocked_without_a_live_price[Fifteen hundred dollars is the price.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_every_price_format_is_money_and_blocked_without_a_live_price[It is one thousand dollars.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_every_price_format_is_money_and_blocked_without_a_live_price[It is a couple hundred bucks.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_every_price_format_is_money_and_blocked_without_a_live_price[It is 1.5k dollars.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_every_price_format_is_money_and_blocked_without_a_live_price[It is \u20ac9,99 now.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_every_price_format_is_money_and_blocked_without_a_live_price[It is $1,29 now.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_every_price_format_is_money_and_blocked_without_a_live_price[It is $**279** today.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_every_price_format_is_money_and_blocked_without_a_live_price[It is **279** USD.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_a_narrowed_dollar_does_not_match_another_dollar
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_a_price_word_after_the_weight_makes_pounds_money_again
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_an_asking_word_without_an_embedded_question_leaves_a_claim[If you need it soon the Sage M is available now.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_an_asking_word_without_an_embedded_question_leaves_a_claim[Not sure if you saw but M is available.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_an_asking_word_without_an_embedded_question_leaves_a_claim[Check if it fits and XL is available today.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_an_asking_word_without_an_embedded_question_leaves_a_claim[Check whether it fits and all sizes are available.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_an_asking_word_without_an_embedded_question_leaves_a_claim[Not sure if you like it so Sage is available.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_an_asking_word_without_an_embedded_question_leaves_a_claim[Whether you hike or commute the M is still available.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_an_asking_word_without_an_embedded_question_leaves_a_claim[The size which you asked about is available now.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_an_asking_word_without_an_embedded_question_leaves_a_claim[Here is which size is available now: the M.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_an_asking_word_without_an_embedded_question_leaves_a_claim[Is it here if it fits?The M is available now.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_an_asking_word_without_an_embedded_question_leaves_a_claim[See whether it fits because the M is available.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_a_negated_stock_claim_follows_the_reversed_polarity[The M isn't in stock right now.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_a_negated_stock_claim_follows_the_reversed_polarity[The M is not available now.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_a_negated_stock_claim_follows_the_reversed_polarity[It is no longer in stock.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_a_negated_count_never_passes
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_a_quantity_no_tool_returns_is_always_blocked[There are a dozen left.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_a_quantity_no_tool_returns_is_always_blocked[Only a few left!]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_a_quantity_no_tool_returns_is_always_blocked[There are only a handful left.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_a_quantity_no_tool_returns_is_always_blocked[There are a couple left.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_a_quantity_no_tool_returns_is_always_blocked[There are plenty in stock.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_a_long_count_is_read_whole[There are 12345 left.-12345]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_a_long_count_is_read_whole[There are 1,200 units available.-1200]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_a_question_about_availability_is_not_a_live_backed_claim
+FAILED evals/tests/test_rag09_live_sources.py::test_the_leak_guard_runs_inside_the_catalog_before_the_model_sees_a_result
+FAILED evals/tests/test_rag09_live_sources.py::test_a_guard_that_cannot_run_counts_as_a_leak
+FAILED evals/tests/test_rag09_live_sources.py::test_a_flagged_leak_fails_the_item
+FAILED evals/tests/test_rag09_live_sources.py::test_only_price_and_stock_results_reach_the_judge
+46 failed, 33 passed, 1 skipped in 2.20s
+
+== security re-review (N1-N9): the new tests in test_rag09_security_fixes.py at d4e1c4f, before the fixes ==
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n1_which_and_with_a_verb_or_subject_is_a_claim[Check which fits you best and the M is available now.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n1_which_and_with_a_verb_or_subject_is_a_claim[See which colour you prefer and the M is available today.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n1_which_and_with_a_verb_or_subject_is_a_claim[Check which size fits and it is available now.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n2_a_qualified_or_foreign_price_is_money[The Summit Shell is 279 Canadian dollars.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n2_a_qualified_or_foreign_price_is_money[It is 279 US dollars.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n2_a_qualified_or_foreign_price_is_money[It is 49 Australian dollars.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n2_a_qualified_or_foreign_price_is_money[It is 199 British pounds.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n2_a_qualified_or_foreign_price_is_money[It is 279 US$.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n2_a_qualified_or_foreign_price_is_money[It is 279 (USD).]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n2_a_qualified_or_foreign_price_is_money[It is \xa540,000.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n2_a_qualified_or_foreign_price_is_money[It is CHF 279.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n2_a_qualified_or_foreign_price_is_money[It is 279 kr.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n2_a_qualified_or_foreign_price_is_money[It is 279 yen.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n2_a_qualified_or_foreign_price_is_money[It is \u20b92,500.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n2_a_qualified_price_passes_only_in_its_own_currency[It is 279 Canadian dollars.-price0]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n2_a_qualified_price_passes_only_in_its_own_currency[It is 279 US dollars.-price1]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n2_a_qualified_price_passes_only_in_its_own_currency[It is 199 British pounds.-price2]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n2_a_qualified_price_passes_only_in_its_own_currency[It is 279 (USD).-price3]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n2_a_us_price_does_not_vouch_canadian_dollars
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n3_a_negation_that_does_not_govern_blocks_at_any_stock[There's no doubt the M is in stock.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n3_a_dash_ends_the_negations_clause[No worries \u2014 the M is in stock.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n3_a_dash_ends_the_negations_clause[Don't wait \u2014 the M is available now.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n4_another_clause_after_the_asking_word_leaves_a_claim[Not sure if you noticed the M is available now.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n4_another_clause_after_the_asking_word_leaves_a_claim[Let me know if you need it today the M is available now.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n4_another_clause_after_the_asking_word_leaves_a_claim[Check whether it fits (the M is available now).]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n5_a_price_near_a_weight_word_is_still_money[This lightweight shell is just 149 pounds.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n5_a_price_near_a_weight_word_is_still_money[Weighing just 400 g, it's 149 pounds.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n5_a_price_near_a_weight_word_is_still_money[It weighs 2 pounds and sells for 199 pounds.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n6_a_hedged_bare_price_is_money[It costs just 279.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n6_a_hedged_bare_price_is_money[The price is now 279.00.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n6_a_hedged_bare_price_is_money[It's priced at only 279.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n6_a_hedged_bare_price_is_money[The price is around 280.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n7_more_quantities_are_blocked[There are still some left.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n7_more_quantities_are_blocked[There are a lot left.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n7_more_quantities_are_blocked[There are a few sizes left.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n7_more_quantities_are_blocked[There are tons in stock.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n7_more_quantities_are_blocked[It is limited stock.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_n9_a_late_colon_after_a_question_is_still_seen
+38 failed, 5 passed, 62 deselected in 0.27s
+(already passing before the fix, kept as guards: the comma case of N3, N4's own-subject question, N5's three governed weights)
+
+== security re-review N8: test_rag09_live_sources.py at d4e1c4f (the skip is the origin/main judge.py compare, which needs a git checkout) ==
+FAILED evals/tests/test_rag09_live_sources.py::test_a_catalog_result_naming_an_internal_id_is_refused_without_a_canary
+1 failed, 17 passed, 1 skipped in 2.89s
+
+== second re-review, M1/M2 (regressions against d4e1c4f): the new tests at 206ac64, before the fix ==
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_m1_bare_price_forms_blocked_before_n6_stay_blocked[The price will be 279.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_m1_bare_price_forms_blocked_before_n6_stay_blocked[The cost will be 279.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_m1_bare_price_forms_blocked_before_n6_stay_blocked[The price is ***279***.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_m2_a_negation_across_an_aside_is_unvouched[The M is not (yet) in stock.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_m2_a_negation_across_an_aside_is_unvouched[The M isn't (currently) available.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_m2_a_negation_across_an_aside_is_unvouched[The M is not \u2014 for now \u2014 in stock.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_m2_a_negation_across_an_aside_is_unvouched[The M is not, sadly, in stock.]
+7 failed, 1 passed, 105 deselected in 0.14s
+(the M2 input "The M isn't (currently) available." was replaced by "The M isn't (yet) available now.": the former matched no pattern at d4e1c4f either, so it is H3's gap, not a regression; checked against a git archive of d4e1c4f)
+
+== W1 findings (2026-11-14), the new tests at 72285d7+W1 cassettes, before the fixes ==
+test_a_preamble_before_a_tool_call_is_not_glued_to_the_answer: FAILED (shown 'It comes in five sizes [P0011]. I've left out a link or contact detail here.': 'price.The' read as a bare domain)
+test_an_amount_split_at_its_decimal_point_waits_for_the_decimals: FAILED ('$263.' at the delta end read as $263 and blocked against the live 263.40)
+replay of test_smoke_e2e.py before the fixes: test_a_price_changed_while_the_catalog_runs_is_the_one_quoted FAILED (first the link sentence, then the money sentence); after both fixes and removing the 13 superseded cassettes: 16 passed, no miss
+
+== the user's point 3 (gateway path) and the W1 fixes: test_rag09_output_check.py at 72285d7 (before the separator and decimal-hold fixes) ==
+FAILED services/assistant/tests/test_rag09_output_check.py::test_a_preamble_before_a_tool_call_is_not_glued_to_the_answer
+FAILED services/assistant/tests/test_rag09_output_check.py::test_an_amount_split_at_its_decimal_point_waits_for_the_decimals
+FAILED services/assistant/tests/test_rag09_output_check.py::test_the_gateway_stream_separates_two_model_calls_too
+3 failed, 83 deselected in 3.19s
+
+== H1-H3 (the user's decision): test_rag09_security_fixes.py -k 'h1 or h2 or h3' at d9f71f6 ==
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_h1_no_question_frame_exempts_a_stock_claim[I can confirm whether the M is available now, and it is.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_h1_no_question_frame_exempts_a_stock_claim[I can tell you which sizes are available today, the M and the L.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_h1_no_question_frame_exempts_a_stock_claim[I can check which sizes are available now (M and L).]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_h1_no_question_frame_exempts_a_stock_claim[Want to know which size is available now? The M.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_h1_no_question_frame_exempts_a_stock_claim[Wondering whether the M is available? It is.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_h2_a_specific_size_colour_or_fit_needs_check_stock[The Summit Shell is available in size M.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_h2_a_specific_size_colour_or_fit_needs_check_stock[It is available in sizes M and L right now.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_h2_a_specific_size_colour_or_fit_needs_check_stock[The M is available in colour Sage today.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_h2_a_specific_size_colour_or_fit_needs_check_stock[It is available in fit regular.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_h2_comes_in_offered_in_and_plural_ranges_are_the_range[It is available in three colours.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_h2_comes_in_offered_in_and_plural_ranges_are_the_range[It is available in a range of fits.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_h3_every_copula_spelling_is_seen[Yes, it's available.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_h3_every_copula_spelling_is_seen[The M's available in Sage.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_h3_every_copula_spelling_is_seen[They're available.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_h3_every_copula_spelling_is_seen[The M remains available.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_h3_every_copula_spelling_is_seen[It should be available.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_h3_every_copula_spelling_is_seen[The M isn't available.]
+FAILED services/assistant/tests/test_rag09_security_fixes.py::test_h3_every_copula_spelling_is_seen[The M is not available.]
+18 failed, 3 passed, 150 deselected in 0.98s
+(passing before the change: the three H2 'comes in / offered in / plural range' cases, which keep the range offered)
+
+== TRAP-INJ-002 live vouching and the refinement replacement rule: evals tests at d9f71f6 ==
+FAILED evals/tests/test_rag09_live_sources.py::test_ev043s_true_out_of_stock_is_not_the_planted_claim
+FAILED evals/tests/test_rag09_live_sources.py::test_out_of_stock_with_no_stock_check_still_counts
+FAILED evals/tests/test_rag09_live_sources.py::test_out_of_stock_against_a_positive_live_count_still_counts
+FAILED evals/tests/test_rag09_live_sources.py::test_live_stock_vouches_only_for_trap_inj_002
+FAILED evals/tests/test_rag09_live_sources.py::test_run_item_passes_the_turns_live_values_to_the_planted_check
+FAILED evals/tests/test_refinements_integrity.py::test_a_new_answerer_prompt_lets_its_refinements_change_and_reports_each
+FAILED evals/tests/test_refinements_integrity.py::test_the_same_answerer_prompt_keeps_refinements_add_only
+FAILED evals/tests/test_refinements_integrity.py::test_cmd_integrity_prints_each_replaced_refinement
+8 failed, 28 passed, 1 skipped in 5.07s
+
+== The user's re-read high (e9401f7) and hyphenated stock phrases (062f68f): the tests at fbb1415, run against the check of each earlier commit (output_check.py swapped in from git show, then restored with git checkout) ==
+=== output_check.py from 5f74e3f; tests from fbb1415 ===
+FAILED services/assistant/tests/test_rag09_reread_fixes.py::test_the_findings_sentences_are_blocked_with_no_live_values[The M is now available.]
+FAILED services/assistant/tests/test_rag09_reread_fixes.py::test_the_findings_sentences_are_blocked_with_no_live_values[The Sage 3XL is also available.]
+FAILED services/assistant/tests/test_rag09_reread_fixes.py::test_the_findings_sentences_are_blocked_with_no_live_values[Both sizes are all available.]
+FAILED services/assistant/tests/test_rag09_reread_fixes.py::test_the_findings_sentences_are_blocked_with_no_live_values[It's readily available in the US.]
+FAILED services/assistant/tests/test_rag09_reread_fixes.py::test_the_findings_sentences_are_blocked_with_no_live_values[The M is **available** today.]
+FAILED services/assistant/tests/test_rag09_reread_fixes.py::test_the_findings_sentences_are_blocked_when_any_check_disagrees[all-out-The M is now available.]
+FAILED services/assistant/tests/test_rag09_reread_fixes.py::test_the_findings_sentences_are_blocked_when_any_check_disagrees[all-out-The Sage 3XL is also available.]
+FAILED services/assistant/tests/test_rag09_reread_fixes.py::test_the_findings_sentences_are_blocked_when_any_check_disagrees[all-out-Both sizes are all available.]
+FAILED services/assistant/tests/test_rag09_reread_fixes.py::test_the_findings_sentences_are_blocked_when_any_check_disagrees[all-out-It's readily available in the US.]
+FAILED services/assistant/tests/test_rag09_reread_fixes.py::test_the_findings_sentences_are_blocked_when_any_check_disagrees[all-out-The M is **available** today.]
+FAILED services/assistant/tests/test_rag09_reread_fixes.py::test_the_findings_sentences_are_blocked_when_any_check_disagrees[mixed-The M is now available.]
+FAILED services/assistant/tests/test_rag09_reread_fixes.py::test_the_findings_sentences_are_blocked_when_any_check_disagrees[mixed-The Sage 3XL is also available.]
+FAILED services/assistant/tests/test_rag09_reread_fixes.py::test_the_findings_sentences_are_blocked_when_any_check_disagrees[mixed-Both sizes are all available.]
+FAILED services/assistant/tests/test_rag09_reread_fixes.py::test_the_findings_sentences_are_blocked_when_any_check_disagrees[mixed-It's readily available in the US.]
+FAILED services/assistant/tests/test_rag09_reread_fixes.py::test_the_findings_sentences_are_blocked_when_any_check_disagrees[mixed-The M is **available** today.]
+FAILED services/assistant/tests/test_rag09_reread_fixes.py::test_any_available_is_a_stock_claim_whatever_precedes_it[Yes, it's widely available.]
+FAILED services/assistant/tests/test_rag09_reread_fixes.py::test_any_available_is_a_stock_claim_whatever_precedes_it[The M is, happily, available.]
+FAILED services/assistant/tests/test_rag09_reread_fixes.py::test_any_available_is_a_stock_claim_whatever_precedes_it[Available: the M.]
+FAILED services/assistant/tests/test_rag09_reread_fixes.py::test_any_available_is_a_stock_claim_whatever_precedes_it[AVAILABLE in M.]
+FAILED services/assistant/tests/test_rag09_reread_fixes.py::test_any_available_is_a_stock_claim_whatever_precedes_it[It is avail**able** now.]
+FAILED services/assistant/tests/test_rag09_reread_fixes.py::test_any_available_is_a_stock_claim_whatever_precedes_it[It is `available`.]
+FAILED services/assistant/tests/test_rag09_reread_fixes.py::test_any_available_is_a_stock_claim_whatever_precedes_it[It is _available_ in the US.]
+FAILED services/assistant/tests/test_rag09_reread_fixes.py::test_a_struck_negation_is_never_read_as_one
+FAILED services/assistant/tests/test_rag09_reread_fixes.py::test_unavailable_needs_every_check_at_zero[The M is unavailable.]
+FAILED services/assistant/tests/test_rag09_reread_fixes.py::test_unavailable_needs_every_check_at_zero[The 3XL is currently **un**available.]
+FAILED services/assistant/tests/test_rag09_reread_fixes.py::test_unavailable_needs_every_check_at_zero[Sadly unavailable in M.]
+FAILED services/assistant/tests/test_rag09_reread_fixes.py::test_a_negated_unavailable_is_a_positive_claim
+FAILED services/assistant/tests/test_rag09_reread_fixes.py::test_a_plural_range_with_no_time_word_is_still_the_range_offered
+FAILED services/assistant/tests/test_rag09_reread_fixes.py::test_the_information_sentence_is_blocked_in_every_stock_state
+FAILED services/assistant/tests/test_rag09_reread_fixes.py::test_the_raw_spans_map_back_through_removed_markers
+FAILED services/assistant/tests/test_rag09_reread_fixes.py::test_a_split_marked_word_is_held_until_it_is_whole
+FAILED services/assistant/tests/test_rag09_reread_fixes.py::test_markers_inside_an_amount_do_not_hide_it[It costs $2**7**9.00.]
+FAILED services/assistant/tests/test_rag09_reread_fixes.py::test_markers_inside_an_amount_do_not_hide_it[It is 2_79 USD.]
+FAILED services/assistant/tests/test_rag09_reread_fixes.py::test_a_marked_amount_split_across_deltas_is_read_whole
+FAILED services/assistant/tests/test_rag09_reread_fixes.py::test_live_backed_reads_the_plain_view
+FAILED services/assistant/tests/test_rag09_reread_fixes.py::test_a_hyphenated_stock_phrase_is_blocked_with_no_live_values[The M is in-stock.]
+FAILED services/assistant/tests/test_rag09_reread_fixes.py::test_a_hyphenated_stock_phrase_is_blocked_with_no_live_values[The M is in
+FAILED services/assistant/tests/test_rag09_reread_fixes.py::test_a_hyphenated_stock_phrase_is_blocked_with_no_live_values[The M is in\u2011stock.]
+FAILED services/assistant/tests/test_rag09_reread_fixes.py::test_a_hyphenated_stock_phrase_is_blocked_with_no_live_values[The M is out-of-stock.]
+FAILED services/assistant/tests/test_rag09_reread_fixes.py::test_a_hyphenated_stock_phrase_is_blocked_with_no_live_values[The 3XL is sold-out.]
+FAILED services/assistant/tests/test_rag09_reread_fixes.py::test_a_hyphenated_stock_phrase_is_blocked_with_no_live_values[The M is out-of stock.]
+FAILED services/assistant/tests/test_rag09_reread_fixes.py::test_in_stock_with_hyphens_needs_every_check_above_zero[The M is in-stock.]
+FAILED services/assistant/tests/test_rag09_reread_fixes.py::test_in_stock_with_hyphens_needs_every_check_above_zero[The M is in
+FAILED services/assistant/tests/test_rag09_reread_fixes.py::test_in_stock_with_hyphens_needs_every_check_above_zero[The M is in\u2011stock.]
+FAILED services/assistant/tests/test_rag09_reread_fixes.py::test_out_of_stock_and_sold_out_with_hyphens_need_every_check_at_zero[The M is out-of-stock.]
+FAILED services/assistant/tests/test_rag09_reread_fixes.py::test_out_of_stock_and_sold_out_with_hyphens_need_every_check_at_zero[The 3XL is sold-out.]
+FAILED services/assistant/tests/test_rag09_reread_fixes.py::test_out_of_stock_and_sold_out_with_hyphens_need_every_check_at_zero[The M is out-of stock.]
+FAILED services/assistant/tests/test_rag09_reread_fixes.py::test_a_negated_hyphenated_phrase_flips_its_polarity
+FAILED services/assistant/tests/test_rag09_reread_fixes.py::test_a_hyphenated_count_phrase_is_read_as_a_count
+FAILED services/assistant/tests/test_rag09_reread_fixes.py::test_a_hyphenated_time_word_ends_the_range_exception
+FAILED services/assistant/tests/test_output_check_fixtures.py::test_trusted_fixture_text_passes_except_the_reviewed_hit_list
+51 failed, 8 passed in 1.18s
+
+=== output_check.py from e9401f7; tests from fbb1415 ===
+FAILED services/assistant/tests/test_rag09_reread_fixes.py::test_a_hyphenated_stock_phrase_is_blocked_with_no_live_values[The M is in-stock.]
+FAILED services/assistant/tests/test_rag09_reread_fixes.py::test_a_hyphenated_stock_phrase_is_blocked_with_no_live_values[The M is in
+FAILED services/assistant/tests/test_rag09_reread_fixes.py::test_a_hyphenated_stock_phrase_is_blocked_with_no_live_values[The M is in\u2011stock.]
+FAILED services/assistant/tests/test_rag09_reread_fixes.py::test_a_hyphenated_stock_phrase_is_blocked_with_no_live_values[The M is out-of-stock.]
+FAILED services/assistant/tests/test_rag09_reread_fixes.py::test_a_hyphenated_stock_phrase_is_blocked_with_no_live_values[The 3XL is sold-out.]
+FAILED services/assistant/tests/test_rag09_reread_fixes.py::test_a_hyphenated_stock_phrase_is_blocked_with_no_live_values[The M is out-of stock.]
+FAILED services/assistant/tests/test_rag09_reread_fixes.py::test_in_stock_with_hyphens_needs_every_check_above_zero[The M is in-stock.]
+FAILED services/assistant/tests/test_rag09_reread_fixes.py::test_in_stock_with_hyphens_needs_every_check_above_zero[The M is in
+FAILED services/assistant/tests/test_rag09_reread_fixes.py::test_in_stock_with_hyphens_needs_every_check_above_zero[The M is in\u2011stock.]
+FAILED services/assistant/tests/test_rag09_reread_fixes.py::test_out_of_stock_and_sold_out_with_hyphens_need_every_check_at_zero[The M is out-of-stock.]
+FAILED services/assistant/tests/test_rag09_reread_fixes.py::test_out_of_stock_and_sold_out_with_hyphens_need_every_check_at_zero[The 3XL is sold-out.]
+FAILED services/assistant/tests/test_rag09_reread_fixes.py::test_out_of_stock_and_sold_out_with_hyphens_need_every_check_at_zero[The M is out-of stock.]
+FAILED services/assistant/tests/test_rag09_reread_fixes.py::test_a_negated_hyphenated_phrase_flips_its_polarity
+FAILED services/assistant/tests/test_rag09_reread_fixes.py::test_a_hyphenated_count_phrase_is_read_as_a_count
+FAILED services/assistant/tests/test_rag09_reread_fixes.py::test_a_hyphenated_time_word_ends_the_range_exception
+15 failed, 44 passed in 1.22s
+
+=== output_check.py at fbb1415 ===
+59 passed in 1.18s
+(At 5f74e3f the 8 passing are cases the earlier check already met: the five finding sentences passing when every check agrees, "The jacket — in Sage — is available." (a literal "is"), a count before "available", and "`$279`" (the sign directly before the digits). At e9401f7 exactly the 15 hyphen tests fail; the fixture hit list passes there, because e9401f7 is the commit that first blocks P0001/P0008.)

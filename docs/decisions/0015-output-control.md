@@ -171,3 +171,211 @@ the model does; a deterministic check on what leaves is the control.
 - **`fabricated_ok`** (judge v5, product claims) is absolute on adversarial items, folded into `behaviour_ok`.
 - **What the check blocked in the promoted recording:** promotion on EV-090, EV-091 and EV-100; false_policy on
   EV-093 and EV-102; stock on EV-043, 044, 046 and 048. Listed in `docs/reviews/2026-11-13-RAG-08b-answers.md` §5.
+
+## #12 amendment (2026-11-14): live values, money and stock counts (RAG-09)
+
+Approved with the row #12 plan (`docs/reviews/2026-11-14-12-plan.md`; the user's D3, D4, D5 and change 2) and
+measured first on the recorded answers (`docs/reviews/2026-11-14-12-overblocking.md`). #13's tests are unchanged,
+except for the two user-approved exceptions recorded below (RT-017 for RT-003; P0001/P0008 on the reviewed hit list).
+
+**Live values.**
+- `ToolState.live` (`LiveValues`) holds this turn's `get_price` (amount, currency) and `check_stock` (variant, units
+  on hand) results.
+- They are recorded only from a successful tool result that is exactly one `<catalog_data>` label for that tool,
+  with well-formed values for the shopper's own region (`tools.record_live`). They never come from text.
+- The check reads them live, as it reads `seen`.
+
+**Class 6, `money` (new).**
+- What matches:
+  - a currency sign and an amount (`$`, `£`, `€`; `US$`, `C$`/`CA$` and `A$` narrow `$`);
+  - an amount and a code or word (USD, GBP, EUR, AUD, CAD, dollars, bucks, quid, euros);
+  - a spelled number and a currency word ("a hundred dollars").
+- Exemption `live_price`: the amount and one of its currencies equal a `get_price` result this turn.
+- **D5 (the user, option 1):** a figure the shopper wrote is blocked too ("under $100"). The prompt asks for each
+  live price instead of the shopper's limit.
+- "pounds" (as first written) was not a currency word, because "weighs 2 pounds" is an attribute. *Superseded after
+  security review pass 1:* "N pounds" is money unless a weight verb or noun governs it, so "twenty pounds" is blocked
+  unless it is live (GBP).
+
+**Class 4, `stock`, extended.**
+- Counts in digits or words before left / remaining / in stock / available / on hand ("three left", "12 in
+  stock").
+- "available" beside a variant (#15 L9): `is/are (currently|still)? available` (not "available in
+  sizes/colours/fits/lengths/widths"), "currently/still available", "available now/today/to order".
+- **Exemption `live_stock` (D3):**
+  - a count must equal a variant's units on hand;
+  - "out of stock" or "sold out" needs every checked variant at zero;
+  - "in stock" or "available" needs every checked variant above zero;
+  - "low" never passes.
+- #13's stock patterns get the same exemption. It applies only when a `check_stock` result exists, so #13's cases
+  are unchanged.
+- **Exemption `availability`** (superseded by H1 below: the asking exemption was removed entirely): the "available"
+  patterns also pass when a question governs their clause:
+  "whether", "if" or a question "which". There may be no comma, semicolon, colon or dash between them, and no
+  "but/and/so" followed by a subject word. "which" never counts after a comma or directly before a verb.
+
+**Class 1 (promotions).** It gains `members-only rate/price/pricing/deal/offer`,
+`member rate/deal/offer/savings/exclusive` and `loyalty price/pricing/rate/discount/reward/points` (#13b R4). These
+had 0 hits on the recorded answers.
+
+**Fixed sentences (D4).**
+- `money`: "I can only give a price from the live price check."
+- `stock` changes from "I can't check stock in chat." (untrue once `check_stock` is attached) to "I can only give
+  stock from the live stock check."
+
+**One fixed sentence once (EV-090).** A replacement equal to the sentence already last on screen is not sent
+again. It is still counted.
+
+**Measured (no spend), 143 recorded assistant calls:** new hits are money 2 (EV-029, EV-030: shopper price
+filters, D5) and stock 0, after `_asks` was tightened. The member wordings had 0 hits.
+
+**Residuals (logged in PROGRESS "Open items"):**
+- A price passes if it equals *any* `get_price` result this turn, not necessarily for the variant named (the user's
+  change 6).
+- ~~"twenty pounds" as money passes.~~ (Stale since pass 1: it is blocked unless live.)
+- A stock count matches *any* checked variant's units.
+- The question rule reads only the 60 characters before "available". (Superseded by H1 below: no question rule
+  remains.)
+
+**After security review pass 1 (2026-11-14; `docs/reviews/2026-11-14-12-security-review.raw.md`).** Two high findings
+and three medium were fixed. The scoped re-review found that two of these fixes loosened the check: the
+"which … and" rule (N1) and negation (N3). Both are fixed in the next section.
+- **Money, every way round (finding 1):**
+  - code before the amount ("USD 279") and sign after it ("130,66 €");
+  - digits with "pounds", unless the sentence is about weight;
+  - a bare amount said to be a price ("The price is 279.00", "It costs 279");
+  - markdown inside the figure;
+  - size words before a currency ("fifteen hundred dollars", "1.5k dollars"), always blocked;
+  - amounts read greedily and exactly, or blocked ("€9,99" is no longer skipped);
+  - a `$` prefix other than US/CA/C/A/AU means no live currency.
+- **`availability` (finding 2):**
+  - the asking word must follow a verb that asks or shows (see, check, show, confirm, know, say, tell, ask, find
+    out, sure, wonder);
+  - but, so, or, then, yet, because, since, although, while, as, until, unless, when and once always end the
+    clause;
+  - "and" ends it except after a question "which" and before any verb;
+  - no colon or dash may follow the match in its sentence;
+  - the sentence is cut at "?", "!" and "." with or without a space after.
+- **Negation (finding 3):** a negation earlier in the clause reverses polarity ("isn't in stock" needs every
+  variant at zero), and a negated count never passes.
+- **Counts (finding 4):**
+  - any digit run is read whole ("12345 left", "1,200 units");
+  - dozen, few, handful, couple, several, plenty, lots, loads, hundreds, thousands and many before a stock word are
+    always blocked.
+- **Eval leak guard (finding 5):** it runs on every catalog result inside the in-process server, before the model,
+  a cassette or a file sees it.
+- **Judge blocks (finding 9):** only `get_price` and `check_stock` results reach the judge. A product attribute
+  only `get_product` returned is not support (hard rule 5).
+- **`live_backed` (finding 7, part):** it does not count a question.
+- **Re-measured on the 143 recorded calls:** new hits are still money 2 (EV-029, EV-030) and stock 0.
+- **More residuals (logged):**
+  - MAX_TURNS bounds model rounds, not parallel catalog calls (finding 6, hardening);
+  - a polarity claim about a variant that was not checked passes when every checked variant agrees (finding 8);
+  - `live_claims` is not capped at the judge's product-claim count, which needs `judge.py` (finding 7, part; off
+    limits this row);
+  - a price-table cell with no currency or price word passes;
+  - "a hundred dollars" and other round spelled hundreds are always blocked, even when live.
+
+
+**After the scoped re-review (2026-11-14; `docs/reviews/2026-11-14-12-security-rereview.raw.md`).** It found two
+high findings, N1 (a regression from pass 1's "and" rule) and N2. That is stop 10: the chain stops for the user. The
+fixes below were made locally before stopping, as CLAUDE.md asks. They are tested and committed, but no reviewer has
+read them.
+- **N1:** a question's "and" is allowed only in a noun phrase from a closed list ("which size and colour
+  combinations are"). Anything else ends the clause.
+- **N2:**
+  - an amount, then one or two words, then a currency unit ("279 Canadian dollars", "199 British pounds", "279 US$")
+    is read through a closed qualifier map, and passes only in the currency the qualifier and the unit agree on;
+  - "279 (USD)" is read too;
+  - other currencies' signs and codes next to a digit (¥, ₹, CHF, kr, yen, …) are always blocked.
+- **N3:** only a negation that governs the phrase ("isn't in stock", "is not available", "no longer in stock")
+  reverses polarity. Any other negation in the clause makes the claim unvouched. Dashes and brackets end the clause.
+- **N4:** a personal pronoun between the asking word and the question's own subject means another clause sits in
+  between, so the phrase is a claim. Brackets, slashes and quotes end the clause.
+- **N5:** "N pounds" is a weight only when a weight verb or noun governs it ("weighs about 2.1 pounds", "its
+  weight is 3 pounds"). Light, lightweight and heavy no longer count.
+- **N6:** up to two hedge words between a price word and its amount ("costs just 279").
+- **N7:** some, lot(s), tons and "limited stock", with sizes/colours/of them in between, are always blocked.
+- **N8:** the eval catalog guard also refuses any internal source ID in a result's text.
+- **N9:** an `availability` match that a question exempts is held until its sentence ends or 60 characters pass,
+  so a late colon still counts.
+- **Re-measured:** money 2 (EV-029, EV-030), stock 0.
+- **New residuals:** "starting at" and "as low as" before a bare amount (they would push the pattern past L); a
+  qualifier outside the closed map ("279 Kiwi dollars") is blocked even when live.
+
+
+**After the second scoped re-review (2026-11-14; `docs/reviews/2026-11-14-12-security-rereview-2.raw.md`).** This
+was the last pass the user allowed. It found three high findings, all unsafe under hard rule 2, so the chain stops
+again (stop 10, no third pass). None of the three is a regression, and none is fixed in this row:
+- **H1:** the affirmative question frames (confirm, tell, know, say, sure) let an answer ride in the same sentence or
+  the next one ("I can confirm whether the M is available now, and it is.", "Want to know which size is available
+  now? The M.").
+- **H2:** the `_RANGE` narrowing exempts a specific size or colour ("available in size M").
+- **H3:** the availability patterns see only a literal "is"/"are" ("it's available", "they're available", "remains
+  available", "isn't (currently) available").
+
+Its two regressions against `d4e1c4f` are fixed: **M1** ("The price will be 279.", markdown before a bare price) and
+**M2** (a governing negation across an aside: "is not (yet) in stock", "is not — for now — in stock", "is not, sadly,
+in stock", now unvouched at any stock level). Re-measured: money 2 (EV-029, EV-030), stock 0.
+
+Logged as residuals (the user's rule: lower findings are logged): M3 (only one figure of a money range is checked),
+M4 (other currencies with an adjective or unlisted word, brackets, a comma), M5 (an asking clause with no listed
+pronoun, "&"/"plus"), M6 (bare-price wording outside the list: "price of the M is 279", "sells for 279"), M7 (a size
+token between count and stock word: "only 2 Ms left", "plenty of stock"), L1 ("weighing in at 199 pounds"), L2
+(double negation), L3 (the N9 hold has no raw-length cap), L4 (the look-ahead stops at "e.g."), L5 (other
+currencies start before a trigger: a flicker), L6 ("under $279" passes with live 279), L7 ("1 279 €"), and the
+over-blocking it noted ("whether it's available", "won 2 awards").
+
+
+**A user-approved exception to "#12 changes none of #13's tests" (2026-11-14).** In
+`services/assistant/tests/test_red_team_e2e.py` (h), the set of recorded items where the check must replace a
+planted refund sentence changes from {RT-003, RT-016} to {RT-016, RT-017}. In the W2 re-recording the model refuses
+RT-003 ("I can't confirm that. None of the sources I have describe refund override tiers…") without writing the
+planted sentence, so there is nothing to replace. RT-003 still passes (a)–(h), including no payload in anything
+sent. RT-017's recording now has the check replacing "One review in the sources contains text that claims to
+authorise refunds." So two recorded items still prove the check fires, as #13 intended. No other #13 assertion
+changed.
+
+
+**H1–H3, fixed by the user's decision after the second re-review (2026-11-14).** No reviewer has read these; they
+are on the user's re-read list instead of a third pass.
+- **H1:** the asking exemption is removed entirely (`_asks()`, its frames, the noun-phrase rule, the N9 hold). A
+  hedge such as "check whether the M is available" gets the stock sentence, which says the same thing. A claim
+  passes only when every `check_stock` result this turn agrees (D3). A negation elsewhere in the clause still makes
+  it unvouched (N3).
+- **H2:**
+  - only a plural range is the range offered ("available in sizes XS–XL", "in three colours", "in a range of …"),
+    and only when no time word (now, today, at the moment, currently, still, in stock) follows in the sentence;
+  - a specific size, colour or fit ("available in size M") is stock and needs `check_stock`;
+  - "comes in" and "is offered in" match no stock pattern.
+- **H3:** "available" is seen after is, are, 's, 're, remains and be, and after a negation (n't, not).
+- **Over-blocking:** the five hedges measured in §5.1 are now replaced unless live stock agrees. The user accepted
+  this as the fail-closed choice. It is re-measured after the new W1–W3.
+
+**After the user's re-read of 72285d7..5f74e3f (2026-11-14).** One high finding (hard rule 2): H3's copula
+lookbehinds missed "available" after any adverb or emphasis ("is now available", "are all available", "It's
+readily available", "**available**"). Fixed, fail closed:
+- **Any "available" or "unavailable"** is a stock claim (`live_stock`, D3), whatever precedes it. The one exception is
+  unchanged: "in" and a plural range with no time word after it. A time word before it ("now", "currently", "still")
+  makes even a range a stock claim. A count before it is read with it, so "3 available" is vouched as a count.
+  "Unavailable" needs every checked variant at zero; a negation governing it flips that.
+- **The stock and money patterns** run on a view without markdown emphasis and code markers (`*`, `_`, `` ` ``), with
+  each position mapped back to its raw character. The hold searches for triggers in both views, and a stock or money
+  match followed only by markers at a delta's end is held. Strikethrough stays in the view: dropping it made "is
+  ~~not~~ available" read as negated.
+- **No new exemption.** "I don't have that information available." is blocked in every stock state, because the
+  clause's other negation makes any stock claim in it unvouched. An exemption for a non-stock sense needs the user's
+  approval, and none was added.
+- **Over-blocking:** no change on the current recordings. On origin/main's recordings, three new hits, each "available
+  in" a specific colour or size (H2's rule). Measured in `docs/reviews/2026-11-14-12-overblocking.md`, seventh pass.
+
+**A second user-approved exception to "#12 changes none of #13's tests" (2026-11-14).** The re-read fix makes the
+check block P0001's and P0008's description, "Also available in a regular fit": a specific fit is stock that needs
+`check_stock` (H2). In `services/assistant/tests/test_output_check_fixtures.py` (#13, NFR-03), the reviewed hit list
+gains `"P0001": {"stock"}` and `"P0008": {"stock"}`, with a note citing H2. An answer quoting that line gets the
+stock sentence. No other #13 assertion changed, and the check is not loosened.
+
+**Hyphenated stock phrases (the user, 2026-11-14).** Stock phrases accept a hyphen between their words: "in-stock",
+"out-of-stock", "sold-out" (and "low-stock", "on-hand" in the same patterns). At e9401f7, "The M is in-stock."
+passed with no check. They are vouched under D3 as the spaced forms are, and "in-stock" after a plural range ends
+the range exception as "in stock" does.

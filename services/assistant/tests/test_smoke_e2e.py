@@ -20,13 +20,16 @@ import pytest
 from fastapi.testclient import TestClient
 
 from northwind_assistant.caller import Caller
+from northwind_assistant.catalog_client import CatalogEndpoint
+from northwind_assistant.output_check import FIXED_SENTENCES
 from northwind_assistant.rag_client import RagEndpoint
 from northwind_assistant.turn import Citations, TextDelta, TurnEvent, stream_answer
 from northwind_assistant.usage import TELEMETRY_LOGGER
 from northwind_common.llm import agent_runtime
-from northwind_data.textscan import find_money_or_stock
 from northwind_gateway.app import app
 from northwind_gateway.chat import ChatServices, chat_services
+from northwind_mcp_catalog import testing as catalog_testing
+from northwind_mcp_catalog.live import FixtureCatalog
 from northwind_mcp_rag.testing import KEY, CallerIndex, serve_retriever
 from northwind_rag.cli import DEFAULT_DATABASE_URL
 from northwind_rag.embedding import CachedEmbedder, FastEmbedEmbedder
@@ -62,16 +65,23 @@ def connect() -> psycopg.Connection:
     return psycopg.connect(url, autocommit=True)
 
 
-def ask(question: str, root: Path) -> list[TurnEvent]:
-    """Through a real mcp-rag over the index, ranking on frozen vectors (decision 0012)."""
+def ask(question: str, root: Path, live: FixtureCatalog | None = None) -> list[TurnEvent]:
+    """Through a real mcp-rag over the index, ranking on frozen vectors (decision 0012), and a real
+    mcp-catalog over the verified fixtures or the given live store (row #12: the production
+    surface)."""
     runtime = agent_runtime(root=root)
     index = CallerIndex(connect, CachedEmbedder(FastEmbedEmbedder()))
+    store = live if live is not None else FixtureCatalog()
 
-    async def collect(rag: RagEndpoint) -> list[TurnEvent]:
-        return [e async for e in stream_answer(question, Caller(region="US"), rag, runtime)]
+    async def collect(rag: RagEndpoint, catalog: CatalogEndpoint) -> list[TurnEvent]:
+        caller = Caller(region="US")
+        return [e async for e in stream_answer(question, caller, rag, runtime, catalog)]
 
-    with serve_retriever(index, Caller) as (url, _):
-        return asyncio.run(collect(RagEndpoint(url, KEY)))
+    with (
+        serve_retriever(index, Caller) as (url, _),
+        catalog_testing.running(catalog_testing.server(store, key=KEY)) as catalog_url,
+    ):
+        return asyncio.run(collect(RagEndpoint(url, KEY), CatalogEndpoint(catalog_url, KEY)))
 
 
 def answer_of(events: list[TurnEvent]) -> str:
@@ -102,16 +112,59 @@ def test_a_product_question_streams_and_cites_a_source(
     )
 
 
-def test_a_price_question_gets_the_product_page_not_a_price(llm_proxy: Any, tmp_path: Path) -> None:
-    """Row #5's smoke criterion: this one recorded answer quotes no price and points to the product
-    page. Not evidence for hard rule 2: nothing in its context could leak, and in replay the answer
-    cannot change. Row #12 owns the rule."""
-    events = ask(QUESTIONS["price"], tmp_path)
-    assert isinstance(events[-1], Citations)
-    answer = answer_of(events)
-    assert find_money_or_stock(answer) == []
-    assert not PROMOTION.search(answer)  # textscan can't see these until row #7
-    assert "product page" in answer.lower()
+# Row #12 (RAG-09, the user's D7): replaces row #5's smoke criterion (no price, "product page").
+# Prices now come from `get_price`, so the test changes the live price while the catalog runs.
+PRICE_PRODUCT = "P0011"  # the Brindlemoor Cairn Storm Jacket, `QUESTIONS["price"]`
+PRICE_A, PRICE_B = "263.40", "231.75"  # not the fixture price, so neither can come from memory
+
+
+@pytest.mark.req("RAG-09")
+def test_a_price_changed_while_the_catalog_runs_is_the_one_quoted(
+    llm_proxy: Any, tmp_path: Path
+) -> None:
+    """Every US variant gets one price, so the answer does not depend on which variant the model
+    checks; then the price changes, and the same question gets the new one. Recorded, so in replay
+    the answers cannot change; the free proof of live reads is `test_rag09_*`."""
+    live = FixtureCatalog()
+    variants = [v.variant_id for v in live.variants_of(PRICE_PRODUCT)]
+    answers = []
+    for amount in (PRICE_A, PRICE_B):
+        for variant in variants:
+            live.set_price(variant, "US", amount, "USD")
+        events = ask(QUESTIONS["price"], tmp_path / amount, live)
+        assert isinstance(events[-1], Citations)
+        answers.append(answer_of(events))
+    first, second = answers
+    assert PRICE_A in first and PRICE_B not in first
+    assert PRICE_B in second and PRICE_A not in second
+    assert FIXED_SENTENCES["money"] not in first + second  # the quoted price was a live one
+    assert not PROMOTION.search(first + second)
+
+
+STOCK_QUESTION = (
+    "Is the Tidewick Harbor Rain Jacket in Black relaxed fit available in 3XL?"  # EV-048
+)
+STOCK_VARIANT = "P0001-BLK-REL-3XL"
+OUT = re.compile(r"\bout of stock\b|\bsold out\b|\bnot (?:currently )?in stock\b", re.IGNORECASE)
+
+
+@pytest.mark.req("RAG-09")
+def test_a_stock_change_while_the_catalog_runs_is_the_one_stated(
+    llm_proxy: Any, tmp_path: Path
+) -> None:
+    """EV-048's query (frozen vector; no new query, so `data/embeddings` is untouched), with the
+    variant at zero, then at three."""
+    live = FixtureCatalog()
+    answers = []
+    for on_hand in (0, 3):
+        live.set_stock(STOCK_VARIANT, "US", on_hand)
+        events = ask(STOCK_QUESTION, tmp_path / str(on_hand), live)
+        assert isinstance(events[-1], Citations)
+        answers.append(answer_of(events))
+    empty, three = answers
+    assert OUT.search(empty)
+    assert not OUT.search(three) and re.search(r"\bin stock\b|\b3\b|\bthree\b", three, re.I)
+    assert FIXED_SENTENCES["stock"] not in empty + three
 
 
 def received(body: str) -> tuple[str, str, list[str]]:
@@ -158,8 +211,13 @@ def injection_turn(
     one turn, so they replay the same recording."""
     monkeypatch.setenv("DEV_SHOPPER_REGION", "US")
     index = CallerIndex(connect, CachedEmbedder(FastEmbedEmbedder()))
-    with serve_retriever(index, Caller) as (url, _):
-        services = ChatServices(RagEndpoint(url, KEY), agent_runtime(root=tmp_path))
+    with (
+        serve_retriever(index, Caller) as (url, _),
+        catalog_testing.running(catalog_testing.server(key=KEY)) as catalog_url,
+    ):
+        services = ChatServices(
+            RagEndpoint(url, KEY), agent_runtime(root=tmp_path), CatalogEndpoint(catalog_url, KEY)
+        )
         app.dependency_overrides[chat_services] = lambda: services
         try:
             response = TestClient(app).post("/api/chat", json={"message": QUESTIONS["injection"]})

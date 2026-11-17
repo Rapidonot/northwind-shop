@@ -8,6 +8,7 @@ dependencies = [
     "northwind-assistant",
     "northwind-common",
     "northwind-llm-replay",
+    "northwind-mcp-catalog",
     "northwind-mcp-rag",
     "northwind-rag",
     "psycopg[binary]>=3.3.7",
@@ -17,6 +18,7 @@ dependencies = [
 northwind-assistant = { workspace = true }
 northwind-common = { workspace = true }
 northwind-llm-replay = { workspace = true }
+northwind-mcp-catalog = { workspace = true }
 northwind-mcp-rag = { workspace = true }
 northwind-rag = { workspace = true }
 

@@ -3,8 +3,8 @@
 The signing key comes only from `NORTHWIND_MCP_TOKEN_KEY` (hard rule 4). The server refuses to start
 without it, and on fixtures that do not match their manifest (Q4: `FixtureCatalog` verifies before
 it seeds). It listens on 127.0.0.1 only, one worker, on this worktree's port
-(`northwind_common.localenv.mcp_catalog_port`). Nothing starts it yet: the assistant attaches the
-catalog at #12.
+(`northwind_common.localenv.mcp_catalog_port`). `make dev` starts it beside mcp-rag, and the
+gateway's turns reach it at `localenv.mcp_catalog_url` (row #12).
 """
 
 from __future__ import annotations

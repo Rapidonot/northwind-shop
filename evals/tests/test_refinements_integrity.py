@@ -112,3 +112,92 @@ def test_a_base_with_no_refinements_file_has_nothing_to_protect(
     write(REFINEMENTS, [entry("EV-1", 1)])
     commit("first recording")
     assert integrity_problems("main", BASELINE) == []
+
+
+# ---- row #12: a re-recorded answerer replaces its own refinements -------------------------------
+
+
+def baseline_with(prompt: str) -> str:
+    answerer = f"assistant:v1:claude-sonnet-5-5:prompt-{prompt}:check-0cb61e75"
+    return json.dumps({"overrides": [], "answerer_id": answerer})
+
+
+@pytest.fixture
+def promoted_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    monkeypatch.chdir(tmp_path)
+    git("init", "-q", "-b", "main")
+    git("config", "user.email", "test@example.invalid")
+    git("config", "user.name", "test")
+    write(BASELINE, [baseline_with("aaaaaaaa")])
+    write(REFINEMENTS, [entry("EV-1", 1), entry("EV-2", 1)])
+    commit("base")
+    git("switch", "-q", "-c", "feature")
+    return tmp_path
+
+
+@pytest.mark.req("RAG-09")
+def test_a_new_answerer_prompt_lets_its_refinements_change_and_reports_each(
+    promoted_repo: Path,
+) -> None:
+    from northwind_evals.integrity import replaced_refinements
+
+    write(BASELINE, [baseline_with("bbbbbbbb")])
+    write(REFINEMENTS, [entry("EV-1", 1, "Re-recorded."), entry("EV-3", 1)])
+    commit("promote a re-recorded answerer")
+    assert integrity_problems("main", BASELINE) == []
+    replaced = replaced_refinements("main", BASELINE)
+    assert [(r["item_id"], r["n"]) for r in replaced] == [("EV-1", 1), ("EV-2", 1)]
+    changed, dropped = replaced
+    assert len(changed["old"]) == 16 and changed["new"] not in ("-", changed["old"])
+    assert dropped["new"] == "-"
+
+
+@pytest.mark.req("RAG-09")
+def test_the_same_answerer_prompt_keeps_refinements_add_only(promoted_repo: Path) -> None:
+    from northwind_evals.integrity import replaced_refinements
+
+    write(BASELINE, [baseline_with("aaaaaaaa").replace("0cb61e75", "11111111")])  # check part only
+    write(REFINEMENTS, [entry("EV-1", 1, "Tampered.")])
+    commit("edit")
+    problems = integrity_problems("main", BASELINE)
+    assert f"{REFINEMENTS}: refinement EV-1#1 changed (HEAD)" in problems
+    assert f"{REFINEMENTS}: refinement EV-2#1 removed (HEAD)" in problems
+    assert replaced_refinements("main", BASELINE) == []
+
+
+@pytest.mark.req("RAG-09")
+def test_an_uncommitted_baseline_change_does_not_open_the_exemption(promoted_repo: Path) -> None:
+    # Both the committed and the on-disk baseline must hold the new prompt part.
+    write(BASELINE, [baseline_with("bbbbbbbb")])
+    write(REFINEMENTS, [entry("EV-1", 1, "Re-recorded.")])
+    problems = integrity_problems("main", BASELINE)
+    assert f"{REFINEMENTS}: refinement EV-1#1 changed (disk)" in problems
+
+
+@pytest.mark.req("RAG-09")
+def test_an_unreadable_answerer_id_keeps_refinements_add_only(promoted_repo: Path) -> None:
+    write(BASELINE, [json.dumps({"overrides": [], "answerer_id": "assistant:v1:m"})])
+    write(REFINEMENTS, [entry("EV-1", 1, "Re-recorded.")])
+    commit("no prompt part")
+    assert f"{REFINEMENTS}: refinement EV-1#1 changed (HEAD)" in integrity_problems(
+        "main", BASELINE
+    )
+
+
+@pytest.mark.req("RAG-09")
+def test_cmd_integrity_prints_each_replaced_refinement(
+    promoted_repo: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import argparse
+
+    from northwind_evals import cli
+
+    monkeypatch.setattr(cli, "added_frozen_vectors", lambda _commit: {})
+    monkeypatch.setattr(cli, "added_known_failures", lambda _commit, _path: [])
+    write(BASELINE, [baseline_with("bbbbbbbb")])
+    write(REFINEMENTS, [entry("EV-1", 1, "Re-recorded.")])
+    commit("promote")
+    assert cli.cmd_integrity(argparse.Namespace(base="main")) == 0
+    out = capsys.readouterr().out
+    lines = [line for line in out.splitlines() if "refinement replaced:" in line]
+    assert len(lines) == 2 and '"item_id": "EV-1"' in lines[0] and '"new": "-"' in lines[1]

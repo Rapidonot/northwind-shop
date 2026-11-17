@@ -20,7 +20,7 @@ from northwind_assistant.rag_client import QUIET_LOGGERS, McpRagSearcher, RagEnd
 from northwind_assistant.tools import ALLOWED_TOOL
 from northwind_assistant.turn import TurnError, TurnEvent, stream_answer
 from northwind_common.llm import agent_runtime
-from northwind_common.mcp_token import verify
+from northwind_common.mcp_token import RAG_SERVER, verify_for
 from northwind_llm_replay.scripted import ScriptedLLM
 from northwind_mcp_rag.testing import KEY, serve_retriever
 from northwind_rag.retrieval import RetrievedChunk
@@ -105,8 +105,10 @@ def test_without_the_quieting_the_message_would_reach_the_debug_log(
 
 def test_the_endpoint_mints_a_shopper_token_for_the_caller_and_hides_its_key() -> None:
     endpoint = RagEndpoint("http://127.0.0.1:9/mcp", KEY)
-    claims = verify(endpoint.mint(Caller(region="EU")), key=KEY)
+    # Row #12 (#10b re-review P1): bare `verify` is private; `verify_for` also checks the server.
+    claims = verify_for(endpoint.mint(Caller(region="EU")), key=KEY, server=RAG_SERVER)
     assert (claims.aud, claims.region, claims.agent) == ("shopper", "EU", "shopper-assistant")
+    assert claims.srv == RAG_SERVER
     assert KEY.decode() not in repr(endpoint)
     searcher = McpRagSearcher("http://127.0.0.1:9/mcp", "v1.secret.token")
     assert "secret" not in repr(searcher)

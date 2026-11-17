@@ -1,0 +1,72 @@
+"""Row #12, the re-read fix: the check at 5f74e3f vs the new check, on every recorded assistant call
+(origin/main's recordings and the current ones), each call with the live values its request held."""
+import glob, json, os, re, sys, importlib.util
+from collections import Counter
+from decimal import Decimal
+from pathlib import Path
+
+SCRATCH = Path(__file__).parent
+spec = importlib.util.spec_from_file_location("prev_output_check", SCRATCH / "prevcheck/prev_output_check.py")
+prev = importlib.util.module_from_spec(spec); sys.modules["prev_output_check"] = prev; spec.loader.exec_module(prev)
+from northwind_assistant import output_check as new
+from northwind_common import catalog_tool
+
+def deltas(body):
+    out = []
+    for line in body.splitlines():
+        if line.startswith("data: "):
+            try: d = json.loads(line[6:])
+            except ValueError: continue
+            if d.get("type") == "content_block_delta" and d["delta"].get("type") == "text_delta":
+                out.append(d["delta"]["text"])
+    return "".join(out)
+
+def live_from(request_body):
+    prices, stock = set(), {}
+    try: req = json.loads(request_body)
+    except (TypeError, ValueError): return prices, stock
+    for msg in req.get("messages", []):
+        content = msg.get("content")
+        if not isinstance(content, list): continue
+        for block in content:
+            if block.get("type") != "tool_result" or block.get("is_error"): continue
+            parts = block.get("content")
+            texts = [parts] if isinstance(parts, str) else [p.get("text", "") for p in parts or [] if isinstance(p, dict)]
+            for t in texts:
+                got = catalog_tool.unlabel(t)
+                if not got: continue
+                name, body = got
+                if not isinstance(body, dict): continue
+                if name == "get_price" and isinstance(body.get("amount"), str):
+                    prices.add((Decimal(body["amount"]), body["currency"]))
+                elif name == "check_stock" and isinstance(body.get("on_hand"), int):
+                    stock[body["variant_id"]] = body["on_hand"]
+    return prices, stock
+
+def split(t): return [s for s in re.split(r"(?<=[.!?])\s+|\n", t) if s.strip()]
+
+for label, root in [("current", "cassettes"), ("origin/main", os.environ["TMPDIR"] + "/oldcass/cassettes")]:
+    totals, calls, rows = Counter(), 0, []
+    for suite in ["eval-answers", "assistant-smoke", "assistant-redteam"]:
+        for f in sorted(glob.glob(f"{root}/{suite}/*.json")):
+            d = json.load(open(f))
+            if d["kind"] != "sse": continue
+            text = deltas(d["body"])
+            if not text.strip(): continue
+            calls += 1
+            prices, stock = live_from(d["match"].get("body"))
+            lp = prev.LiveValues(prices=set(prices), stock=dict(stock))
+            ln = new.LiveValues(prices=set(prices), stock=dict(stock))
+            h_old, h_new = prev.hits(text, live=lp), new.hits(text, live=ln)
+            diff = {c: h_new.get(c, 0) - h_old.get(c, 0) for c in set(h_old) | set(h_new)}
+            diff = {c: n for c, n in diff.items() if n}
+            if diff:
+                s_old, s_new = prev.check_text(text, live=lp), new.check_text(text, live=ln)
+                rows.append((suite, d["test_id"], diff, bool(stock), split(text), s_old, s_new))
+                totals.update(diff)
+    print(f"=== {label}: assistant calls scanned: {calls}; hits new minus prev: {dict(totals)}")
+    for suite, tid, diff, checked, sents, s_old, s_new in rows:
+        print(f"--- {suite} {tid} {diff} (check_stock this turn: {checked})")
+        for s in sents:
+            if s in s_old and s not in s_new: print("   BLOCKED NOW:", s.strip()[:300])
+            elif s not in s_old and s in s_new: print("   PASSES NOW:", s.strip()[:300])

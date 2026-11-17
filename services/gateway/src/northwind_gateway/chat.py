@@ -24,11 +24,12 @@ from fastapi.sse import EventSourceResponse, ServerSentEvent
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from northwind_assistant.caller import Caller
+from northwind_assistant.catalog_client import CatalogEndpoint
 from northwind_assistant.rag_client import RagEndpoint
 from northwind_assistant.turn import Citations, Reset, TextDelta, TurnError, stream_answer
 from northwind_common.cards import contains_card_data
 from northwind_common.llm import AgentRuntime, agent_runtime
-from northwind_common.localenv import mcp_rag_url
+from northwind_common.localenv import mcp_catalog_url, mcp_rag_url
 from northwind_common.mcp_token import signing_key
 from northwind_gateway.settings import current_caller
 
@@ -88,14 +89,23 @@ def checked_message(body: ChatRequest) -> str:
 class ChatServices:
     rag: RagEndpoint
     runtime: AgentRuntime
+    # Row #12 (RAG-09): live price and stock. `chat_services` always sets it (a test pins that);
+    # `None` only in gateway tests that predate #12 and never reach a model.
+    catalog: CatalogEndpoint | None = None
 
 
 @lru_cache(maxsize=1)
 def chat_services() -> ChatServices:
     """Once per process: each `agent_runtime()` makes a temp directory, and it fixes the proxy URL
     when called, so this stays lazy. Searches go to mcp-rag (CC-10), which holds the index and the
-    embedding model; the token key comes only from the environment (hard rule 4)."""
-    return ChatServices(RagEndpoint(mcp_rag_url(), signing_key()), agent_runtime())
+    embedding model; live price and stock to mcp-catalog (row #12). The token key comes only from
+    the environment (hard rule 4)."""
+    key = signing_key()
+    return ChatServices(
+        RagEndpoint(mcp_rag_url(), key),
+        agent_runtime(),
+        CatalogEndpoint(mcp_catalog_url(), key),
+    )
 
 
 def _event(event: Any) -> ServerSentEvent:
@@ -116,7 +126,9 @@ async def chat(
 ) -> AsyncIterable[ServerSentEvent]:
     failed = False
     try:
-        async for event in stream_answer(message, caller, services.rag, services.runtime):
+        async for event in stream_answer(
+            message, caller, services.rag, services.runtime, services.catalog
+        ):
             failed = failed or isinstance(event, TurnError)
             yield _event(event)
     except Exception as error:  # noqa: BLE001 - its text must not reach the shopper

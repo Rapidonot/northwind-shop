@@ -95,14 +95,13 @@ def mint(
     agent: str,
     key: bytes,
     now: float | None = None,
+    server: str,
     ttl: int = TTL_SECONDS,
-    server: str = RAG_SERVER,
 ) -> tuple[str, Claims]:
     """A fresh token and its claims, for one server. The turn id is new each time.
 
-    `server` defaults to northwind-rag only because the one production minter,
-    `northwind_assistant.rag_client`, is not changed at #10b; #12 passes it explicitly and removes
-    the default. A forgotten `server` gives a rag token, which every other server refuses."""
+    `server` has no default (row #12, #10b security review L4): every minter names the server the
+    token is for, so a forgotten argument is a `TypeError`, never a token for the wrong server."""
     if server not in SERVERS:
         raise ValueError("unknown server")
     if AGENT_AUDIENCE.get(agent) != audience:
@@ -155,9 +154,10 @@ def _claims(body: Any, now: float) -> Claims:
     return Claims(aud=aud, region=region, agent=agent, turn=turn, exp=exp, srv=srv)
 
 
-def verify(token: object, *, key: bytes, now: float | None = None) -> Claims:
-    """The claims of a valid token, else `TokenError`. The signature is checked, in constant
-    time, before anything inside the token is read."""
+def _verify(token: object, *, key: bytes, now: float | None = None) -> Claims:
+    """The claims of a valid token for any server, else `TokenError`. The signature is checked, in
+    constant time, before anything inside the token is read. Private (row #12, #10b re-review P1):
+    `verify_for` is the only public check, so no gate accepts a token minted for another server."""
     if not isinstance(token, str) or len(token) > 2048 or not token.isascii():
         raise TokenError
     parts = token.split(".")
@@ -174,11 +174,11 @@ def verify(token: object, *, key: bytes, now: float | None = None) -> Claims:
 
 
 def verify_for(token: object, *, key: bytes, server: str, now: float | None = None) -> Claims:
-    """`verify`, and the token must have been minted for `server` (L4). A server's gate calls this,
-    never bare `verify`; a token for another server is the same bare `TokenError`."""
+    """`_verify`, and the token must have been minted for `server` (L4). The only public check: a
+    token for another server is the same bare `TokenError`."""
     if server not in SERVERS:
         raise TokenError
-    claims = verify(token, key=key, now=now)
+    claims = _verify(token, key=key, now=now)
     if not hmac.compare_digest(claims.srv.encode(), server.encode()):
         raise TokenError
     return claims

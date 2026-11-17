@@ -18,7 +18,11 @@ from typing import Any
 
 import pytest
 
+from northwind_assistant.rag_client import AGENT
 from northwind_assistant.tools import ALLOWED_TOOL
+
+# Row #12's RAG-09 stock question: EV-048's query, as `test_smoke_e2e.STOCK_QUESTION` asks it.
+STOCK_QUESTION = "Is the Tidewick Harbor Rain Jacket in Black relaxed fit available in 3XL?"
 
 REPO = Path(__file__).resolve().parents[3]
 SUITE = REPO / "cassettes" / "assistant-smoke"
@@ -102,9 +106,10 @@ def test_later_questions_read_the_prefix_from_cache() -> None:
 @pytest.mark.req("SA-02")
 def test_the_recording_holds_only_this_design() -> None:
     """Every question is there, in the fenced format, and no older recording is left behind. The
-    suite is the 5 portal questions plus RAG-03's 8 contradiction questions, each exactly once."""
-    questions = [*QUESTIONS.values(), *CONTRADICTION_QUESTIONS]
-    assert len(questions) == 13 and len(set(questions)) == 13
+    suite is the 5 portal questions plus RAG-03's 8 contradiction questions plus row #12's stock
+    question (EV-048's query; the user's approval under stop 5, 2026-11-14), each exactly once."""
+    questions = [*QUESTIONS.values(), *CONTRADICTION_QUESTIONS, STOCK_QUESTION]
+    assert len(questions) == 14 and len(set(questions)) == 14
     turns = [first_turn(cassette) for cassette in recorded() if cassette["seq"] == 0]
     assert len(turns) == len(questions)
     assert all("<sources>" in turn and "<shopper_message>" in turn for turn in turns)
@@ -129,9 +134,18 @@ def test_the_injection_question_really_put_the_planted_review_in_front_of_the_mo
 @pytest.mark.req("SA-02")
 @pytest.mark.req("NFR-03")
 def test_no_recorded_response_calls_anything_but_the_one_tool() -> None:
+    """Row #12 (the user's approval under stop 5, 2026-11-14): retrieve_context plus exactly the
+    five catalog tools `tool_scopes` gives the assistant, nothing more."""
+    from northwind_common.mcp_token import CATALOG_SERVER
+    from northwind_common.tool_scopes import allowed_tools
+
+    scoped = {f"mcp__{CATALOG_SERVER}__{name}" for name in allowed_tools(AGENT, CATALOG_SERVER)}
+    assert len(scoped) == 5
+    allowed = {ALLOWED_TOOL, *scoped}
     for cassette in recorded():
-        assert [tool["name"] for tool in body(cassette)["tools"]] == [ALLOWED_TOOL]
-        assert set(tool_calls(cassette["body"])) <= {ALLOWED_TOOL}
+        assert {tool["name"] for tool in body(cassette)["tools"]} == allowed
+        assert len(body(cassette)["tools"]) == 6
+        assert set(tool_calls(cassette["body"])) <= allowed
 
 
 @pytest.mark.req("SA-02")
