@@ -1,0 +1,37 @@
+# Row #32 judged phase: failing-first log (2026-11-17)
+
+## The judge request pin (replaces test_judge_py_is_unchanged_from_main; the user's answer 2)
+
+1. Placeholder hash, judge.py = main's v5: FAILED (assert 'd93877e3…150b081e' == '0000…'). The measured value is v5's request.
+2. Pinned, judge.py = main's v5: 1 passed, 23 deselected in 1.11s
+3. One-character mutation of SYSTEM_PROMPT ('assistant.' -> 'assistant!'): diff:
+     30c30
+     < You assess one answer from a retail shopping assistant. Everything inside <sources>, <question>, \
+     ---
+     > You assess one answer from a retail shopping assistant! Everything inside <sources>, <question>, \
+   result: 1 failed, 23 deselected in 1.10s
+4. Restored (git diff of judge.py is empty: yes): 1 passed, 23 deselected in 0.94s
+
+## M1 (A-narrow) and F7 tests, before the code
+
+evals/tests/test_rag12_judge_v6.py at judge v5: ImportError while importing test module '/Users/rapido/Projects/northwind-shop-b/evals/tests/test_rag12_judge_v6.py'.
+1 error in 0.76s
+
+evals/tests/test_rag12_judge_v6.py after judge.py v6 only (before the harness F7 cap): 2 failed, 43 passed (test_live_claims_are_capped_at_the_product_claims, test_a_verdict_without_kinds_takes_no_live_discount)
+After the harness F7 cap: 45 passed.
+
+## Mutation checks on M1 and F7 (each run against test_rag12_judge_v6, test_rag08b_judge_v5, test_rag09_live_sources)
+
+KILLED  no exemption: 1 failed, 18 passed in 1.30s ['FAILED evals/tests/test_rag12_judge_v6.py::test_a_pure_live_lookup_offer_stays_site[I can look up the live price of the Tidewick Marsh Overshirt.]']
+KILLED  exemption not anchored (match): 1 failed, 18 passed in 1.04s ['FAILED evals/tests/test_rag12_judge_v6.py::test_a_pure_live_lookup_offer_stays_site[I can look up the live price of the Tidewick Marsh Overshirt.]']
+KILLED  exemption name not checked: 1 failed, 24 passed in 0.98s ['FAILED evals/tests/test_rag12_judge_v6.py::test_anything_else_in_the_claim_is_rekinded[The assistant can look up the price of Tidewick Marsh Overshirt, which is 40 dollars]']
+KILLED  no brand-free names: 1 failed, 4 passed in 0.94s ['FAILED evals/tests/test_rag12_judge_v6.py::test_an_unsupported_claim_naming_a_product_counts_as_product[The cinder tablecloth resists wine stains.-site]']
+KILLED  one-word remainders allowed: 1 failed, 15 passed in 0.94s ['FAILED evals/tests/test_rag12_judge_v6.py::test_a_one_word_remainder_is_not_a_name']
+KILLED  no ID rule: 1 failed, 7 passed in 0.93s ['FAILED evals/tests/test_rag12_judge_v6.py::test_an_unsupported_claim_naming_a_product_counts_as_product[P0193 resists wine stains.-site]']
+KILLED  M1 off: 1 failed, 1 passed in 0.86s ['FAILED evals/tests/test_rag12_judge_v6.py::test_an_unsupported_claim_naming_a_product_counts_as_product[The Halvardine Home Cinder Tablecloth resists wine stains.-site]']
+SURVIVED  M1 on supported claims too: 80 passed in 3.06s []
+KILLED  empty catalog allowed: 1 failed, 39 passed in 1.33s ['FAILED evals/tests/test_rag12_judge_v6.py::test_an_empty_catalog_is_a_judge_error']
+KILLED  F7 no min: 1 failed, 41 passed in 2.37s ['FAILED evals/tests/test_rag12_judge_v6.py::test_live_claims_are_capped_at_the_product_claims']
+KILLED  F7 None gives discount: 1 failed, 44 passed in 1.05s ['FAILED evals/tests/test_rag12_judge_v6.py::test_a_verdict_without_kinds_takes_no_live_discount']
+KILLED  product_claims supported-only: 1 failed, 43 passed in 1.03s ['FAILED evals/tests/test_rag12_judge_v6.py::test_product_claims_count_every_product_claim_supported_or_not']
+Survivor fixed: test_a_supported_claim_naming_a_product_is_not_rekinded_for_fabrication now also asserts citable == 0 and product_claims == 0. Re-run: KILLED  M1 on supported claims too (1 failed, 14 passed). 12 of 12 killed.

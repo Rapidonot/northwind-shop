@@ -42,3 +42,28 @@ Branch `req/32-eval-set-300` at `98d72bd`.
 | **Total** | **153** |
 
 **Hits: 0.** Both patterns are clean on every recorded answer.
+
+## Re-run with the user's rule A-narrow, on the real code (2026-11-17)
+
+**The rule (the user):** M1 stays fail-closed, with one exemption anchored on the whole claim:
+- an assistant subject (I, we, the assistant, this assistant);
+- then can or will, then look up or check, then "the";
+- then an optional "live" and an optional region;
+- then price, stock or availability, then of or for;
+- then a catalog product name, and the end of the claim (a trailing period only).
+
+**What ran:** `judge.py` is v6 (`ProductCatalog`, `parse_verdict(..., catalog)`), and `harness.py` has the F7 cap
+(`_live_discount`). The same replay (`rescore.py`) wrote the "after" file, and `rescore_diff.py` compared it with the
+v5 "before".
+
+| | Result |
+|---|---|
+| Replayed `ok` | 102 of 102 |
+| Scores equal to the promoted baseline | 102 of 102 |
+| Judge ID | `judge:v5:claude-sonnet-5-5` → `judge:v6:claude-sonnet-5-5` |
+| Items whose status or any score changes | none |
+| Items whose unsupported-claim kinds change | none |
+| Adversarial or unanswerable flips | **0** |
+
+EV-090's and EV-092's recorded claims match the exemption exactly, so they stay `site`. They count in D8 as
+self-capability.

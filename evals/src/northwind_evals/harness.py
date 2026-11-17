@@ -239,6 +239,10 @@ def score_retrieval(item: EvalItem, ranked_sources: Sequence[str]) -> dict[str, 
     }
 
 
+def _live_discount(live_claims: int, product_claims: int | None) -> int:
+    return 0 if product_claims is None else min(live_claims, product_claims)
+
+
 def run_item(item: EvalItem, context: SavedContext, answerer: Answerer, judge: Judge) -> ItemResult:
     answer = None
     try:
@@ -303,9 +307,11 @@ def run_item(item: EvalItem, context: SavedContext, answerer: Answerer, judge: J
         # A claim backed only by a live value has no retrieved source to cite, so it does not
         # count toward the requirement (row #12, the user's change 3); the rule that no citation
         # may name a source the turn did not return is unchanged.
+        # F7 (row #32): the discount is capped at the judge's product claims, since live values back
+        # only those; a verdict without kinds takes none (fail closed).
         citation_ok=citations_ok(
             shown,
-            max(0, citable - answer.live_claims),
+            max(0, citable - _live_discount(answer.live_claims, verdict.product_claims)),
             sources,
             verdict.declined,
         ),
