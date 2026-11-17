@@ -80,3 +80,13 @@ KILLED  any suite accepted: 5 failed, 56 passed in 2.53s
 KILLED  variance suite ignored: 2 failed, 59 passed in 2.52s
 KILLED  failed side run returns 0: 3 failed, 58 passed in 2.75s
 6 of 6 killed.
+
+## test_traps (decision 0018, the user's option (a), 2026-11-17)
+
+Before: data/tests/test_traps.py::test_injection_reviews_are_planted_public_reviews FAILED (AssertionError: TRAP-INJ-017; the word list cannot hold R01222 to R01224).
+After (EXACT_PAYLOAD_TRAPS, plus test_row_32s_reviews_are_the_approved_texts_exactly): 22 passed in 1.47s
+Mutations:
+KILLED  exemption widened to TRAP-INJ-016: 1 failed, 21 passed in 1.52s
+KILLED  one character of R01224 in the committed fixture: 1 failed, 21 passed in 1.52s
+KILLED  one character of R01222 in the generator: 1 failed, 21 passed in 1.48s
+3 of 3 killed.
