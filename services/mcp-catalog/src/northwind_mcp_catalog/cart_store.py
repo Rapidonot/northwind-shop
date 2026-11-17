@@ -78,6 +78,12 @@ class CartStore:
             raise
         return _Open(self._lock, cart)
 
+    def drop(self, session: str) -> None:
+        """Forget every cart of one session (the evals start each item empty, row #16)."""
+        with self._lock:
+            for key in [k for k in self._carts if k[0] == session]:
+                del self._carts[key]
+
     def __len__(self) -> int:
         with self._lock:
             return len(self._carts)

@@ -135,16 +135,18 @@ def test_the_injection_question_really_put_the_planted_review_in_front_of_the_mo
 @pytest.mark.req("NFR-03")
 def test_no_recorded_response_calls_anything_but_the_one_tool() -> None:
     """Row #12 (the user's approval under stop 5, 2026-11-14): retrieve_context plus exactly the
-    five catalog tools `tool_scopes` gives the assistant, nothing more."""
+    five catalog tools `tool_scopes` gives the assistant, nothing more. Row #16 (CHK-01, exact-set
+    update approved with its plan): and the four cart tools, so 9 on mcp-catalog, 10 in all. Passes
+    again once W1 re-records this suite."""
     from northwind_common.mcp_token import CATALOG_SERVER
     from northwind_common.tool_scopes import allowed_tools
 
     scoped = {f"mcp__{CATALOG_SERVER}__{name}" for name in allowed_tools(AGENT, CATALOG_SERVER)}
-    assert len(scoped) == 5
+    assert len(scoped) == 9
     allowed = {ALLOWED_TOOL, *scoped}
     for cassette in recorded():
         assert {tool["name"] for tool in body(cassette)["tools"]} == allowed
-        assert len(body(cassette)["tools"]) == 6
+        assert len(body(cassette)["tools"]) == 10
         assert set(tool_calls(cassette["body"])) <= allowed
 
 

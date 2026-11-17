@@ -114,3 +114,23 @@ def test_mcp_rag_port_is_per_worktree_stable_and_clear_of_the_proxy_span(
     assert localenv.mcp_rag_url(wt) == "http://127.0.0.1:31000/mcp"
     monkeypatch.setenv("MCP_RAG_URL", "http://127.0.0.1:1/x")
     assert localenv.mcp_rag_url(wt) == "http://127.0.0.1:1/x"
+
+
+@pytest.mark.req("CHK-01")
+@pytest.mark.parametrize(
+    ("url", "name"),
+    [
+        ("postgresql://northwind:northwind-local@localhost:5432/northwind_16", "northwind_16"),
+        ("postgres://u:p@h/northwind", "northwind"),
+        ("dbname=northwind_16 host=localhost password=secret", "northwind_16"),
+        ("postgresql://u:secret@h/", "(unreadable)"),
+        ("postgresql://u:secret@h/a b", "(unreadable)"),
+        ("not a url secret", "(unreadable)"),
+    ],
+)
+def test_the_database_line_names_only_the_database(url: str, name: str) -> None:
+    """Row #16: the startup line that proves which database a server reads; never the password."""
+    from northwind_common.localenv import database_name
+
+    assert database_name(url) == name
+    assert "secret" not in database_name(url)

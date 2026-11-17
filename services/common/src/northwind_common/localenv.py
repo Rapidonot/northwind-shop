@@ -125,3 +125,28 @@ def mcp_catalog_url(cwd: Path | None = None) -> str:
     """Where the gateway's turns reach mcp-catalog (row #12): `MCP_CATALOG_URL`, else this
     worktree's port on 127.0.0.1."""
     return os.environ.get("MCP_CATALOG_URL") or f"http://127.0.0.1:{mcp_catalog_port(cwd)}/mcp"
+
+
+def database_name(url: str) -> str:
+    """Only the database name in a connection URL, for a startup line that proves which database a
+    server reads (row #16: the scratch database). Never the URL, which can hold a password; a URL
+    that does not parse says so without echoing it."""
+    import re
+    from urllib.parse import unquote, urlsplit
+
+    try:
+        if url.startswith(("postgresql://", "postgres://")):
+            name = unquote(urlsplit(url).path.lstrip("/"))
+        else:  # libpq keyword form, `dbname=… host=…`
+            found = re.search(r"(?:^|\s)dbname\s*=\s*'?([^'\s]+)", url)
+            name = found.group(1) if found else ""
+    except ValueError:
+        return "(unreadable)"
+    return name if re.fullmatch(r"[A-Za-z0-9_.-]{1,63}", name) else "(unreadable)"
+
+
+def announce_database(server: str, url: str) -> None:
+    """One stderr line naming the server and its database (`database_name`), at startup."""
+    import sys
+
+    print(f"{server}: database {database_name(url)}", file=sys.stderr, flush=True)

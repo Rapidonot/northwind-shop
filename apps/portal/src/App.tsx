@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Chat } from "./Chat";
+import { ChatPanel } from "./ChatPanel";
 
 type Health =
   | { state: "loading" }
@@ -42,7 +42,7 @@ export function App() {
     <main>
       <h1>Northwind Shop</h1>
       <p role="status">{label(health)}</p>
-      <Chat />
+      <ChatPanel />
     </main>
   );
 }

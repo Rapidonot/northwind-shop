@@ -31,7 +31,7 @@ from northwind_common.cards import contains_card_data
 from northwind_common.llm import AgentRuntime, agent_runtime
 from northwind_common.localenv import mcp_catalog_url, mcp_rag_url
 from northwind_common.mcp_token import signing_key
-from northwind_gateway.settings import current_caller
+from northwind_gateway.settings import shopper_caller
 
 log = logging.getLogger(__name__)
 
@@ -121,7 +121,7 @@ def _event(event: Any) -> ServerSentEvent:
 @router.post("/api/chat", response_class=EventSourceResponse)
 async def chat(
     message: Annotated[str, Depends(checked_message)],
-    caller: Annotated[Caller, Depends(current_caller)],
+    caller: Annotated[Caller, Depends(shopper_caller)],  # row #16: with the session
     services: Annotated[ChatServices, Depends(chat_services)],
 ) -> AsyncIterable[ServerSentEvent]:
     failed = False

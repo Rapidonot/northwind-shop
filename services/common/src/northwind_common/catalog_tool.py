@@ -26,6 +26,7 @@ import re
 import unicodedata
 from typing import Any
 
+from northwind_common.errors import ENVELOPE_KEYS
 from northwind_common.mcp_token import CATALOG_SERVER
 from northwind_common.tool_scopes import CART_TOOLS, CATALOG_READ_TOOLS
 
@@ -36,6 +37,10 @@ ALLOWED_TOOLS = tuple(f"mcp__{SERVER_NAME}__{name}" for name in TOOL_NAMES)
 PRICE_TOOL = f"mcp__{SERVER_NAME}__get_price"
 STOCK_TOOL = f"mcp__{SERVER_NAME}__check_stock"
 CART_TOOL_NAMES = frozenset(f"mcp__{SERVER_NAME}__{name}" for name in CART_TOOLS)
+# Row #16: the only error codes whose result carries a labelled block, after the envelope.
+REFUSAL_CODES = frozenset({"out_of_stock", "insufficient_stock"})
+# How a reader joins a result's text blocks before `labelled_result`: one block is unchanged.
+BLOCK_SEPARATOR = "\n"
 
 _LABELLED = re.compile(
     rf'\A<{TAG} tool="(?P<tool>[a-z_]{{1,32}})">\n(?P<body>[^<>&]*)\n</{TAG}>\Z', re.ASCII
@@ -71,3 +76,27 @@ def unlabel(text: str) -> tuple[str, Any] | None:
         return found["tool"], json.loads(found["body"])
     except ValueError:
         return None
+
+
+def labelled_result(text: str, is_error: bool) -> tuple[str, Any] | None:
+    """The labelled value in a catalog or cart result, read the same way by the assistant and the
+    evals (row #16). A success is exactly one label (`unlabel`). An error carries one only when it
+    is a cart stock refusal: the fixed envelope, alone on the first line, with a code in
+    `REFUSAL_CODES`, then `BLOCK_SEPARATOR` and exactly one label. Anything else is None."""
+    if not is_error:
+        return unlabel(text)
+    head, separator, rest = text.partition(BLOCK_SEPARATOR)
+    if not separator:
+        return None
+    try:
+        envelope = json.loads(head)
+    except ValueError:
+        return None
+    if (
+        not isinstance(envelope, dict)
+        or set(envelope) != ENVELOPE_KEYS
+        or envelope.get("isError") is not True
+        or envelope.get("code") not in REFUSAL_CODES
+    ):
+        return None
+    return unlabel(rest)

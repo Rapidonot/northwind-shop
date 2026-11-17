@@ -171,7 +171,7 @@ def test_a_token_without_a_session_is_refused(url: str, name: str) -> None:
 @pytest.mark.parametrize("name", CART_TOOLS)
 @pytest.mark.parametrize("key", ["session_id", "cart_id", "shopper_id", "sid", "region"])
 def test_a_smuggled_identity_argument_is_refused(url: str, name: str, key: str) -> None:
-    other = new_session()
+    other = "e" * 32  # fixed: a random hex id can hold a Luhn-valid digit run, refused as a card
     outcome = call(url, new_session(), name, {**ARGS[name], key: other})
     assert_error(outcome, "validation", "unknown_argument")
     assert other not in "".join(outcome[1])
@@ -527,3 +527,23 @@ def test_a_planted_product_name_stays_inside_one_label() -> None:
     labelled = unlabel(text)
     assert labelled is not None
     assert labelled[1]["cart"]["lines"][0]["name"] == name  # the same text, carried as data
+
+
+def test_the_refusal_codes_are_the_ones_the_readers_accept() -> None:
+    from northwind_common.catalog_tool import REFUSAL_CODES
+    from northwind_mcp_catalog.cart import insufficient_stock, out_of_stock
+
+    assert {out_of_stock().code, insufficient_stock().code} == REFUSAL_CODES
+
+
+def test_a_refusal_reads_back_through_the_shared_parser(url: str, store: FixtureCatalog) -> None:
+    from northwind_common.catalog_tool import BLOCK_SEPARATOR, labelled_result
+
+    stock(store, V, 0)
+    is_error, blocks = call(url, new_session(), "add_to_cart", {"variant_id": V})
+    labelled = labelled_result(BLOCK_SEPARATOR.join(blocks), is_error)
+    assert labelled is not None and labelled[0] == "add_to_cart"
+    assert labelled[1]["requested"]["variant_id"] == V
+    # Another error never yields a label, even with one appended.
+    other = call(url, new_session(), "remove_from_cart", {"variant_id": V})
+    assert labelled_result(BLOCK_SEPARATOR.join([*other[1], blocks[1]]), True) is None

@@ -36,7 +36,9 @@ function apply(turn: Turn, event: ChatEvent): Turn {
 
 export const PRICE_NOTE = "Ask me for a price or stock check: I look them up live.";
 
-export function Chat() {
+/** `onTurnEnd` (row #16): called when a turn has ended, however it ended, so the cart can be read
+ * again. */
+export function Chat({ onTurnEnd }: { onTurnEnd?: () => void } = {}) {
   const [message, setMessage] = useState("");
   const [turn, setTurn] = useState<Turn>(EMPTY);
   const [busy, setBusy] = useState(false);
@@ -51,6 +53,7 @@ export function Chat() {
       setTurn((current) => apply(current, { type: "error", code: "internal" }));
     } finally {
       setBusy(false);
+      onTurnEnd?.();
     }
   }
 

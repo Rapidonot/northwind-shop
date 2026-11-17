@@ -97,9 +97,6 @@ def insufficient_stock() -> ToolError:
     )
 
 
-REFUSAL_CODES = frozenset({"out_of_stock", "insufficient_stock"})
-
-
 # ---- checks ------------------------------------------------------------------------------------
 
 

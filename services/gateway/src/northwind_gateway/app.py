@@ -2,9 +2,13 @@
 
 FOUND-0: a health endpoint that proves the portal -> gateway -> Postgres path works.
 SA-02: the chat endpoint, in `northwind_gateway.chat`.
+Row #16 (CHK-01): the shopper's session (`northwind_gateway.session`) and GET /api/cart
+(`northwind_gateway.cart`).
 """
 
 import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Literal
 
 import psycopg
@@ -13,12 +17,15 @@ from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel
 
 from northwind_assistant.usage import TELEMETRY_LOGGER
+from northwind_common.localenv import announce_database
+from northwind_gateway.cart import router as cart_router
 from northwind_gateway.chat import (
     CardNumberRefused,
     card_refused,
     invalid_request,
     router,
 )
+from northwind_gateway.session import SessionMiddleware
 from northwind_gateway.settings import database_url
 
 # OpenTelemetry comes later: for now the per-answer line goes to stderr (RAG-13).
@@ -27,8 +34,18 @@ _telemetry.setLevel(logging.INFO)
 if not _telemetry.handlers:
     _telemetry.addHandler(logging.StreamHandler())
 
-app = FastAPI(title="Northwind gateway")
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    # Row #16: the database the health check reads, by name only (the scratch-database proof).
+    announce_database("gateway", database_url())
+    yield
+
+
+app = FastAPI(title="Northwind gateway", lifespan=lifespan)
 app.include_router(router)
+app.include_router(cart_router)
+app.add_middleware(SessionMiddleware)
 app.add_exception_handler(RequestValidationError, invalid_request)
 app.add_exception_handler(CardNumberRefused, card_refused)
 
