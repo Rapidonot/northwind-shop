@@ -22,10 +22,15 @@ with the amendments recorded there, 2026-11-17. 0018 is reserved for row #32.
      - the same key with other arguments, or for another tool, gets `validation` / `idempotency_conflict`;
      - the last 50 keys per cart are kept;
      - only a write that changed the cart is stored, so a refusal retried with the same key checks stock again;
-     - what is stored is the outcome only (`result`, `variant_id`, `quantity`). A replay returns it with
-       `"replayed": true` and the cart read live, never a stored view, so a replay cannot carry an old price,
-       stock level or line (security review F1, F5). The key's description asks for a new key per change, not one
-       built from the arguments.
+     - what is stored is the outcome only (`result`, `variant_id`, `quantity`), taken from the write's own value
+       (re-review N2). A replay answers `"result": "already_applied"`, the first outcome under `"original"`, and the
+       cart read live, never a stored view: it cannot carry an old price, stock level or line, nor read as a new
+       change (security review F1, F5; re-review N1). The key's description says keys are remembered for the cart
+       across turns, and its examples use a placeholder, not a copyable key; the prompt says an
+       `already_applied` result changed nothing.
+     - Open (a scope question for the user, re-review N1): a model with no memory across turns cannot guarantee a
+       key it has never used for this cart. A collision is safe (nothing changes; the result says so; the panel
+       reads live) but can make one change a no-op or an `idempotency_conflict` until 50 newer keys evict it.
      There is no `dry_run`: a reversible cart write doesn't need one ("where useful"). The user restored the key on
      2026-11-17, reversing an earlier scope cut.
 2. **Live values only (hard rule 2).**

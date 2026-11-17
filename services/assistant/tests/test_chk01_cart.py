@@ -259,6 +259,7 @@ def test_the_prompt_states_the_cart_rules_and_no_unprompted_capability() -> None
     assert "Change the cart only when the shopper asks" in prompt
     assert "offer only the alternatives that result lists" in prompt
     assert "each by its product name and variant ID" in prompt  # security review F8
+    assert 'A cart result of "already_applied" changed nothing now' in prompt  # re-review N1
     assert "or saying whether they are in stock" in prompt
     # "No orders in chat" only on the shopper's asking, never as a self-description.
     [sentence] = [s for s in re.split(r"(?<=\.)\s", prompt) if "orders can't be placed" in s]

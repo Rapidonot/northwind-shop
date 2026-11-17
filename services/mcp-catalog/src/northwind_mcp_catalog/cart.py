@@ -307,7 +307,7 @@ async def get_cart(
 
 def _add(
     server: CatalogServer, claims: Claims, region: str, cart: Cart, args: Mapping[str, Any]
-) -> t.CallToolResult:
+) -> t.CallToolResult | dict[str, Any]:
     quantity = _quantity(args, default=1)
     variant = _variant(server, claims, args)
     if server.catalog.price(variant.variant_id, region) is None:
@@ -324,33 +324,22 @@ def _add(
             ADD_TO_CART, _stock_refusal(on_hand), server, claims, region, variant, quantity
         )
     cart.lines[variant.variant_id] = total
-    value = {
-        "result": "added",
-        "variant_id": variant.variant_id,
-        "quantity": total,
-        "cart": view(server, claims, region, cart),
-    }
-    return json_result(ADD_TO_CART, value)
+    return {"result": "added", "variant_id": variant.variant_id, "quantity": total}
 
 
 def _remove(
     server: CatalogServer, claims: Claims, region: str, cart: Cart, args: Mapping[str, Any]
-) -> t.CallToolResult:
+) -> t.CallToolResult | dict[str, Any]:
     variant = _variant(server, claims, args)
     if variant.variant_id not in cart.lines:
         raise not_in_cart()
     del cart.lines[variant.variant_id]
-    value = {
-        "result": "removed",
-        "variant_id": variant.variant_id,
-        "cart": view(server, claims, region, cart),
-    }
-    return json_result(REMOVE_FROM_CART, value)
+    return {"result": "removed", "variant_id": variant.variant_id}
 
 
 def _set_quantity(
     server: CatalogServer, claims: Claims, region: str, cart: Cart, args: Mapping[str, Any]
-) -> t.CallToolResult:
+) -> t.CallToolResult | dict[str, Any]:
     quantity = _quantity(args, default=None)
     variant = _variant(server, claims, args)
     current = cart.lines.get(variant.variant_id)
@@ -369,23 +358,15 @@ def _set_quantity(
                 quantity,
             )
     cart.lines[variant.variant_id] = quantity
-    value = {
-        "result": "updated",
-        "variant_id": variant.variant_id,
-        "quantity": quantity,
-        "cart": view(server, claims, region, cart),
-    }
-    return json_result(SET_CART_QUANTITY, value)
+    return {"result": "updated", "variant_id": variant.variant_id, "quantity": quantity}
 
 
 OUTCOME_KEYS = ("result", "variant_id", "quantity")
 
 
-def _text(result: t.CallToolResult) -> str:
-    return "".join(getattr(block, "text", "") for block in result.content)
-
-
-Write = Callable[[CatalogServer, Claims, str, Cart, Mapping[str, Any]], t.CallToolResult]
+Write = Callable[
+    [CatalogServer, Claims, str, Cart, Mapping[str, Any]], t.CallToolResult | dict[str, Any]
+]
 
 
 def _idempotent(tool: str, arguments: frozenset[str], write: Write) -> Any:
@@ -397,9 +378,11 @@ def _idempotent(tool: str, arguments: frozenset[str], write: Write) -> Any:
     Only a write that changed the cart is stored (the last `MAX_KEYS` per cart): a refusal or an
     error is not, so retrying it with the same key checks again.
 
-    What is stored is the outcome only (`result`, `variant_id`, `quantity`), never a cart view. A
-    replay returns that outcome with `"replayed": true` and the cart as it is now, read live, so a
-    replay can never hand back an old price, stock level or line (security review F1, F5)."""
+    What is stored is the outcome only (`result`, `variant_id`, `quantity`), taken from the write's
+    own value, never a re-parse (re-review N2), and never a cart view. A replay says so at the top
+    level, `"result": "already_applied"` with the first outcome under `"original"`, plus the cart as
+    it is now, read live: it can never hand back an old price, stock level or line, nor read as a
+    fresh change (security review F1, F5; re-review N1)."""
 
     async def handler(
         server: CatalogServer, claims: Claims, args: Mapping[str, Any]
@@ -417,18 +400,20 @@ def _idempotent(tool: str, arguments: frozenset[str], write: Write) -> Any:
                 if seen[0] != fingerprint:
                     raise idempotency_conflict()
                 cart.keys.move_to_end(key)
-                outcome = dict(seen[1])
-                replay = {**outcome, "replayed": True, "cart": view(server, claims, region, cart)}
+                replay = {
+                    "result": "already_applied",
+                    "original": dict(seen[1]),
+                    "cart": view(server, claims, region, cart),
+                }
                 return json_result(tool, replay)
-            result = write(server, claims, region, cart, rest)
-            if not result.is_error:
-                written = catalog_tool.unlabel(_text(result))
-                if written is not None and isinstance(written[1], dict):
-                    outcome = {k: written[1][k] for k in OUTCOME_KEYS if k in written[1]}
-                    cart.keys[key] = (fingerprint, outcome)
-                    while len(cart.keys) > MAX_KEYS:
-                        cart.keys.popitem(last=False)
-            return result
+            written = write(server, claims, region, cart, rest)
+            if isinstance(written, t.CallToolResult):  # a stock refusal: never stored
+                return written
+            outcome = {k: written[k] for k in OUTCOME_KEYS if k in written}
+            cart.keys[key] = (fingerprint, outcome)
+            while len(cart.keys) > MAX_KEYS:
+                cart.keys.popitem(last=False)
+            return json_result(tool, {**outcome, "cart": view(server, claims, region, cart)})
 
     return handler
 
@@ -455,9 +440,10 @@ _KEY = {
     "maxLength": 64,
     "pattern": "^[A-Za-z0-9_-]+$",
     "description": (
-        "A new key, never used before, for each cart change, e.g. 7f3c9a21; not built from the "
-        "item or quantity. Send the same key only to retry the same change in this turn. A "
-        'result with "replayed": true changed nothing now.'
+        "Make up a new random key of 8-64 letters and digits for every cart change. Keys are "
+        "remembered for this cart across turns, so never take one from an example or build one "
+        "from the item. Send the same key again only to retry a change whose result you did not "
+        'get. A result of "already_applied" means that key was used before: nothing changed now.'
     ),
 }
 
@@ -506,19 +492,19 @@ DESCRIPTIONS = {
         "region. Use it only when the shopper asks to add an item and has said which colour, size "
         "and fit; otherwise ask first. If stock can't cover it, the add is refused and the result "
         "lists alternatives in stock: offer only those. It never places an order. Example: "
-        '{"variant_id": "P0001-BLK-REG-M", "quantity": 1, "idempotency_key": "7f3c9a21"}.'
+        '{"variant_id": "P0001-BLK-REG-M", "quantity": 1, "idempotency_key": "<new random key>"}.'
     ),
     REMOVE_FROM_CART: (
         "Remove one variant from the shopper's own cart. Use it only when the shopper asks to "
         "remove that item; never to make room or tidy up on your own. Example: "
-        '{"variant_id": "P0001-BLK-REG-M", "idempotency_key": "c41d06e8"}.'
+        '{"variant_id": "P0001-BLK-REG-M", "idempotency_key": "<new random key>"}.'
     ),
     SET_CART_QUANTITY: (
         "Change how many units of one variant are in the shopper's own cart (1-10; use "
         "remove_from_cart for none). A larger quantity is checked against live stock first. Use it "
         "only when the shopper asks to change the quantity; do not use it to add a new item (use "
         "add_to_cart). Example: "
-        '{"variant_id": "P0001-BLK-REG-M", "quantity": 2, "idempotency_key": "9b2e5f70"}.'
+        '{"variant_id": "P0001-BLK-REG-M", "quantity": 2, "idempotency_key": "<new random key>"}.'
     ),
 }
 

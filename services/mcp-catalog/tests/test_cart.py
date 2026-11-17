@@ -601,10 +601,11 @@ def test_the_same_key_ten_times_adds_once_and_returns_the_same_result(
     args = {"variant_id": V, "quantity": 2, "idempotency_key": "add-once-0001"}
     outcomes = calls(url, session, [("add_to_cart", args)] * 10)
     first = data(outcomes[0], "add_to_cart")
-    assert "replayed" not in first
-    for outcome in outcomes[1:]:  # security review F1: the outcome, marked, the cart live
+    assert (first["result"], first["quantity"]) == ("added", 2)
+    for outcome in outcomes[1:]:  # F1 and N1: never read as a new change; the cart live
         again = data(outcome, "add_to_cart")
-        assert (again["result"], again["quantity"], again["replayed"]) == ("added", 2, True)
+        assert again["result"] == "already_applied"
+        assert again["original"] == {"result": "added", "variant_id": V, "quantity": 2}
         assert again["cart"] == first["cart"]
     [line] = data(call(url, session, "get_cart", {}), "get_cart")["lines"]
     assert line["quantity"] == 2
@@ -683,7 +684,8 @@ def test_the_last_fifty_keys_per_cart_are_kept(url: str, store: FixtureCatalog) 
     # The last key is still kept: its replay changes nothing.
     last = steps[-1][1]
     replay = data(call(url, session, "set_cart_quantity", last), "set_cart_quantity")
-    assert replay["quantity"] == last["quantity"]
+    assert replay["result"] == "already_applied"
+    assert replay["original"]["quantity"] == last["quantity"]
     [line] = data(call(url, session, "get_cart", {}), "get_cart")["lines"]
     assert line["quantity"] == 2
 
@@ -699,7 +701,7 @@ def test_a_reused_key_after_remove_shows_the_live_cart_not_the_old_add(
     call(url, session, "add_to_cart", first)
     call(url, session, "remove_from_cart", {"variant_id": V, "idempotency_key": "reused-key-02"})
     replay = data(call(url, session, "add_to_cart", first), "add_to_cart")
-    assert replay["replayed"] is True and replay["cart"]["lines"] == []
+    assert replay["result"] == "already_applied" and replay["cart"]["lines"] == []
     assert data(call(url, session, "get_cart", {}), "get_cart")["lines"] == []
 
 
@@ -732,3 +734,21 @@ def test_reading_a_cart_never_creates_one(url: str, store: FixtureCatalog) -> No
     assert len(carts) == 1
     with carts.open("kept", REGION, create=False) as cart:
         assert cart.lines == {V: 1}
+
+
+def test_get_cart_over_the_server_never_creates_a_cart() -> None:
+    """Re-review F4: through the tool, reads of new sessions store nothing and evict nothing."""
+    from northwind_mcp_catalog.cart_store import CartStore
+
+    store = FixtureCatalog()
+    store.set_stock(V, REGION, 5)
+    server = CatalogServer(store, key=KEY, tools=TOOLS)
+    server.carts = CartStore(max_carts=1)
+    with running(server) as small:
+        kept = new_session()
+        call(small, kept, "add_to_cart", {"variant_id": V})
+        for n in range(5):
+            assert data(call(small, f"{n:032x}", "get_cart", {}), "get_cart")["lines"] == []
+        assert len(server.carts) == 1
+        [line] = data(call(small, kept, "get_cart", {}), "get_cart")["lines"]
+    assert line["variant_id"] == V

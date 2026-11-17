@@ -54,6 +54,9 @@ class ProductSources:
     def __init__(self) -> None:
         rows = (REPO / "data/fixtures/products.jsonl").read_text(encoding="utf-8").splitlines()
         products = {r["product_id"]: r for r in (json.loads(row) for row in rows if row.strip())}
+        for pid in ("P0001", "P0008"):  # re-review N4: this retriever skips the index's filters
+            assert products[pid]["visibility"] == "public", pid
+            assert REGION in products[pid]["regions"], pid
         self.chunks = [
             RetrievedChunk(
                 f"product:{pid}:0",

@@ -41,3 +41,14 @@ Not failing-first: services/gateway/tests/test_playwright_servers.py passes on m
   M5 a forged cookie keeps its session: KILLED (3 failed, 5 passed, 11 deselected in 0.59s)
   git status after the mutants: '?? docs/reviews/2026-11-17-16-failing-first.log' (empty means restored)
   Earlier (at e741dd1, session record): dropping only the product-visibility check in the alternatives scan SURVIVED services/mcp-catalog/tests/test_catalog_canary.py, because each variant's own visibility check also keeps P0009 out (a second guard); dropping both was KILLED (1 failed).
+
+== Mutants again at f3f97a1 + uncommitted re-review fixes (N1, N2, F4 pin); source restored after each ==
+  M1 replay is not stored (idempotency): KILLED (1 failed, 103 deselected in 0.69s)
+  M2 conflict ignores the arguments: KILLED (1 failed, 103 deselected in 0.70s)
+  M3 cart keyed on region only: KILLED (1 failed, 103 deselected in 0.69s)
+  M6 get_cart creates a cart (F4): KILLED (1 failed, 103 deselected in 0.74s)
+  M7 a replay reads as a new change (N1): KILLED (1 failed, 103 deselected in 0.74s)
+  source files changed by the mutants afterwards: ' M services/assistant/src/northwind_assistant/prompt.py  M services/mcp-catalog/src/northwind_mcp_catalog/cart.py ' (the row's own uncommitted edits only)
+  M4 refusal records the alternatives' stock: KILLED (1 failed, 22 deselected in 0.52s)
+  M5 a forged cookie keeps its session: KILLED (3 failed, 5 passed, 12 deselected in 0.62s)
+  M8 a line total vouches a price (F2): KILLED (1 failed, 22 deselected in 0.52s)

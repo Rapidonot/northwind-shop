@@ -152,6 +152,8 @@ FOUND-2 spike gate (proxy path), parallel-worktree layout for LLM state (decisio
 
 ## Open items
 
+- Low, from #16 security re-review N3 (2026-11-17); owner hardening, after #32 (the judge is #32's while it runs): variant IDs encode colour, fit and size, and the judge sees an alternative's variant ID, so it may accept a colour or size decoded from the ID as supported. Add a judge rubric line (a variant ID is not support for colour, size or fit) or a test.
+- Low, from #16 security re-review F4 residual (2026-11-17); owner hardening: a refused cart write still creates an empty cart (writes open with `create=True` before the write runs); only `shopper-assistant` reaches it, at a model turn each.
 - Low, from #16 security review F7 (2026-11-17); owner #19 (FOUND-3, shopper identity): browsers share cookies across localhost ports, so a page on another port could plant a validly signed `nw_session` and share an anonymous cart. The row that adds login must issue a new session at login and must not inherit an anonymous cart unchecked.
 - From #16 (2026-11-17); owner Window B P6, NFR-03: untrusted content can steer a cart write; only the prompt and the recorded check (`services/assistant/tests/test_chk01_cart.py`) stand between the model and a cart write (threat model, boundary 3).
 - Low, from #16 (2026-11-17); owner #19/#24 with the per-purpose-keys item: the session cookie key is derived from `NORTHWIND_MCP_TOKEN_KEY` (decision 0019), accepted for the lab by the user.

@@ -44,8 +44,8 @@ GOLDEN = [
 ATTACHED = [
     (
         "mcp__northwind-catalog__add_to_cart",
-        "9c1328543534d77ad40c210b13808a88bd57ddd3267cf8f25eb25ec4f08a680a",
-        "e9e97721333a85bb9536d6b8c1739affa7213b0163bdb09326445242dd067e79",
+        "01c9788335c07b97f2a3dfd955afab39a3765cf565bfa29b9cf16374871033dd",
+        "b023869a0e06c1540a620c92efe2571cfcb01bf1049af6d0df072a09529af15c",
     ),
     (
         "mcp__northwind-catalog__check_stock",
@@ -74,8 +74,8 @@ ATTACHED = [
     ),
     (
         "mcp__northwind-catalog__remove_from_cart",
-        "5a2f1b9875a84bb0902bbe12c99bf112db160dbbff3b720c974f02b28cf9cf60",
-        "3d5c6a9dcc1d89a61cc045444d56f369b72ce20d0e017ccb420bfa1ed684cc6f",
+        "9f98750f9bd3e6ec1b5ec314dd1f5347e67bf94553e7918a817660f94f988802",
+        "d2953d08588f992529446bb6dfea3783ac9ba64d2b36dd6909bfdf315b75c618",
     ),
     (
         "mcp__northwind-catalog__search_products",
@@ -84,8 +84,8 @@ ATTACHED = [
     ),
     (
         "mcp__northwind-catalog__set_cart_quantity",
-        "b382bd2219a66babfff69f74b891030b9fa6db07c1a5c1934ab1fdde33955b13",
-        "e824f14cfb5b61b4a6bafefdecc40668f708334e077530653e374a24d7f6d1d1",
+        "03280ddad3276ee8cb718a71a8f5e4bb1a9e165cdd666f570b0b0d964cb559a9",
+        "6c99ccaed27af48fa937dfc82ebe0f76c65904a634df15f2f28528333132644c",
     ),
     *GOLDEN,
 ]
