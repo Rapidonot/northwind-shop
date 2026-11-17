@@ -354,12 +354,18 @@ def judge_view(name: str, value: Any) -> Any:
             for row in rows or []
         ]
 
-    if "requested" in value:  # a stock refusal: the requested variant, the alternatives' IDs
+    if "requested" in value:  # a stock refusal: the requested variant, the alternatives offered
         alternatives = value.get("alternatives") or []
         return {
             "region": value.get("region"),
             "requested": value.get("requested"),
-            "alternatives": [a.get("variant_id") for a in alternatives if isinstance(a, dict)],
+            # Product name and variant ID: how the prompt offers them (security review F8). No
+            # colour, size or fit: those stay claims that need a cited source.
+            "alternatives": [
+                {"variant_id": a.get("variant_id"), "name": a.get("name")}
+                for a in alternatives
+                if isinstance(a, dict)
+            ],
         }
     cart = value if name == "get_cart" else value.get("cart")
     if not isinstance(cart, dict):
