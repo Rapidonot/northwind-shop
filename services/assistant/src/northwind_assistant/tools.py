@@ -212,15 +212,18 @@ def _stock_entry(entry: Any) -> tuple[str, int] | None:
 
 
 def _record_cart(state: ToolState, tool: str, *, is_error: bool, text: str) -> None:
-    """A cart result's live values (row #16): every line's stock, unit price and line total, the
-    subtotal, and a refusal's requested variant's stock. All of it only for the shopper's own region
-    and only when well-formed: one bad line drops the whole result, so the check stays closed (hard
-    rule 2). The server computed every figure from the live store.
+    """A cart result's live values (row #16), only for the shopper's own region and only when the
+    whole result is well-formed, so the check stays closed (hard rule 2):
 
-    A refusal's alternatives are checked for shape but their stock is not recorded: the check
-    vouches "out of stock" only when every variant read this turn is at zero (#12's D3), so
-    recording them would block the one stock fact a refusal states. The alternatives are offered by
-    name, not by stock (the prompt)."""
+    - a cart (from any cart tool's success): each line's **unit price** only;
+    - a stock refusal: the **requested variant's stock** only.
+
+    Not recorded (security review F2): line totals and the subtotal, which depend on quantities the
+    model chose, so they could vouch an invented price; and a cart line's stock, which would vouch a
+    stock claim about a product the shopper never asked to check. A refusal's alternatives are
+    checked for shape but their stock is not recorded either: the check vouches "out of stock" only
+    when every variant read this turn is at zero (#12's D3), so recording them would block the one
+    stock fact a refusal states. The alternatives are offered by name, not by stock (the prompt)."""
     if state.region is None:
         return
     labelled = catalog_tool.labelled_result(text, is_error)
@@ -229,46 +232,33 @@ def _record_cart(state: ToolState, tool: str, *, is_error: bool, text: str) -> N
     name, body = labelled
     if not isinstance(body, dict):
         return
-    prices: set[tuple[Decimal, str]] = set()
-    stock: dict[str, int] = {}
-    if is_error:  # a stock refusal: the requested variant and the server's alternatives
+    if is_error:  # a stock refusal: the requested variant's stock, nothing else
         if body.get("region") != state.region or not isinstance(body.get("alternatives"), list):
             return
         if any(_stock_entry(alt) is None for alt in body["alternatives"]):
             return
-        entries = [body.get("requested")]
-    else:
-        cart = body if name == "get_cart" else body.get("cart")
-        if not isinstance(cart, dict) or cart.get("region") != state.region:
+        found = _stock_entry(body.get("requested"))
+        if found is not None:
+            state.live.stock[found[0]] = found[1]
+        return
+    cart = body if name == "get_cart" else body.get("cart")
+    if not isinstance(cart, dict) or cart.get("region") != state.region:
+        return
+    lines = cart.get("lines")
+    if not isinstance(lines, list):
+        return
+    prices: set[tuple[Decimal, str]] = set()
+    for line in lines:
+        if not isinstance(line, dict) or _stock_entry(line) is None:
             return
-        lines = cart.get("lines")
-        if not isinstance(lines, list):
+        unit, total, currency = line.get("unit_price"), line.get("line_total"), line.get("currency")
+        if unit is None and total is None and currency is None:
+            continue  # not sold in the region: no price to vouch for
+        amount, code = _amount(unit), _currency(currency)
+        if amount is None or code is None or _amount(total) is None:
             return
-        for line in lines:
-            if not isinstance(line, dict):
-                return
-            unit, total = line.get("unit_price"), line.get("line_total")
-            currency = line.get("currency")
-            if unit is None and total is None and currency is None:
-                continue  # not sold in the region: no price to vouch for
-            parsed = (_amount(unit), _amount(total), _currency(currency))
-            if None in parsed:
-                return
-            prices.update((value, parsed[2]) for value in parsed[:2])  # type: ignore[misc]
-        subtotal, currency = cart.get("subtotal"), cart.get("currency")
-        if subtotal is not None or currency is not None:
-            amount, code = _amount(subtotal), _currency(currency)
-            if amount is None or code is None:
-                return
-            prices.add((amount, code))
-        entries = lines
-    for entry in entries:
-        found = _stock_entry(entry)
-        if found is None:
-            return
-        stock[found[0]] = found[1]
+        prices.add((amount, code))
     state.live.prices.update(prices)
-    state.live.stock.update(stock)
 
 
 async def search_sources(query: Any, searcher: Searcher, state: ToolState) -> str | SearchFailure:

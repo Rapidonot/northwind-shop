@@ -228,3 +228,14 @@ def test_the_portal_agent_cannot_write_even_with_a_valid_session(keyed: None) ->
                 return {t.name for t in (await client.list_tools()).tools}
 
         assert asyncio.run(names()) == {"get_cart"}
+
+
+def test_without_the_key_the_real_reader_gives_the_fixed_503_not_a_500(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Security review F6: no override, so the real `cart_reader` dependency runs without a key."""
+    monkeypatch.delenv(KEY_ENV, raising=False)
+    app.dependency_overrides.clear()
+    response = TestClient(app, raise_server_exceptions=False).get("/api/cart")
+    assert response.status_code == 503
+    assert response.json()["message"] == UNAVAILABLE

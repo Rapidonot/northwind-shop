@@ -142,7 +142,8 @@ def test_a_remove_result_joins_the_remaining_lines_figures() -> None:
         "remove_from_cart", {"result": "removed", "variant_id": V, "quantity": 0, "cart": value}
     )
     live = recorded(text, REMOVE)
-    assert (Decimal("100.00"), "USD") in live.prices and live.stock == {V2: 6}
+    # Security review F2: the remaining line's unit price only; no total, no cart-line stock.
+    assert live.prices == {(Decimal("50.00"), "USD")} and live.stock == {}
 
 
 def test_a_set_quantity_result_joins_its_lines_and_subtotal() -> None:
@@ -151,7 +152,8 @@ def test_a_set_quantity_result_joins_its_lines_and_subtotal() -> None:
         "set_cart_quantity", {"result": "updated", "variant_id": V, "quantity": 3, "cart": value}
     )
     live = recorded(text, SET)
-    assert {(Decimal("19.99"), "USD"), (Decimal("59.97"), "USD")} <= live.prices
+    # Security review F2: the unit price only, never the line total or subtotal.
+    assert live.prices == {(Decimal("19.99"), "USD")}
 
 
 def test_a_quantity_change_refusal_adds_only_the_requested_variants_stock() -> None:
@@ -171,8 +173,10 @@ def test_a_two_line_cart_passes_its_sum_and_blocks_a_sum_no_tool_returned() -> N
         catalog_tool.label("get_cart", value),
         f"mcp__{SERVER}__get_cart",
     )
-    assert shown("Your subtotal is $60.67.", live) == "Your subtotal is $60.67."
+    # Security review F2: a subtotal vouches nothing, even the cart's own; unit prices do.
+    assert shown("Your subtotal is $60.67.", live) == FIXED_SENTENCES["money"]
     assert shown("Your subtotal is $60.00.", live) == FIXED_SENTENCES["money"]
+    assert shown("They are $19.99 each.", live) == "They are $19.99 each."
 
 
 def test_a_price_from_the_other_region_is_not_vouched() -> None:
@@ -250,7 +254,7 @@ def test_a_turn_with_an_out_of_stock_add_gives_the_model_the_refusal_and_alterna
     assert after is not None and after["lines"] == []  # a refused add changes nothing
 
 
-def test_a_turn_with_an_in_stock_add_changes_the_cart_and_passes_the_live_total(
+def test_a_turn_with_an_in_stock_add_changes_the_cart_and_blocks_the_total(
     tmp_path: Path,
 ) -> None:
     store = FixtureCatalog()
@@ -264,7 +268,8 @@ def test_a_turn_with_an_in_stock_add_changes_the_cart_and_passes_the_live_total(
         "Added two. Your cart total is $278.00.",
         "bc" * 16,
     )
-    assert text == "Added two. Your cart total is $278.00."
+    # Security review F2: a total vouches nothing, even the cart's own; the cart still changed.
+    assert text == "Added two. " + FIXED_SENTENCES["money"]
     assert after is not None
     [added] = after["lines"]
     assert (added["variant_id"], added["quantity"], added["line_total"]) == (V, 2, "278.00")

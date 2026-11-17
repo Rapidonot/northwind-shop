@@ -603,7 +603,14 @@ def test_a_replayed_remove_returns_the_stored_result_not_not_in_cart(
     args = {"variant_id": V1, "idempotency_key": "remove-key-0001"}
     first, second = calls(url, session, [("remove_from_cart", args)] * 2)
     assert ok(first, "remove_from_cart")["result"] == "removed"
-    assert second == first
+    # Security review F1: a replay is the stored outcome, marked, with the cart read live.
+    replayed = ok(second, "remove_from_cart")
+    assert (replayed["result"], replayed["variant_id"], replayed["replayed"]) == (
+        "removed",
+        V1,
+        True,
+    )
+    assert replayed["cart"] == ok(first, "remove_from_cart")["cart"]
 
 
 def test_a_replayed_set_quantity_changes_the_line_once(url: str, store: FixtureCatalog) -> None:
@@ -612,7 +619,10 @@ def test_a_replayed_set_quantity_changes_the_line_once(url: str, store: FixtureC
     call(url, session, "add_to_cart", {**KEY_ARGS["add_to_cart"]})
     args = {"variant_id": V1, "quantity": 4, "idempotency_key": "set-key-00001"}
     first, second = calls(url, session, [("set_cart_quantity", args)] * 2)
-    assert second == first
+    # Security review F1: a replay is the stored outcome, marked, with the cart read live.
+    replayed = ok(second, "set_cart_quantity")
+    assert (replayed["quantity"], replayed["replayed"]) == (4, True)
+    assert replayed["cart"] == ok(first, "set_cart_quantity")["cart"]
     [line] = cart_of(url, session)["lines"]
     assert line["quantity"] == 4
 

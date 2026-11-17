@@ -21,7 +21,11 @@ with the amendments recorded there, 2026-11-17. 0018 is reserved for row #32.
      - the same key with the same arguments returns the stored result, and the cart changes once;
      - the same key with other arguments, or for another tool, gets `validation` / `idempotency_conflict`;
      - the last 50 keys per cart are kept;
-     - only a write that changed the cart is stored, so a refusal retried with the same key checks stock again.
+     - only a write that changed the cart is stored, so a refusal retried with the same key checks stock again;
+     - what is stored is the outcome only (`result`, `variant_id`, `quantity`). A replay returns it with
+       `"replayed": true` and the cart read live, never a stored view, so a replay cannot carry an old price,
+       stock level or line (security review F1, F5). The key's description asks for a new key per change, not one
+       built from the arguments.
      There is no `dry_run`: a reversible cart write doesn't need one ("where useful"). The user restored the key on
      2026-11-17, reversing an earlier scope cut.
 2. **Live values only (hard rule 2).**
@@ -29,8 +33,9 @@ with the amendments recorded there, 2026-11-17. 0018 is reserved for row #32.
      the subtotal, are read from the live store when the cart is shown.
    - An add, and a quantity increase, are checked against live stock in the token's region. Stock is checked, not
      reserved: reservation belongs to checkout (CHK-05).
-   - Bounds: 1–10 units a line, at most 20 lines, at most 10,000 carts (least recently used dropped). Carts live
-     in memory and do not survive a restart, like the live store.
+   - Bounds: 1–10 units a line, at most 20 lines, at most 10,000 carts (least recently used dropped). Only a
+     write creates a cart; a read of an unknown cart stores nothing, so reads cannot evict carts (security review
+     F4). Carts live in memory and do not survive a restart, like the live store.
 3. **Out of stock.**
    - The refusal is the fixed envelope (`out_of_stock`, or `insufficient_stock`), alone in the first content
      block, then one `<catalog_data>` label with the alternatives *the server* chose:
@@ -40,10 +45,13 @@ with the amendments recorded there, 2026-11-17. 0018 is reserved for row #32.
      - up to 5 in all, each visible, sold and in stock for the quantity asked.
    - `catalog_tool.labelled_result` is the one reader. It accepts a label after an error only behind our own
      refusal codes.
-   - The assistant records the requested variant's stock from a refusal, not the alternatives' stock. #12's check
-     vouches "out of stock" only when every variant read in the turn is at zero, so recording the alternatives
-     would block the one stock fact a refusal states. The prompt offers alternatives by name, without a stock
-     claim.
+   - What a cart result vouches in the output check (security review F2): each line's **unit price**, and a
+     refusal's **requested variant's stock**. Nothing else. Line totals and the subtotal depend on quantities the
+     model chose, so they vouch nothing, not even the cart's own; a cart line's stock vouches nothing either.
+     #12's check vouches "out of stock" only when every variant read in the turn is at zero, so recording the
+     alternatives' stock would block the one stock fact a refusal states.
+   - The prompt offers alternatives by product name and variant ID as the result gives them, with no other
+     attribute and no stock claim; the judge sees the same two fields (security review F8).
 4. **The session (D2).**
    - The gateway binds an anonymous session to `/api/chat` and `/api/cart`: the `nw_session` cookie, holding 128
      random bits plus an HMAC-SHA256 over them. It is HttpOnly, SameSite=Strict and Path=/api, with no Secure flag
@@ -51,7 +59,8 @@ with the amendments recorded there, 2026-11-17. 0018 is reserved for row #32.
    - The cookie key is derived from `NORTHWIND_MCP_TOKEN_KEY` with the label `northwind-session-v1`. The user
      accepted this for the lab under the per-purpose-keys item (#10 L7 / #10b L3, owner #19/#24).
    - A missing, malformed or forged cookie gets a new session. Without the key there is no session, so the cart
-     tools refuse (`session_required`) and `/api/cart` answers 503.
+     tools refuse (`session_required`) and `/api/cart` answers the fixed 503 (security review F6: the reader reads
+     the key per request and never raises a 500).
    - The MCP token gains an optional signed `sid` claim (shopper tokens only). A token minted without one keeps its
      old claim set. The cart is keyed on `(sid, region)` from the verified token, and no schema takes a cart,
      session or shopper ID.

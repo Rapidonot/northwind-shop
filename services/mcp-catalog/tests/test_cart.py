@@ -600,7 +600,12 @@ def test_the_same_key_ten_times_adds_once_and_returns_the_same_result(
     stock(store, V, 50)
     args = {"variant_id": V, "quantity": 2, "idempotency_key": "add-once-0001"}
     outcomes = calls(url, session, [("add_to_cart", args)] * 10)
-    assert all(outcome == outcomes[0] for outcome in outcomes)
+    first = data(outcomes[0], "add_to_cart")
+    assert "replayed" not in first
+    for outcome in outcomes[1:]:  # security review F1: the outcome, marked, the cart live
+        again = data(outcome, "add_to_cart")
+        assert (again["result"], again["quantity"], again["replayed"]) == ("added", 2, True)
+        assert again["cart"] == first["cart"]
     [line] = data(call(url, session, "get_cart", {}), "get_cart")["lines"]
     assert line["quantity"] == 2
 
@@ -681,3 +686,49 @@ def test_the_last_fifty_keys_per_cart_are_kept(url: str, store: FixtureCatalog) 
     assert replay["quantity"] == last["quantity"]
     [line] = data(call(url, session, "get_cart", {}), "get_cart")["lines"]
     assert line["quantity"] == 2
+
+
+def test_a_reused_key_after_remove_shows_the_live_cart_not_the_old_add(
+    url: str, store: FixtureCatalog
+) -> None:
+    """Security review F1: add (key A), remove, add again with key A. The replay changes nothing,
+    says so, and shows the cart as it is now: empty, never the first add's snapshot."""
+    session = new_session()
+    stock(store, V, 5)
+    first = {"variant_id": V, "quantity": 1, "idempotency_key": "reused-key-01"}
+    call(url, session, "add_to_cart", first)
+    call(url, session, "remove_from_cart", {"variant_id": V, "idempotency_key": "reused-key-02"})
+    replay = data(call(url, session, "add_to_cart", first), "add_to_cart")
+    assert replay["replayed"] is True and replay["cart"]["lines"] == []
+    assert data(call(url, session, "get_cart", {}), "get_cart")["lines"] == []
+
+
+def test_a_replay_shows_the_price_as_it_is_now(url: str, store: FixtureCatalog) -> None:
+    """Security review F1: no stored price ever comes back."""
+    session = new_session()
+    variant = (
+        "P0002-BLK-REG-S"
+        if store.variant("P0002-BLK-REG-S")
+        else store.variants_of("P0002")[1].variant_id
+    )
+    stock(store, variant, 5)
+    args = {"variant_id": variant, "idempotency_key": "price-key-001"}
+    call(url, session, "add_to_cart", args)
+    store.set_price(variant, REGION, "12.34", "GBP")
+    [line] = data(call(url, session, "add_to_cart", args), "add_to_cart")["cart"]["lines"]
+    assert line["unit_price"] == "12.34"
+
+
+def test_reading_a_cart_never_creates_one(url: str, store: FixtureCatalog) -> None:
+    """Security review F4: reads of unknown sessions store nothing, so they cannot evict carts."""
+    from northwind_mcp_catalog.cart_store import CartStore
+
+    carts = CartStore(max_carts=1)
+    with carts.open("kept", REGION) as cart:
+        cart.lines[V] = 1
+    for n in range(5):
+        with carts.open(f"reader-{n}", REGION, create=False) as cart:
+            assert dict(cart.lines) == {}
+    assert len(carts) == 1
+    with carts.open("kept", REGION, create=False) as cart:
+        assert cart.lines == {V: 1}

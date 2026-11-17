@@ -30,11 +30,12 @@ CartKey = tuple[str, str]  # (session id, region)
 
 class Cart:
     """Lines in the order they were first added: variant ID -> quantity. `keys` holds the last
-    `MAX_KEYS` idempotency keys of writes that changed this cart: key -> (fingerprint, result)."""
+    `MAX_KEYS` idempotency keys of writes that changed this cart: key -> (fingerprint, outcome),
+    where the outcome is `result`, `variant_id` and `quantity` only, never a cart view."""
 
     def __init__(self) -> None:
         self.lines: OrderedDict[str, int] = OrderedDict()
-        self.keys: OrderedDict[str, tuple[str, Any]] = OrderedDict()
+        self.keys: OrderedDict[str, tuple[str, dict[str, Any]]] = OrderedDict()
 
 
 class _Open:
@@ -64,14 +65,18 @@ class CartStore:
         self._max = max_carts
         self._lock = threading.Lock()
 
-    def open(self, session: str, region: str) -> _Open:
-        """The caller's cart, created empty if new, held under the store's lock for the whole `with`
-        block, so a stock check and the write that follows it are one step for that cart."""
+    def open(self, session: str, region: str, *, create: bool = True) -> _Open:
+        """The caller's cart, held under the store's lock for the whole `with` block, so a stock
+        check and the write that follows it are one step for that cart. A new cart is created and
+        kept only when `create`; otherwise an unknown cart is a detached empty one, never stored
+        (reads, security review F4)."""
         key = (session, region)
         self._lock.acquire()
         try:
             cart = self._carts.get(key)
-            if cart is None:
+            if cart is None and not create:
+                cart = Cart()
+            elif cart is None:
                 cart = Cart()
                 self._carts[key] = cart
                 while len(self._carts) > self._max:

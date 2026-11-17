@@ -299,7 +299,8 @@ async def get_cart(
 ) -> t.CallToolResult:
     _catalog._checked(args, frozenset())
     session, region = _caller(claims)
-    with server.carts.open(session, region) as cart:
+    # A read never creates a cart, so reads cannot evict real carts (security review F4).
+    with server.carts.open(session, region, create=False) as cart:
         value = view(server, claims, region, cart)
     return json_result(GET_CART, value)
 
@@ -377,6 +378,13 @@ def _set_quantity(
     return json_result(SET_CART_QUANTITY, value)
 
 
+OUTCOME_KEYS = ("result", "variant_id", "quantity")
+
+
+def _text(result: t.CallToolResult) -> str:
+    return "".join(getattr(block, "text", "") for block in result.content)
+
+
 Write = Callable[[CatalogServer, Claims, str, Cart, Mapping[str, Any]], t.CallToolResult]
 
 
@@ -384,10 +392,14 @@ def _idempotent(tool: str, arguments: frozenset[str], write: Write) -> Any:
     """A cart write behind its idempotency key (hard rule 9; plan R1, R8).
 
     Card data and unknown arguments are refused first. Then the key is checked (`KEY`). Under the
-    cart's lock, a key this cart has seen returns its stored result when the tool and the other
+    cart's lock, a key this cart has seen returns its stored outcome when the tool and the other
     arguments are the same, and `idempotency_conflict` when they are not; a new key runs the write.
     Only a write that changed the cart is stored (the last `MAX_KEYS` per cart): a refusal or an
-    error is not, so retrying it with the same key checks again."""
+    error is not, so retrying it with the same key checks again.
+
+    What is stored is the outcome only (`result`, `variant_id`, `quantity`), never a cart view. A
+    replay returns that outcome with `"replayed": true` and the cart as it is now, read live, so a
+    replay can never hand back an old price, stock level or line (security review F1, F5)."""
 
     async def handler(
         server: CatalogServer, claims: Claims, args: Mapping[str, Any]
@@ -405,13 +417,17 @@ def _idempotent(tool: str, arguments: frozenset[str], write: Write) -> Any:
                 if seen[0] != fingerprint:
                     raise idempotency_conflict()
                 cart.keys.move_to_end(key)
-                stored: t.CallToolResult = seen[1]
-                return stored
+                outcome = dict(seen[1])
+                replay = {**outcome, "replayed": True, "cart": view(server, claims, region, cart)}
+                return json_result(tool, replay)
             result = write(server, claims, region, cart, rest)
             if not result.is_error:
-                cart.keys[key] = (fingerprint, result)
-                while len(cart.keys) > MAX_KEYS:
-                    cart.keys.popitem(last=False)
+                written = catalog_tool.unlabel(_text(result))
+                if written is not None and isinstance(written[1], dict):
+                    outcome = {k: written[1][k] for k in OUTCOME_KEYS if k in written[1]}
+                    cart.keys[key] = (fingerprint, outcome)
+                    while len(cart.keys) > MAX_KEYS:
+                        cart.keys.popitem(last=False)
             return result
 
     return handler
@@ -439,8 +455,9 @@ _KEY = {
     "maxLength": 64,
     "pattern": "^[A-Za-z0-9_-]+$",
     "description": (
-        "A new key for each cart change, e.g. add-p0001-blk-m-1. Send the same key only to retry "
-        "the same change."
+        "A new key, never used before, for each cart change, e.g. 7f3c9a21; not built from the "
+        "item or quantity. Send the same key only to retry the same change in this turn. A "
+        'result with "replayed": true changed nothing now.'
     ),
 }
 
@@ -489,19 +506,19 @@ DESCRIPTIONS = {
         "region. Use it only when the shopper asks to add an item and has said which colour, size "
         "and fit; otherwise ask first. If stock can't cover it, the add is refused and the result "
         "lists alternatives in stock: offer only those. It never places an order. Example: "
-        '{"variant_id": "P0001-BLK-REG-M", "quantity": 1, "idempotency_key": "add-p0001-blk-m-1"}.'
+        '{"variant_id": "P0001-BLK-REG-M", "quantity": 1, "idempotency_key": "7f3c9a21"}.'
     ),
     REMOVE_FROM_CART: (
         "Remove one variant from the shopper's own cart. Use it only when the shopper asks to "
         "remove that item; never to make room or tidy up on your own. Example: "
-        '{"variant_id": "P0001-BLK-REG-M", "idempotency_key": "remove-p0001-blk-m-1"}.'
+        '{"variant_id": "P0001-BLK-REG-M", "idempotency_key": "c41d06e8"}.'
     ),
     SET_CART_QUANTITY: (
         "Change how many units of one variant are in the shopper's own cart (1-10; use "
         "remove_from_cart for none). A larger quantity is checked against live stock first. Use it "
         "only when the shopper asks to change the quantity; do not use it to add a new item (use "
         "add_to_cart). Example: "
-        '{"variant_id": "P0001-BLK-REG-M", "quantity": 2, "idempotency_key": "set-p0001-blk-m-2"}.'
+        '{"variant_id": "P0001-BLK-REG-M", "quantity": 2, "idempotency_key": "9b2e5f70"}.'
     ),
 }
 

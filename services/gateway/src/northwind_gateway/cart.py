@@ -14,7 +14,6 @@ name.
 from __future__ import annotations
 
 import logging
-from functools import lru_cache
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
@@ -23,7 +22,7 @@ from fastapi.responses import JSONResponse
 from northwind_assistant.caller import Caller
 from northwind_assistant.catalog_client import CartReader
 from northwind_common.localenv import mcp_catalog_url
-from northwind_common.mcp_token import signing_key
+from northwind_common.mcp_token import TokenKeyError, signing_key
 from northwind_gateway.settings import shopper_caller
 
 log = logging.getLogger(__name__)
@@ -34,10 +33,14 @@ NO_STORE = {"Cache-Control": "no-store"}
 router = APIRouter()
 
 
-@lru_cache(maxsize=1)
-def cart_reader() -> CartReader:
-    """Once per process. The key comes only from the environment (hard rule 4)."""
-    return CartReader(mcp_catalog_url(), signing_key())
+def cart_reader() -> CartReader | None:
+    """The reader, with the key read from the environment on each request (hard rule 4; as the
+    session middleware reads it, so the two never disagree). None without a key: the route answers
+    the fixed 503, never a 500 (security review F6)."""
+    try:
+        return CartReader(mcp_catalog_url(), signing_key())
+    except TokenKeyError:
+        return None
 
 
 def _unavailable() -> JSONResponse:
@@ -53,8 +56,11 @@ def _unavailable() -> JSONResponse:
 @router.get("/api/cart")
 async def cart(
     caller: Annotated[Caller, Depends(shopper_caller)],
-    reader: Annotated[CartReader, Depends(cart_reader)],
+    reader: Annotated[CartReader | None, Depends(cart_reader)],
 ) -> JSONResponse:
+    if reader is None:
+        log.error("cart read failed: no key")
+        return _unavailable()
     try:
         view = await reader.read(caller)
     except Exception as error:  # noqa: BLE001 - its text must not reach the shopper or a log

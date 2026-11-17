@@ -114,10 +114,10 @@ def test_a_cart_result_reaches_the_judge_as_live_values_only() -> None:
     for attribute in ("Tidewick", "Black", '"size"', '"fit"', '"colour"', '"name"'):
         assert attribute not in block.text
     assert '"line_total": "139.00"' in block.text
-    assert (Decimal("139.00"), "USD") in live.prices and live.stock == {V: 5}
+    assert live.prices == {(Decimal("139.00"), "USD")} and live.stock == {}  # security review F2
 
 
-def test_a_refusal_reaches_the_judge_with_alternative_ids_only() -> None:
+def test_a_refusal_reaches_the_judge_with_alternative_names_and_ids_only() -> None:
     envelope = {
         "isError": True,
         "errorCategory": "business",
@@ -147,8 +147,12 @@ def test_a_refusal_reaches_the_judge_with_alternative_ids_only() -> None:
     )
     blocks, live = live_of([("add_to_cart", True, text)], "US")
     [block] = blocks
-    assert json.loads(block.text)["alternatives"] == ["P0001-BLK-REG-L"]
-    assert "Tidewick" not in block.text
+    # Security review F8: the name and variant ID the prompt offers them by; no colour, size or fit.
+    assert json.loads(block.text)["alternatives"] == [
+        {"variant_id": "P0001-BLK-REG-L", "name": "Tidewick Harbor Rain Jacket"}
+    ]
+    for attribute in ('"colour"', '"size"', '"fit"', "Black"):
+        assert attribute not in block.text
     assert live.stock == {V: 0}
 
 
