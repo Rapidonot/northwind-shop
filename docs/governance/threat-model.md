@@ -261,7 +261,6 @@ user decided them, and the Why gives the date and the decision (decision 0011).
 | What the device bridge can reach and keep | decided | 2026-11-07: the advisor reads only connected folders, never `~/.northwind`, and writes only when asked. A stated policy, not measured; it does not say what the bridge keeps |
 | Who approves `make eval-gate-stale-ok` | decided | 2026-11-07: the user |
 | Untrusted content can steer a cart write: only the prompt and the recorded check stand between the model and `add_to_cart`, `remove_from_cart`, `set_cart_quantity` (row #16) | Window B P6, NFR-03 | The user's amendment 5 to the row #16 plan, 2026-11-17: a threat-model row and a recorded check now; a deterministic control is the rest of NFR-03 |
-| The cart writes take no idempotency key or dry run, an exception to hard rule 9 (row #16) | #21 | The user's scope cut, 2026-11-17 (decision 0019): CHK-05 owns idempotency on the purchase path, and hardening after it; a cart write changes only the caller's own cart and is undone by another write |
 
 ## Open items
 

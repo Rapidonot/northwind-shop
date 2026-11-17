@@ -7,7 +7,8 @@
       "tool": "add_to_cart",
       "arguments": {
         "variant_id": "P0001-BLK-REG-M",
-        "quantity": 1
+        "quantity": 1,
+        "idempotency_key": "journey-add-to-cart-1"
       },
       "answer": [
         "Done: ",
@@ -26,7 +27,8 @@
       "tool": "add_to_cart",
       "arguments": {
         "variant_id": "P0008-CHR-REL-M",
-        "quantity": 1
+        "quantity": 1,
+        "idempotency_key": "journey-add-to-cart-2"
       },
       "answer": [
         "That one is out of stock, ",
@@ -45,7 +47,8 @@
       "tool": "set_cart_quantity",
       "arguments": {
         "variant_id": "P0001-BLK-REG-M",
-        "quantity": 2
+        "quantity": 2,
+        "idempotency_key": "journey-set-cart-quantity-3"
       },
       "answer": [
         "Updated: ",
@@ -63,7 +66,8 @@
       "message": "Remove the Tidewick Harbor Rain Jacket in Black, regular fit, size M from my cart.",
       "tool": "remove_from_cart",
       "arguments": {
-        "variant_id": "P0001-BLK-REG-M"
+        "variant_id": "P0001-BLK-REG-M",
+        "idempotency_key": "journey-remove-from-cart-4"
       },
       "answer": [
         "Removed it ",

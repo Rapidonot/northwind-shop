@@ -46,7 +46,7 @@ SERVERS = frozenset({RAG_SERVER, CATALOG_SERVER})
 _UUID4 = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
 _B64 = re.compile(r"^[A-Za-z0-9_-]+$")
 _REGION = re.compile(r"^[A-Z]{2,3}$")
-SESSION_ID = re.compile(r"^[0-9a-f]{32}$")
+SESSION_ID = re.compile(r"[0-9a-f]{32}", re.ASCII)  # fullmatch: no trailing "\n"
 
 
 class TokenError(Exception):
@@ -119,7 +119,7 @@ def mint(
     if audience == "shopper" and region is None:
         raise ValueError("a shopper token needs a region")
     if session is not None and (
-        audience != "shopper" or not isinstance(session, str) or not SESSION_ID.match(session)
+        audience != "shopper" or not isinstance(session, str) or not SESSION_ID.fullmatch(session)
     ):
         raise ValueError("a session is 32 lowercase hex characters, on a shopper token only")
     claims = Claims(
@@ -169,7 +169,7 @@ def _claims(body: Any, now: float) -> Claims:
         or exp > now + MAX_TTL_SECONDS
         or (
             "sid" in body
-            and not (aud == "shopper" and isinstance(sid, str) and SESSION_ID.match(sid))
+            and not (aud == "shopper" and isinstance(sid, str) and SESSION_ID.fullmatch(sid))
         )
     ):
         raise TokenError

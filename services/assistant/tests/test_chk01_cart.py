@@ -213,7 +213,7 @@ def turn_requests(tmp_path: Path, session: str) -> list[dict[str, Any]]:
         serve_retriever(One(), Caller) as (url, _),
         catalog_testing.running(catalog_testing.server(store, key=KEY)) as catalog_url,
     ):
-        llm.reply_tool_use(ADD, {"variant_id": V, "quantity": 1})
+        llm.reply_tool_use(ADD, {"variant_id": V, "quantity": 1, "idempotency_key": "turn-add-01"})
         llm.reply_stream("Added it to your cart.")
         runtime = agent_runtime(base_url=llm.url, root=tmp_path / session)
 

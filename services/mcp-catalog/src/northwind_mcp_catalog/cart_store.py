@@ -9,7 +9,8 @@ Memory is bounded: at most `MAX_CARTS` carts, the least recently used dropped fi
 `MAX_LINES` lines of at most `MAX_QUANTITY` units each. A cart is checked against stock when it
 changes, not reserved: reservation belongs to checkout (CHK-05).
 
-Nothing here creates an order, a payment or anything else: the only state is the quantity per line.
+Nothing here creates an order, a payment or anything else: the state is the quantity per line, plus
+each cart's recent idempotency keys and the results they returned.
 """
 
 from __future__ import annotations
@@ -17,19 +18,23 @@ from __future__ import annotations
 import threading
 from collections import OrderedDict
 from types import TracebackType
+from typing import Any
 
 MAX_CARTS = 10_000
 MAX_LINES = 20
 MAX_QUANTITY = 10
+MAX_KEYS = 50  # idempotency keys kept per cart (hard rule 9)
 
 CartKey = tuple[str, str]  # (session id, region)
 
 
 class Cart:
-    """Lines in the order they were first added: variant ID -> quantity."""
+    """Lines in the order they were first added: variant ID -> quantity. `keys` holds the last
+    `MAX_KEYS` idempotency keys of writes that changed this cart: key -> (fingerprint, result)."""
 
     def __init__(self) -> None:
         self.lines: OrderedDict[str, int] = OrderedDict()
+        self.keys: OrderedDict[str, tuple[str, Any]] = OrderedDict()
 
 
 class _Open:

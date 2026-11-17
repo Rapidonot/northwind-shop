@@ -57,7 +57,9 @@ def test_an_items_session_comes_from_its_id_alone() -> None:
 def run_twice() -> list[dict[str, Any]]:
     with ScriptedLLM() as llm:
         for _ in range(2):
-            llm.reply_tool_use(ADD, {"variant_id": V, "quantity": 1})
+            llm.reply_tool_use(
+                ADD, {"variant_id": V, "quantity": 1, "idempotency_key": "eval-add-01"}
+            )
             llm.reply_stream("Added it to your cart.")
         with assistant_answerer(llm.url, {}, "m", lambda s: s) as (answerer, _index):
             for _ in range(2):
@@ -170,10 +172,14 @@ def test_the_leak_guard_runs_on_a_stock_refusal_and_not_on_a_bare_error() -> Non
             return bool(result.is_error)
 
         # A bare business error carries no catalog data: not a leak.
-        assert asyncio.run(call("remove_from_cart", {"variant_id": V}))
+        assert asyncio.run(
+            call("remove_from_cart", {"variant_id": V, "idempotency_key": "leak-rm-01"})
+        )
         assert log.leak is False
         # An out-of-stock refusal carries alternatives: the guard runs and refuses it.
-        assert asyncio.run(call("add_to_cart", {"variant_id": "P0008-CHR-REL-M"}))
+        assert asyncio.run(
+            call("add_to_cart", {"variant_id": "P0008-CHR-REL-M", "idempotency_key": "leak-add-01"})
+        )
         assert log.leak is True
         [*_, (tool, is_error, text)] = log.taken()
         assert (tool, is_error) == ("add_to_cart", True) and "tool_failed" in text

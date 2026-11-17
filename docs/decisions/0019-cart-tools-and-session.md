@@ -16,6 +16,14 @@ with the amendments recorded there, 2026-11-17. 0018 is reserved for row #32.
      `shopper-portal` gets `get_cart` only, and the catalog subagent gets none.
    - mcp-catalog is no longer read-only. The three writes are the only tools annotated as writes, and they touch
      only the caller's cart: never the catalog, an order or a payment.
+   - **Idempotency (hard rule 9).** Each write requires an `idempotency_key` of 8–64 characters from
+     `[A-Za-z0-9_-]`:
+     - the same key with the same arguments returns the stored result, and the cart changes once;
+     - the same key with other arguments, or for another tool, gets `validation` / `idempotency_conflict`;
+     - the last 50 keys per cart are kept;
+     - only a write that changed the cart is stored, so a refusal retried with the same key checks stock again.
+     There is no `dry_run`: a reversible cart write doesn't need one ("where useful"). The user restored the key on
+     2026-11-17, reversing an earlier scope cut.
 2. **Live values only (hard rule 2).**
    - A cart stores variant IDs and quantities, never a price. Each line's unit price, line total and stock, and
      the subtotal, are read from the live store when the cart is shown.
@@ -59,10 +67,8 @@ with the amendments recorded there, 2026-11-17. 0018 is reserved for row #32.
 
 ## Exceptions and open items
 
-- **Hard rule 9:** the cart writes take no idempotency key or `dry_run`. This was the user's scope cut,
-  2026-11-17 (amendment 3), and is owned by #21 (CHK-05) and hardening. A cart write changes only the caller's
-  own cart and is undone by another write. `tests/mcp/test_cc10_contract_errors.py` pins exactly these three as
-  the only state-changing tools.
+- None to hard rule 9: every cart write takes an idempotency key. `tests/mcp/test_cc10_contract_errors.py` pins
+  that every state-changing tool requires one and that a read-only tool takes none.
 - **Injection into a cart write** (amendment 5): a threat-model row, owned by Window B P6, NFR-03. A recorded
   check covers it: no cart write in any `assistant-redteam` cassette, nor in any `eval-answers` cassette for an
   adversarial item.

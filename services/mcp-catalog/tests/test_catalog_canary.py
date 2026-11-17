@@ -78,12 +78,23 @@ def arguments() -> list[tuple[str, dict[str, Any]]]:
         calls.append(("search_products", {"text": value, "limit": 20}))
     calls.append(("get_product", {"product_id": "P0009", "note": CANARY}))
     # Row #16: the cart tools, with the same values, then an out-of-stock add beside P0009.
-    for value in VALUES:
-        calls.append(("add_to_cart", {"variant_id": value}))
-        calls.append(("set_cart_quantity", {"variant_id": value, "quantity": 2}))
-        calls.append(("remove_from_cart", {"variant_id": value}))
-    calls.append(("add_to_cart", {"variant_id": OUT_OF_STOCK}))
-    calls.append(("add_to_cart", {"variant_id": "P0009-BLK-REG-M", "note": CANARY}))
+    for n, value in enumerate(VALUES):
+        key = f"canary-key-{n:03d}"  # hard rule 9: every cart write takes one
+        calls.append(("add_to_cart", {"variant_id": value, "idempotency_key": f"{key}-a"}))
+        calls.append(
+            (
+                "set_cart_quantity",
+                {"variant_id": value, "quantity": 2, "idempotency_key": f"{key}-s"},
+            )
+        )
+        calls.append(("remove_from_cart", {"variant_id": value, "idempotency_key": f"{key}-r"}))
+    calls.append(("add_to_cart", {"variant_id": OUT_OF_STOCK, "idempotency_key": "canary-oos-1"}))
+    calls.append(
+        (
+            "add_to_cart",
+            {"variant_id": "P0009-BLK-REG-M", "note": CANARY, "idempotency_key": "canary-note-1"},
+        )
+    )
     calls.append(("get_cart", {}))
     return calls
 
@@ -105,5 +116,5 @@ def test_the_canary_title_and_id_are_in_no_response_byte(url: str) -> None:
         for (name, args), raw in zip(calls, asyncio.run(go(region)), strict=True):
             for needle in FORBIDDEN:
                 assert needle not in raw, (region, name, args)
-            if name == "add_to_cart" and args == {"variant_id": OUT_OF_STOCK}:
+            if name == "add_to_cart" and args.get("variant_id") == OUT_OF_STOCK:
                 assert "out_of_stock" in raw  # the alternatives scan really ran

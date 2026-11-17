@@ -193,13 +193,19 @@ def test_the_real_registry_holds_no_refund_capture_or_assign_tool_and_nothing_th
     # #10b: mcp-catalog's registry joins (decision D1 scopes it to the assistant).
     registry = {**TOOLS, **CATALOG_TOOLS}
     # Row #16 (CHK-01): the three cart writes are the only tools that change state, and they change
-    # only the caller's own cart. They take no idempotency key or dry run: the user's scope cut of
-    # 2026-11-17, a recorded exception to hard rule 9 (decision 0019), open for CHK-05/hardening.
+    # only the caller's own cart. Hard rule 9: a tool that changes state requires an idempotency
+    # key, and a read-only tool takes none. No tool takes `dry_run` (not useful for a reversible
+    # cart write, by the user's decision, 2026-11-17).
     cart_writes = {"add_to_cart", "remove_from_cart", "set_cart_quantity"}
     for name, spec in registry.items():
         assert not any(f in name.lower() for f in fragments)
         schema = spec.tool.input_schema
-        assert not {"idempotency_key", "dry_run"} & set(schema.get("properties", {}))
+        properties = set(schema.get("properties", {}))
+        assert "dry_run" not in properties
+        if name in cart_writes:
+            assert "idempotency_key" in schema.get("required", [])
+        else:
+            assert "idempotency_key" not in properties
         assert spec.tool.annotations is not None
         assert spec.tool.annotations.read_only_hint is (name not in cart_writes)
         assert spec.tool.annotations.destructive_hint in (None, False)

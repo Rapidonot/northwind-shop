@@ -189,7 +189,12 @@ def test_the_panel_reads_the_real_cart_as_the_portal_agent(keyed: None) -> None:
         async def add() -> None:
             async with catalog_testing.connect(url, assistant) as client:
                 result = await client.call_tool(
-                    "add_to_cart", {"variant_id": "P0001-BLK-REG-M", "quantity": 2}
+                    "add_to_cart",
+                    {
+                        "variant_id": "P0001-BLK-REG-M",
+                        "quantity": 2,
+                        "idempotency_key": "gateway-e2e-01",
+                    },
                 )
                 assert not result.is_error
 

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import itertools
 import json
 import uuid
 from collections.abc import Iterator
@@ -55,6 +56,14 @@ def new_session() -> str:
 
 
 Outcome = tuple[bool, list[str]]
+_KEYS = itertools.count()
+
+
+def keyed(name: str, args: dict[str, Any]) -> dict[str, Any]:
+    """A write gets a fixed, new idempotency key unless the test passes its own (hard rule 9)."""
+    if name in WRITES and "idempotency_key" not in args:
+        return {**args, "idempotency_key": f"test-key-{next(_KEYS):06d}"}
+    return args
 
 
 def calls(
@@ -70,7 +79,7 @@ def calls(
         out: list[Outcome] = []
         async with connect(url, bearer) as client:
             for name, args in steps:
-                result = await client.call_tool(name, args)
+                result = await client.call_tool(name, keyed(name, args))
                 out.append(
                     (bool(result.is_error), [getattr(b, "text", "") for b in result.content])
                 )
@@ -118,15 +127,18 @@ def same_product_in_stock(store: FixtureCatalog, variant_id: str) -> list[str]:
 # ---- R1, R12: the tools ------------------------------------------------------------------------
 
 
-def test_the_four_cart_tools_take_no_identity_and_no_idempotency_or_dry_run() -> None:
+def test_every_cart_write_requires_an_idempotency_key_and_none_takes_an_identity() -> None:
     for name in CART_TOOLS:
         schema = TOOLS[name].tool.input_schema
         assert schema["additionalProperties"] is False
         props = set(schema.get("properties", {}))
-        assert props <= {"variant_id", "quantity"}
+        assert props <= {"variant_id", "quantity", "idempotency_key"}
         assert not {"session_id", "cart_id", "shopper_id", "sid", "region", "audience"} & props
-        # The user's scope cut, 2026-11-17: an open item for CHK-05/hardening (decision 0019).
-        assert not {"idempotency_key", "dry_run"} & props
+        assert "dry_run" not in props  # not useful for a reversible cart write (the user)
+        if name in WRITES:  # hard rule 9 (the user, 2026-11-17)
+            assert "idempotency_key" in schema["required"]
+        else:
+            assert "idempotency_key" not in props
 
 
 def test_a_write_result_and_a_cart_say_nothing_about_an_order(
@@ -547,3 +559,125 @@ def test_a_refusal_reads_back_through_the_shared_parser(url: str, store: Fixture
     # Another error never yields a label, even with one appended.
     other = call(url, new_session(), "remove_from_cart", {"variant_id": V})
     assert labelled_result(BLOCK_SEPARATOR.join([*other[1], blocks[1]]), True) is None
+
+
+# ---- R8: idempotency (hard rule 9) ---------------------------------------------------------------
+
+
+@pytest.mark.parametrize("name", WRITES)
+@pytest.mark.parametrize("key", [None, "short", "x" * 65, "has space1", "semi;colon", 12345678, ""])
+def test_a_write_without_a_well_formed_key_is_refused_and_changes_nothing(
+    url: str, store: FixtureCatalog, name: str, key: Any
+) -> None:
+    session = new_session()
+    stock(store, V, 5)
+    args = dict(ARGS[name])
+    if key is None:
+        is_error, blocks = _raw(url, session, name, args)  # no key at all
+    else:
+        args["idempotency_key"] = key
+        is_error, blocks = calls(url, session, [(name, args)])[0]
+    assert_error((is_error, blocks), "validation", "invalid_idempotency_key")
+    assert data(call(url, session, "get_cart", {}), "get_cart")["lines"] == []
+
+
+def _raw(url: str, session: str, name: str, args: dict[str, Any]) -> Outcome:
+    """A call with no key at all (`keyed` would add one)."""
+    bearer = token("shopper-assistant", REGION, session=session)[0]
+
+    async def go() -> Outcome:
+        async with connect(url, bearer) as client:
+            result = await client.call_tool(name, args)
+        return bool(result.is_error), [getattr(b, "text", "") for b in result.content]
+
+    return asyncio.run(go())
+
+
+def test_the_same_key_ten_times_adds_once_and_returns_the_same_result(
+    url: str, store: FixtureCatalog
+) -> None:
+    session = new_session()
+    stock(store, V, 50)
+    args = {"variant_id": V, "quantity": 2, "idempotency_key": "add-once-0001"}
+    outcomes = calls(url, session, [("add_to_cart", args)] * 10)
+    assert all(outcome == outcomes[0] for outcome in outcomes)
+    [line] = data(call(url, session, "get_cart", {}), "get_cart")["lines"]
+    assert line["quantity"] == 2
+
+
+def test_the_same_key_with_other_arguments_or_another_tool_is_a_conflict(
+    url: str, store: FixtureCatalog
+) -> None:
+    session = new_session()
+    stock(store, V, 50)
+    key = "same-key-0001"
+    first = call(
+        url, session, "add_to_cart", {"variant_id": V, "quantity": 1, "idempotency_key": key}
+    )
+    assert not first[0]
+    conflicts: list[tuple[str, dict[str, Any]]] = [
+        ("add_to_cart", {"variant_id": V, "quantity": 2, "idempotency_key": key}),
+        ("set_cart_quantity", {"variant_id": V, "quantity": 1, "idempotency_key": key}),
+        ("remove_from_cart", {"variant_id": V, "idempotency_key": key}),
+    ]
+    for name, args in conflicts:
+        assert_error(call(url, session, name, args), "validation", "idempotency_conflict")
+    [line] = data(call(url, session, "get_cart", {}), "get_cart")["lines"]
+    assert line["quantity"] == 1
+
+
+def test_keys_belong_to_one_cart(url: str, store: FixtureCatalog) -> None:
+    stock(store, V, 50)
+    args = {"variant_id": V, "quantity": 1, "idempotency_key": "shared-key-01"}
+    a, b = new_session(), new_session()
+    call(url, a, "add_to_cart", args)
+    call(url, b, "add_to_cart", args)
+    for session in (a, b):
+        [line] = data(call(url, session, "get_cart", {}), "get_cart")["lines"]
+        assert line["quantity"] == 1
+
+
+def test_a_refusal_is_not_stored_so_a_retry_after_a_restock_adds(
+    url: str, store: FixtureCatalog
+) -> None:
+    session = new_session()
+    variant = (
+        "P0007-BLK-REG-M"
+        if store.variant("P0007-BLK-REG-M")
+        else store.variants_of("P0007")[0].variant_id
+    )
+    args = {"variant_id": variant, "idempotency_key": "retry-key-01"}
+    stock(store, variant, 0)
+    assert_error(call(url, session, "add_to_cart", args), "business", "out_of_stock", blocks=2)
+    stock(store, variant, 3)
+    assert data(call(url, session, "add_to_cart", args), "add_to_cart")["quantity"] == 1
+
+
+def test_the_last_fifty_keys_per_cart_are_kept(url: str, store: FixtureCatalog) -> None:
+    from northwind_mcp_catalog.cart_store import MAX_KEYS
+
+    assert MAX_KEYS == 50
+    session = new_session()
+    stock(store, V, 50)
+    first = {"variant_id": V, "quantity": 1, "idempotency_key": "keep-key-000"}
+    call(url, session, "add_to_cart", first)
+    # 50 more changes on this cart, each with its own key, push the first key out.
+    steps: list[tuple[str, dict[str, Any]]] = []
+    for n in range(MAX_KEYS):
+        quantity = 2 if n % 2 == 0 else 1
+        steps.append(
+            (
+                "set_cart_quantity",
+                {"variant_id": V, "quantity": quantity, "idempotency_key": f"keep-key-{n + 1:03d}"},
+            )
+        )
+    calls(url, session, steps)
+    # The first key is forgotten: the same add runs again (1 -> 2), rather than replaying.
+    again = data(call(url, session, "add_to_cart", first), "add_to_cart")
+    assert again["quantity"] == 2
+    # The last key is still kept: its replay changes nothing.
+    last = steps[-1][1]
+    replay = data(call(url, session, "set_cart_quantity", last), "set_cart_quantity")
+    assert replay["quantity"] == last["quantity"]
+    [line] = data(call(url, session, "get_cart", {}), "get_cart")["lines"]
+    assert line["quantity"] == 2

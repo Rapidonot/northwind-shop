@@ -38,3 +38,20 @@ def test_playwright_never_sets_the_database_itself() -> None:
     # Playwright starts each server with its own environment merged over the parent's, so the
     # DATABASE_URL make exports reaches the gateway and mcp-rag unless the config overrides it.
     assert "DATABASE_URL" not in CONFIG
+
+
+def test_the_browser_cart_journey_is_the_scripted_models_journey() -> None:
+    """cart.e2e.ts keeps its steps inline (a journey imports only ./journey, NFR-08's guard); the
+    scripted model and the recorded journey read cart.json. Each message, answer and expected line
+    must be in both, so the two cannot drift apart."""
+    import json
+
+    portal = Path(__file__).resolve().parents[3] / "apps/portal/e2e"
+    journey = (portal / "cart.e2e.ts").read_text(encoding="utf-8")
+    steps = json.loads((portal / "cart.json").read_text(encoding="utf-8"))["steps"]
+    assert len(re.findall(r"\bmessage: \"", journey)) == len(steps)
+    for step in steps:
+        assert json.dumps(step["message"]) in journey
+        assert json.dumps("".join(step["answer"])) in journey
+        for line in step["expect"]:
+            assert json.dumps(line["variant_id"]) in journey

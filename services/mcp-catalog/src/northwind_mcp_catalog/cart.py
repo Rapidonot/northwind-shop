@@ -29,14 +29,18 @@ has stock for the quantity asked. The model never chooses or invents one.
 **Arguments.** These use the same checks as the catalog tools: card data is refused first, then
 unknown keys, then each value's type and range. No error echoes an argument.
 
-Idempotency keys and dry runs are not here (the user's scope cut, 2026-11-17): an open item for
-CHK-05 and hardening.
+**Idempotency (hard rule 9; the user, 2026-11-17).** Every write requires an `idempotency_key`, 8-64
+characters of `[A-Za-z0-9_-]`. The same key with the same arguments returns the stored result, and
+the cart changes once; the same key with other arguments, or for another tool, is an
+`idempotency_conflict`. The last `MAX_KEYS` keys per cart are kept. There is no dry run: a
+reversible cart write doesn't need one.
 """
 
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
+import re
+from collections.abc import Callable, Mapping
 from typing import Any
 
 import mcp.types as t
@@ -44,7 +48,7 @@ import mcp.types as t
 from northwind_common import catalog_tool
 from northwind_common.errors import ToolError
 from northwind_common.mcp_token import Claims
-from northwind_mcp_catalog.cart_store import MAX_LINES, MAX_QUANTITY, Cart
+from northwind_mcp_catalog.cart_store import MAX_KEYS, MAX_LINES, MAX_QUANTITY, Cart
 from northwind_mcp_catalog.live import Product, Variant
 from northwind_mcp_catalog.server import CatalogServer, ToolSpec, json_result
 
@@ -53,6 +57,8 @@ ADD_TO_CART = "add_to_cart"
 REMOVE_FROM_CART = "remove_from_cart"
 SET_CART_QUANTITY = "set_cart_quantity"
 
+IDEMPOTENCY_KEY = "idempotency_key"
+KEY = re.compile(r"[A-Za-z0-9_-]{8,64}", re.ASCII)
 MAX_SAME_PRODUCT = 3
 MAX_ALTERNATIVES = 5
 
@@ -79,6 +85,22 @@ def cart_full() -> ToolError:
 
 def line_limit() -> ToolError:
     return _error("business", "line_limit", f"A cart line holds at most {MAX_QUANTITY} units.")
+
+
+def invalid_idempotency_key() -> ToolError:
+    return _error(
+        "validation",
+        "invalid_idempotency_key",
+        "Each cart change needs an idempotency_key of 8-64 letters, digits, '-' or '_'.",
+    )
+
+
+def idempotency_conflict() -> ToolError:
+    return _error(
+        "validation",
+        "idempotency_conflict",
+        "That idempotency_key was already used for a different cart change.",
+    )
 
 
 def not_in_cart() -> ToolError:
@@ -282,86 +304,124 @@ async def get_cart(
     return json_result(GET_CART, value)
 
 
-async def add_to_cart(
-    server: CatalogServer, claims: Claims, args: Mapping[str, Any]
+def _add(
+    server: CatalogServer, claims: Claims, region: str, cart: Cart, args: Mapping[str, Any]
 ) -> t.CallToolResult:
-    _catalog._checked(args, frozenset({"variant_id", "quantity"}))
-    session, region = _caller(claims)
     quantity = _quantity(args, default=1)
     variant = _variant(server, claims, args)
     if server.catalog.price(variant.variant_id, region) is None:
         raise _catalog.not_sold_in_region()
-    with server.carts.open(session, region) as cart:
-        current = cart.lines.get(variant.variant_id, 0)
-        if current == 0 and len(cart.lines) >= MAX_LINES:
-            raise cart_full()
-        total = current + quantity
-        if total > MAX_QUANTITY:
-            raise line_limit()
-        on_hand = _on_hand(server, variant.variant_id, region)
-        if on_hand < total:
-            return refusal(
-                ADD_TO_CART, _stock_refusal(on_hand), server, claims, region, variant, quantity
-            )
-        cart.lines[variant.variant_id] = total
-        value = {
-            "result": "added",
-            "variant_id": variant.variant_id,
-            "quantity": total,
-            "cart": view(server, claims, region, cart),
-        }
+    current = cart.lines.get(variant.variant_id, 0)
+    if current == 0 and len(cart.lines) >= MAX_LINES:
+        raise cart_full()
+    total = current + quantity
+    if total > MAX_QUANTITY:
+        raise line_limit()
+    on_hand = _on_hand(server, variant.variant_id, region)
+    if on_hand < total:
+        return refusal(
+            ADD_TO_CART, _stock_refusal(on_hand), server, claims, region, variant, quantity
+        )
+    cart.lines[variant.variant_id] = total
+    value = {
+        "result": "added",
+        "variant_id": variant.variant_id,
+        "quantity": total,
+        "cart": view(server, claims, region, cart),
+    }
     return json_result(ADD_TO_CART, value)
 
 
-async def remove_from_cart(
-    server: CatalogServer, claims: Claims, args: Mapping[str, Any]
+def _remove(
+    server: CatalogServer, claims: Claims, region: str, cart: Cart, args: Mapping[str, Any]
 ) -> t.CallToolResult:
-    _catalog._checked(args, frozenset({"variant_id"}))
-    session, region = _caller(claims)
     variant = _variant(server, claims, args)
-    with server.carts.open(session, region) as cart:
-        if variant.variant_id not in cart.lines:
-            raise not_in_cart()
-        del cart.lines[variant.variant_id]
-        value = {
-            "result": "removed",
-            "variant_id": variant.variant_id,
-            "cart": view(server, claims, region, cart),
-        }
+    if variant.variant_id not in cart.lines:
+        raise not_in_cart()
+    del cart.lines[variant.variant_id]
+    value = {
+        "result": "removed",
+        "variant_id": variant.variant_id,
+        "cart": view(server, claims, region, cart),
+    }
     return json_result(REMOVE_FROM_CART, value)
 
 
-async def set_cart_quantity(
-    server: CatalogServer, claims: Claims, args: Mapping[str, Any]
+def _set_quantity(
+    server: CatalogServer, claims: Claims, region: str, cart: Cart, args: Mapping[str, Any]
 ) -> t.CallToolResult:
-    _catalog._checked(args, frozenset({"variant_id", "quantity"}))
-    session, region = _caller(claims)
     quantity = _quantity(args, default=None)
     variant = _variant(server, claims, args)
-    with server.carts.open(session, region) as cart:
-        current = cart.lines.get(variant.variant_id)
-        if current is None:
-            raise not_in_cart()
-        if quantity > current:  # an increase is stock-checked; a decrease never needs to be
-            on_hand = _on_hand(server, variant.variant_id, region)
-            if on_hand < quantity:
-                return refusal(
-                    SET_CART_QUANTITY,
-                    _stock_refusal(on_hand),
-                    server,
-                    claims,
-                    region,
-                    variant,
-                    quantity,
-                )
-        cart.lines[variant.variant_id] = quantity
-        value = {
-            "result": "updated",
-            "variant_id": variant.variant_id,
-            "quantity": quantity,
-            "cart": view(server, claims, region, cart),
-        }
+    current = cart.lines.get(variant.variant_id)
+    if current is None:
+        raise not_in_cart()
+    if quantity > current:  # an increase is stock-checked; a decrease never needs to be
+        on_hand = _on_hand(server, variant.variant_id, region)
+        if on_hand < quantity:
+            return refusal(
+                SET_CART_QUANTITY,
+                _stock_refusal(on_hand),
+                server,
+                claims,
+                region,
+                variant,
+                quantity,
+            )
+    cart.lines[variant.variant_id] = quantity
+    value = {
+        "result": "updated",
+        "variant_id": variant.variant_id,
+        "quantity": quantity,
+        "cart": view(server, claims, region, cart),
+    }
     return json_result(SET_CART_QUANTITY, value)
+
+
+Write = Callable[[CatalogServer, Claims, str, Cart, Mapping[str, Any]], t.CallToolResult]
+
+
+def _idempotent(tool: str, arguments: frozenset[str], write: Write) -> Any:
+    """A cart write behind its idempotency key (hard rule 9; plan R1, R8).
+
+    Card data and unknown arguments are refused first. Then the key is checked (`KEY`). Under the
+    cart's lock, a key this cart has seen returns its stored result when the tool and the other
+    arguments are the same, and `idempotency_conflict` when they are not; a new key runs the write.
+    Only a write that changed the cart is stored (the last `MAX_KEYS` per cart): a refusal or an
+    error is not, so retrying it with the same key checks again."""
+
+    async def handler(
+        server: CatalogServer, claims: Claims, args: Mapping[str, Any]
+    ) -> t.CallToolResult:
+        _catalog._checked(args, arguments | {IDEMPOTENCY_KEY})
+        session, region = _caller(claims)
+        key = args.get(IDEMPOTENCY_KEY)
+        if not isinstance(key, str) or not KEY.fullmatch(key):
+            raise invalid_idempotency_key()
+        rest = {k: v for k, v in args.items() if k != IDEMPOTENCY_KEY}
+        fingerprint = json.dumps([tool, rest], sort_keys=True, separators=(",", ":"), default=str)
+        with server.carts.open(session, region) as cart:
+            seen = cart.keys.get(key)
+            if seen is not None:
+                if seen[0] != fingerprint:
+                    raise idempotency_conflict()
+                cart.keys.move_to_end(key)
+                stored: t.CallToolResult = seen[1]
+                return stored
+            result = write(server, claims, region, cart, rest)
+            if not result.is_error:
+                cart.keys[key] = (fingerprint, result)
+                while len(cart.keys) > MAX_KEYS:
+                    cart.keys.popitem(last=False)
+            return result
+
+    return handler
+
+
+add_to_cart = _idempotent(ADD_TO_CART, frozenset({"variant_id", "quantity"}), _add)
+remove_from_cart = _idempotent(REMOVE_FROM_CART, frozenset({"variant_id"}), _remove)
+set_cart_quantity = _idempotent(
+    SET_CART_QUANTITY, frozenset({"variant_id", "quantity"}), _set_quantity
+)
 
 
 # ---- registry ----------------------------------------------------------------------------------
@@ -373,6 +433,16 @@ _VARIANT = {
     "description": "A variant ID, e.g. P0001-BLK-REG-M.",
 }
 _QUANTITY = {"type": "integer", "minimum": 1, "maximum": MAX_QUANTITY}
+_KEY = {
+    "type": "string",
+    "minLength": 8,
+    "maxLength": 64,
+    "pattern": "^[A-Za-z0-9_-]+$",
+    "description": (
+        "A new key for each cart change, e.g. add-p0001-blk-m-1. Send the same key only to retry "
+        "the same change."
+    ),
+}
 
 
 def _schema(properties: dict[str, Any], required: list[str]) -> dict[str, Any]:
@@ -390,16 +460,20 @@ SCHEMAS = {
         {
             "variant_id": _VARIANT,
             "quantity": {**_QUANTITY, "description": "Units to add, 1-10 (default 1)."},
+            IDEMPOTENCY_KEY: _KEY,
         },
-        ["variant_id"],
+        ["variant_id", IDEMPOTENCY_KEY],
     ),
-    REMOVE_FROM_CART: _schema({"variant_id": _VARIANT}, ["variant_id"]),
+    REMOVE_FROM_CART: _schema(
+        {"variant_id": _VARIANT, IDEMPOTENCY_KEY: _KEY}, ["variant_id", IDEMPOTENCY_KEY]
+    ),
     SET_CART_QUANTITY: _schema(
         {
             "variant_id": _VARIANT,
             "quantity": {**_QUANTITY, "description": "The new number of units, 1-10."},
+            IDEMPOTENCY_KEY: _KEY,
         },
-        ["variant_id", "quantity"],
+        ["variant_id", "quantity", IDEMPOTENCY_KEY],
     ),
 }
 
@@ -415,19 +489,19 @@ DESCRIPTIONS = {
         "region. Use it only when the shopper asks to add an item and has said which colour, size "
         "and fit; otherwise ask first. If stock can't cover it, the add is refused and the result "
         "lists alternatives in stock: offer only those. It never places an order. Example: "
-        '{"variant_id": "P0001-BLK-REG-M", "quantity": 1}.'
+        '{"variant_id": "P0001-BLK-REG-M", "quantity": 1, "idempotency_key": "add-p0001-blk-m-1"}.'
     ),
     REMOVE_FROM_CART: (
         "Remove one variant from the shopper's own cart. Use it only when the shopper asks to "
         "remove that item; never to make room or tidy up on your own. Example: "
-        '{"variant_id": "P0001-BLK-REG-M"}.'
+        '{"variant_id": "P0001-BLK-REG-M", "idempotency_key": "remove-p0001-blk-m-1"}.'
     ),
     SET_CART_QUANTITY: (
         "Change how many units of one variant are in the shopper's own cart (1-10; use "
         "remove_from_cart for none). A larger quantity is checked against live stock first. Use it "
         "only when the shopper asks to change the quantity; do not use it to add a new item (use "
         "add_to_cart). Example: "
-        '{"variant_id": "P0001-BLK-REG-M", "quantity": 2}.'
+        '{"variant_id": "P0001-BLK-REG-M", "quantity": 2, "idempotency_key": "set-p0001-blk-m-2"}.'
     ),
 }
 
