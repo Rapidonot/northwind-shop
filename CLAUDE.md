@@ -54,7 +54,7 @@ docs/            PRD.md, images/, decisions/, reviews/
 ```
 make setup            # uv sync + pnpm install; creates .env from env.example (main checkout only)
 make up | make down   # docker compose stack (Postgres 16 + pgvector), waits for healthy
-make dev              # mcp-rag (worktree port) + gateway on :8000 + portal on :5173; fresh token key per run
+make dev              # mcp-rag + mcp-catalog (worktree ports) + gateway on :8000 + portal on :5173; fresh token key per run
 make data             # regenerate data/fixtures (seeded, byte-identical; bump DATA_VERSION if output changes)
 make model            # pre-fetch the embedding model into FASTEMBED_CACHE_PATH (own terminal, from the runner clone; CC-27)
 make ingest           # load data/fixtures into the RAG index (needs `make up`; idempotent, no LLM)

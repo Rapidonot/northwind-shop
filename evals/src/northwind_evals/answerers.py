@@ -57,6 +57,13 @@ class Answer:
     sent: str = ""
     sources: tuple[ContextChunk, ...] = ()
     payload_hits: Mapping[str, int] = field(default_factory=dict)
+    # Row #12 (RAG-09): every catalog tool result the turn returned, as `type="catalog"` blocks for
+    # the judge only (the user's D6), and how many sentences of `shown` hold a claim backed only by
+    # a live price or stock value, which no retrieved source can be cited for (change 3).
+    live: tuple[ContextChunk, ...] = ()
+    live_claims: int = 0
+    # The turn's `LiveValues` (row #12): the planted-claim check reads them (TRAP-INJ-002).
+    live_values: Any = None
 
     @property
     def text(self) -> str:
@@ -265,23 +272,84 @@ def assistant_id(model: str) -> str:
     return f"assistant:v1:{model}:prompt-{prompt}:check-{check}"
 
 
-def payload_hits(shown: str, sent: str, sources: Sequence[ContextChunk]) -> dict[str, int]:
+def payload_hits(
+    shown: str, sent: str, sources: Sequence[ContextChunk], live: Any = None
+) -> dict[str, int]:
     """What the check would still block in text that already passed it, on the text left on
     screen and on every token sent (`shown:<class>`, `sent:<class>`): anything is a bypass. The same
-    engine as the live check, so not independent of it: the planted-claim regexes are (L6)."""
+    engine as the live check, so not independent of it: the planted-claim regexes are (L6). `live`
+    is the turn's `LiveValues` (row #12), so a price the check let through is not a bypass."""
     from northwind_assistant.output_check import Source, hits
 
     checked = [
         Source(c.source_id, c.source_type, unicodedata.normalize("NFKC", c.text)) for c in sources
     ]
     seen = {c.source_id for c in sources}
-    found = {f"shown:{cls}": n for cls, n in hits(shown, checked, seen).items() if n}
-    found |= {f"sent:{cls}": n for cls, n in hits(sent, checked, seen).items() if n}
+    found = {f"shown:{cls}": n for cls, n in hits(shown, checked, seen, live).items() if n}
+    found |= {f"sent:{cls}": n for cls, n in hits(sent, checked, seen, live).items() if n}
     return found
 
 
+LIVE_SOURCE_TYPE = "catalog"
+LIVE_TOOLS = frozenset({"get_price", "check_stock"})
+
+
+class CatalogLog:
+    """What the in-process mcp-catalog returned during one item's turn (row #12): the tool name,
+    the error flag and the text, in order. The judge sees these results, as the model did (D6)."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self.results: list[tuple[str, bool, str]] = []
+        self.leak = False  # a result held internal content: refused before the model saw it
+
+    def begin(self) -> None:
+        with self._lock:
+            self.results = []
+            self.leak = False
+
+    def add(self, tool: str, is_error: bool, text: str) -> None:
+        with self._lock:
+            self.results.append((tool, is_error, text))
+
+    def taken(self) -> list[tuple[str, bool, str]]:
+        with self._lock:
+            return list(self.results)
+
+
+def live_of(
+    results: Sequence[tuple[str, bool, str]], region: str
+) -> tuple[tuple[ContextChunk, ...], Any]:
+    """The turn's live values as judge blocks, and its `LiveValues` for the check's numbers.
+
+    A block is one successful, labelled `get_price` or `check_stock` result: id `live:<tool>:<n>`,
+    type `catalog`, the JSON it held as text (the judge renders it through `as_data`, like every
+    source). Only live values: a product attribute that only `get_product` returned is not
+    support, because a product claim must cite a retrieved source (hard rule 5; security review
+    pass 1, finding 9). Live values are read with the assistant's own `record_live`, so the evals
+    and the check agree on what counts."""
+    from northwind_assistant.tools import ToolState, record_live
+    from northwind_common import catalog_tool
+
+    state = ToolState(region=region)
+    blocks: list[ContextChunk] = []
+    for n, (tool, is_error, text) in enumerate(results):
+        labelled = None if is_error else catalog_tool.unlabel(text)
+        if labelled is None or labelled[0] != tool:  # the label must name the tool called
+            continue
+        if tool not in LIVE_TOOLS:
+            continue
+        name, value = labelled
+        body = json.dumps(value, sort_keys=True, ensure_ascii=False)
+        source_id = f"live:{name}:{n}"
+        blocks.append(ContextChunk(source_id, source_id, LIVE_SOURCE_TYPE, body))
+        record_live(state, f"mcp__{catalog_tool.SERVER_NAME}__{name}", is_error=False, text=text)
+    return tuple(blocks), state.live
+
+
 class AssistantAnswerer:
-    """One `stream_answer` turn per item, through an in-process mcp-rag (`serve_retriever`)."""
+    """One `stream_answer` turn per item, through an in-process mcp-rag (`serve_retriever`) and,
+    from row #12, an in-process mcp-catalog over the verified fixtures."""
 
     def __init__(
         self,
@@ -290,6 +358,8 @@ class AssistantAnswerer:
         rag: Any,
         model: str,
         test_id: Callable[[str], str],
+        catalog: Any = None,
+        catalog_log: CatalogLog | None = None,
     ) -> None:
         self._proxy_url = proxy_url.rstrip("/")
         self._index = index
@@ -297,6 +367,8 @@ class AssistantAnswerer:
         self._model = model
         self._test_id = test_id
         self._id = assistant_id(model)
+        self._catalog = catalog
+        self._catalog_log = catalog_log or CatalogLog()
 
     @property
     def id(self) -> str:
@@ -308,6 +380,7 @@ class AssistantAnswerer:
         from northwind_common.llm import agent_runtime
 
         self._index.begin(item, context)
+        self._catalog_log.begin()
         root = Path(tempfile.mkdtemp(prefix="nw-eval-"))
         try:
             base_url = f"{self._proxy_url}/_t/{self._test_id('eval-answerer:' + item.id)}"
@@ -315,7 +388,12 @@ class AssistantAnswerer:
 
             async def collect() -> list[Any]:
                 caller = Caller(region=item.region)  # type: ignore[arg-type]
-                return [e async for e in stream_answer(item.query, caller, self._rag, runtime)]
+                return [
+                    e
+                    async for e in stream_answer(
+                        item.query, caller, self._rag, runtime, self._catalog
+                    )
+                ]
 
             events = asyncio.run(collect())
         finally:
@@ -343,7 +421,23 @@ class AssistantAnswerer:
             raise AnswerError("empty answer", "empty")
         sources = self._index.sources()
         streamed = "".join(sent)
-        return Answer(text, streamed, sources, payload_hits(text, streamed, sources))
+        # The catalog's visibility filter keeps internal records out of tool results. The leak guard
+        # refinements get also runs on every catalog result inside the server, before the model,
+        # a cassette or a file sees it (`serve_catalog`; security review pass 1, finding 5).
+        if self._catalog_log.leak:
+            raise AnswerError("a catalog result held internal content", "leak")
+        blocks, live = live_of(self._catalog_log.taken(), item.region)
+        from northwind_assistant.output_check import live_backed
+
+        return Answer(
+            text,
+            streamed,
+            sources,
+            payload_hits(text, streamed, sources, live),
+            blocks,
+            live_backed(text, live),
+            live,
+        )
 
 
 @contextlib.contextmanager
@@ -355,13 +449,77 @@ def assistant_answerer(
     live: LiveSearch | None = None,
     leaks: Callable[[Sequence[ContextChunk]], bool] | None = None,
 ) -> Iterator[tuple[AssistantAnswerer, SavedFirstIndex]]:
-    """A real mcp-rag over `SavedFirstIndex`, signed with a fresh key per run (never the fixed test
-    key), and the answerer that talks to it."""
+    """A real mcp-rag over `SavedFirstIndex` and a real mcp-catalog over the verified fixtures
+    (row #12), both signed with one fresh key per run (never the fixed test key), and the answerer
+    that talks to them."""
     from northwind_assistant.caller import Caller
+    from northwind_assistant.catalog_client import CatalogEndpoint
     from northwind_assistant.rag_client import RagEndpoint
     from northwind_mcp_rag.testing import serve_retriever
 
     key = secrets.token_bytes(40)
     index = SavedFirstIndex(recorded, live, leaks)
-    with serve_retriever(index, Caller, key=key) as (url, _server):
-        yield AssistantAnswerer(proxy_url, index, RagEndpoint(url, key), model, test_id), index
+    log = CatalogLog()
+    with (
+        serve_retriever(index, Caller, key=key) as (url, _server),
+        serve_catalog(key, log, leaks) as catalog_url,
+    ):
+        answerer = AssistantAnswerer(
+            proxy_url,
+            index,
+            RagEndpoint(url, key),
+            model,
+            test_id,
+            CatalogEndpoint(catalog_url, key),
+            log,
+        )
+        yield answerer, index
+
+
+@contextlib.contextmanager
+def serve_catalog(
+    key: bytes,
+    log: CatalogLog,
+    leaks: Callable[[Sequence[ContextChunk]], bool] | None = None,
+) -> Iterator[str]:
+    """mcp-catalog in-process over `FixtureCatalog` (verified against the manifest before it
+    seeds), recording every result into `log`. Fixtures do not change during a run, so a replayed
+    turn gets the tool results its recording got. Each successful result goes through `leaks`,
+    the refinements' guard, before it is returned: a leaking one, or a guard that cannot run, is
+    replaced by the fixed `tool_failed` envelope and flags the item (fail closed)."""
+    from northwind_mcp_catalog import testing as catalog_testing
+    from northwind_mcp_catalog.live import FixtureCatalog
+    from northwind_mcp_catalog.server import CatalogServer, error_result, tool_failed
+    from northwind_mcp_catalog.tools import TOOLS
+
+    internal: list[frozenset[str]] = []
+
+    def leaking(name: str, text: str) -> bool:
+        if leaks is None:
+            return False
+        try:
+            if not internal:  # on first use; internal variants carry no canary (re-review N8)
+                from northwind_data.dataset import FIXTURES_DIR
+                from northwind_evals.contexts import internal_sources
+
+                internal.append(frozenset(internal_sources(FIXTURES_DIR)))
+            if any(source_id in text for source_id in internal[0]):
+                return True
+            return bool(leaks((ContextChunk(name, name, LIVE_SOURCE_TYPE, text),)))
+        except Exception:  # noqa: BLE001 - a guard that cannot run counts as a leak
+            return True
+
+    class Recording(CatalogServer):
+        async def call_tool(self, ctx: Any, params: Any) -> Any:
+            result = await super().call_tool(ctx, params)
+            text = "".join(getattr(block, "text", "") for block in result.content)
+            if not result.is_error and leaking(str(params.name), text):
+                log.leak = True
+                result = error_result(tool_failed())
+                text = "".join(getattr(block, "text", "") for block in result.content)
+            log.add(str(params.name), bool(result.is_error), text)
+            return result
+
+    server = Recording(FixtureCatalog(), key=key, tools=TOOLS)
+    with catalog_testing.running(server) as url:
+        yield url

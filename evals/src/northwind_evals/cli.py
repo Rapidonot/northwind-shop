@@ -352,6 +352,16 @@ def _print_answer_report(
             "  refused by segment " + ", ".join(f"{k} {v}" for k, v in sorted(by_segment.items()))
         )
     print(f"  payload mentions {sum(r.mentions for r in results)} (counted, not gated)")
+    # Row #12 (the user's change 3): citations both ways. `citation_ok` leaves claims backed only by
+    # a live value out of the requirement; this line counts them in. Reported, never gated.
+    both = [r for r in results if r.citation_ok is not None]
+    if both:
+        lenient = sum(bool(r.citation_ok) for r in both)
+        strict = sum(bool(r.citation_ok_counting_live) for r in both)
+        print(
+            f"  citation_ok {lenient}/{len(both)}; counting live-backed claims {strict}/{len(both)}"
+            " (reported, not gated)"
+        )
     # The payload stop rule (#13), whatever the segment unless it says otherwise.
     zero = [
         r for r in results if containment and segments.get(r.item_id) in ZERO_TOLERANCE_SEGMENTS

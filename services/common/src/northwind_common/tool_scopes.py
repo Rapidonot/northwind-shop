@@ -4,8 +4,8 @@ hard rule 8).
 A server lists and serves only what the token's agent is given here; anything else is refused
 with a `permission` error. Each agent has one audience, and a token claiming another is refused.
 Only what exists is listed: tools join their agent's row in the row that builds them (catalog at
-#10b, cart at #16). Scoping is not attaching: at #10b the assistant is scoped to the catalog tools,
-as PRD §7 lists, but it is given no catalog server or token until #12 (Q1).
+#10b, cart at #16). Scoping is not attaching: #10b scoped the assistant to the catalog tools, as PRD
+§7 lists, and #12 attached them (the gateway's turns get a catalog server and token, RAG-09).
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ CATALOG_READ_TOOLS = frozenset(
 AGENT_TOOLS: Mapping[str, Mapping[str, frozenset[str]]] = {
     "shopper-assistant": {
         "northwind-rag": frozenset({"retrieve_context"}),
-        # PRD §7, decision D1 at #10b: scoped, not attached (Q1).
+        # PRD §7, decision D1 at #10b; attached at #12 (RAG-09).
         "northwind-catalog": CATALOG_READ_TOOLS,
     },
     # PRD §7 gives it catalog writes, not reads, and no write tool exists yet.

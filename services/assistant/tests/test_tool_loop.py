@@ -266,8 +266,8 @@ def test_a_built_in_tool_cannot_run(tmp_path: Path) -> None:
 
 @pytest.mark.req("RAG-10")
 @pytest.mark.req("RAG-08")  # thin evidence: the fixed insufficient-evidence reply (row #13, AC2)
-def test_a_fifth_turn_never_happens(tmp_path: Path) -> None:
-    assert MAX_TURNS == 4
+def test_a_seventh_turn_never_happens(tmp_path: Path) -> None:
+    assert MAX_TURNS == 6  # 4 until row #12 (the user's D2: catalog rounds need two more)
     retriever = FakeRetriever()
     with ScriptedLLM() as llm:
         for n in range(MAX_TURNS + 2):

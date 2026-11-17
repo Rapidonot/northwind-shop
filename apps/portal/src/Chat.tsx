@@ -34,6 +34,8 @@ function apply(turn: Turn, event: ChatEvent): Turn {
   }
 }
 
+export const PRICE_NOTE = "Ask me for a price or stock check: I look them up live.";
+
 export function Chat() {
   const [message, setMessage] = useState("");
   const [turn, setTurn] = useState<Turn>(EMPTY);
@@ -55,7 +57,8 @@ export function Chat() {
   return (
     <section aria-label="Chat">
       <AiDisclosure />
-      <p>Prices and stock are on each product page.</p>
+      {/* Row #12 (RAG-09): the assistant looks up price and stock live, through its catalog tools. */}
+      <p>{PRICE_NOTE}</p>
       <form onSubmit={(event) => void submit(event)}>
         <label>
           Your question{" "}

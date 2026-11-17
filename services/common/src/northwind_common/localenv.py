@@ -119,3 +119,9 @@ def mcp_catalog_port(cwd: Path | None = None) -> int:
     if override:
         return int(override)
     return MCP_CATALOG_PORT_BASE + _worktree_offset(cwd)
+
+
+def mcp_catalog_url(cwd: Path | None = None) -> str:
+    """Where the gateway's turns reach mcp-catalog (row #12): `MCP_CATALOG_URL`, else this
+    worktree's port on 127.0.0.1."""
+    return os.environ.get("MCP_CATALOG_URL") or f"http://127.0.0.1:{mcp_catalog_port(cwd)}/mcp"

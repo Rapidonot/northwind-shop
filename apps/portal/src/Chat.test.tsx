@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { Chat } from "./Chat";
+import { Chat, PRICE_NOTE } from "./Chat";
 import { parseFrames } from "./chatStream";
 
 const frame = (name: string, data: unknown) => `event: ${name}\ndata: ${JSON.stringify(data)}\n\n`;
@@ -136,5 +136,14 @@ describe("[SA-02] Chat", () => {
     vi.stubGlobal("fetch", vi.fn(() => Promise.reject(new TypeError("network down"))));
     ask("hi");
     expect(await screen.findByRole("alert")).toHaveTextContent(/Something went wrong/);
+  });
+});
+
+describe("[RAG-09] the price and stock note", () => {
+  it("says prices and stock are looked up live, not that they are on the product page", () => {
+    render(<Chat />);
+    expect(screen.getByText(PRICE_NOTE)).toBeTruthy();
+    expect(PRICE_NOTE).toMatch(/live/);
+    expect(screen.queryByText(/on each product page/i)).toBeNull();
   });
 });

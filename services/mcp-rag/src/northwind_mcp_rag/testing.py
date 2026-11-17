@@ -18,7 +18,7 @@ from mcp import Client
 from mcp.client.streamable_http import streamable_http_client
 from mcp.shared._httpx_utils import create_mcp_http_client
 
-from northwind_common.mcp_token import Claims, bearer, mint
+from northwind_common.mcp_token import RAG_SERVER, Claims, bearer, mint
 from northwind_mcp_rag.server import Backend, RagServer
 from northwind_rag.retrieval import RetrievedChunk
 from northwind_rag.testing import FakeEmbedder
@@ -66,9 +66,10 @@ def token(
     *,
     now: float | None = None,
     key: bytes = KEY,
+    server_name: str = RAG_SERVER,
 ) -> tuple[str, Claims]:
     audience: Any = "staff" if agent == "catalog-subagent" else "shopper"
-    return mint(audience=audience, region=region, agent=agent, key=key, now=now)
+    return mint(audience=audience, region=region, agent=agent, key=key, now=now, server=server_name)
 
 
 class CallerSearcher:

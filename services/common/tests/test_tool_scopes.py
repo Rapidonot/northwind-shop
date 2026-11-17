@@ -11,7 +11,7 @@ pytestmark = [pytest.mark.req("NFR-01"), pytest.mark.req("CC-10")]
 
 def test_the_assistant_gets_exactly_retrieve_context_and_no_resource() -> None:
     # #10b, decision D1 (the user, 2026-11-13): the five read-only catalog tools join, as PRD §7
-    # lists them; scoped, not attached (Q1). Still exact: nothing else, no resource.
+    # lists them; attached at #12. Still exact: nothing else, no resource.
     assert tool_scopes.AGENT_TOOLS["shopper-assistant"] == {
         "northwind-rag": frozenset({"retrieve_context"}),
         "northwind-catalog": frozenset(
