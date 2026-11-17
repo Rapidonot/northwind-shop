@@ -12,6 +12,11 @@ The JSON is ASCII (non-ASCII is `\\uXXXX`), its strings are NFKC-normalised firs
 and `&` are escaped as `\\u003c`, `\\u003e` and `\\u0026`, so no value, however it was written,
 can close the tag or open another one (#10b security review L6). Errors are not labelled: they
 are the fixed structured envelope, which holds no free text.
+
+Row #16 (CHK-01): the cart tools live on the same server and use the same label. One error carries a
+second content block: an out-of-stock add is the fixed envelope, then one labelled block with the
+server's alternatives (`cart` in `northwind_mcp_catalog`). The envelope stays first and alone in its
+block.
 """
 
 from __future__ import annotations
@@ -22,14 +27,15 @@ import unicodedata
 from typing import Any
 
 from northwind_common.mcp_token import CATALOG_SERVER
-from northwind_common.tool_scopes import CATALOG_READ_TOOLS
+from northwind_common.tool_scopes import CART_TOOLS, CATALOG_READ_TOOLS
 
 SERVER_NAME = CATALOG_SERVER
 TAG = "catalog_data"
-TOOL_NAMES = tuple(sorted(CATALOG_READ_TOOLS))
+TOOL_NAMES = tuple(sorted(CATALOG_READ_TOOLS | CART_TOOLS))  # cart: row #16
 ALLOWED_TOOLS = tuple(f"mcp__{SERVER_NAME}__{name}" for name in TOOL_NAMES)
 PRICE_TOOL = f"mcp__{SERVER_NAME}__get_price"
 STOCK_TOOL = f"mcp__{SERVER_NAME}__check_stock"
+CART_TOOL_NAMES = frozenset(f"mcp__{SERVER_NAME}__{name}" for name in CART_TOOLS)
 
 _LABELLED = re.compile(
     rf'\A<{TAG} tool="(?P<tool>[a-z_]{{1,32}})">\n(?P<body>[^<>&]*)\n</{TAG}>\Z', re.ASCII

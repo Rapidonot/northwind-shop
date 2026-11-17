@@ -1,6 +1,11 @@
 """C8 (catalog): P0009's canary, ID and title never appear in any catalog tool output (CC-10;
 RAG-11, hard rule 7). Every shopper-scoped tool, every region, with arguments built from the
-product's title, ID, variant IDs and canary."""
+product's title, ID, variant IDs and canary.
+
+Row #16 (CHK-01, R6): the cart tools too, with a real session, so each call reaches its lookup. In
+this store P0009's variants are priced and in stock in every region, and every public rain shell
+(P0009's own subcategory) is out of stock, so an add's alternatives scan reaches P0009 and only
+visibility can keep it out."""
 
 from __future__ import annotations
 
@@ -35,9 +40,30 @@ VALUES = [TITLE, TITLE.upper(), "P0009", "p0009", CANARY, f"{TITLE} {CANARY}", *
 FORBIDDEN = (CANARY, "P0009", TITLE, "NWCANARY")
 
 
+SESSION = "c" * 32
+CURRENCY = {"US": "USD", "CA": "CAD", "UK": "GBP", "EU": "EUR"}
+
+
+OUT_OF_STOCK = "P0001-BLK-REG-M"  # a public rain shell, at zero in `canary_store`
+
+
+def canary_store() -> FixtureCatalog:
+    """P0009 priced and stocked everywhere; every public rain shell at zero."""
+    store = FixtureCatalog()
+    for region in REGIONS:
+        for variant in store.variants_of("P0009"):
+            store.set_price(variant.variant_id, region, "10.00", CURRENCY[region])
+            store.set_stock(variant.variant_id, region, 50)
+        for product in store.products():
+            if product.subcategory == "rain_shell" and product.visibility == "public":
+                for variant in store.variants_of(product.product_id):
+                    store.set_stock(variant.variant_id, region, 0)
+    return store
+
+
 @pytest.fixture(scope="module")
 def url() -> Iterator[str]:
-    with running(CatalogServer(FixtureCatalog(), key=KEY, tools=TOOLS)) as live_url:
+    with running(CatalogServer(canary_store(), key=KEY, tools=TOOLS)) as live_url:
         yield live_url
 
 
@@ -51,6 +77,14 @@ def arguments() -> list[tuple[str, dict[str, Any]]]:
             calls.append(("search_products", {key: value}))
         calls.append(("search_products", {"text": value, "limit": 20}))
     calls.append(("get_product", {"product_id": "P0009", "note": CANARY}))
+    # Row #16: the cart tools, with the same values, then an out-of-stock add beside P0009.
+    for value in VALUES:
+        calls.append(("add_to_cart", {"variant_id": value}))
+        calls.append(("set_cart_quantity", {"variant_id": value, "quantity": 2}))
+        calls.append(("remove_from_cart", {"variant_id": value}))
+    calls.append(("add_to_cart", {"variant_id": OUT_OF_STOCK}))
+    calls.append(("add_to_cart", {"variant_id": "P0009-BLK-REG-M", "note": CANARY}))
+    calls.append(("get_cart", {}))
     return calls
 
 
@@ -61,7 +95,7 @@ def test_the_canary_title_and_id_are_in_no_response_byte(url: str) -> None:
 
     async def go(region: str) -> list[str]:
         out: list[str] = []
-        async with connect(url, token("shopper-assistant", region)[0]) as client:
+        async with connect(url, token("shopper-assistant", region, session=SESSION)[0]) as client:
             for name, args in calls:
                 result = await client.call_tool(name, args)
                 out.append(json.dumps(result.model_dump(mode="json", by_alias=True)))
@@ -71,3 +105,5 @@ def test_the_canary_title_and_id_are_in_no_response_byte(url: str) -> None:
         for (name, args), raw in zip(calls, asyncio.run(go(region)), strict=True):
             for needle in FORBIDDEN:
                 assert needle not in raw, (region, name, args)
+            if name == "add_to_cart" and args == {"variant_id": OUT_OF_STOCK}:
+                assert "out_of_stock" in raw  # the alternatives scan really ran

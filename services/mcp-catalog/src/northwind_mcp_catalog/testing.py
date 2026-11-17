@@ -71,9 +71,19 @@ def token(
     now: float | None = None,
     key: bytes = KEY,
     server_name: str = CATALOG_SERVER,
+    session: str | None = None,
 ) -> tuple[str, Claims]:
+    """`session` (row #16): the gateway's session id, which the cart tools need."""
     audience: Any = "staff" if agent == "catalog-subagent" else "shopper"
-    return mint(audience=audience, region=region, agent=agent, key=key, now=now, server=server_name)
+    return mint(
+        audience=audience,
+        region=region,
+        agent=agent,
+        key=key,
+        now=now,
+        server=server_name,
+        session=session,
+    )
 
 
 def body_of(text: str) -> Any:

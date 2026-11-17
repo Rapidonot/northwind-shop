@@ -169,11 +169,20 @@ def fixture_stock(variant_id: str, region: str) -> int:
 # ---- C2: happy paths ---------------------------------------------------------------------------
 
 
+# Row #16 (CHK-01): the four cart tools join the registry. Exact: the five catalog tools and
+# `get_cart` stay read-only, and the three cart writes are the only tools that are not.
+CART = {"get_cart", "add_to_cart", "remove_from_cart", "set_cart_quantity"}
+CART_WRITES = {"add_to_cart", "remove_from_cart", "set_cart_quantity"}
+
+
 def test_the_server_serves_exactly_the_five_tools() -> None:
-    assert set(TOOLS) == FIVE
-    assert all(
-        spec.tool.annotations and spec.tool.annotations.read_only_hint for spec in TOOLS.values()
-    )
+    assert set(TOOLS) == FIVE | CART
+    writes = {
+        name
+        for name, spec in TOOLS.items()
+        if not (spec.tool.annotations and spec.tool.annotations.read_only_hint)
+    }
+    assert writes == CART_WRITES
 
 
 def test_the_assistant_lists_the_five_tools_over_the_wire(url: str) -> None:
@@ -181,7 +190,7 @@ def test_the_assistant_lists_the_five_tools_over_the_wire(url: str) -> None:
         async with connect(url, token()[0]) as client:
             return {tool.name for tool in (await client.list_tools()).tools}
 
-    assert asyncio.run(go()) == FIVE
+    assert asyncio.run(go()) == FIVE | CART
 
 
 def test_search_products_finds_a_public_product_by_name(url: str) -> None:

@@ -12,8 +12,10 @@ The same shape as `northwind_mcp_rag.server`:
   not built here.
 - Logs name categories and codes, never arguments, tokens or exception text.
 
-What the server can call is `TOOLS`: the five read-only tools. The live store's `set_price` and
-`set_stock` are not tools, so no request reaches them.
+What the server can call is `TOOLS`: the five read-only catalog tools and, since row #16 (CHK-01,
+decision 0019), the four cart tools, so the server is no longer read-only. The cart tools write only
+the caller's own cart (`carts`), keyed on the token's session and region; they never write the
+catalog. The live store's `set_price` and `set_stock` are not tools, so no request reaches them.
 """
 
 from __future__ import annotations
@@ -34,6 +36,7 @@ from northwind_common.errors import ToolError
 from northwind_common.mcp_gate import ASGIApp
 from northwind_common.mcp_token import CATALOG_SERVER, Claims
 from northwind_common.tool_scopes import allowed_tools
+from northwind_mcp_catalog.cart_store import CartStore
 from northwind_mcp_catalog.live import LiveCatalog
 
 log = logging.getLogger("northwind_mcp_catalog")
@@ -100,6 +103,7 @@ class CatalogServer:
         clock: Callable[[], float] = time.time,
     ) -> None:
         self.catalog = catalog
+        self.carts = CartStore()  # row #16: shoppers' carts, keyed on the token's session
         self._key = key
         self._tools = dict(tools or {})
         self._clock = clock

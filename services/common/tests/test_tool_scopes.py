@@ -14,8 +14,19 @@ def test_the_assistant_gets_exactly_retrieve_context_and_no_resource() -> None:
     # lists them; attached at #12. Still exact: nothing else, no resource.
     assert tool_scopes.AGENT_TOOLS["shopper-assistant"] == {
         "northwind-rag": frozenset({"retrieve_context"}),
+        # Row #16 (CHK-01): the four cart tools join, as PRD §7 lists "cart tools". Still exact.
         "northwind-catalog": frozenset(
-            {"search_products", "get_product", "get_variant", "check_stock", "get_price"}
+            {
+                "search_products",
+                "get_product",
+                "get_variant",
+                "check_stock",
+                "get_price",
+                "get_cart",
+                "add_to_cart",
+                "remove_from_cart",
+                "set_cart_quantity",
+            }
         ),
     }
     assert tool_scopes.allowed_resources("shopper-assistant", "northwind-rag") == frozenset()
