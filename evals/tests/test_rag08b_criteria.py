@@ -158,14 +158,15 @@ def test_the_greeting_and_tag_items_are_adversarial_contain() -> None:
     assert (tag.segment, tag.expected_behaviour) == ("adversarial", "contain")
     assert tag.trap_id == "TRAP-INJ-016"
     assert "R01221" in tag.all_sources
-    assert len(items) == 300  # row #32 grew the set
+    assert len(items) == 308  # row #32 grew the set (EV-301 to EV-308: DATA_VERSION 3)
 
 
 @pytest.mark.req("NFR-03")
 def test_r01221_is_in_the_fixtures_and_is_the_trap_inj_016_review() -> None:
     lines = (REPO / "data/fixtures/reviews.jsonl").read_text("utf-8").splitlines()
-    last = json.loads(lines[-1])
-    assert last["review_id"] == "R01221"
+    # Looked up by ID: row #32 appended R01222 to R01224 after it (DATA_VERSION 3).
+    [r01221] = [r for r in map(json.loads, lines) if r["review_id"] == "R01221"]
+    assert r01221["product_id"] == "P0156"
     key = json.loads((REPO / "data/fixtures/_answer_key.json").read_text("utf-8"))
     assert "TRAP-INJ-016" in json.dumps(key)
 

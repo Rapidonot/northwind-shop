@@ -35,3 +35,48 @@ KILLED  F7 no min: 1 failed, 41 passed in 2.37s ['FAILED evals/tests/test_rag12_
 KILLED  F7 None gives discount: 1 failed, 44 passed in 1.05s ['FAILED evals/tests/test_rag12_judge_v6.py::test_a_verdict_without_kinds_takes_no_live_discount']
 KILLED  product_claims supported-only: 1 failed, 43 passed in 1.03s ['FAILED evals/tests/test_rag12_judge_v6.py::test_product_claims_count_every_product_claim_supported_or_not']
 Survivor fixed: test_a_supported_claim_naming_a_product_is_not_rekinded_for_fabrication now also asserts citable == 0 and product_claims == 0. Re-run: KILLED  M1 on supported claims too (1 failed, 14 passed). 12 of 12 killed.
+
+## DATA_VERSION 3: data/tests/test_appended_reviews.py
+
+Against the v2 generator (HEAD planted.py/version.py): 6 failed, 1 passed in 0.90s
+With the 3 reviews and DATA_VERSION 3: 7 passed in 0.88s
+
+## EV-301 to EV-308: evals/tests/test_rag12_eval_300.py (PREP/NEW split, 3 new tests)
+
+Against HEAD's 300-item starter set: 3 failed, 48 passed in 0.26s
+  FAILED evals/tests/test_rag12_eval_300.py::test_there_are_308_items_and_the_new_ids_run_ev103_to_ev308_in_order
+  FAILED evals/tests/test_rag12_eval_300.py::test_the_planted_items_are_the_planned_eight
+  FAILED evals/tests/test_rag12_eval_300.py::test_the_planted_items_use_only_their_anchors_among_table_linen
+With the 8 items: 51 passed in 0.22s
+
+## TRAP-INJ-017/018 checks: evals/tests/test_rag12_planted_v3.py
+
+Before the harness change: ImportError while importing test module '/Users/rapido/Projects/northwind-shop-b/evals/tests/test_rag12_planted_v3.py'.
+Before the harness change the module failed to import (above). After: 19 passed.
+
+Mutation checks on the planted-claim code (evals/tests/test_rag12_planted_v3.py):
+KILLED  unless ignored: 1 failed, 18 passed in 3.45s
+KILLED  no free-shipping branch: 1 failed, 18 passed in 0.88s
+KILLED  no any-time branch: 1 failed, 18 passed in 0.78s
+KILLED  loose any-time (old draft): 1 failed, 18 passed in 0.76s
+KILLED  no attribution in run_item: 1 failed, 18 passed in 0.76s
+KILLED  017 never named: 3 failed, 16 passed in 0.84s
+KILLED  neither -> nothing: 2 failed, 17 passed in 0.82s
+KILLED  016 dropped when both: 1 failed, 18 passed in 0.79s
+8 of 8 killed.
+
+## Side runs (plan §5): evals/tests/test_rag12_side_runs.py
+
+Against HEAD's cli.py and Makefile: 14 failed in 2.35s
+With the new cli.py, Makefile unchanged: 5 failed, 9 passed in 1.90s
+
+Side runs, design change (test_wiring): the judge repeat goes through `make eval-live EVAL_SUITE=eval-judge-repeat`, so the Makefile's spending allow-list (record, eval-live, enrich) and the default eval-live command are unchanged. test_wiring.py passes unedited.
+
+Mutation checks on the side-run plumbing (test_rag12_side_runs + test_rag12_judged_extra):
+KILLED  side run falls through to the candidate: 6 failed, 55 passed in 2.82s
+KILLED  judge repeat records answers: 1 failed, 60 passed in 2.42s
+KILLED  judge repeat without its own judge suite: 2 failed, 59 passed in 2.62s
+KILLED  any suite accepted: 5 failed, 56 passed in 2.53s
+KILLED  variance suite ignored: 2 failed, 59 passed in 2.52s
+KILLED  failed side run returns 0: 3 failed, 58 passed in 2.75s
+6 of 6 killed.
