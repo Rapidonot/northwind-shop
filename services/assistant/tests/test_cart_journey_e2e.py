@@ -1,8 +1,14 @@
-"""The cart journey through the real assistant, index and catalog (row #16, CHK-01; W4).
+"""The cart journey through the real assistant and catalog (row #16, CHK-01; W4).
 
 `make record SUITE=assistant-cart` runs this through the user's runner window and creates the
 cassettes it replays. As in `test_smoke_e2e`, the `e2e` marker keeps it out of `make test` and
-`make test-integration`: it needs the real index.
+`make test-integration`.
+
+The first search is served by a fixed retriever (`ProductSources`): the two products' own records
+from `data/fixtures`, not the index. The journey tests the cart, not retrieval, and its messages
+have no frozen query vectors (decision 0012; `data/embeddings/**` is off-limits while #32 runs), so
+a live-model ranking could differ between machines and miss on replay. The assistant, its prompt,
+mcp-rag's protocol and mcp-catalog with its live store are all real.
 
 Four messages, each its own turn (memory is SA-05), in one session against one live store. They are
 the same messages the browser journey uses (`apps/portal/e2e/cart.json`). Every check reads the
@@ -14,11 +20,9 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 from pathlib import Path
 from typing import Any
 
-import psycopg
 import pytest
 
 from northwind_assistant.caller import Caller
@@ -30,9 +34,8 @@ from northwind_mcp_catalog import testing as catalog_testing
 from northwind_mcp_catalog.cart import alternatives
 from northwind_mcp_catalog.live import FixtureCatalog
 from northwind_mcp_catalog.server import CatalogServer
-from northwind_mcp_rag.testing import KEY, CallerIndex, serve_retriever
-from northwind_rag.cli import DEFAULT_DATABASE_URL
-from northwind_rag.embedding import CachedEmbedder, FastEmbedEmbedder
+from northwind_mcp_rag.testing import KEY, serve_retriever
+from northwind_rag.retrieval import RetrievedChunk
 
 pytestmark = [pytest.mark.e2e, pytest.mark.req("CHK-01"), pytest.mark.llm_suite("assistant-cart")]
 
@@ -44,9 +47,26 @@ IN_STOCK = "P0001-BLK-REG-M"
 OUT_OF_STOCK = "P0008-CHR-REL-M"
 
 
-def connect() -> psycopg.Connection:
-    url = os.environ.get("DATABASE_URL", DEFAULT_DATABASE_URL)
-    return psycopg.connect(url, autocommit=True)
+class ProductSources:
+    """The first search's sources for every journey message: the two products' records, in a fixed
+    order, from the verified fixtures. No price or stock is in them (hard rule 2)."""
+
+    def __init__(self) -> None:
+        rows = (REPO / "data/fixtures/products.jsonl").read_text(encoding="utf-8").splitlines()
+        products = {r["product_id"]: r for r in (json.loads(row) for row in rows if row.strip())}
+        self.chunks = [
+            RetrievedChunk(
+                f"product:{pid}:0",
+                "product",
+                pid,
+                None,
+                f"{products[pid]['name']}. {products[pid]['description']}",
+            )
+            for pid in ("P0001", "P0008")
+        ]
+
+    def search(self, query: str, caller: Caller) -> list[RetrievedChunk]:
+        return list(self.chunks)
 
 
 def lines(server: CatalogServer) -> dict[str, int]:
@@ -63,7 +83,7 @@ def test_add_refused_add_change_quantity_remove(llm_proxy: Any, tmp_path: Path) 
     store.set_stock(IN_STOCK, REGION, 5)
     store.set_stock(OUT_OF_STOCK, REGION, 0)
     server = catalog_testing.server(store, key=KEY)
-    index = CallerIndex(connect, CachedEmbedder(FastEmbedEmbedder()))
+    index = ProductSources()
     caller = Caller(region=REGION, session=SESSION)
     [add, refused, change, remove] = [step["message"] for step in JOURNEY["steps"]]
 
