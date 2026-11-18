@@ -89,7 +89,7 @@ def test_t1_a_changed_context_lets_its_refinements_change_and_reports_each(repo:
     commit("re-record EV-1 after its context changed")
     assert integrity_problems("main", BASELINE) == []
     replaced = replaced_refinements("main", BASELINE)
-    assert reported(replaced) == [("EV-1", 1, "context"), ("EV-1", 2, "context")]
+    assert reported(replaced) == [("EV-1", 1, "saved_context"), ("EV-1", 2, "saved_context")]
     changed, dropped = replaced
     assert len(changed["old"]) == 16 and changed["new"] not in ("-", changed["old"])
     assert dropped["new"] == "-"
@@ -138,7 +138,7 @@ def test_t5_one_items_context_change_never_exempts_another(repo: Path) -> None:
         f"{REFINEMENTS}: refinement EV-2#1 changed (HEAD)",
         f"{REFINEMENTS}: refinement EV-2#1 changed (disk)",
     ]
-    assert reported(replaced_refinements("main", BASELINE)) == [("EV-1", 1, "context")]
+    assert reported(replaced_refinements("main", BASELINE)) == [("EV-1", 1, "saved_context")]
 
 
 def test_t6a_a_deleted_file_is_refused_under_the_answerer_exemption(repo: Path) -> None:
@@ -204,7 +204,7 @@ def test_t10_cmd_integrity_prints_each_context_replaced_refinement(
     out = capsys.readouterr().out
     lines = [line for line in out.splitlines() if "refinement replaced:" in line]
     assert len(lines) == 1
-    assert '"item_id": "EV-1"' in lines[0] and '"reason": "context"' in lines[0]
+    assert '"item_id": "EV-1"' in lines[0] and '"reason": "saved_context"' in lines[0]
 
 
 def test_t11_same_chunks_with_new_index_and_retriever_ids_is_not_a_change(repo: Path) -> None:
@@ -281,7 +281,7 @@ def test_t16_a_chunk_text_change_with_the_same_chunk_ids_counts_as_changed(repo:
     commit("same chunk ids, new text")
     assert changed_set() == {"EV-1"}
     assert integrity_problems("main", BASELINE) == []
-    assert reported(replaced_refinements("main", BASELINE)) == [("EV-1", 1, "context")]
+    assert reported(replaced_refinements("main", BASELINE)) == [("EV-1", 1, "saved_context")]
 
 
 def test_t17_head_and_disk_changed_differently_still_exempts(repo: Path) -> None:
@@ -291,7 +291,7 @@ def test_t17_head_and_disk_changed_differently_still_exempts(repo: Path) -> None
     write(CONTEXTS, [context("EV-1", "product:P8:0", "v3"), context("EV-2", "product:P2:0")])
     assert changed_set() == {"EV-1"}
     assert integrity_problems("main", BASELINE) == []
-    assert reported(replaced_refinements("main", BASELINE)) == [("EV-1", 1, "context")]
+    assert reported(replaced_refinements("main", BASELINE)) == [("EV-1", 1, "saved_context")]
 
 
 def test_t18_replaced_lists_only_exempt_items_while_problems_name_the_rest(repo: Path) -> None:

@@ -58,3 +58,10 @@ E         +   eval-integrity passed against main" twice
 FAILED evals/tests/test_context_refinements_integrity.py::test_t19_a_duplicate_context_id_is_quoted_so_it_cannot_pose_as_output[cr]
 FAILED evals/tests/test_context_refinements_integrity.py::test_t19_a_duplicate_context_id_is_quoted_so_it_cannot_pose_as_output[u2028]
 2 failed, 1 passed, 19 deselected in 0.55s
+
+# Reason renamed to saved_context (2026-11-18, the user's option 1)
+make ci at adc4a58 (northwind_16): 1 failed, 6053 passed, 9 skipped, 22 xfailed; the failure was
+services/rag/tests/test_context_checks.py::test_only_the_index_writers_touch_context_or_embed_text
+(decision 0010 pin: 'evals/src/northwind_evals/integrity.py' matched ['"]context['"]). After the rename:
+$ uv run pytest -m "not integration" -p no:randomly -q evals/tests/test_context_refinements_integrity.py evals/tests/test_refinements_integrity.py services/rag/tests/test_context_checks.py tests/governance/
+313 passed (the pin included)

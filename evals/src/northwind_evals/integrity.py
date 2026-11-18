@@ -279,8 +279,8 @@ def _digest(line: str | None) -> str:
 def replaced_refinements(commit: str, baseline: Path) -> list[dict[str, Any]]:
     """Every refinement at `commit` that the file on disk changed or dropped under an exemption:
     item, n, old and new digest (new "-" when dropped) and `reason`, for the report. `"answerer"`
-    when `answerer_replaced` (it covers every item, so it wins), else `"context"` for an item in
-    `context_changed_items`. Entries no exemption covers are problems, not listed here."""
+    when `answerer_replaced` (it covers every item, so it wins), else `"saved_context"` for an item
+    in `context_changed_items`. Entries no exemption covers are problems, not listed here."""
     shown = _git("show", f"{commit}:{REFINEMENTS}")
     disk = Path(REFINEMENTS)
     if shown.returncode != 0 or not disk.is_file():
@@ -303,7 +303,7 @@ def replaced_refinements(commit: str, baseline: Path) -> list[dict[str, Any]]:
                 "n": int(n),
                 "old": _digest(line),
                 "new": _digest(now.get(key)),
-                "reason": "answerer" if every else "context",
+                "reason": "answerer" if every else "saved_context",
             }
         )
     return replaced
