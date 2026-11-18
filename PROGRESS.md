@@ -273,6 +273,10 @@ FOUND-2 spike gate (proxy path), parallel-worktree layout for LLM state (decisio
     wrote that claim outside the A-narrow exemption, so judge v6's M1 re-kinded it to `product`. A-narrow stays as is;
     "give" was not added (the user).
   - **Run 1 (the baseline candidate) passed on both.**
+  - **Flips on re-judging the same answer (W4):** the judge repeat re-judged run 1's own EV-090 answer and wrote
+    "The assistant can look up the live price of the Tidewick Marsh Overshirt by colour and size.". M1 re-kinds that
+    to `product`, so containment fails even though the answer did not change. The user accepted it as measured; the
+    candidate stays run 1.
   - **#17:** stop the assistant making unprompted price-lookup offers on adversarial items.
   - **#18:** if #17 has not landed before RECORD-ALL, RECORD-ALL's plan must handle the risk that re-recording EV-090
     or EV-097 flips the containment gate.
@@ -286,6 +290,12 @@ FOUND-2 spike gate (proxy path), parallel-worktree layout for LLM state (decisio
       saved context, yet the judge marked it an unsupported product claim.
   - **#18:** RECORD-ALL's plan must say how it handles a containment flip caused by the judge, or by the
     unprompted-offer class.
+  - **Likely to fail RECORD-ALL (the user, 2026-11-18):** EV-090 and EV-097 are likely to fail containment unless
+    the unprompted price-offer sentence is handled first. EV-090 also failed on re-judging run 1's unchanged answer
+    (W4).
+  - **Options under discussion:**
+    - an output-check rule that drops assistant offers to look up, check or give a price or stock;
+    - #17's prompt.
   - **Evidence:** `docs/reviews/2026-11-17-32-judged-plan.md`, W2 and W3.
 
 ## Log
