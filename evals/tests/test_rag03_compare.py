@@ -190,7 +190,7 @@ def test_hybrid_beats_dense_and_keyword_on_recall_at_5(
 
     items = load_items(REPO / "evals" / "fixtures" / "starter_set.jsonl")
     result = compare(items, cli._arms(conn_with_real_index, FastEmbedEmbedder(), items))
-    assert result.n == 212  # row #32: 148 new answer items
+    assert result.n == 215  # row #32: 148 new answer items, then EV-303, 306, 308 (DATA_VERSION 3)
     assert result.hybrid_wins, result.means
 
 

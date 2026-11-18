@@ -35,7 +35,9 @@ REPO = Path(__file__).resolve().parents[2]
 # docs/reviews/2026-11-12-RAG-08b-evidence.md). Was 99135472f1545431… over the 100 pre-row items.
 # Row #32 (2026-11-14): 300 items, measured read-only on the shared v2 index through `cli._live`.
 # The same run reproduced the old pin, 2126833fa26a9ba4…, over the first 102 items.
-MACOS_HASH = "91b43fc18cc8c679f6461157604d99e68680b4073b4b00e0fe1d927ab8393e4f"
+# Row #32 judged phase (2026-11-18): DATA_VERSION 3 (R01222-R01224) and 308 items, measured
+# read-only on the shared v3 index (3a89123f2aaf586f) through `cli._live`. Was 91b43fc18cc8c679…
+MACOS_HASH = "168c823b92378ee8c8c26a1c0ed5ceee1fa4fa7140b9f64b1bfee9960b496b4d"
 
 
 def _real_embedder() -> Any:
