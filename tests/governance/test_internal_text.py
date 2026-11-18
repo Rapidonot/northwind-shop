@@ -149,14 +149,23 @@ NO_ARGUMENT_TOOL = "mcp__northwind-catalog__get_cart"  # the only tool that take
 def is_bare_get_cart_call(body: str) -> bool:
     """Row #16, a stop-5 change the user approved (2026-11-18): a streamed response may hold no text
     only if it is exactly one `tool_use` block, named `get_cart` (the only tool with no argument),
-    with input `{}` and no input delta that adds anything. Beside it only `thinking` blocks may
-    appear (the model's own, which give no text here: `streamed_text` is already empty). Anything
-    else without text, any other tool, or `get_cart` with any input, still fails the control."""
+    with input `{}` and no input delta that adds anything. Beside it only an empty `thinking` block
+    may appear: its `thinking` text and every `thinking_delta` empty (signature only, as W4
+    recorded it; the user, 2026-11-18). Anything else without text, any other tool, or `get_cart`
+    with any input, is not the exception."""
     events = [json.loads(line[6:]) for line in body.splitlines() if line.startswith("data: ")]
     starts = [e["content_block"] for e in events if e["type"] == "content_block_start"]
     uses = [block for block in starts if block.get("type") == "tool_use"]
     others = [block for block in starts if block.get("type") not in ("tool_use", "thinking")]
     if len(uses) != 1 or others:
+        return False
+    thinking = [block.get("thinking", "") for block in starts if block.get("type") == "thinking"]
+    thinking += [
+        e["delta"].get("thinking", "")
+        for e in events
+        if e["type"] == "content_block_delta" and e["delta"].get("type") == "thinking_delta"
+    ]
+    if any(thinking):  # an empty thinking block only (the user, 2026-11-18)
         return False
     [use] = uses
     deltas = [
@@ -275,3 +284,24 @@ def test_only_the_asked_visibility_counts() -> None:
 
 def test_a_string_that_only_looks_like_json_is_kept() -> None:
     assert list(strings({"a": "{not json"})) == ["{not json"]
+
+
+@pytest.mark.parametrize(
+    "thinking",
+    [
+        ({"type": "thinking", "thinking": "Let me check the cart."}, []),
+        ({"type": "thinking", "thinking": ""}, [{"type": "thinking_delta", "thinking": "Hmm."}]),
+    ],
+)
+def test_a_thinking_block_with_text_is_never_the_exception(
+    thinking: tuple[dict[str, Any], list[dict[str, Any]]],
+) -> None:
+    """The user, 2026-11-18: beside a bare get_cart call, only an empty thinking block is allowed.
+    One with any text is never the exception, so it passes the control only if the scan has text
+    to read: text in a `thinking_delta` is read (`STREAMED_KEYS`); text only in the block's start
+    event is not, and that response fails the control."""
+    body = _stream(thinking, _use(NO_ARGUMENT_TOOL))
+    assert not is_bare_get_cart_call(body)
+    assert _passes(body) == bool(streamed_text(body))
+    if not thinking[1]:  # text only in the start event: the scan reads nothing, so it fails
+        assert not _passes(body)

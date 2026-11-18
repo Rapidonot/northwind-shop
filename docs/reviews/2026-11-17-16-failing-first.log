@@ -59,3 +59,5 @@ Not failing-first: services/gateway/tests/test_playwright_servers.py passes on m
   G1 the name check dropped (any no-input tool excepted): KILLED (2 failed, 21 passed in 24.24s)
   G2 other block types allowed beside the call: KILLED (1 failed, 22 passed in 2.67s)
   G3 the input-delta check dropped: KILLED (1 failed, 22 passed in 2.73s)
+  Narrowed again by the user (2026-11-18): a thinking block beside the call must be empty (its text and every thinking_delta). 25 passed in the file. Mutant (source restored):
+  G4 the empty-thinking check dropped: KILLED (2 failed, 23 passed in 2.84s)
