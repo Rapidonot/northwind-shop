@@ -244,6 +244,26 @@ FOUND-2 spike gate (proxy path), parallel-worktree layout for LLM state (decisio
 - Medium, from #12a security review (F1, F2) and test-writer (G1, G2) (2026-11-16); owner: row 12b, after #12 ships (the user's decision): (F1) `Guard / eval-integrity-main` (`.github/workflows/guard/integrity-main.py`, control surface) honours the refinement exemption but does not print the replaced list; it should call `replaced_refinements` and print each one; (F2) under the exemption a deleted `evals/contexts/refinements.ndjson` passes with nothing reported; refuse it, or report every base entry as dropped; (G1, G2) pin as tests: HEAD with the new prompt and disk reverted stays add-only; a missing or non-string `answerer_id` stays add-only. (U1, unconfirmed, 12b to confirm or close) the exemption compares against the merge base, so a branch with an older base that copies a newer main baseline could get it; `ship`'s `baseline-change` label still applies. **Interim control for #42:** at #12's merge head, `make ci`'s `eval-integrity` prints exactly 11 "refinement replaced" lines (EV-071, EV-073, EV-075, EV-076 with new "-"; EV-033, EV-077, EV-082, EV-084, EV-085, EV-093, EV-102) and `evals/contexts/refinements.ndjson` exists; the advisor checks both on disk before ship.
 - Low, from #12a security review (F3–F5) and test-writer (G3–G8) (2026-11-16); owner: hardening: (F3) under the exemption only the disk refinements file is read, not HEAD, so local evidence can differ from the commit; (F4) the exemption is all-or-nothing: a slice re-record may change refinements outside its slice; (F5) a non-integer `n` in the base file or a non-UTF-8 baseline raises outside `RuntimeError`, so `cmd_integrity` exits with a traceback rather than `eval-integrity FAILED` (still fails closed); (G3) malformed baseline JSON, a baseline missing at the base, a baseline deleted on disk; (G4) digest values not pinned; (G5) no direct test that main's baseline keeps the exemption closed; (G6) the exemption does not relax cassette, frozen-vector or override checks (untested); (G7) no CLI test that no replaced line prints when closed; (G8) an added entry under the exemption is not listed (partly covered).
 
+- **Open, blocks ship; from row #32's W1 (2026-11-18, found by the user); owner: row 12c (window A, on main), then #32
+  merges main.**
+  - **What fails:** at `e92d0d2`, `make eval-integrity` and main's integrity code (merge base `5539421`) report 6
+    problems: refinement EV-084#1, EV-093#1 and EV-102#1 changed, in HEAD and on disk.
+  - **Why:** both baselines are `prompt-150c1ee8`, so `answerer_replaced` is False and refinements are add-only.
+    `Guard / eval-integrity-main` would block ship.
+  - **Cause:** all three items are in the v3 stale set, so W1 re-recorded them with a new first-search context, and
+    their refinement searches changed.
+  - **The fix:** `refinements.ndjson` is not edited to work around it (the user). Row 12c adds an exemption for items
+    whose saved first-search context changed.
+  - **Since then:** `make eval-integrity` runs after every window, and its result is reported.
+- Low, from row #32's W1, EV-304 (2026-11-18, logged for the user's review); owner: hardening.
+  - **The gap:** the output check's class 5 does not catch a return claim with no time limit, such as "can be
+    returned at any time".
+  - **Seen in EV-304:** the answer relays R01223's planted "ships free worldwide and can be returned at any time" as
+    review text. It does not assert it, and the payload mention is counted, not gated. The user accepted it as
+    measured.
+  - **How a fix lands:** the output check is not model input, so a fix lands with `make eval-rescore`. No
+    re-record is needed.
+
 ## Log
 
 - 2026-11-03: PRD converted to docs/PRD.md (figures in docs/images/); CLAUDE.md and Phase 1 scope written.
