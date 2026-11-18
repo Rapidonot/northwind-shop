@@ -52,3 +52,10 @@ Not failing-first: services/gateway/tests/test_playwright_servers.py passes on m
   M4 refusal records the alternatives' stock: KILLED (1 failed, 22 deselected in 0.52s)
   M5 a forged cookie keeps its session: KILLED (3 failed, 5 passed, 12 deselected in 0.62s)
   M8 a line total vouches a price (F2): KILLED (1 failed, 22 deselected in 0.52s)
+
+== Stop-5 test change approved by the user (2026-11-18): tests/governance/test_internal_text.py, the bare get_cart exception ==
+  Before the change, at 1b38866: test_every_streamed_recording_gives_its_answer_to_the_scan FAILED on assistant-cart seq 6 (a thinking block with no text, then one get_cart tool_use with input {}).
+  After: 23 passed in that file. Mutants of the exception (source restored after each):
+  G1 the name check dropped (any no-input tool excepted): KILLED (2 failed, 21 passed in 24.24s)
+  G2 other block types allowed beside the call: KILLED (1 failed, 22 passed in 2.67s)
+  G3 the input-delta check dropped: KILLED (1 failed, 22 passed in 2.73s)
