@@ -1,0 +1,17 @@
+# 12c acceptance check, 2026-11-18T03:26:56Z: this branch's final integrity.py (sha256 4c0dc41c84504ffd…, working tree as committed in the 12c commit) run in a throwaway --shared clone at e92d0d2 (window B), base 5539421; nothing written in northwind-shop-b
+integrity module: /Users/rapido/Projects/northwind-shop/evals/src/northwind_evals/integrity.py
+checkout HEAD: e92d0d25039121acb9e0026968f493b2b1f7e2ef | base 5539421 | merge-base: 5539421ef15f0b563581bda53630e9ccfe2f5747
+integrity problems: 0 (refinement problems: 0)
+answerer_replaced: False
+context_changed_items: ['EV-051', 'EV-052', 'EV-053', 'EV-059', 'EV-060', 'EV-078', 'EV-084', 'EV-093', 'EV-094', 'EV-102']
+replaced refinements: 3
+  refinement replaced: {"item_id": "EV-084", "n": 1, "new": "9bdff847d3ee2d36", "old": "bda8800b24185ed6", "reason": "context"}
+  refinement replaced: {"item_id": "EV-093", "n": 1, "new": "f42403583f8536f6", "old": "9a0b1f5d3862d6f0", "reason": "context"}
+  refinement replaced: {"item_id": "EV-102", "n": 1, "new": "2158d7b1e47b1cf2", "old": "89346380c23a909e", "reason": "context"}
+control, origin/main's integrity.py on the same data: 6 problems
+  problem: evals/contexts/refinements.ndjson: refinement EV-084#1 changed (HEAD)
+  problem: evals/contexts/refinements.ndjson: refinement EV-093#1 changed (HEAD)
+  problem: evals/contexts/refinements.ndjson: refinement EV-102#1 changed (HEAD)
+  problem: evals/contexts/refinements.ndjson: refinement EV-084#1 changed (disk)
+  problem: evals/contexts/refinements.ndjson: refinement EV-093#1 changed (disk)
+  problem: evals/contexts/refinements.ndjson: refinement EV-102#1 changed (disk)

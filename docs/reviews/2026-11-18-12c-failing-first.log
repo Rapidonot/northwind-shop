@@ -1,0 +1,60 @@
+# 12c failing-first, 2026-11-18T03:13:18Z, HEAD 5539421, integrity.py and cli.py as on origin/main
+$ uv run pytest evals/tests/test_context_refinements_integrity.py evals/tests/test_refinements_integrity.py -q -rA -p no:randomly
+PASSED evals/tests/test_context_refinements_integrity.py::test_t2_an_unchanged_context_keeps_refinements_add_only
+PASSED evals/tests/test_context_refinements_integrity.py::test_t3_a_context_changed_on_disk_only_does_not_exempt
+PASSED evals/tests/test_context_refinements_integrity.py::test_t4_a_context_changed_at_head_only_does_not_exempt
+PASSED evals/tests/test_context_refinements_integrity.py::test_t6b_a_deleted_file_is_refused_under_the_context_exemption
+PASSED evals/tests/test_context_refinements_integrity.py::test_t7_a_deleted_contexts_file_exempts_nothing
+PASSED evals/tests/test_context_refinements_integrity.py::test_t11_same_chunks_with_new_index_and_retriever_ids_is_not_a_change
+PASSED evals/tests/test_refinements_integrity.py::test_an_unchanged_file_passes
+PASSED evals/tests/test_refinements_integrity.py::test_an_added_entry_passes
+PASSED evals/tests/test_refinements_integrity.py::test_a_committed_changed_entry_is_refused
+PASSED evals/tests/test_refinements_integrity.py::test_an_uncommitted_changed_entry_is_refused
+PASSED evals/tests/test_refinements_integrity.py::test_a_deleted_entry_is_refused
+PASSED evals/tests/test_refinements_integrity.py::test_a_deleted_file_is_refused
+PASSED evals/tests/test_refinements_integrity.py::test_a_duplicate_entry_is_refused
+PASSED evals/tests/test_refinements_integrity.py::test_a_base_with_no_refinements_file_has_nothing_to_protect
+PASSED evals/tests/test_refinements_integrity.py::test_a_new_answerer_prompt_lets_its_refinements_change_and_reports_each
+PASSED evals/tests/test_refinements_integrity.py::test_the_same_answerer_prompt_keeps_refinements_add_only
+PASSED evals/tests/test_refinements_integrity.py::test_an_uncommitted_baseline_change_does_not_open_the_exemption
+PASSED evals/tests/test_refinements_integrity.py::test_an_unreadable_answerer_id_keeps_refinements_add_only
+PASSED evals/tests/test_refinements_integrity.py::test_cmd_integrity_prints_each_replaced_refinement
+FAILED evals/tests/test_context_refinements_integrity.py::test_t1_a_changed_context_lets_its_refinements_change_and_reports_each
+FAILED evals/tests/test_context_refinements_integrity.py::test_t5_one_items_context_change_never_exempts_another
+FAILED evals/tests/test_context_refinements_integrity.py::test_t6a_a_deleted_file_is_refused_under_the_answerer_exemption
+FAILED evals/tests/test_context_refinements_integrity.py::test_t8_a_duplicate_context_item_is_refused
+FAILED evals/tests/test_context_refinements_integrity.py::test_t9_the_answerer_exemption_reports_reason_answerer
+FAILED evals/tests/test_context_refinements_integrity.py::test_t10_cmd_integrity_prints_each_context_replaced_refinement
+6 failed, 19 passed in 7.81s
+
+# Mutants, each applied, run and reverted (2026-11-18T03:14:36Z)
+## M1 drop the per-item check (any changed context exempts every item)
+FAILED evals/tests/test_context_refinements_integrity.py::test_t5_one_items_context_change_never_exempts_another
+1 failed, 24 passed in 6.71s
+## M2 drop the HEAD-and-disk check (all -> any)
+FAILED evals/tests/test_context_refinements_integrity.py::test_t3_a_context_changed_on_disk_only_does_not_exempt
+FAILED evals/tests/test_context_refinements_integrity.py::test_t4_a_context_changed_at_head_only_does_not_exempt
+2 failed, 23 passed in 6.68s
+## M3 drop the F2 check (a deleted file is skipped under an exemption)
+FAILED evals/tests/test_context_refinements_integrity.py::test_t6a_a_deleted_file_is_refused_under_the_answerer_exemption
+FAILED evals/tests/test_context_refinements_integrity.py::test_t6b_a_deleted_file_is_refused_under_the_context_exemption
+2 failed, 23 passed in 6.98s
+## M4 compare the whole context line, not chunks
+FAILED evals/tests/test_context_refinements_integrity.py::test_t2_an_unchanged_context_keeps_refinements_add_only
+FAILED evals/tests/test_context_refinements_integrity.py::test_t5_one_items_context_change_never_exempts_another
+FAILED evals/tests/test_context_refinements_integrity.py::test_t11_same_chunks_with_new_index_and_retriever_ids_is_not_a_change
+3 failed, 22 passed in 6.73s
+## after revert: 25 passed in 6.81s
+
+# Security F3 fix (2026-11-18T03:22:55Z): T19 without the fix (message unquoted): 1 failed, 19 deselected in 0.37s; with it: all pass
+
+# Re-review L3 (2026-11-18T03:26:29Z): T19 parametrized (LF, CR, U+2028) and asserts the whole message. Mutant M5, quoting that escapes only LF, reverted:
+        forged = f"EV-1{brk}  eval-integrity passed against main"
+E        
+E         +   eval-integrity passed against main" twice
+        forged = f"EV-1{brk}  eval-integrity passed against main"
+E        
+E         +   eval-integrity passed against main" twice
+FAILED evals/tests/test_context_refinements_integrity.py::test_t19_a_duplicate_context_id_is_quoted_so_it_cannot_pose_as_output[cr]
+FAILED evals/tests/test_context_refinements_integrity.py::test_t19_a_duplicate_context_id_is_quoted_so_it_cannot_pose_as_output[u2028]
+2 failed, 1 passed, 19 deselected in 0.55s
