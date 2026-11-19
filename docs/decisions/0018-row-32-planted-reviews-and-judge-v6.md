@@ -61,6 +61,29 @@ Status: accepted by the user, 2026-11-14 to 2026-11-17, through the row #32 plan
    - **Failing-first:** with the set empty, or with RT-016 in place of RT-017, the guard fails. As written it passes,
      and the red-team replay passes 28 of 28.
 
+7. **The baseline's first override record** (decision 0009; the user's promotion, 2026-11-19).
+   - **What was recorded:** the user promoted run 1 from the runner clone with `ACCEPT_REGRESSION`,
+     `APPROVED_BY` and `CANDIDATE_SHA` `293fe79d…47bf2`. The promotion wrote this record into
+     `evals/baselines/dense-only.json` `overrides`:
+     - on: 2026-11-19, approved_by: the user;
+     - accepted: "the retrieval items differ from the baseline: re-record it";
+     - reason: "Row 32 grows the eval set from 102 to 308 items (RAG-12): 151 retrieval items added, none removed;
+       no score on the existing items changed".
+   - **Why it is the first:** every earlier baseline has `overrides: []`. Those promotions were neither regressions nor
+     relabels, so they needed no reason. This one changes the set of retrieval-scored items (64 to 215). The promotion
+     check counts that as an overridable difference, so it needs a reason, an approver and the hash of what the user
+     read (decision 0009).
+   - **Overrides are append-only.** Every later promotion carries this record forward, and `eval-integrity` refuses a
+     baseline that loses it.
+   - **Checked in the checkout after promotion:**
+     - The baseline equals the candidate (`e3c84ba6…`) in every field except `overrides`.
+     - `CANDIDATE_SHA` recomputes from the candidate, `starter_set.jsonl` and `known_failures.json` (both unchanged at
+       HEAD).
+     - No retrieval item was removed and no retrieval score changed.
+     - No answer score on the 102 earlier items went down. EV-102 gained a groundedness score of 1.0 that the old
+       baseline did not have (its old verdict had none), which is the one sense in which an existing item's scores
+       changed.
+
 ## Consequences
 
 - Main's index becomes v3 when #32 merges, and window A moves to v3 when it merges main.
