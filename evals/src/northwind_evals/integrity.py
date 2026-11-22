@@ -27,6 +27,8 @@ CASSETTES = "cassettes"
 EMBEDDINGS = "data/embeddings"
 # The model's recorded follow-up searches (row #13b): recordings, so add-only like a cassette.
 REFINEMENTS = "evals/contexts/refinements.ndjson"
+# Each item's saved first-search context (`make eval-snapshot`): row 12c's per-item exemption.
+CONTEXTS = "evals/contexts/dense-only.jsonl"
 
 
 def _git(*args: str) -> subprocess.CompletedProcess[str]:
@@ -223,18 +225,68 @@ def answerer_replaced(commit: str, baseline: Path) -> bool:
     return old is not None and all(part is not None and part != old for part in now)
 
 
+def _context_chunks(text: str, source: str) -> dict[str, str]:
+    """`item_id` to its `chunks`, canonical JSON. Only `chunks` counts: `index_version` and
+    `retriever_id` change on every re-ingest (row 12c, D1). A duplicate is refused."""
+    chunks: dict[str, str] = {}
+    for line in text.splitlines():
+        try:
+            record = json.loads(line)
+            item_id = str(record["item_id"])
+            value = json.dumps(record["chunks"], sort_keys=True)
+        except (ValueError, KeyError, TypeError):
+            raise RuntimeError(f"{source} has a line that is not a saved context") from None
+        if item_id in chunks:
+            # JSON-quoted: the id is branch text, and a newline in it could pose as output.
+            raise RuntimeError(f"{source} holds context {json.dumps(item_id)} twice")
+        chunks[item_id] = value
+    return chunks
+
+
+def context_changed_items(commit: str) -> set[str]:
+    """Items whose saved context at `commit` has different chunks both committed at HEAD and on disk
+    (row 12c, the user's decision 2026-11-18): their re-recorded answers replaced their own
+    refinements. Fails closed: the file missing anywhere, or the item missing at HEAD or on disk,
+    exempts nothing."""
+    shown = _git("show", f"{commit}:{CONTEXTS}")
+    committed = _git("show", f"HEAD:{CONTEXTS}")
+    disk = Path(CONTEXTS)
+    if shown.returncode != 0 or committed.returncode != 0 or not disk.is_file():
+        return set()
+    before = _context_chunks(shown.stdout, f"{CONTEXTS} at {commit}")
+    now = [
+        _context_chunks(committed.stdout, f"{CONTEXTS} at HEAD"),
+        _context_chunks(disk.read_text(encoding="utf-8"), f"{CONTEXTS} (disk)"),
+    ]
+    return {
+        item
+        for item, chunks in before.items()
+        if all(item in version and version[item] != chunks for version in now)
+    }
+
+
+def _exemption(commit: str, baseline: Path | None) -> tuple[bool, set[str]]:
+    """(every item exempt because the answerer was replaced, items exempt because their context
+    changed)."""
+    replaced = baseline is not None and answerer_replaced(commit, baseline)
+    return replaced, context_changed_items(commit)
+
+
 def _digest(line: str | None) -> str:
     return "-" if line is None else hashlib.sha256(line.encode("utf-8")).hexdigest()[:16]
 
 
 def replaced_refinements(commit: str, baseline: Path) -> list[dict[str, Any]]:
-    """When `answerer_replaced`, every refinement at `commit` that the file on disk changed or
-    dropped: item, n, old and new digest (new "-" when dropped), for the report. Otherwise none."""
-    if not answerer_replaced(commit, baseline):
-        return []
+    """Every refinement at `commit` that the file on disk changed or dropped under an exemption:
+    item, n, old and new digest (new "-" when dropped) and `reason`, for the report. `"answerer"`
+    when `answerer_replaced` (it covers every item, so it wins), else `"saved_context"` for an item
+    in `context_changed_items`. Entries no exemption covers are problems, not listed here."""
     shown = _git("show", f"{commit}:{REFINEMENTS}")
     disk = Path(REFINEMENTS)
     if shown.returncode != 0 or not disk.is_file():
+        return []
+    every, items = _exemption(commit, baseline)
+    if not every and not items:
         return []
     before = _refinement_lines(shown.stdout, f"{REFINEMENTS} at {commit}")
     now = _refinement_lines(disk.read_text(encoding="utf-8"), f"{REFINEMENTS} (disk)")
@@ -243,8 +295,16 @@ def replaced_refinements(commit: str, baseline: Path) -> list[dict[str, Any]]:
         if now.get(key) == line:
             continue
         item_id, n = key.rsplit("#", 1)
+        if not every and item_id not in items:
+            continue
         replaced.append(
-            {"item_id": item_id, "n": int(n), "old": _digest(line), "new": _digest(now.get(key))}
+            {
+                "item_id": item_id,
+                "n": int(n),
+                "old": _digest(line),
+                "new": _digest(now.get(key)),
+                "reason": "answerer" if every else "saved_context",
+            }
         )
     return replaced
 
@@ -252,15 +312,15 @@ def replaced_refinements(commit: str, baseline: Path) -> list[dict[str, Any]]:
 def changed_refinements(commit: str, baseline: Path | None = None) -> list[str]:
     """Every refinement recorded at `commit` must still be there with the same line, committed at
     HEAD and on disk (the user, row #13b). New entries pass; a base with no file protects
-    nothing. The one exception (row #12): when the promoted baseline's answerer prompt part
-    differs from `commit`'s (`answerer_replaced`), changed and dropped refinements pass, and
-    `replaced_refinements` lists every one for the report."""
-    if baseline is not None and answerer_replaced(commit, baseline):
-        return []
+    nothing. Two exemptions let an entry change or drop, and `replaced_refinements` lists each one:
+    every entry when the promoted baseline's answerer prompt part differs from `commit`'s (row #12,
+    `answerer_replaced`), and an item's own entries when its saved context changed (row 12c,
+    `context_changed_items`). A deleted file is never exempt (12a's F2)."""
     shown = _git("show", f"{commit}:{REFINEMENTS}")
     if shown.returncode != 0:
         return []
     before = _refinement_lines(shown.stdout, f"{REFINEMENTS} at {commit}")
+    every, items = _exemption(commit, baseline)
     committed = _git("show", f"HEAD:{REFINEMENTS}")
     disk = Path(REFINEMENTS)
     versions = {
@@ -273,12 +333,13 @@ def changed_refinements(commit: str, baseline: Path | None = None) -> list[str]:
             problems.append(f"{REFINEMENTS}: deleted ({where}); refinements may only be added")
             continue
         now = _refinement_lines(text, f"{REFINEMENTS} ({where})")
+        guarded = [k for k in before if not every and k.rsplit("#", 1)[0] not in items]
         problems += [
-            f"{REFINEMENTS}: refinement {k} removed ({where})" for k in before if k not in now
+            f"{REFINEMENTS}: refinement {k} removed ({where})" for k in guarded if k not in now
         ]
         problems += [
             f"{REFINEMENTS}: refinement {k} changed ({where})"
-            for k in before
+            for k in guarded
             if k in now and now[k] != before[k]
         ]
     return problems
