@@ -201,3 +201,131 @@ def test_cmd_integrity_prints_each_replaced_refinement(
     out = capsys.readouterr().out
     lines = [line for line in out.splitlines() if "refinement replaced:" in line]
     assert len(lines) == 2 and '"item_id": "EV-1"' in lines[0] and '"new": "-"' in lines[1]
+
+
+# ---- row 12b: G1, G2 and U1 (12a's test-writer and security review) ----------------------------
+
+
+@pytest.mark.req("RAG-12")
+def test_g1_a_new_prompt_at_head_with_the_disk_baseline_reverted_stays_add_only(
+    promoted_repo: Path,
+) -> None:
+    """T4: the committed baseline has the new prompt, the one on disk is back to the old one."""
+    from northwind_evals.integrity import replaced_refinements
+
+    write(BASELINE, [baseline_with("bbbbbbbb")])
+    write(REFINEMENTS, [entry("EV-1", 1, "Re-recorded.")])
+    commit("promote")
+    write(BASELINE, [baseline_with("aaaaaaaa")])
+    problems = integrity_problems("main", BASELINE)
+    assert f"{REFINEMENTS}: refinement EV-1#1 changed (HEAD)" in problems
+    assert f"{REFINEMENTS}: refinement EV-2#1 removed (disk)" in problems
+    assert replaced_refinements("main", BASELINE) == []
+
+
+@pytest.mark.req("RAG-12")
+def test_g2_a_missing_answerer_id_at_head_stays_add_only(promoted_repo: Path) -> None:
+    """T5: the base names a prompt, HEAD and disk name none."""
+    from northwind_evals.integrity import replaced_refinements
+
+    write(BASELINE, [json.dumps({"overrides": []})])
+    write(REFINEMENTS, [entry("EV-1", 1, "Re-recorded.")])
+    commit("no answerer_id")
+    assert f"{REFINEMENTS}: refinement EV-1#1 changed (HEAD)" in integrity_problems(
+        "main", BASELINE
+    )
+    assert replaced_refinements("main", BASELINE) == []
+
+
+NOT_A_STRING = {
+    "list": ["assistant:v1:m:prompt-bbbbbbbb:check-0"],
+    "dict": {"id": "assistant:v1:m:prompt-bbbbbbbb:check-0"},
+    "number": 12345678,
+    "null": None,
+}
+
+
+@pytest.mark.req("RAG-12")
+@pytest.mark.parametrize("kind", sorted(NOT_A_STRING))
+def test_g2_an_answerer_id_that_is_not_a_string_stays_add_only(
+    promoted_repo: Path, kind: str
+) -> None:
+    """T6, T7: `str()` of a list or dict holding the prompt pattern used to open the exemption."""
+    from northwind_evals.integrity import replaced_refinements
+
+    write(BASELINE, [json.dumps({"overrides": [], "answerer_id": NOT_A_STRING[kind]})])
+    write(REFINEMENTS, [entry("EV-1", 1, "Re-recorded.")])
+    commit("answerer_id is not a string")
+    problems = integrity_problems("main", BASELINE)
+    assert f"{REFINEMENTS}: refinement EV-1#1 changed (HEAD)" in problems
+    assert f"{REFINEMENTS}: refinement EV-1#1 changed (disk)" in problems
+    assert replaced_refinements("main", BASELINE) == []
+
+
+CONTEXTS = Path("evals/contexts/dense-only.jsonl")
+
+
+def saved_context(item_id: str, chunk_id: str) -> str:
+    chunk = {"chunk_id": chunk_id, "source_id": "P1", "source_type": "product", "text": "Shell."}
+    record = {"chunks": [chunk], "index_version": "v1", "item_id": item_id, "retriever_id": "d"}
+    return json.dumps(record, sort_keys=True)
+
+
+U1_CONTEXTS = [saved_context("EV-1", "product:P1:0"), saved_context("EV-2", "product:P2:0")]
+U1_EXEMPTIONS = {
+    "answerer": (BASELINE, [baseline_with("bbbbbbbb")]),
+    "saved_context": (
+        CONTEXTS,
+        [saved_context("EV-1", "product:P7:0"), saved_context("EV-2", "product:P2:0")],
+    ),
+}
+
+
+@pytest.mark.req("RAG-12")
+@pytest.mark.parametrize("exemption", sorted(U1_EXEMPTIONS))
+@pytest.mark.xfail(
+    strict=True,
+    raises=AssertionError,
+    reason="U1 local residual (row 12b, D1-A): at the branch head the merge base is the fork "
+    "point, so a copied newer main file opens the exemption. Guard runs on the merge ref and "
+    "refuses it (tests/ship/test_guard.py). Owner: hardening.",
+)
+def test_u1_a_branch_copying_a_newer_main_file_gets_no_exemption_locally(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, exemption: str
+) -> None:
+    """T10: the branch forks, main re-records EV-1#1 under an exemption, the branch copies main's
+    file and edits EV-1#2, which main kept."""
+    monkeypatch.chdir(tmp_path)
+    git("init", "-q", "-b", "main")
+    git("config", "user.email", "test@example.invalid")
+    git("config", "user.name", "test")
+    write(BASELINE, [baseline_with("aaaaaaaa")])
+    write(CONTEXTS, U1_CONTEXTS)
+    write(REFINEMENTS, [entry("EV-1", 1), entry("EV-1", 2)])
+    commit("base")
+    git("switch", "-q", "-c", "feature")
+    git("switch", "-q", "main")
+    path, lines = U1_EXEMPTIONS[exemption]
+    write(path, lines)
+    write(REFINEMENTS, [entry("EV-1", 1, "Re-recorded."), entry("EV-1", 2)])
+    commit("main re-records EV-1#1")
+    git("switch", "-q", "feature")
+    write(path, lines)
+    write(REFINEMENTS, [entry("EV-1", 1, "Re-recorded."), entry("EV-1", 2, "Tampered.")])
+    commit("copy main's file, edit EV-1#2")
+    problems = integrity_problems("main", BASELINE)
+    assert f"{REFINEMENTS}: refinement EV-1#2 changed (HEAD)" in problems
+
+
+@pytest.mark.req("RAG-12")
+def test_g2_an_answerer_id_missing_at_the_base_stays_add_only(repo: Path) -> None:
+    """The base names no prompt part, so a prompt at HEAD has nothing to differ from."""
+    from northwind_evals.integrity import replaced_refinements
+
+    write(BASELINE, [baseline_with("bbbbbbbb")])
+    write(REFINEMENTS, [entry("EV-1", 1, "Re-recorded.")])
+    commit("answerer_id appears")
+    problems = integrity_problems("main", BASELINE)
+    assert f"{REFINEMENTS}: refinement EV-1#1 changed (HEAD)" in problems
+    assert f"{REFINEMENTS}: refinement EV-1#1 changed (disk)" in problems
+    assert replaced_refinements("main", BASELINE) == []

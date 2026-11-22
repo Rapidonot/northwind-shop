@@ -1,0 +1,102 @@
+# Row 12b failing-first, on main's code (ee49c22): new tests only, no implementation yet
+$ git rev-parse HEAD: ee49c221243bef42bbd8bf0387a00a4cb2f04653
+$ git diff --stat
+ evals/tests/test_refinements_integrity.py | 113 +++++++++++++++++++
+ tests/ship/test_guard.py                  | 179 ++++++++++++++++++++++++++++++
+ 2 files changed, 292 insertions(+)
+
+$ uv run pytest -v tests/ship/test_guard.py -k "guard_prints or guard_lists or merge_ref or integrity_job_checks"
+tests/ship/test_guard.py::test_guard_prints_each_refinement_a_new_answerer_replaced FAILED [ 16%]
+tests/ship/test_guard.py::test_guard_prints_each_refinement_a_changed_context_replaced FAILED [ 33%]
+tests/ship/test_guard.py::test_guard_lists_nothing_and_fails_when_no_exemption_holds PASSED [ 50%]
+tests/ship/test_guard.py::test_guard_on_the_merge_ref_gives_no_exemption_for_a_copied_newer_main_file[answerer] PASSED [ 66%]
+tests/ship/test_guard.py::test_guard_on_the_merge_ref_gives_no_exemption_for_a_copied_newer_main_file[saved_context] PASSED [ 83%]
+tests/ship/test_guard.py::test_the_integrity_job_checks_out_the_merge_ref PASSED [100%]
+FAILED tests/ship/test_guard.py::test_guard_prints_each_refinement_a_new_answerer_replaced
+FAILED tests/ship/test_guard.py::test_guard_prints_each_refinement_a_changed_context_replaced
+=========== 2 failed, 4 passed, 151 deselected in 110.76s (0:01:50) ============
+
+$ uv run pytest -v evals/tests/test_refinements_integrity.py evals/tests/test_context_refinements_integrity.py
+evals/tests/test_refinements_integrity.py::test_an_unchanged_file_passes PASSED [  2%]
+evals/tests/test_refinements_integrity.py::test_an_added_entry_passes PASSED [  4%]
+evals/tests/test_refinements_integrity.py::test_a_committed_changed_entry_is_refused PASSED [  6%]
+evals/tests/test_refinements_integrity.py::test_an_uncommitted_changed_entry_is_refused PASSED [  9%]
+evals/tests/test_refinements_integrity.py::test_a_deleted_entry_is_refused PASSED [ 11%]
+evals/tests/test_refinements_integrity.py::test_a_deleted_file_is_refused PASSED [ 13%]
+evals/tests/test_refinements_integrity.py::test_a_duplicate_entry_is_refused PASSED [ 16%]
+evals/tests/test_refinements_integrity.py::test_a_base_with_no_refinements_file_has_nothing_to_protect PASSED [ 18%]
+evals/tests/test_refinements_integrity.py::test_a_new_answerer_prompt_lets_its_refinements_change_and_reports_each PASSED [ 20%]
+evals/tests/test_refinements_integrity.py::test_the_same_answerer_prompt_keeps_refinements_add_only PASSED [ 23%]
+evals/tests/test_refinements_integrity.py::test_an_uncommitted_baseline_change_does_not_open_the_exemption PASSED [ 25%]
+evals/tests/test_refinements_integrity.py::test_an_unreadable_answerer_id_keeps_refinements_add_only PASSED [ 27%]
+evals/tests/test_refinements_integrity.py::test_cmd_integrity_prints_each_replaced_refinement PASSED [ 30%]
+evals/tests/test_refinements_integrity.py::test_g1_a_new_prompt_at_head_with_the_disk_baseline_reverted_stays_add_only PASSED [ 32%]
+evals/tests/test_refinements_integrity.py::test_g2_a_missing_answerer_id_at_head_stays_add_only PASSED [ 34%]
+evals/tests/test_refinements_integrity.py::test_g2_an_answerer_id_that_is_not_a_string_stays_add_only[dict] FAILED [ 37%]
+evals/tests/test_refinements_integrity.py::test_g2_an_answerer_id_that_is_not_a_string_stays_add_only[list] FAILED [ 39%]
+evals/tests/test_refinements_integrity.py::test_g2_an_answerer_id_that_is_not_a_string_stays_add_only[null] PASSED [ 41%]
+evals/tests/test_refinements_integrity.py::test_g2_an_answerer_id_that_is_not_a_string_stays_add_only[number] PASSED [ 44%]
+evals/tests/test_refinements_integrity.py::test_u1_a_branch_copying_a_newer_main_file_gets_no_exemption_locally[answerer] XFAIL [ 46%]
+evals/tests/test_refinements_integrity.py::test_u1_a_branch_copying_a_newer_main_file_gets_no_exemption_locally[saved_context] XFAIL [ 48%]
+evals/tests/test_context_refinements_integrity.py::test_t1_a_changed_context_lets_its_refinements_change_and_reports_each PASSED [ 51%]
+evals/tests/test_context_refinements_integrity.py::test_t2_an_unchanged_context_keeps_refinements_add_only PASSED [ 53%]
+evals/tests/test_context_refinements_integrity.py::test_t3_a_context_changed_on_disk_only_does_not_exempt PASSED [ 55%]
+evals/tests/test_context_refinements_integrity.py::test_t4_a_context_changed_at_head_only_does_not_exempt PASSED [ 58%]
+evals/tests/test_context_refinements_integrity.py::test_t5_one_items_context_change_never_exempts_another PASSED [ 60%]
+evals/tests/test_context_refinements_integrity.py::test_t6a_a_deleted_file_is_refused_under_the_answerer_exemption PASSED [ 62%]
+evals/tests/test_context_refinements_integrity.py::test_t6b_a_deleted_file_is_refused_under_the_context_exemption PASSED [ 65%]
+evals/tests/test_context_refinements_integrity.py::test_t7_a_deleted_contexts_file_exempts_nothing PASSED [ 67%]
+evals/tests/test_context_refinements_integrity.py::test_t8_a_duplicate_context_item_is_refused PASSED [ 69%]
+evals/tests/test_context_refinements_integrity.py::test_t9_the_answerer_exemption_reports_reason_answerer PASSED [ 72%]
+evals/tests/test_context_refinements_integrity.py::test_t10_cmd_integrity_prints_each_context_replaced_refinement PASSED [ 74%]
+evals/tests/test_context_refinements_integrity.py::test_t11_same_chunks_with_new_index_and_retriever_ids_is_not_a_change PASSED [ 76%]
+evals/tests/test_context_refinements_integrity.py::test_t12_an_item_removed_from_the_contexts_is_not_exempt PASSED [ 79%]
+evals/tests/test_context_refinements_integrity.py::test_t13_an_unreadable_contexts_line_raises PASSED [ 81%]
+evals/tests/test_context_refinements_integrity.py::test_t14_a_base_without_a_contexts_file_keeps_refinements_add_only PASSED [ 83%]
+evals/tests/test_context_refinements_integrity.py::test_t15_refinements_for_a_new_item_pass_and_are_not_reported PASSED [ 86%]
+evals/tests/test_context_refinements_integrity.py::test_t16_a_chunk_text_change_with_the_same_chunk_ids_counts_as_changed PASSED [ 88%]
+evals/tests/test_context_refinements_integrity.py::test_t17_head_and_disk_changed_differently_still_exempts PASSED [ 90%]
+evals/tests/test_context_refinements_integrity.py::test_t18_replaced_lists_only_exempt_items_while_problems_name_the_rest PASSED [ 93%]
+evals/tests/test_context_refinements_integrity.py::test_t19_a_duplicate_context_id_is_quoted_so_it_cannot_pose_as_output[lf] PASSED [ 95%]
+evals/tests/test_context_refinements_integrity.py::test_t19_a_duplicate_context_id_is_quoted_so_it_cannot_pose_as_output[cr] PASSED [ 97%]
+evals/tests/test_context_refinements_integrity.py::test_t19_a_duplicate_context_id_is_quoted_so_it_cannot_pose_as_output[u2028] PASSED [100%]
+FAILED evals/tests/test_refinements_integrity.py::test_g2_an_answerer_id_that_is_not_a_string_stays_add_only[dict]
+FAILED evals/tests/test_refinements_integrity.py::test_g2_an_answerer_id_that_is_not_a_string_stays_add_only[list]
+=================== 2 failed, 39 passed, 2 xfailed in 11.36s ===================
+
+# Mutants (row 12b, step 2), each applied to the implementation, run, then reverted
+
+$ M1 drop the print loop from integrity-main.py: uv run pytest tests/ship/test_guard.py -k guard_prints
+FAILED tests/ship/test_guard.py::test_guard_prints_each_refinement_a_new_answerer_replaced
+FAILED tests/ship/test_guard.py::test_guard_prints_each_refinement_a_changed_context_replaced
+2 failed, 155 deselected in 47.91s
+exit 1 (KILLED)
+
+$ M2 answerer_replaced reads HEAD only, not disk: uv run pytest evals/tests/test_refinements_integrity.py -k g1_
+FAILED evals/tests/test_refinements_integrity.py::test_g1_a_new_prompt_at_head_with_the_disk_baseline_reverted_stays_add_only
+1 failed, 20 deselected in 0.51s
+exit 1 (KILLED)
+
+$ M3 drop the isinstance check: uv run pytest evals/tests/test_refinements_integrity.py -k not_a_string
+FAILED evals/tests/test_refinements_integrity.py::test_g2_an_answerer_id_that_is_not_a_string_stays_add_only[dict]
+FAILED evals/tests/test_refinements_integrity.py::test_g2_an_answerer_id_that_is_not_a_string_stays_add_only[list]
+2 failed, 2 passed, 17 deselected in 1.09s
+exit 1 (KILLED)
+
+$ M4 answerer_replaced lets a None part through: uv run pytest evals/tests/test_refinements_integrity.py -k missing_answerer
+FAILED evals/tests/test_refinements_integrity.py::test_g2_a_missing_answerer_id_at_head_stays_add_only
+1 failed, 20 deselected in 0.31s
+exit 1 (KILLED)
+
+$ M5 T8 runs at the branch head, not the merge commit: uv run pytest tests/ship/test_guard.py -k merge_ref_gives
+E        +  where 0 = CompletedProcess(args=['/Users/rapido/Projects/northwind-shop/.venv/bin/python', '-I', '/Users/rapido/Projects/northwi..."old": "43ce15eb62136f37", "reason": "answerer"}\neval-integrity passed against refs/remotes/origin/main\n', stderr='').returncode
+E        +  where 0 = CompletedProcess(args=['/Users/rapido/Projects/northwind-shop/.venv/bin/python', '-I', '/Users/rapido/Projects/northwi...: "43ce15eb62136f37", "reason": "saved_context"}\neval-integrity passed against refs/remotes/origin/main\n', stderr='').returncode
+FAILED tests/ship/test_guard.py::test_guard_on_the_merge_ref_gives_no_exemption_for_a_copied_newer_main_file[answerer]
+FAILED tests/ship/test_guard.py::test_guard_on_the_merge_ref_gives_no_exemption_for_a_copied_newer_main_file[saved_context]
+2 failed, 155 deselected in 54.50s
+exit 1 (KILLED)
+
+$ M6 ref: head.sha on the integrity job's checkout: uv run pytest tests/ship/test_guard.py -k checks_out_the_merge_ref
+FAILED tests/ship/test_guard.py::test_the_integrity_job_checks_out_the_merge_ref
+1 failed, 156 deselected in 0.14s
+exit 1 (KILLED)

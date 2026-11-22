@@ -1108,3 +1108,232 @@ def test_a_badly_named_folder_with_a_valid_project_is_refused(
     done = integrity(integrity_repo)
     assert done.returncode == 1
     assert f"services/{name} is not a plain member name" in done.stderr
+
+
+# -- row 12b: Guard prints replaced refinements (12a F1, 12c F1), and U1 --------------------------
+
+REFINEMENTS_FILE = "evals/contexts/refinements.ndjson"
+CONTEXTS_FILE = "evals/contexts/dense-only.jsonl"
+BASELINE_FILE = "evals/baselines/dense-only.json"
+
+
+def answerer_baseline(prompt: str) -> str:
+    answerer = f"assistant:v1:claude-sonnet-5-5:prompt-{prompt}:check-0cb61e75"
+    return json.dumps({"overrides": [], "answerer_id": answerer}) + "\n"
+
+
+def saved_context(item_id: str, chunk_id: str) -> str:
+    chunk = {"chunk_id": chunk_id, "source_id": "P1", "source_type": "product", "text": "Shell."}
+    record = {"chunks": [chunk], "index_version": "v1", "item_id": item_id, "retriever_id": "d"}
+    return json.dumps(record, sort_keys=True)
+
+
+def refinement(item_id: str, n: int, text: str = "Great.") -> str:
+    chunk = {"chunk_id": "R9#0", "source_id": "R9", "source_type": "review", "text": text}
+    record = {"chunks": [chunk], "item_id": item_id, "n": n, "query": "q"}
+    return json.dumps(record, sort_keys=True)
+
+
+def jsonl(*records: str) -> str:
+    return "".join(f"{record}\n" for record in records)
+
+
+BASE_CONTEXTS = jsonl(saved_context("EV-1", "product:P1:0"), saved_context("EV-2", "product:P2:0"))
+EV1_CONTEXT_CHANGED = jsonl(
+    saved_context("EV-1", "product:P7:0"), saved_context("EV-2", "product:P2:0")
+)
+
+
+def advance_main(repo: Path, files: dict[str, str | None]) -> None:
+    """A commit on main, which `origin/main` then names. The `pr` branch stays where it was."""
+    git(repo, "switch", "-q", "main")
+    commit(repo, files, "main")
+    git(repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+    git(repo, "switch", "-q", "pr")
+
+
+def rebase_pr_on_main(repo: Path, files: dict[str, str | None]) -> None:
+    """A new base for a `pr` branch that has no commits of its own yet."""
+    advance_main(repo, files)
+    git(repo, "switch", "-qC", "pr", "main")
+
+
+def replaced_lines(done: subprocess.CompletedProcess[str]) -> list[dict[str, Any]]:
+    marker = "  refinement replaced: "
+    assert marker.strip() not in done.stderr
+    return [
+        json.loads(ln[len(marker) :]) for ln in done.stdout.splitlines() if ln.startswith(marker)
+    ]
+
+
+def reported(entries: list[dict[str, Any]]) -> list[tuple[Any, Any, Any]]:
+    return [(e["item_id"], e["n"], e["reason"]) for e in entries]
+
+
+def test_guard_prints_each_refinement_a_new_answerer_replaced(integrity_repo: Path) -> None:
+    """T1 (12a's F1): one JSON line per replaced entry, on stdout, as `cmd_integrity` prints."""
+    rebase_pr_on_main(
+        integrity_repo,
+        {
+            BASELINE_FILE: answerer_baseline("aaaaaaaa"),
+            REFINEMENTS_FILE: jsonl(refinement("EV-1", 1), refinement("EV-2", 1)),
+        },
+    )
+    commit(
+        integrity_repo,
+        {
+            BASELINE_FILE: answerer_baseline("bbbbbbbb"),
+            REFINEMENTS_FILE: jsonl(refinement("EV-1", 1, "Re-recorded.")),
+        },
+    )
+    done = integrity(integrity_repo)
+    assert done.returncode == 0, done.stderr
+    entries = replaced_lines(done)
+    assert reported(entries) == [("EV-1", 1, "answerer"), ("EV-2", 1, "answerer")]
+    assert entries[0]["new"] not in ("-", entries[0]["old"]) and entries[1]["new"] == "-"
+    assert "eval-integrity passed" in done.stdout
+
+
+def test_guard_prints_each_refinement_a_changed_context_replaced(integrity_repo: Path) -> None:
+    """T2 (12c's F1): the context exemption needs no label, so its list matters most here."""
+    rebase_pr_on_main(
+        integrity_repo,
+        {
+            BASELINE_FILE: answerer_baseline("aaaaaaaa"),
+            CONTEXTS_FILE: BASE_CONTEXTS,
+            REFINEMENTS_FILE: jsonl(refinement("EV-1", 1), refinement("EV-2", 1)),
+        },
+    )
+    commit(
+        integrity_repo,
+        {
+            CONTEXTS_FILE: EV1_CONTEXT_CHANGED,
+            REFINEMENTS_FILE: jsonl(refinement("EV-1", 1, "Re-recorded."), refinement("EV-2", 1)),
+        },
+    )
+    done = integrity(integrity_repo)
+    assert done.returncode == 0, done.stderr
+    assert reported(replaced_lines(done)) == [("EV-1", 1, "saved_context")]
+
+
+def test_guard_lists_nothing_and_fails_when_no_exemption_holds(integrity_repo: Path) -> None:
+    """T3: a changed refinement with no exemption is a problem, never a replaced line."""
+    rebase_pr_on_main(
+        integrity_repo,
+        {
+            BASELINE_FILE: answerer_baseline("aaaaaaaa"),
+            CONTEXTS_FILE: BASE_CONTEXTS,
+            REFINEMENTS_FILE: jsonl(refinement("EV-1", 1), refinement("EV-2", 1)),
+        },
+    )
+    commit(
+        integrity_repo,
+        {REFINEMENTS_FILE: jsonl(refinement("EV-1", 1, "Tampered."), refinement("EV-2", 1))},
+    )
+    done = integrity(integrity_repo)
+    assert done.returncode == 1
+    assert f"{REFINEMENTS_FILE}: refinement EV-1#1 changed (HEAD)" in done.stderr
+    assert "refinement replaced" not in done.stdout + done.stderr
+
+
+# U1: the base holds EV-1#1 and EV-1#2, with two spacers so main's edit and the branch's never touch
+# (adjacent edits would conflict). Main re-records EV-1#1 under an exemption; the branch copies
+# main's newer file and edits EV-1#2, which main kept.
+U1_BASE = jsonl(
+    refinement("EV-1", 1), refinement("EV-3", 1), refinement("EV-4", 1), refinement("EV-1", 2)
+)
+U1_MAIN = U1_BASE.replace(refinement("EV-1", 1), refinement("EV-1", 1, "Re-recorded."))
+U1_BRANCH = U1_BASE.replace(refinement("EV-1", 2), refinement("EV-1", 2, "Tampered."))
+U1_EXEMPTIONS = {
+    "answerer": {BASELINE_FILE: answerer_baseline("bbbbbbbb")},
+    "saved_context": {CONTEXTS_FILE: EV1_CONTEXT_CHANGED},
+}
+
+
+def u1_branch(repo: Path, exemption: str) -> None:
+    """A branch forked before main's exemption, that copies main's newer file."""
+    rebase_pr_on_main(
+        repo,
+        {
+            BASELINE_FILE: answerer_baseline("aaaaaaaa"),
+            CONTEXTS_FILE: BASE_CONTEXTS,
+            REFINEMENTS_FILE: U1_BASE,
+        },
+    )
+    advance_main(repo, {**U1_EXEMPTIONS[exemption], REFINEMENTS_FILE: U1_MAIN})
+    commit(repo, {**U1_EXEMPTIONS[exemption], REFINEMENTS_FILE: U1_BRANCH}, "copy main's file")
+
+
+def github_merge_ref(repo: Path) -> None:
+    """What `actions/checkout` puts on disk for `pull_request`: the PR merged into main."""
+    git(repo, "switch", "-q", "--detach", "refs/remotes/origin/main")
+    git(repo, "merge", "-q", "--no-ff", "--no-edit", "pr")
+
+
+@pytest.mark.parametrize("exemption", sorted(U1_EXEMPTIONS))
+def test_guard_on_the_merge_ref_gives_no_exemption_for_a_copied_newer_main_file(
+    integrity_repo: Path, exemption: str
+) -> None:
+    """T8 (U1): on a fresh merge ref the merge base is main when the ref was built, whose file the
+    branch copied, so no
+    exemption opens and the branch's own edit is refused."""
+    u1_branch(integrity_repo, exemption)
+    github_merge_ref(integrity_repo)
+    done = integrity(integrity_repo)
+    assert done.returncode == 1
+    assert f"{REFINEMENTS_FILE}: refinement EV-1#2 changed (HEAD)" in done.stderr
+    assert replaced_lines(done) == []
+
+
+def test_the_integrity_job_checks_out_the_merge_ref(workflow: dict[Any, Any]) -> None:
+    """T9 (U1): no `ref` on the checkout, so `pull_request` gives the merge commit T8 relies on."""
+    checkout = workflow["jobs"]["eval-integrity-main"]["steps"][0]
+    assert str(checkout["uses"]).startswith("actions/checkout@")
+    assert "ref" not in checkout.get("with", {})
+
+
+def test_guard_lists_a_replaced_entry_beside_a_refusal_and_quotes_odd_ids(
+    integrity_repo: Path,
+) -> None:
+    """The list and a failing problem come out together: EV-1 (its saved context changed) is listed
+    on stdout, EV-2 (nothing exempts it) is refused on stderr, exit 1. An item id with a newline
+    stays inside one JSON line, so it cannot pose as an extra output line."""
+    odd = "EV-1\n  known failure added: {}"
+    contexts = jsonl(saved_context(odd, "product:P1:0"), saved_context("EV-2", "product:P2:0"))
+    rebase_pr_on_main(
+        integrity_repo,
+        {
+            BASELINE_FILE: answerer_baseline("aaaaaaaa"),
+            CONTEXTS_FILE: contexts,
+            REFINEMENTS_FILE: jsonl(refinement(odd, 1), refinement("EV-2", 1)),
+        },
+    )
+    commit(
+        integrity_repo,
+        {
+            CONTEXTS_FILE: jsonl(
+                saved_context(odd, "product:P7:0"), saved_context("EV-2", "product:P2:0")
+            ),
+            REFINEMENTS_FILE: jsonl(
+                refinement(odd, 1, "Re-recorded."), refinement("EV-2", 1, "X.")
+            ),
+        },
+    )
+    done = integrity(integrity_repo)
+    assert done.returncode == 1
+    assert reported(replaced_lines(done)) == [(odd, 1, "saved_context")]
+    assert f"{REFINEMENTS_FILE}: refinement EV-2#1 changed (HEAD)" in done.stderr
+    assert "refinement EV-1" not in done.stderr
+    assert not [ln for ln in done.stdout.splitlines() if ln.startswith("  known failure added")]
+    assert done.stdout.rstrip().endswith("eval-integrity FAILED against refs/remotes/origin/main")
+
+
+def test_guard_reports_a_runtime_error_without_a_traceback(integrity_repo: Path) -> None:
+    """A duplicate refinement line is a RuntimeError in the check: one FAILED line, exit 1."""
+    rebase_pr_on_main(integrity_repo, {REFINEMENTS_FILE: jsonl(refinement("EV-1", 1))})
+    commit(integrity_repo, {REFINEMENTS_FILE: jsonl(refinement("EV-1", 1), refinement("EV-1", 1))})
+    done = integrity(integrity_repo)
+    assert done.returncode == 1
+    assert "eval-integrity FAILED: " in done.stderr
+    assert "Traceback" not in done.stderr + done.stdout
+    assert replaced_lines(done) == []

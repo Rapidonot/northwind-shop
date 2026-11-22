@@ -205,10 +205,12 @@ def _prompt_part(text: str | None) -> str | None:
     if text is None:
         return None
     try:
-        answerer = json.loads(text).get("answerer_id", "")
+        answerer = json.loads(text).get("answerer_id")
     except (ValueError, AttributeError):
         return None
-    found = _PROMPT_PART.search(str(answerer))
+    if not isinstance(answerer, str):  # row 12b (G2): str() of a list or dict could hold the part
+        return None
+    found = _PROMPT_PART.search(answerer)
     return found.group(1) if found else None
 
 
