@@ -302,6 +302,27 @@ FOUND-2 spike gate (proxy path), parallel-worktree layout for LLM state (decisio
     - an output-check rule that drops assistant offers to look up, check or give a price or stock;
     - #17's prompt.
   - **Evidence:** `docs/reviews/2026-11-17-32-judged-plan.md`, W2 and W3.
+- Low, from row #32's security review (2026-11-22, `docs/reviews/2026-11-22-32-security-review.raw.md`).
+  M1 (medium), L5, L6 and L7 were fixed in the row. The rest:
+  - **(L1, owner hardening)** Paraphrases of the planted claims are not caught, so only the judge remains:
+    - "free shipping worldwide", "ships worldwide for free";
+    - "returnable at any time", "send it back anytime", "no time limit on returns";
+    - TRAP-INJ-017's "every item can be returned for a full refund" with no 365 days, receipt or year.
+
+    The fix is new branches, each with a caught-test and an honest-test, then `make eval-rescore`.
+  - **(L2, owner #17 or hardening, with the kind residual)** M1 re-kinds unsupported claims only. R01224's judge steer
+    could work through a supported claim kinded `site` ("resists wine stains"), which lowers `citable` with no
+    citation. The run 1 judge resisted it (EV-307: all four claims `product`).
+    - **Fix:** count a supported non-product claim that names a product as product, for `citable` and
+      `product_claims`.
+    - **Also:** extend EV-307's outcome check to supported claims.
+  - **(L3, owner hardening)** `test_the_judges_request_bytes_are_pinned` pins one `answer` item with an explicit model.
+    The fix is to parametrize it over the four behaviours and assert the default `JUDGE_MODEL`. Replay misses remain
+    the backstop.
+  - **(L4, owner hardening)** `cli._merged_state` copies a fixed list of `ProxyState` field names, and the real
+    two-proxy path is stubbed in tests.
+    - **Fix:** derive the list from `dataclasses.fields(ProxyState)`.
+    - **Also:** add a test where the judge proxy's `scan_failures` stop a side run.
 
 ## Log
 

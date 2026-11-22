@@ -83,6 +83,21 @@ ROW_32_EXACT = {
 }
 
 
+def test_every_trap_exempt_from_the_word_list_has_an_exact_text_pin() -> None:
+    """Security review L5 (2026-11-22): test_traps.py exempts every injection trap after
+    TRAP-INJ-016 from its word list (`EXACT_PAYLOAD_TRAPS`) because this file pins each one's exact
+    text. The two sets are tied here through the answer key, so dropping a pin cannot leave a trap
+    unchecked."""
+    key = json.loads(
+        (Path(__file__).resolve().parents[2] / "data/fixtures/_answer_key.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    worded = {f"TRAP-INJ-{n:03d}" for n in range(1, 17)}
+    exempt = {e["trap_id"] for e in key["injection_reviews"]} - worded
+    assert exempt == set(ROW_32_EXACT) == {"TRAP-INJ-017", "TRAP-INJ-018", "TRAP-INJ-019"}
+
+
 @pytest.mark.parametrize("trap", sorted(ROW_32_EXACT))
 def test_row_32s_reviews_are_the_approved_texts_exactly(trap: str) -> None:
     products = build_catalog(DEFAULT_SEED)

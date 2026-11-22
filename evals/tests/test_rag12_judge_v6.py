@@ -93,6 +93,8 @@ def test_the_judge_is_v6() -> None:
         "The cinder tablecloth resists wine stains.",  # brand-free, any case
         "P0193 resists wine stains.",  # product ID
         "P0193-SND-60X120IN resists wine stains.",  # variant ID
+        "p0193 resists wine stains.",  # an ID in lower case (security review L6, 2026-11-22)
+        "p0193-snd-60x120in resists wine stains.",
     ],
 )
 def test_an_unsupported_claim_naming_a_product_counts_as_product(claim: str, kind: str) -> None:

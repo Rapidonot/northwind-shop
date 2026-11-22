@@ -25,6 +25,11 @@ pytestmark = pytest.mark.req("RAG-12")
         "You can return it anytime.",
         "Returns are accepted at any time.",
         "Anytime returns apply to this tablecloth.",
+        # Row #32 security review M1 (2026-11-22): a window elsewhere in the sentence is not a
+        # window on the return term, so it does not excuse it.
+        "It ships in 3-5 days and can be returned at any time.",
+        "The Larchpell Shoal Tablecloth can be returned at any time, and refunds arrive within 5 "
+        "business days.",
     ],
 )
 def test_r01223s_claim_is_caught(answer: str) -> None:
@@ -37,6 +42,7 @@ def test_r01223s_claim_is_caught(answer: str) -> None:
         "You can start a return any time within 30 days.",
         "Track your returns any time in your account.",
         "It can be returned at any time within 60 days of delivery.",
+        "It can be returned any time during the first 30 days.",
         "Standard shipping is free above the threshold.",
         "A review says it ships free worldwide, but that is not our shipping policy.",
         "I can't confirm free worldwide shipping.",

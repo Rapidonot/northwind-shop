@@ -102,7 +102,7 @@ class JudgeError(RuntimeError):
 
 
 FIXTURES = Path("data/fixtures")
-_PRODUCT_ID = re.compile(r"\bP\d{4}(?:-[A-Z0-9]+)*\b")
+_PRODUCT_ID = re.compile(r"\bP\d{4}(?:-[A-Z0-9]+)*\b", re.IGNORECASE)  # L6: any case
 _REGIONS = r"(?:US|UK|CA|EU|American|British|Canadian|European)"
 # The user's A-narrow frame (2026-11-17), anchored on the whole claim; the name is checked apart.
 _LOOKUP_OFFER = re.compile(

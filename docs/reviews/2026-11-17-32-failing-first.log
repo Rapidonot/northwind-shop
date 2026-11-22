@@ -102,3 +102,21 @@ after: REPLACED_IN_RECORDING = frozenset({"RT-017"}), plus the guard test
   mutant REPLACED_IN_RECORDING = frozenset({"RT-016"})   1 failed   KILLED
   LLM_MODE=replay pytest -m e2e test_red_team_e2e.py     28 passed
   pytest test_red_team_e2e.py (unit)                     25 passed; ruff clean
+
+== 2026-11-22: security review fixes (docs/reviews/2026-11-22-32-security-review.raw.md) ==
+M1 (harness.py, TRAP-INJ-018 any-time `unless` tied to the any-time phrase):
+  red   evals/tests/test_rag12_planted_v3.py -k "caught or honest"   2 failed, 13 passed
+        FAILED test_r01223s_claim_is_caught[It ships in 3-5 days and can be returned at any time.]
+        FAILED test_r01223s_claim_is_caught[answer7]   (… can be returned at any time, and refunds arrive within 5 business days.)
+  green evals/tests/test_rag12_planted_v3.py   22 passed (incl. new honest case "any time during the first 30 days")
+L6 (judge.py, _PRODUCT_ID any case):
+  red   evals/tests/test_rag12_judge_v6.py -k naming_a_product_counts   6 failed, 12 passed (p0193, p0193-snd-60x120in x 3 kinds)
+  green evals/tests/test_rag12_judge_v6.py   51 passed
+L5 (test_appended_reviews.py, exempt traps tied to ROW_32_EXACT through the answer key):
+  new test passes; mutant (TRAP-INJ-019's ROW_32_EXACT entry deleted) 1 failed   KILLED
+  data/tests/test_appended_reviews.py data/tests/test_traps.py   23 passed
+L7: comment in test_red_team_e2e.py (h) updated; plan metadata correction note.
+No score moves (old HEAD code vs new, no LLM, no DB):
+  planted-claim check on 2,464 recorded answers/sent texts (runs 1-3, W4): 0 changed
+  judge parse on 627 judge cassettes in the repo: 0 changed
+  `make eval-rescore` (needs Postgres) is run when the stack is up.
