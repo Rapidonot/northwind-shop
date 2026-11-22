@@ -1,6 +1,7 @@
 # 0018: Row #32's planted reviews (DATA_VERSION 3), judge v6, and three approved test changes
 
-Status: accepted by the user, 2026-11-14 to 2026-11-17, through the row #32 plans:
+Status: accepted by the user, 2026-11-14 to 2026-11-19, through the row #32 plans (test change 3 on 2026-11-18, the
+promotion on 2026-11-19):
 - `docs/reviews/2026-11-14-32-plan.md`, §7 option (a);
 - `docs/reviews/2026-11-17-32-judged-plan.md`, with the user's answers.
 
