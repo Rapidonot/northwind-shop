@@ -764,7 +764,7 @@ def cmd_integrity(args: argparse.Namespace) -> int:
         return 1
     for entry in added:  # one JSON line each, so text inside an entry cannot pose as output
         print(f"  known failure added: {json.dumps(entry, sort_keys=True)}")
-    for entry in replaced:  # row #12: a re-recorded answerer replaced these refinements
+    for entry in replaced:  # a re-recorded answerer (#12) or context (12c) replaced these
         print(f"  refinement replaced: {json.dumps(entry, sort_keys=True)}")
     for problem in problems:
         print(f"  {problem}", file=sys.stderr)
