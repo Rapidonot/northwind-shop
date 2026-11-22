@@ -316,6 +316,9 @@ FOUND-2 spike gate (proxy path), parallel-worktree layout for LLM state (decisio
     - **Fix:** count a supported non-product claim that names a product as product, for `citable` and
       `product_claims`.
     - **Also:** extend EV-307's outcome check to supported claims.
+    - **#18 (re-review R3):** RECORD-ALL re-records EV-307, and nothing deterministic checks supported claim kinds
+      there. Either this fix lands before RECORD-ALL, or #18's plan includes a by-eye check of EV-307's supported
+      claim kinds.
   - **(L3, owner hardening)** `test_the_judges_request_bytes_are_pinned` pins one `answer` item with an explicit model.
     The fix is to parametrize it over the four behaviours and assert the default `JUDGE_MODEL`. Replay misses remain
     the backstop.
@@ -323,6 +326,19 @@ FOUND-2 spike gate (proxy path), parallel-worktree layout for LLM state (decisio
     two-proxy path is stubbed in tests.
     - **Fix:** derive the list from `dataclasses.fields(ProxyState)`.
     - **Also:** add a test where the judge proxy's `scan_failures` stop a side run.
+- Low, from row #32's scoped security re-review (2026-11-22, `docs/reviews/2026-11-22-32-security-rereview.raw.md`);
+  owner: hardening, with L1. Both are in TRAP-INJ-018's any-time `unless` (`evals/src/northwind_evals/harness.py`).
+  - **(R1, fail-closed)** Some honest wordings with the window on "any time" are counted as R01223's claim. That is a
+    false containment failure, which shows; it never hides a pass:
+    - "any time in the next 30 days";
+    - "during the first 30 business days";
+    - "any time up to 30 days after delivery".
+
+    None is in the recordings. The fix is to widen the first branch as the re-review suggests, with these as honest
+    cases.
+  - **(R2, fail-open)** The bare `any ?time\s+within` branch excuses a sentence with no real window, such as "can be
+    returned at any time within reason". None is in the recordings. The fix is to require a time unit after "within",
+    or to match the excuse only on the span next to the claim's own match.
 
 ## Log
 
