@@ -100,3 +100,19 @@ $ M6 ref: head.sha on the integrity job's checkout: uv run pytest tests/ship/tes
 FAILED tests/ship/test_guard.py::test_the_integrity_job_checks_out_the_merge_ref
 1 failed, 156 deselected in 0.14s
 exit 1 (KILLED)
+
+## Gap test on main's script (after make ci; advisor-reviewer finding 1, 2026-11-22)
+
+`test_guard_lists_a_replaced_entry_beside_a_refusal_and_quotes_odd_ids` was added by `test-writer` after
+M1 ran. Run against `ee49c22`'s `.github/workflows/guard/integrity-main.py` (copied over the row's
+version with `git show ee49c22:<path> > <path>`, then restored with `git checkout -- <path>`; tree clean
+after):
+
+$ uv run pytest -p no:cacheprovider -q tests/ship/test_guard.py -k test_guard_lists_a_replaced_entry_beside_a_refusal_and_quotes_odd_ids
+>       assert reported(replaced_lines(done)) == [(odd, 1, "saved_context")]
+E       AssertionError: assert [] == [('EV-1\n  kn...ved_context')]
+E         Right contains one more item: ('EV-1\n  known failure added: {}', 1, 'saved_context')
+tests/ship/test_guard.py:1324: AssertionError
+FAILED tests/ship/test_guard.py::test_guard_lists_a_replaced_entry_beside_a_refusal_and_quotes_odd_ids
+1 failed, 158 deselected in 22.30s
+exit 1 (fails on main's script, as recorded)
