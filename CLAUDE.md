@@ -171,7 +171,7 @@ Toolchain notes:
   recovery for `switch` and `merge` only.
 - Record decisions that change this file or the PRD defaults in docs/decisions/.
 - LLM calls (decision 0001): tests and evals run in replay by default. Live calls only
-  through `make record` / `make eval-live` / `make enrich`. Until the credit expires (~2026-11-24,
+  through `make record` / `make eval-live` / `make enrich`. Until the credit expires (~2026-12-22,
   decision 0013) full runs are fine, with a generous `RUN_BUDGET`; after that, 10–20-item slices during
   development, with full runs only at milestones. The proxy's budget cap is never raised without asking. Never
   put an API key in CI secrets. Cassettes hold synthetic data only and must pass the
