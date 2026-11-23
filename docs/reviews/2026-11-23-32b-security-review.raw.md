@@ -72,3 +72,60 @@ Clean. It reads only `REPO / "docs/reviews/2026-11-18-32-kind-labels.md"`, where
 - 0001, key file never copied into a worktree: checked. Nothing in the diff or the scripts reads or copies it.
 - 0001, budget caps enforced and not raised: checked. No cap changed, and 0021 keeps `LLM_BUDGET_USD` and `RUN_BUDGET`.
 - 0001, cassettes still covered by the secret/PAN scanner: checked. No cassette or scanner change, and 0021 keeps the scan.
+
+---
+
+# Scoped re-review (M1 fixed), verbatim: base 649a372, head ea10559
+
+## Scoped re-review: row 32b (base 649a372, head ea10559)
+
+I read the diff /tmp/claude-502/32b-security-rereview.diff in full, all 246 lines, and checked it against the current CLAUDE.md, tests/hooks/test_stop_conditions.py, evals/tests/test_rag12_followup.py and evals/src/northwind_evals/judge.py.
+
+**Result: no critical, high or medium findings.** M1 and L1 are closed. L2 is closed except for one leftover low, L3 below. The hook-test changes loosen nothing beyond decision 0021, and the rescore test fix makes that test stronger.
+
+### 1. Are M1, L1 and L2 closed?
+- **M1: closed.** CLAUDE.md:185 now reads "`test-writer` (for gate, integrity, spend, ship or hard-rule code)".
+  - 0021 rule 7 defines hard-rule code as the paths for hard rules 1, 6, 7, 8 and 9 listed under "Routine rows".
+  - That list includes "any later payment code" and "any later agent, MCP or tool-scoping code". So #16's cart tools, payment code and tool scoping get the independent test author again.
+  - CHAIN in test_stop_conditions.py:151 pins the new wording.
+- **L1: closed.** CLAUDE.md:242-244 now logs a real-bug Low found elsewhere in "Open items" with a named owning row. This matches 0021 rule 1's new sub-bullet (0021:71-72), and test_stop_conditions.py:240-242 pins it.
+- **L2: closed except for L3.** 0021 rule 8 now records the chain order, and CLAUDE.md:193-196 no longer contradicts it.
+
+**L3 (low, the rest of L2): CLAUDE.md:185-188 and 193-196.** Area: decision 0021 rule 8, and the reviewed-SHA rule at CLAUDE.md:257.
+- **What 0021 says:** rule 8 has `make ci` run "at the head the advisor read (**a re-read if its fixes moved the head**)".
+- **What CLAUDE.md says:** "`advisor-reviewer`, with its fixes → `make ci`, once, at that head". It has no re-read clause, and no hook test pins one. The test named `test_make_ci_runs_once_at_the_head_the_advisor_reads` (:187-192) checks only the order and the counts.
+- **How it fails:** the session follows CLAUDE.md, not 0021. It applies the advisor's fixes, runs `make ci` on a head the advisor never read, and the gate report must then name either the head the advisor actually read or the post-fix head.
+  - If it names the head the advisor read, `tools/finish.sh:134-145` refuses, because the fix commits changed files other than PROGRESS.md or COVERAGE.md. That fails closed.
+  - If it names the post-fix head, the advisor's fixes ship without anyone reading them.
+- **Who can fix it:** CLAUDE.md is control surface, so this is the user's call. One option is to bring 0021's re-read clause into the chain sentence and pin it.
+
+### 2. Hook-test edit (tests/hooks/test_stop_conditions.py)
+Nothing is removed. There are still exactly ten stops (:81-82), and each changed pin is longer than before.
+- **Stop 10 (:63-72):** the `after the re-review` anchor is replaced by `still open after its fix` plus `and the re-review, when one runs`. The meaning moves from "after the re-review" to "after the fix", but that is what 0021 rules 2 and 9 decided, not a loosening beyond them.
+- **CHAIN (:149-160):** each step is now a longer literal.
+  - "one scoped re-review" becomes "a scoped re-review only if a medium or higher was fixed", as 0021 rule 2 says.
+  - `advisor-reviewer` now comes before `make ci`, as 0021 rule 8 says.
+- **Order test (:187-192):** `count("`make ci`") == 1` is kept, and `count("`advisor-reviewer`") == 1` is new, which is tighter.
+- **Change-after-`make ci` test (:196-199):** both old assertions are kept and one is added. The CLAUDE.md words removed there ("a fix or an advisor finding") were never pinned, so no pin is lost.
+- **Triage Low (:240-242):** the short `low: log it in `progress.md`` is replaced by the full rule, including the owner clause.
+- **Untouched:** the guardrail checks for the control-surface list, the git error strings, stop 5's loosening wording, the routine definition and the gate-in-`make ci` Makefile check.
+
+### 3. Rescore test fix (evals/tests/test_rag12_followup.py:459-463)
+The fix makes the test stronger. All four assertions are unchanged (:498-502): exit 1, no candidate, `upstream == []`, and no ledger file or directory. The httpx `send` trap and the `Ledger.__init__` trap are also unchanged.
+- **Why it was failing:** `Judge.__init__` loads the catalog at startup (judge.py:273). Under the chdir, `default_catalog()` failed there with a JudgeError, before any request reached the proxy. So the test failed in `make ci` without ever reaching the code it is meant to prove.
+- **Why the patch works:** both callers use `default_catalog` as a module global inside judge.py (:221, :273), so the monkeypatch reaches them.
+- **What it reads:** read-only, from `REPO / "data" / "fixtures"`, where REPO is the test file's `parents[2]` (:56), the repo root. Nothing outside the repo is read.
+- **Why it changes nothing else:** the catalog only drives kind re-labelling. It does not touch the mode, the cassettes, the upstream or the ledger.
+- **Residual, not a loosening:** the test asserts exit 1 without asserting that the cause was a cassette miss (for example, `state.misses` being non-empty). This predates the row.
+
+### 4. Anything new against the hard rules or decision 0001
+Nothing new. CLAUDE.md's "Hard rules" section is not in the diff. Neither are the Makefile, `.github/`, cassettes, budget caps, the scanner or key handling. The PR-body text is records only and contains no secrets, PANs or real data.
+
+### Checked, no findings (this scope)
+- Hard rules 1-11: not applicable to this change. The hard-rule text is unchanged, and the diff touches only process text, two tests and docs.
+- 0001, placeholder key only in children, and only the proxy holds the real key: not applicable. The rescore test still runs the real proxy in replay with an upstream trap.
+- 0001, the Makefile does not export the key: not applicable (the Makefile is not in the diff).
+- 0001, no key in CI secrets, and CI runs in replay: not applicable (`.github/` is not in the diff).
+- 0001, the key file is never copied into a worktree: not applicable.
+- 0001, budget caps enforced and not raised: not applicable. No cap changed, and the rescore test still refuses any ledger.
+- 0001, cassettes still covered by the scanner: not applicable (no cassette or scanner change).
