@@ -1,0 +1,13 @@
+# BE-01 failing-first: this row's new tests run against origin/main 85aae52 source (PYTHONPATH=git archive of services/backend/src and services/llm-replay/src), 2026-11-23T16:40:28Z
+ImportError while importing test module '/Users/rapido/Projects/northwind-shop-b/services/backend/tests/orchestrator/test_be01_scripted.py'.
+E   ModuleNotFoundError: No module named 'northwind_backend.agents.returns_track'
+ImportError while importing test module '/Users/rapido/Projects/northwind-shop-b/services/backend/tests/orchestrator/test_be01_units.py'.
+E   ModuleNotFoundError: No module named 'northwind_backend.orchestrator'
+ImportError while importing test module '/Users/rapido/Projects/northwind-shop-b/services/llm-replay/tests/test_scripted_routes.py'.
+E   ImportError: cannot import name 'system_text' from 'northwind_llm_replay.scripted' (<base>/services/llm-replay/src/northwind_llm_replay/scripted.py)
+!!!!!!!!!!!!!!!!!!! Interrupted: 3 errors during collection !!!!!!!!!!!!!!!!!!!!
+3 errors in 0.48s
+
+# The same tests at the row's working tree
+.............................................                            [100%]
+45 passed in 25.66s

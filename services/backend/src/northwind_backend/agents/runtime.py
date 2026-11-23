@@ -14,6 +14,7 @@ only, `dontAsk`, a turn cap."""
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
@@ -255,6 +256,24 @@ async def run_subagent(
                 run_code = _result_code(item)
                 if run_code is None:
                     summary = item.result or ""
+    except asyncio.CancelledError:
+        # A caller's deadline cancelled the run (row #24, security review L1): the attempt still
+        # gets its outcome before the cancellation goes on, so no `agent.run` is left open.
+        log.error("%s run cancelled", spec.actor)
+        done = state.results()[0]
+        cancelled = {
+            "ok": False,
+            "status": RunStatus.FAILED.value,
+            # What had finished before the cancel (security re-review N4).
+            "steps_ok": len(done),
+            "failures": ["cancelled"],
+            "summary": {"type": "str", "length": 0},
+        }
+        try:
+            audit.outcome(action_id, "agent.run", run_inputs, cancelled)
+        except AuditWriteError:
+            log.error("agent.run outcome not recorded for cancelled %s", spec.actor)
+        raise
     except ClaudeSDKError as error:
         # The SDK raises after an error result too, and that result names the cause.
         log.error("%s run failed: %s", spec.actor, type(error).__name__)

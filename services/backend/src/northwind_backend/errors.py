@@ -130,6 +130,11 @@ _ALTERNATIVES: dict[str, tuple[str, ...]] = {
     "model_unavailable": ("retry_later", _ESCALATE),
     "replay_miss": ("re_record_on_purpose", _ESCALATE),
     "max_turns": ("rerun_with_a_narrower_task", _ESCALATE),
+    # The orchestrator's own (row #24, BE-01).
+    "invalid_request": (_ESCALATE,),
+    "invalid_plan": ("rephrase_the_request", _ESCALATE),
+    "not_supported": (_ESCALATE,),
+    "deadline": ("retry_later", _ESCALATE),
 }
 
 

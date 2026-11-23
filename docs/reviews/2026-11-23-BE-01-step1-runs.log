@@ -1,0 +1,8 @@
+# BE-01 step 1: targeted serial runs after window A's replay finished (the user, 2026-11-23 20:43). No xdist.
+# HEAD 85aae52 plus the uncommitted row changes (committed next)
+uv run pytest services/backend/tests/orchestrator services/llm-replay/tests/test_scripted_routes.py -q
+  -> 82 passed in 50.47s
+uv run pytest services/backend/tests (minus orchestrator; test_be05_replay_recorded.py deselected, the 1,000-order replay, left for make ci) tests/governance services/llm-replay/tests/test_pytest_plugin.py services/llm-replay/tests/test_proxy.py -q
+  -> 842 passed, 3 deselected in 120.71s
+make lint
+  -> ruff, ruff format --check (512 files), mypy strict (324 files), eslint, tsc: clean
