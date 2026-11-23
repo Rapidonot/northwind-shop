@@ -84,7 +84,7 @@ Extra hardening is not pursued for its own sake.
 7. **`test-writer` runs for gate, integrity, spend, ship and hard-rule code.**
    - Hard-rule code means the hard-rule 1, 6, 7, 8 and 9 paths listed under CLAUDE.md's "Routine rows".
    - Elsewhere the session writes the tests itself, failing first (rule 3).
-8. **The chain order (added by the user in row 32b):**
+8. **The chain order** (the user's chain order, row 32b; the re-read-after-fixes clause added by this row's review):
    - implement;
    - `test-writer` where rule 7 says;
    - one `security-reviewer` pass, then fixes;
