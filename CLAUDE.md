@@ -182,7 +182,7 @@ Toolchain notes:
 Once a plan is approved, by the user or on a routine row by `advisor-reviewer`, carry on without waiting
 for prompts. The chain:
 
-implement → `test-writer` (only for gate, integrity, spend or ship code) → `security-reviewer` (read-only:
+implement → `test-writer` (for gate, integrity, spend, ship or hard-rule code) → `security-reviewer` (read-only:
 write the diff to a file and pass the path) → fix → a scoped re-review only if a medium or higher was
 fixed → commit → PR body (a committed file in `docs/reviews/`) → `advisor-reviewer`, with its fixes →
 `make ci`, once, at that head → gate report (decision 0021)
@@ -191,8 +191,9 @@ Commit on the row's branch; never push. Any revised plan goes to `advisor-review
 to the user.
 
 `make ci` already runs the gate, so nothing in the chain runs `make eval-gate` again. During the row use
-`make check`, which is never evidence. Any change after `make ci`, a fix or an advisor finding, is a new
-commit and another `make ci`, because the reviewed head moved.
+`make check`, which is never evidence. Any change after `make ci` is a new
+commit and another `make ci`, because the reviewed head moved; that is why `advisor-reviewer` and its
+fixes come before it.
 
 `advisor-reviewer` reviews one diff, from one fixed command: `make review-diff`. It writes the committed
 diff against `origin/main`, with `base <sha>` and `head <sha>` as its first two lines. Pass the path, both
@@ -239,8 +240,9 @@ installed, stop 1 applies to every row: the installed copy cannot check that a r
 
 Triage on a routine row is fixed: critical or high is stop 10. Unsafe at any severity, meaning it breaks a
 hard rule or a protected path: fix it, and stop 6 if the fix changes the design. Medium: fix it if it is
-inside the row's files, otherwise log it with an owner. Low: fix it if it is a real bug in the row's files; otherwise
-mention it in the PR body only, not in `PROGRESS.md`, "Open items" (decision 0021).
+inside the row's files, otherwise log it with an owner. Low: fix it if it is a real bug in the row's files; log a real bug
+elsewhere in `PROGRESS.md`, "Open items", with a named owning row; otherwise mention it in the PR body
+only (decision 0021).
 
 The control surface: `CLAUDE.md`, `.claude/**`, `.github/workflows/**`, `Makefile`, `tools/*.proposed*`,
 `tools/ship.sh`, `tools/finish.sh`, `tools/refused-paths.sh`, the files in `RUNNER_SYNC_PATHS`,
