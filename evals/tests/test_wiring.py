@@ -260,14 +260,22 @@ def test_the_eval_gate_job_does_not_continue_on_error() -> None:
     assert "continue-on-error" not in job_text("eval-gate")
 
 
+@pytest.mark.req("DEV-1")
 def test_ci_integration_step_runs_after_a_unit_failure() -> None:
-    python = steps("python")
-    unit = next(i for i, s in enumerate(python) if re.search(r"run: uv run pytest\s*$", s, re.M))
-    integration = next(i for i, s in enumerate(python) if "pytest -m integration" in s)
-    assert unit < integration
-    assert "!cancelled()" in python[integration]
-    assert "if:" not in python[unit]
-    assert "continue-on-error" not in python[unit]
+    """DEV-1: the integration tests have their own job, so a red unit test cannot stop them. Nothing
+    may tie that job back to `python`, and neither job may skip or soften a step."""
+    python, integration = job_text("python"), job_text("python-integration")
+    assert not any("pytest -m integration" in s for s in steps("python"))
+    assert [c for c in runs("python-integration") if "pytest" in c] == [
+        "uv run pytest -m integration"
+    ]
+    assert "needs:" not in integration
+    for block in (python, integration):
+        assert not re.search(r"^    if:", block, re.MULTILINE)  # no job-level `if`
+        assert "continue-on-error" not in block
+    assert not any("if:" in s for s in steps("python") + steps("python-integration"))
+    assert re.search(r"^      LLM_MODE: replay$", integration, re.MULTILINE)
+    assert "image: pgvector/pgvector" in integration
 
 
 def test_ci_python_job_lints_the_evals_package_and_scans_saved_contexts() -> None:

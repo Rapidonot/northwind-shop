@@ -131,17 +131,23 @@ lint: ## Lint + type-check Python and TypeScript
 
 # Prints the filter that skips the slow ship and pre-push tests, only when it is sure that nothing they
 # cover differs from the merge base with main. Anything it cannot tell prints nothing, so they run.
-# GitHub CI's plain `uv run pytest` takes `addopts`, which does not name the marker, so it always runs
-# them (AUTO-2, decision 0011). Through the environment so that the recipe stays one pytest call: a
-# command-line `-m` still wins, so `test-integration` is not touched.
+# GitHub CI's unit step (`uv run pytest` with only the xdist flags) takes `addopts`, which does not
+# name the marker, so it always runs them (AUTO-2, decision 0011). Through the environment so that
+# the recipe stays one pytest call: a command-line `-m` still wins, so `test-integration` is not touched.
 SHIP_TEST_PATHS := tools tests/ship .github Makefile
 SHIP_FILTER := base=$$(git merge-base origin/main HEAD 2>/dev/null) && git diff --quiet "$$base" -- $(SHIP_TEST_PATHS) 2>/dev/null && untracked=$$(git ls-files --others --exclude-standard -- $(SHIP_TEST_PATHS) 2>/dev/null) && [[ -z "$$untracked" ]] && echo '-m "not integration and not e2e and not ship"'
+
+# DEV-1 (decision 0020): unit tests across one worker per CPU. On the command line only, never in
+# PYTEST_ADDOPTS or `addopts`: nested pytest runs inside the tests inherit the environment, and `addopts`
+# would reach `record`. Integration, e2e, record and the evals stay serial. `loadgroup` keeps the tests
+# marked `xdist_group` on one worker each. `override`: no `make ci PYTEST_PAR=…` can shrink the run.
+override PYTEST_PAR := -n auto --dist loadgroup
 
 # LLM_MODE is pinned on the recipe line, so neither the shell, the key file nor
 # `make test LLM_MODE=…` can turn these targets into spending ones (decision 0001).
 test: ## Unit tests (Python + portal), always in replay; ship tests only when what they cover changed
 	@if [[ -n "$$($(SHIP_FILTER))" ]]; then echo "make test: ship tests skipped, nothing they cover differs from origin/main; GitHub CI runs them"; fi
-	LLM_MODE=replay PYTEST_ADDOPTS="$$PYTEST_ADDOPTS $$($(SHIP_FILTER))" uv run pytest
+	LLM_MODE=replay PYTEST_ADDOPTS="$$PYTEST_ADDOPTS $$($(SHIP_FILTER))" uv run pytest $(PYTEST_PAR)
 	$(PNPM) -r test
 
 # For during a row, and never evidence: only `make ci` is (AUTO-2, decision 0011).
@@ -150,7 +156,7 @@ check: lint ## Lint, then only the tests for changed paths, always in replay
 	echo "make check: $${plan:-no tests for these paths}"; \
 	if [[ "$$plan" == all ]]; then $(MAKE) --no-print-directory test; exit $$?; fi; \
 	py=$${plan//portal/}; \
-	if [[ -n "$${py// /}" ]]; then LLM_MODE=replay uv run pytest $$py || exit $$?; fi; \
+	if [[ -n "$${py// /}" ]]; then LLM_MODE=replay uv run pytest $(PYTEST_PAR) $$py || exit $$?; fi; \
 	if [[ "$$plan" == *portal* ]]; then $(PNPM) -r test; fi
 
 test-integration: ## Integration tests against the local stack (run `make up` first), always in replay

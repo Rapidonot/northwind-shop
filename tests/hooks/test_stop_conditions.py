@@ -60,7 +60,16 @@ REQUIRED_STOPS = [
     ("scope question", [r"scope question"]),
     ("control surface in a row not about it", [r"in a row not about them", r"control surface"]),
     ("two failed attempts", [r"two failed attempts to fix the same failure"]),
-    ("open high or critical finding", [r"high or critical finding", r"after the re-review"]),
+    (
+        "open high or critical finding",
+        # Decision 0021: a re-review runs only after a medium or higher fix, so stop 10 counts from
+        # the fix, and still names the re-review for when one runs.
+        [
+            r"high or critical finding",
+            r"still open after its fix",
+            r"and the re-review, when one runs",
+        ],
+    ),
 ]
 
 
@@ -134,16 +143,19 @@ def test_the_git_stop_cites_the_strings_in_how_we_work() -> None:
     assert all(text in how for text in GIT_STRINGS)
 
 
+# Decision 0021 (the user's CLAUDE.md edits in row 32b): the advisor and its fixes come before the
+# single `make ci`, a re-review only follows a medium or higher fix, and `test-writer` keeps
+# gate, integrity, spend, ship and hard-rule code.
 CHAIN = [
     "implement",
-    "`test-writer`",
+    "`test-writer` (for gate, integrity, spend, ship or hard-rule code)",
     "`security-reviewer`",
     "fix",
-    "one scoped re-review",
+    "a scoped re-review only if a medium or higher was fixed",
     "commit",
     "pr body",
-    "`make ci`",
-    "`advisor-reviewer`",
+    "`advisor-reviewer`, with its fixes",
+    "`make ci`, once, at that head",
     "gate report",
 ]
 
@@ -175,13 +187,16 @@ def test_the_chain_does_not_run_the_gate_a_second_time() -> None:
 def test_make_ci_runs_once_at_the_head_the_advisor_reads() -> None:
     text = chain_paragraph()
     assert text.count("`make ci`") == 1
-    assert text.index("commit") < text.index("`make ci`") < text.index("`advisor-reviewer`")
+    assert text.count("`advisor-reviewer`") == 1
+    # Decision 0021: the advisor reads the head, its fixes land, then the one `make ci` runs there.
+    assert text.index("commit") < text.index("`advisor-reviewer`") < text.index("`make ci`")
 
 
 @pytest.mark.req("AUTO-2")
 def test_a_change_after_make_ci_means_another_run() -> None:
     assert "any change after `make ci`" in FLAT
     assert "a new commit and another `make ci`" in FLAT
+    assert "that is why `advisor-reviewer` and its fixes come before it" in FLAT
 
 
 @pytest.mark.req("AUTO-2")
@@ -303,7 +318,10 @@ def test_what_each_advisor_answer_does(needle: str) -> None:
         "unsafe at any severity",
         "stop 6 if the fix changes the design",
         "medium: fix it if it is inside the row's files, otherwise log it with an owner",
-        "low: log it in `progress.md`",
+        # Decision 0021: a real bug is fixed here or owned elsewhere; the rest goes in the PR body.
+        "low: fix it if it is a real bug in the row's files;"
+        ' log a real bug elsewhere in `progress.md`, "open items", with a named owning row;'
+        " otherwise mention it in the pr body only",
     ],
 )
 def test_the_triage_rule_is_fixed(needle: str) -> None:
