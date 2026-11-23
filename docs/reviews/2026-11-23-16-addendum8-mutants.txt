@@ -1,0 +1,33 @@
+Row #16, addendum 8: mutants for the security fixes and the spend/ship code (2026-11-23)
+
+Asked by `advisor-reviewer`'s pre-`make ci` review. Finding 1: the L1-L4 fixes' tests had no record of failing.
+Finding 10: decision 0021 rule 3 wants mutants for spend and ship code.
+
+How they ran: a scratch pytest plugin applies one mutant per run, and no repo file is edited.
+- Python mutants are monkeypatched.
+- `ship.sh` mutants replace the rig's in-memory copy (`BASE_FILES["tools/ship.sh"]`).
+- `l3-runner-main` swaps in origin/main's `RunnerGate.refuse`, which has no forwarded-bytes size check.
+- `l1-quadratic` swaps in the first draft of `ordered_tool_results`, which rebuilt the rank for every message.
+On the tree at 45469f1 (code unchanged since 16cd485). A mutant is killed when at least one test fails.
+
+  mutant              what it removes                                              tests run                                   result
+  l4-no-count         L4: an open offer counted on reset/abort                     test_rag08_offer_drop -k thrown_away       3 failed: killed
+  l2l3-naive          L2/L3: no strict-UTF-8, duplicate-key or strict-JSON checks  test_tool_result_order -k not_reordered     5 failed: killed
+  forward-original    the user's condition: the reorder hashed and logged, but     test_tool_result_order -k forwarded,        4 failed: killed
+                      the original bytes forwarded, scanned and priced             gate_sees, ledger_reserves, cassette_and_the_log
+  l3-runner-main      L3: the runner's size cap on the forwarded bytes             test_tool_result_order -k bounds_the_bytes  1 failed: killed
+  l1-quadratic        L1: the rank built once per assistant message                test_tool_result_order -k linear            1 failed (36 s): killed
+  ship-no-wait        the wait for CI before --watch                               test_ship_checks_wait                       11 failed: killed
+  ship-no-cap         the 600 s cap on SHIP_CHECKS_WAIT                            test_ship_checks_wait                       1 failed: killed
+  ship-no-validation  the whole-seconds check on both settings                     test_ship_checks_wait                       16 failed: killed
+
+The first `l3-runner-main` run hit a harness error: main's module had to be in sys.modules for its dataclasses to
+load. After that was fixed, the rerun is the result above.
+
+Control runs (no mutant) of the three new test files: 5 runs, 3 with all 180 passing and 2 with 179 passed and
+1 failed. The one failure named was the end-to-end
+test_the_model_sees_the_same_second_request_whichever_tool_finishes_first. Repeat runs of the two end-to-end
+tests: 1 failure in 16. In the failing run the CLI's second request had `"tools": []`, and the MCP gates logged
+"request refused: token" twice, so the CLI had connected to neither server. That is a connection failure in the
+test's setup, not a tool-result order: both requests' results were in tool_use order. The cause is under
+investigation; see the gate report.

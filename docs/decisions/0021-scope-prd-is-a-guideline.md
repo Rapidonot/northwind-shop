@@ -113,3 +113,8 @@ Extra hardening is not pursued for its own sake.
   - Rules 1, 7, 8 and 9 above record those edits, so CLAUDE.md's "(decision 0021)" covers them.
   - `tests/hooks/test_stop_conditions.py` pins the new wording as tightly as the old: the chain order with the advisor
     before `make ci`, stop 10, and the Low rule with its owner clause.
+
+## Amendment (the user, 2026-11-23, row #16)
+
+The offer-drop rule in Keep 2 moved from #17 to #16, in #16's plan addendum 8: W5 stopped on EV-092's containment.
+#17 keeps the D8 prompt line and the live first-token measurement.
