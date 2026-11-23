@@ -5,8 +5,8 @@ user's request; the input is `docs/reviews/2026-11-23-scope-decision-input.md`. 
 
 ## Context
 
-The API credit ends around Dec 22 (decision 0013). The rows have been spending more time on extra
-hardening and on records than on visible behaviour. About 71 Low open items had piled up.
+The API credit ends around Dec 22 (decision 0013). The input (`docs/reviews/2026-11-23-scope-decision-input.md`)
+counts about 71 Low open items.
 
 ## Decision
 
@@ -90,5 +90,7 @@ Extra hardening is not pursued for its own sake.
 
   The items themselves are not moved or rewritten in row 32b: window A's #16 edits the same section. The archive move
   belongs to the conflict-free-records row after #16 ships.
-- `CLAUDE.md` is control surface, so row 32b does not edit it. Its gate report lists the lines that conflict with this
-  decision for the user to edit.
+- `CLAUDE.md` is control surface, so row 32b does not edit it.
+  - The user edited it for this decision in `5b01c9f`.
+  - Where that edit goes beyond what is recorded here (`test-writer` scope, `advisor-reviewer` before `make ci`), row
+    32b's gate report names it for the user to record or adjust.
