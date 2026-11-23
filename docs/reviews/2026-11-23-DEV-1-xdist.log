@@ -1,5 +1,5 @@
 # DEV-1 timing and node-ID evidence. Replay only, $0 (ledger total $19.657308 before and after the baseline).
-# Machine: 10 CPUs. Window A idle by the user's word, 2026-11-23. Scripts: run-stages.sh, probe.mk, compare.py (scratch, quoted in the PR body).
+# Machine: 10 CPUs. Window A idle by the user's word, 2026-11-23. Scripts: in the APPENDIX at the end of this log.
 
 ## BEFORE (serial, head dd53b85)
 ### read-only index check: SELECT index_version, count(*) FROM rag_chunks GROUP BY 1
@@ -292,3 +292,245 @@ run 44430119408 Guard pull_request cce3b22
       4.1s   18  tests.ship.test_refused_paths
     579.9s  374  tests.ship.test_ship
   ship-marked (all but test_guard): 838.0s over 654 tests; 1,005 - 351 deselected = 654
+
+## AFTER: C2 acceptance, 3 parallel CI-form runs in a row (uv run pytest -n auto --dist loadgroup), caffeinate -dims
+# Window A idle and no runner window open, by the user's word, 2026-11-23. Ledger $19.657308 before and after.
+# Comparison (the user's amendment and choice, 2026-11-23): after == the dd53b85 baseline + exactly the 48 listed
+# additions (31 DEV-1, 17 from 12b, merged to main as 73454be and fast-forwarded into this branch); shared nodes keep
+# their outcome; failed == error == none. No test was renamed or removed.
+head abc1d2d77d95752ff28d07704de2c77fbe34f9d1 start 2026-11-23T10:12:29Z
+run1	454s	rc=0	6963 passed, 9 skipped, 24 xfailed in 453.20s (0:07:33)
+run2	450s	rc=0	6963 passed, 9 skipped, 24 xfailed in 449.87s (0:07:29)
+run3	452s	rc=0	6963 passed, 9 skipped, 24 xfailed in 451.05s (0:07:31)
+end 2026-11-23T10:35:05Z
+run1: collected 6996 {'passed': 6963, 'skipped': 9, 'xfailed': 24, 'failed': 0, 'error': 0}; added 48 (listed 48, match True); missing 0; outcome changes 0; failed 0 -> OK
+   outcomes of the added tests: ['passed', 'xfailed']
+run2: collected 6996 {'passed': 6963, 'skipped': 9, 'xfailed': 24, 'failed': 0, 'error': 0}; added 48 (listed 48, match True); missing 0; outcome changes 0; failed 0 -> OK
+   outcomes of the added tests: ['passed', 'xfailed']
+run3: collected 6996 {'passed': 6963, 'skipped': 9, 'xfailed': 24, 'failed': 0, 'error': 0}; added 48 (listed 48, match True); missing 0; outcome changes 0; failed 0 -> OK
+   outcomes of the added tests: ['passed', 'xfailed']
+ACCEPTED
+# The 2 extra xfails are 12b's strict xfails: test_refinements_integrity::test_u1_a_branch_copying_a_newer_main_file_gets_no_exemption_locally[answerer|saved_context].
+
+### the 48 additions (source, node ID)
+DEV-1	services/llm-replay/tests/test_runner_support.py::test_a_spending_run_with_real_xdist_workers_refuses_before_any_claim
+12b	evals/tests/test_refinements_integrity.py::test_g1_a_new_prompt_at_head_with_the_disk_baseline_reverted_stays_add_only
+12b	evals/tests/test_refinements_integrity.py::test_g2_a_missing_answerer_id_at_head_stays_add_only
+12b	evals/tests/test_refinements_integrity.py::test_g2_an_answerer_id_that_is_not_a_string_stays_add_only[dict]
+12b	evals/tests/test_refinements_integrity.py::test_g2_an_answerer_id_that_is_not_a_string_stays_add_only[list]
+12b	evals/tests/test_refinements_integrity.py::test_g2_an_answerer_id_that_is_not_a_string_stays_add_only[null]
+12b	evals/tests/test_refinements_integrity.py::test_g2_an_answerer_id_that_is_not_a_string_stays_add_only[number]
+12b	evals/tests/test_refinements_integrity.py::test_u1_a_branch_copying_a_newer_main_file_gets_no_exemption_locally[answerer]
+12b	evals/tests/test_refinements_integrity.py::test_u1_a_branch_copying_a_newer_main_file_gets_no_exemption_locally[saved_context]
+12b	evals/tests/test_refinements_integrity.py::test_g2_an_answerer_id_missing_at_the_base_stays_add_only
+DEV-1	tests/hooks/test_ci_workflow.py::test_ci_runs_on_pull_request_and_pushes_to_main_only
+DEV-1	tests/hooks/test_ci_workflow.py::test_every_job_has_the_planned_timeout[ci.yml]
+DEV-1	tests/hooks/test_ci_workflow.py::test_every_job_has_the_planned_timeout[guard.yml]
+DEV-1	tests/hooks/test_ci_workflow.py::test_no_job_lacks_a_timeout[ci.yml]
+DEV-1	tests/hooks/test_ci_workflow.py::test_no_job_lacks_a_timeout[guard.yml]
+DEV-1	tests/hooks/test_ci_workflow.py::test_concurrency_cancels_only_superseded_synchronize_runs[ci.yml]
+DEV-1	tests/hooks/test_ci_workflow.py::test_concurrency_cancels_only_superseded_synchronize_runs[guard.yml]
+DEV-1	tests/hooks/test_ci_workflow.py::test_pytest_par_is_defined_once
+DEV-1	tests/hooks/test_ci_workflow.py::test_only_test_and_check_recipes_use_the_parallel_flags
+DEV-1	tests/hooks/test_ci_workflow.py::test_make_test_runs_pytest_in_parallel
+DEV-1	tests/hooks/test_ci_workflow.py::test_make_test_integration_stays_serial
+DEV-1	tests/hooks/test_ci_workflow.py::test_addopts_carries_no_worker_flags
+DEV-1	tests/hooks/test_ci_workflow.py::test_the_worker_flag_pattern_catches_every_spelling[-n4]
+DEV-1	tests/hooks/test_ci_workflow.py::test_the_worker_flag_pattern_catches_every_spelling[-n 4]
+DEV-1	tests/hooks/test_ci_workflow.py::test_the_worker_flag_pattern_catches_every_spelling[-nauto]
+DEV-1	tests/hooks/test_ci_workflow.py::test_the_worker_flag_pattern_catches_every_spelling[--numprocesses=2]
+DEV-1	tests/hooks/test_ci_workflow.py::test_the_worker_flag_pattern_catches_every_spelling[--dist=load]
+DEV-1	tests/hooks/test_ci_workflow.py::test_the_worker_flag_pattern_catches_every_spelling[--tx popen]
+DEV-1	tests/hooks/test_ci_workflow.py::test_the_worker_flag_pattern_catches_every_spelling[-p xdist]
+DEV-1	tests/hooks/test_ci_workflow.py::test_the_worker_flag_pattern_leaves_other_options_alone[uv run pytest -m integration]
+DEV-1	tests/hooks/test_ci_workflow.py::test_the_worker_flag_pattern_leaves_other_options_alone[uv run pytest -m "" --llm-suite "$$SUITE"]
+DEV-1	tests/hooks/test_ci_workflow.py::test_the_worker_flag_pattern_leaves_other_options_alone[uv run pytest]
+DEV-1	tests/hooks/test_ci_workflow.py::test_xdist_is_a_dev_dependency
+DEV-1	tests/hooks/test_ship_marker.py::test_ci_runs_the_integration_tests_serially_with_the_plain_marker
+12b	tests/ship/test_guard.py::test_guard_prints_each_refinement_a_new_answerer_replaced
+12b	tests/ship/test_guard.py::test_guard_prints_each_refinement_a_changed_context_replaced
+12b	tests/ship/test_guard.py::test_guard_lists_nothing_and_fails_when_no_exemption_holds
+12b	tests/ship/test_guard.py::test_guard_on_the_merge_ref_gives_no_exemption_for_a_copied_newer_main_file[answerer]
+12b	tests/ship/test_guard.py::test_guard_on_the_merge_ref_gives_no_exemption_for_a_copied_newer_main_file[saved_context]
+12b	tests/ship/test_guard.py::test_the_integrity_job_checks_out_the_merge_ref
+12b	tests/ship/test_guard.py::test_guard_lists_a_replaced_entry_beside_a_refusal_and_quotes_odd_ids
+12b	tests/ship/test_guard.py::test_guard_reports_a_runtime_error_without_a_traceback
+DEV-1	tests/ship/test_ship.py::test_a_job_that_did_not_pass_is_refused[python-integration-fail]
+DEV-1	tests/ship/test_ship.py::test_a_job_that_did_not_pass_is_refused[python-integration-skipping]
+DEV-1	tests/ship/test_ship.py::test_a_job_that_did_not_pass_is_refused[python-integration-pending]
+DEV-1	tests/ship/test_ship.py::test_a_job_that_did_not_pass_is_refused[python-integration-cancel]
+DEV-1	tests/ship/test_ship.py::test_a_missing_job_is_refused[python-integration]
+DEV-1	tests/ship/test_ship.py::test_same_job_name_from_another_workflow_does_not_count[python-integration]
+
+### run 1: slowest 20 under xdist
+30.96s call     tests/ship/test_guard.py::test_guard_on_the_merge_ref_gives_no_exemption_for_a_copied_newer_main_file[answerer]
+30.91s call     tests/ship/test_guard.py::test_guard_on_the_merge_ref_gives_no_exemption_for_a_copied_newer_main_file[saved_context]
+24.93s call     tests/ship/test_guard.py::test_guard_prints_each_refinement_a_new_answerer_replaced
+24.92s call     tests/ship/test_guard.py::test_guard_prints_each_refinement_a_changed_context_replaced
+24.73s call     tests/ship/test_guard.py::test_guard_lists_nothing_and_fails_when_no_exemption_holds
+24.55s call     tests/ship/test_guard.py::test_guard_lists_a_replaced_entry_beside_a_refusal_and_quotes_odd_ids
+16.69s call     tests/ship/test_guard.py::test_guard_reports_a_runtime_error_without_a_traceback
+13.59s call     tests/ship/test_guard.py::test_a_head_with_two_merge_bases_fails
+12.90s call     tests/ship/test_guard.py::test_the_measured_module_root_move_is_refused
+12.89s call     tests/ship/test_guard.py::test_integrity_refuses_a_root_config_that_moves_the_load_path[a member elsewhere]
+12.83s call     tests/ship/test_guard.py::test_an_edited_cassette_fails_integrity
+12.83s call     tests/ship/test_guard.py::test_integrity_refuses_a_member_holding_anything_else[services/gateway/src/northwind_evals/cli.py]
+12.82s call     tests/ship/test_guard.py::test_integrity_refuses_a_root_config_that_moves_the_load_path[a deep glob]
+12.81s call     tests/ship/test_guard.py::test_integrity_refuses_a_member_holding_anything_else[services/assistant/src/sitecustomize.py]
+12.81s call     tests/ship/test_guard.py::test_integrity_refuses_a_member_holding_anything_else[evals/src/sitecustomize.py]
+12.81s call     tests/ship/test_guard.py::test_integrity_refuses_a_member_config_that_moves_the_load_path[a nested workspace]
+12.81s call     tests/ship/test_guard.py::test_integrity_refuses_a_root_config_that_moves_the_load_path[a path source]
+12.80s call     tests/ship/test_guard.py::test_integrity_refuses_a_member_config_that_moves_the_load_path[another backend]
+12.80s call     tests/ship/test_guard.py::test_integrity_refuses_a_root_config_that_moves_the_load_path[a dot dot member]
+12.77s call     tests/ship/test_guard.py::test_integrity_refuses_a_root_config_that_moves_the_load_path[not toml]
+
+## APPENDIX: the scripts, verbatim (they ran from the session scratchpad)
+
+### probe.mk
+OUT ?= $(TMPDIR)/dev1
+probe-index:
+	uv run python -c "import os, psycopg; from northwind_rag.cli import DEFAULT_DATABASE_URL as D; c=psycopg.connect(os.environ.get('DATABASE_URL', D)); print(c.execute('SELECT index_version, count(*) FROM rag_chunks GROUP BY 1').fetchall())"
+probe-unit:
+	LLM_MODE=replay uv run pytest -p no:cacheprovider -q --durations=40 --junitxml=$(OUT)/unit.xml $(EXTRA)
+probe-integration:
+	LLM_MODE=replay uv run pytest -m integration -p no:cacheprovider -q --durations=30 --junitxml=$(OUT)/integration.xml
+probe-collect:
+	LLM_MODE=replay uv run pytest -p no:cacheprovider -q --collect-only
+probe-unit-par:
+	LLM_MODE=replay uv run pytest -n auto --dist loadgroup -p no:cacheprovider -q --durations=20 --junitxml=$(OUT)/unit.xml
+
+### run-stages.sh
+#!/bin/bash
+# DEV-1 instrumented make ci: each stage of `ci` in order, timed; integration through the probe (adds --durations=30).
+cd /Users/rapido/Projects/northwind-shop-b || exit 2
+OUT=$1; mkdir -p "$OUT"; S=$(dirname "$0")
+stage() { local name=$1; shift; local t0=$(date +%s); "$@" >"$OUT/$name.out" 2>&1; local rc=$?; local t1=$(date +%s); printf '%s\t%ss\trc=%s\n' "$name" $((t1-t0)) $rc | tee -a "$OUT/times.tsv"; }
+echo "head $(git rev-parse HEAD) start $(date -u +%FT%TZ)" | tee "$OUT/times.tsv"
+stage lint make -s lint
+stage scan-cassettes make -s scan-cassettes
+stage test make test
+stage test-integration make -s -f Makefile -f "$S/probe.mk" OUT="$OUT" probe-integration
+stage eval-integrity make -s eval-integrity
+stage eval-gate make -s eval-gate
+stage unit-ci-form make -s -f Makefile -f "$S/probe.mk" OUT="$OUT" probe-unit
+stage collect-ci-form make -s -f Makefile -f "$S/probe.mk" OUT="$OUT" probe-collect
+echo "end $(date -u +%FT%TZ)" | tee -a "$OUT/times.tsv"
+
+### accept.sh
+#!/bin/bash
+# DEV-1 acceptance: 3 parallel CI-form unit runs in a row (the CI step's flags), junit per run.
+cd /Users/rapido/Projects/northwind-shop-b || exit 2
+OUT=$1; mkdir -p "$OUT"
+echo "head $(git rev-parse HEAD) start $(date -u +%FT%TZ)" | tee "$OUT/times.tsv"
+for i in 1 2 3; do
+	t0=$(date +%s)
+	make -s -f Makefile -f "$(dirname "$0")/probe.mk" OUT="$OUT/run$i" probe-unit-par >"$OUT/run$i.out" 2>&1
+	rc=$?; printf 'run%s\t%ss\trc=%s\t%s\n' $i $(( $(date +%s)-t0 )) $rc "$(grep -E 'passed.* in [0-9.]+s' "$OUT/run$i.out" | tr -d '=' | xargs)" | tee -a "$OUT/times.tsv"
+done
+echo "end $(date -u +%FT%TZ)" | tee -a "$OUT/times.tsv"
+
+### compare.py
+"""DEV-1: compare outcome sets of junit XML runs by (classname, name).
+
+usage: python3 -I compare.py BEFORE.xml AFTER.xml [AFTER2.xml ...]
+Prints counts per outcome for each file and every difference against BEFORE. Exit 1 on any difference
+or on any failed/errored test in any file.
+"""
+
+from __future__ import annotations
+
+import sys
+import xml.etree.ElementTree as ET
+
+
+def outcomes(path: str) -> dict[str, set[str]]:
+    sets: dict[str, set[str]] = {k: set() for k in ("passed", "skipped", "xfailed", "failed", "error")}
+    for case in ET.parse(path).getroot().iter("testcase"):
+        node = f"{case.get('classname')}::{case.get('name')}"
+        kids = {child.tag: child for child in case}
+        if "failure" in kids:
+            kind = "failed"
+        elif "error" in kids:
+            kind = "error"
+        elif "skipped" in kids:
+            kind = "xfailed" if kids["skipped"].get("type") == "pytest.xfail" else "skipped"
+        else:
+            kind = "passed"
+        sets[kind].add(node)
+    return sets
+
+
+def main(paths: list[str]) -> int:
+    base = outcomes(paths[0])
+    base_all = set().union(*base.values())
+    bad = 0
+    for path in paths:
+        cur = outcomes(path)
+        counts = ", ".join(f"{k} {len(v)}" for k, v in cur.items())
+        print(f"{path}: collected {len(set().union(*cur.values()))}: {counts}")
+        if cur["failed"] or cur["error"]:
+            bad = 1
+            for node in sorted(cur["failed"] | cur["error"]):
+                print(f"  FAILED/ERROR {node}")
+        if path == paths[0]:
+            continue
+        cur_all = set().union(*cur.values())
+        for node in sorted(base_all - cur_all):
+            bad = 1
+            print(f"  missing {node}")
+        for node in sorted(cur_all - base_all):
+            bad = 1
+            print(f"  extra {node}")
+        for kind in base:
+            for node in sorted(base[kind] ^ cur[kind]):
+                if node in base_all and node in cur_all:
+                    bad = 1
+                    was = next(k for k, v in base.items() if node in v)
+                    now = next(k for k, v in cur.items() if node in v)
+                    if kind == was:
+                        print(f"  outcome {node}: {was} -> {now}")
+    print("IDENTICAL" if not bad else "DIFFERENT")
+    return bad
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
+
+### accept_compare.py
+"""DEV-1 acceptance: each after junit == before junit + exactly the listed additions; shared nodes keep
+their outcome; failed = error = none. usage: python3 -I accept_compare.py BEFORE.xml ADDITIONS.txt AFTER.xml..."""
+import sys, xml.etree.ElementTree as ET
+
+def outcomes(path):
+    res = {}
+    for c in ET.parse(path).getroot().iter("testcase"):
+        kids = {k.tag: k for k in c}
+        kind = ("failed" if "failure" in kids else "error" if "error" in kids else
+                ("xfailed" if kids["skipped"].get("type") == "pytest.xfail" else "skipped") if "skipped" in kids else "passed")
+        res[(c.get("classname"), c.get("name"))] = kind
+    return res
+
+def key(n):
+    path, rest = n.split("::", 1); parts = rest.split("::")
+    return (".".join([path[:-3].replace("/", ".")] + parts[:-1]), parts[-1])
+
+before = outcomes(sys.argv[1])
+adds = {key(l.split("\t", 1)[1].strip()) for l in open(sys.argv[2]) if l.strip()}
+bad = 0
+for path in sys.argv[3:]:
+    after = outcomes(path)
+    extra, missing = set(after) - set(before), set(before) - set(after)
+    changed = sorted(k for k in set(before) & set(after) if before[k] != after[k])
+    fails = sorted(k for k, v in after.items() if v in ("failed", "error"))
+    counts = {v: sum(1 for x in after.values() if x == v) for v in ("passed", "skipped", "xfailed", "failed", "error")}
+    ok = extra == adds and not missing and not changed and not fails
+    bad |= not ok
+    print(f"{path.rsplit('/', 2)[-2]}: collected {len(after)} {counts}; added {len(extra)} (listed {len(adds)}, match {extra == adds}); "
+          f"missing {len(missing)}; outcome changes {len(changed)}; failed {len(fails)} -> {'OK' if ok else 'DIFFERENT'}")
+    for k in sorted(extra ^ adds): print("   addition mismatch", k)
+    for k in sorted(missing): print("   missing", k)
+    for k in changed: print("   changed", k, before[k], "->", after[k])
+    for k in fails: print("   FAILED", k)
+    added_out = {after[k] for k in extra}
+    print(f"   outcomes of the added tests: {sorted(added_out)}")
+print("ACCEPTED" if not bad else "NOT ACCEPTED"); sys.exit(bad)
