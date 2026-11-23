@@ -1,28 +1,178 @@
-# DEV-1 failing-first, 2026-11-23. Script: main's copy of Makefile, ci.yml, guard.yml, pyproject.toml and tools/ship.sh
-# put in place (git show origin/main:<path>), the DEV-1 tests run, the files restored (verified with cmp).
+# DEV-1 failing-first, isolation and mutation evidence (advisor M3 and L1, 2026-11-23).
+# SECOND PASS, raw: script output pasted verbatim, nothing edited. Run at head c6ba739 against origin/main 73454be
+# (12b's merge). The script is at the end of this file.
 
-## against origin/main's files
+# head c6ba7392990af84f1722c619df2dadd90b06edfd; files swapped in from 73454be7b0b8ad72088c2b600215fc0dc0869444 (origin/main, 12b's merge); 2026-11-23T11:08:55Z
+
+## 1. Failing-first: the row's tests against main's implementation files
+# swapped: Makefile .github/workflows/ci.yml .github/workflows/guard.yml pyproject.toml tools/ship.sh (diff against 73454be7b0b8ad72088c2b600215fc0dc0869444 now: '')
 FAILED tests/hooks/test_ci_workflow.py::test_ci_runs_on_pull_request_and_pushes_to_main_only
 FAILED tests/hooks/test_ci_workflow.py::test_every_job_has_the_planned_timeout[ci.yml]
 FAILED tests/hooks/test_ci_workflow.py::test_every_job_has_the_planned_timeout[guard.yml]
-FAILED tests/hooks/test_ci_workflow.py::test_no_job_lacks_a_timeout[ci.yml] - ...
+FAILED tests/hooks/test_ci_workflow.py::test_no_job_lacks_a_timeout[ci.yml]
 FAILED tests/hooks/test_ci_workflow.py::test_no_job_lacks_a_timeout[guard.yml]
 FAILED tests/hooks/test_ci_workflow.py::test_concurrency_cancels_only_superseded_synchronize_runs[ci.yml]
 FAILED tests/hooks/test_ci_workflow.py::test_concurrency_cancels_only_superseded_synchronize_runs[guard.yml]
-FAILED tests/hooks/test_ci_workflow.py::test_pytest_par_is_defined_once - Asse...
+FAILED tests/hooks/test_ci_workflow.py::test_pytest_par_is_defined_once - Ass...
 FAILED tests/hooks/test_ci_workflow.py::test_only_test_and_check_recipes_use_the_parallel_flags
 FAILED tests/hooks/test_ci_workflow.py::test_make_test_runs_pytest_in_parallel
-FAILED tests/hooks/test_ci_workflow.py::test_xdist_is_a_dev_dependency - asser...
+FAILED tests/hooks/test_ci_workflow.py::test_xdist_is_a_dev_dependency - asse...
 FAILED tests/hooks/test_ship_marker.py::test_ci_keeps_a_bare_pytest_step - As...
 FAILED tests/hooks/test_make_check.py::test_python_paths_run_as_one_replay_pytest_call
 FAILED tests/hooks/test_make_check.py::test_python_and_portal_paths_run_both
 FAILED tests/hooks/test_make_check.py::test_the_plan_all_runs_the_whole_suite_through_make_test
 FAILED evals/tests/test_wiring.py::test_ci_integration_step_runs_after_a_unit_failure
 FAILED tests/ship/test_ship.py::test_required_jobs_are_the_jobs_in_the_workflows
-17 failed, 11 passed in 25.05s
+17 failed, 26 passed, 28 deselected in 56.82s
+# restored: '' (empty = identical to HEAD)
 
-## against the row's files
-28 passed in 25.45s
+## 2. The isolation fixes: main's copy of each test file fails where the row's passes
+# 2a. main's test_cli.py, the three chdir gate tests, each alone and serial:
+test_a_cassette_miss_is_reported_as_stale_not_as_an_error: 1 failed in 26.20s
+test_the_gate_fails_when_every_call_misses_even_with_the_flag: 1 failed in 2.92s
+test_a_replay_miss_says_so: 1 failed in 1.92s
+# 2a'. the row's test_cli.py, the same three, each alone and serial:
+test_a_cassette_miss_is_reported_as_stale_not_as_an_error: 1 passed in 2.51s
+test_the_gate_fails_when_every_call_misses_even_with_the_flag: 1 passed in 2.22s
+test_a_replay_miss_says_so: 1 passed in 2.33s
+# 2b. main's test_runner_support.py::test_record_with_no_window_stops_with_the_command_to_open_one under -n 2:
+E       AssertionError: assert <ExitCode.USAGE_ERROR: 4> == <ExitCode.TESTS_FAILED: 1>
+E        +  where <ExitCode.USAGE_ERROR: 4> = <RunResult ret=4 len(stdout.lines)=0 len(stderr.lines)=2 duration=0.36s>.ret
+E        +  and   <ExitCode.TESTS_FAILED: 1> = <enum 'ExitCode'>.TESTS_FAILED
+E        +    where <enum 'ExitCode'> = pytest.ExitCode
+ERROR: a window is one claimed process: record without xdist workers
+FAILED services/llm-replay/tests/test_runner_support.py::test_record_with_no_window_stops_with_the_command_to_open_one
+# 2b'. the row's copy, the same test under -n 2:
+1 passed in 1.08s
 
-# Note: the file was written as tests/ship/test_ci_workflow.py and moved to tests/hooks/ afterwards, unchanged, because
-# test_ship_marker pins test_guard.py as the only unmarked file in tests/ship. The paths above use the new location.
+## 3. Mutations of the security-review fixes (L1-L3), each reverted
+# 3a. L1 mutant: the plugin's xdist refusal disabled ( 1 file changed, 1 insertion(+), 1 deletion(-))
+E       AssertionError: assert 'a window is one claimed process: record without xdist workers' in '============================= test session starts ==============================\nplatform darwin -- Python 3.12.16, ..._refuses_before_any_claim.py::test_x\n=============================== 1 error in 0.51s ==============================='
+E                                                                        [100%]
+FAILED services/llm-replay/tests/test_runner_support.py::test_a_spending_run_with_real_xdist_workers_refuses_before_any_claim
+1 failed in 1.02s
+# 3b. L2 mutants: -n4 on the record recipe, -n 2 in addopts ( 2 files changed, 2 insertions(+), 2 deletions(-))
+FAILED tests/hooks/test_ci_workflow.py::test_addopts_carries_no_worker_flags
+FAILED tests/hooks/test_ci_workflow.py::test_only_test_and_check_recipes_use_the_parallel_flags
+2 failed in 0.55s
+# 3c. L3 mutant: 'override' removed ( 1 file changed, 1 insertion(+), 1 deletion(-))
+FAILED tests/hooks/test_ci_workflow.py::test_pytest_par_is_defined_once - Ass...
+1 failed in 0.08s
+# with the mutant, make -n test PYTEST_PAR="-k nothing" runs: uv run pytest -k nothing
+# restored, the same command runs: uv run pytest -n auto --dist loadgroup
+
+# tree after the script: '' (empty = clean)
+
+
+# ---------------------------------------------------------------------------------------------------------
+# FIRST PASS (kept for the record; superseded by the second pass above). Taken on the working tree before
+# the commit, with main = dd53b85 (before 12b merged) and an earlier tests/hooks/test_ci_workflow.py
+# (before the L2/L3 edits). Its paths were rewritten from tests/ship/ to tests/hooks/ after the file moved.
+# | # DEV-1 failing-first, 2026-11-23. Script: main's copy of Makefile, ci.yml, guard.yml, pyproject.toml and tools/ship.sh
+# | # put in place (git show origin/main:<path>), the DEV-1 tests run, the files restored (verified with cmp).
+# | 
+# | ## against origin/main's files
+# | FAILED tests/hooks/test_ci_workflow.py::test_ci_runs_on_pull_request_and_pushes_to_main_only
+# | FAILED tests/hooks/test_ci_workflow.py::test_every_job_has_the_planned_timeout[ci.yml]
+# | FAILED tests/hooks/test_ci_workflow.py::test_every_job_has_the_planned_timeout[guard.yml]
+# | FAILED tests/hooks/test_ci_workflow.py::test_no_job_lacks_a_timeout[ci.yml] - ...
+# | FAILED tests/hooks/test_ci_workflow.py::test_no_job_lacks_a_timeout[guard.yml]
+# | FAILED tests/hooks/test_ci_workflow.py::test_concurrency_cancels_only_superseded_synchronize_runs[ci.yml]
+# | FAILED tests/hooks/test_ci_workflow.py::test_concurrency_cancels_only_superseded_synchronize_runs[guard.yml]
+# | FAILED tests/hooks/test_ci_workflow.py::test_pytest_par_is_defined_once - Asse...
+# | FAILED tests/hooks/test_ci_workflow.py::test_only_test_and_check_recipes_use_the_parallel_flags
+# | FAILED tests/hooks/test_ci_workflow.py::test_make_test_runs_pytest_in_parallel
+# | FAILED tests/hooks/test_ci_workflow.py::test_xdist_is_a_dev_dependency - asser...
+# | FAILED tests/hooks/test_ship_marker.py::test_ci_keeps_a_bare_pytest_step - As...
+# | FAILED tests/hooks/test_make_check.py::test_python_paths_run_as_one_replay_pytest_call
+# | FAILED tests/hooks/test_make_check.py::test_python_and_portal_paths_run_both
+# | FAILED tests/hooks/test_make_check.py::test_the_plan_all_runs_the_whole_suite_through_make_test
+# | FAILED evals/tests/test_wiring.py::test_ci_integration_step_runs_after_a_unit_failure
+# | FAILED tests/ship/test_ship.py::test_required_jobs_are_the_jobs_in_the_workflows
+# | 17 failed, 11 passed in 25.05s
+# | 
+# | ## against the row's files
+# | 28 passed in 25.45s
+# | 
+# | # Note: the file was written as tests/ship/test_ci_workflow.py and moved to tests/hooks/ afterwards, unchanged, because
+# | # test_ship_marker pins test_guard.py as the only unmarked file in tests/ship. The paths above use the new location.
+
+# ---------------------------------------------------------------------------------------------------------
+# The second-pass script (evidence2.sh), verbatim:
+#!/bin/bash
+# DEV-1 evidence, second pass (advisor M3, L1): raw failing-first and mutation output.
+# Each step swaps files in place, runs, and restores from a copy saved under a flat name; cmp checks it.
+set -u
+cd /Users/rapido/Projects/northwind-shop-b || exit 2
+SAVE=$(mktemp -d "${TMPDIR:-/tmp}/dev1-ev2.XXXX")
+BASE=73454be7b0b8ad72088c2b600215fc0dc0869444
+PY=(env LLM_MODE=replay .venv/bin/python -m pytest -p no:cacheprovider -q -rf)
+declare -a SAVED=()
+save() { local f=$1 flat=${1//\//__}; cp "$f" "$SAVE/$flat" || exit 2; SAVED+=("$f"); }
+restore_all() {
+	local f flat
+	for f in "${SAVED[@]}"; do flat=${f//\//__}; cp "$SAVE/$flat" "$f"; cmp -s "$f" "$SAVE/$flat" || echo "NOT RESTORED $f"; done
+	SAVED=()
+}
+trap restore_all EXIT
+echo "# head $(git rev-parse HEAD); files swapped in from $BASE (origin/main, 12b's merge); $(date -u +%FT%TZ)"
+
+echo; echo "## 1. Failing-first: the row's tests against main's implementation files"
+IMPL=(Makefile .github/workflows/ci.yml .github/workflows/guard.yml pyproject.toml tools/ship.sh)
+for f in "${IMPL[@]}"; do save "$f"; git show "$BASE:$f" >"$f" || exit 2; done
+echo "# swapped: ${IMPL[*]} (diff against $BASE now: '$(git diff --stat $BASE -- "${IMPL[@]}" | tail -1)')"
+"${PY[@]}" tests/hooks/test_ci_workflow.py \
+	tests/hooks/test_ship_marker.py::test_ci_keeps_a_bare_pytest_step \
+	tests/hooks/test_ship_marker.py::test_ci_runs_the_integration_tests_serially_with_the_plain_marker \
+	tests/hooks/test_make_check.py \
+	evals/tests/test_wiring.py::test_ci_integration_step_runs_after_a_unit_failure \
+	tests/ship/test_ship.py::test_required_jobs_are_the_jobs_in_the_workflows \
+	"tests/ship/test_ship.py::test_a_job_that_did_not_pass_is_refused" -k "not (test_a_job_that_did_not_pass_is_refused and not python-integration)" \
+	services/llm-replay/tests/test_runner_support.py::test_a_spending_run_with_real_xdist_workers_refuses_before_any_claim 2>&1 | grep -E '^(FAILED|ERROR)|passed|failed'
+restore_all
+echo "# restored: '$(git diff --stat HEAD -- "${IMPL[@]}" | tail -1)' (empty = identical to HEAD)"
+
+echo; echo "## 2. The isolation fixes: main's copy of each test file fails where the row's passes"
+save evals/tests/test_cli.py; git show "$BASE:evals/tests/test_cli.py" >evals/tests/test_cli.py
+echo "# 2a. main's test_cli.py, the three chdir gate tests, each alone and serial:"
+for t in test_a_cassette_miss_is_reported_as_stale_not_as_an_error test_the_gate_fails_when_every_call_misses_even_with_the_flag test_a_replay_miss_says_so; do
+	printf '%s: ' "$t"; "${PY[@]}" "evals/tests/test_cli.py::$t" 2>&1 | tail -1
+done
+restore_all
+echo "# 2a'. the row's test_cli.py, the same three, each alone and serial:"
+for t in test_a_cassette_miss_is_reported_as_stale_not_as_an_error test_the_gate_fails_when_every_call_misses_even_with_the_flag test_a_replay_miss_says_so; do
+	printf '%s: ' "$t"; "${PY[@]}" "evals/tests/test_cli.py::$t" 2>&1 | tail -1
+done
+T=services/llm-replay/tests/test_runner_support.py
+save "$T"; git show "$BASE:$T" >"$T"
+echo "# 2b. main's test_runner_support.py::test_record_with_no_window_stops_with_the_command_to_open_one under -n 2:"
+"${PY[@]}" -n 2 "$T::test_record_with_no_window_stops_with_the_command_to_open_one" 2>&1 | grep -E '^(FAILED|E +|ERROR: a window)|passed|failed' | head -6
+restore_all
+echo "# 2b'. the row's copy, the same test under -n 2:"
+"${PY[@]}" -n 2 "$T::test_record_with_no_window_stops_with_the_command_to_open_one" 2>&1 | tail -1
+
+echo; echo "## 3. Mutations of the security-review fixes (L1-L3), each reverted"
+P=services/llm-replay/src/northwind_llm_replay/pytest_plugin.py
+save "$P"
+python3 -I -c "
+from pathlib import Path; p = Path('$P'); t = p.read_text()
+a = '    if os.environ.get(\"PYTEST_XDIST_WORKER\") and mode != \"replay\":\n'
+assert t.count(a) == 1; p.write_text(t.replace(a, '    if False and mode != \"replay\":  # MUTANT\n'))"
+echo "# 3a. L1 mutant: the plugin's xdist refusal disabled ($(git diff --stat -- "$P" | tail -1))"
+"${PY[@]}" "$T::test_a_spending_run_with_real_xdist_workers_refuses_before_any_claim" 2>&1 | grep -E '^(FAILED|E +)|passed|failed' | head -4
+restore_all
+save Makefile; save pyproject.toml
+sed -i '' 's|LLM_MODE=record uv run pytest -m ""|LLM_MODE=record uv run pytest -n4 -m ""|' Makefile
+sed -i '' 's|^addopts = \["--strict-markers", |addopts = ["--strict-markers", "-n", "2", |' pyproject.toml
+echo "# 3b. L2 mutants: -n4 on the record recipe, -n 2 in addopts ($(git diff --stat -- Makefile pyproject.toml | tail -1))"
+"${PY[@]}" tests/hooks/test_ci_workflow.py -k 'recipes or addopts' 2>&1 | grep -E '^FAILED|passed|failed'
+restore_all
+save Makefile
+sed -i '' 's|^override PYTEST_PAR := |PYTEST_PAR := |' Makefile
+echo "# 3c. L3 mutant: 'override' removed ($(git diff --stat -- Makefile | tail -1))"
+"${PY[@]}" tests/hooks/test_ci_workflow.py::test_pytest_par_is_defined_once 2>&1 | grep -E '^FAILED|passed|failed'
+printf '# with the mutant, make -n test PYTEST_PAR="-k nothing" runs: '; make -s -n test PNPM=true PYTEST_PAR='-k nothing' 2>/dev/null | grep -o 'uv run pytest.*$'
+restore_all
+printf '# restored, the same command runs: '; make -s -n test PNPM=true PYTEST_PAR='-k nothing' 2>/dev/null | grep -o 'uv run pytest.*$'
+trap - EXIT
+echo; echo "# tree after the script: '$(git status --short | tr '\n' ' ')' (empty = clean)"

@@ -534,3 +534,29 @@ for path in sys.argv[3:]:
     added_out = {after[k] for k in extra}
     print(f"   outcomes of the added tests: {sorted(added_out)}")
 print("ACCEPTED" if not bad else "NOT ACCEPTED"); sys.exit(bad)
+
+## AFTER: make ci at c6ba739 (caffeinate -dims, window A idle by the user's word), one literal run, each output
+# line timestamped (seconds since start). Before used separate per-stage make calls; this is the evidence run.
+head c6ba7392990af84f1722c619df2dadd90b06edfd start 2026-11-23T10:36:44Z
+make ci rc=0 wall=1645s end 2026-11-23T11:04:09Z
+# stage start lines and results:
+     0.0 uv run ruff check
+     0.1 All checks passed!
+     0.1 uv run ruff format --check
+     0.1 uv run mypy services data evals
+     0.7 corepack pnpm -r lint
+     1.9 corepack pnpm -r typecheck
+     2.9 uv run python -m northwind_llm_replay.cli scan ${CASSETTES_DIR:+--cassettes-dir "$CASSETTES_DIR"}
+    14.1 LLM_MODE=replay PYTEST_ADDOPTS="$PYTEST_ADDOPTS $(base=$(git merge-base origin/main HEAD 2>/dev/null) && git diff --quiet "$base" -
+   488.6 =========== 6963 passed, 9 skipped, 24 xfailed in 474.10s (0:07:54) ============
+   488.9 corepack pnpm -r test
+   490.3  Test Files  5 passed (5)
+   490.3       Tests  55 passed (55)
+   490.3 LLM_MODE=replay uv run pytest -m integration
+  1441.2 ========= 297 passed, 1 skipped, 7049 deselected in 950.29s (0:15:50) ==========
+  1441.6 uv run python -m northwind_evals.cli integrity
+  1443.6 eval-integrity passed against origin/main
+  1443.7 uv run python -m northwind_rag.cli --fixtures data/fixtures
+  1444.5 LLM_MODE=replay EVAL_ALLOW_STALE= uv run python -m northwind_evals.cli gate
+  1644.1 eval-gate passed
+# stages: lint 3 s, scan 11 s, test 476 s (pytest 474 s, vitest 1.4 s), test-integration 951 s, eval-integrity 2 s, ingest + eval-gate 200 s
