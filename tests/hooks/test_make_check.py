@@ -71,7 +71,9 @@ def test_lint_runs_before_any_test(tmp_path: Path) -> None:
 def test_python_paths_run_as_one_replay_pytest_call(tmp_path: Path) -> None:
     done, calls = run_check(tmp_path, "tests/hooks tests/ship")
     assert done.returncode == 0, done.stderr
-    assert pytest_calls(calls) == ["uv LLM_MODE=replay run pytest tests/hooks tests/ship"]
+    assert pytest_calls(calls) == [
+        "uv LLM_MODE=replay run pytest -n auto --dist loadgroup tests/hooks tests/ship"
+    ]
     assert "pnpm -r test" not in calls
 
 
@@ -85,7 +87,7 @@ def test_the_portal_alone_runs_vitest_and_no_pytest(tmp_path: Path) -> None:
 def test_python_and_portal_paths_run_both(tmp_path: Path) -> None:
     done, calls = run_check(tmp_path, "evals portal")
     assert done.returncode == 0, done.stderr
-    assert pytest_calls(calls) == ["uv LLM_MODE=replay run pytest evals"]
+    assert pytest_calls(calls) == ["uv LLM_MODE=replay run pytest -n auto --dist loadgroup evals"]
     assert "pnpm -r test" in calls
 
 
@@ -101,7 +103,7 @@ def test_the_plan_all_runs_the_whole_suite_through_make_test(tmp_path: Path) -> 
     done, calls = run_check(tmp_path, "all")
     assert done.returncode == 0, done.stderr
     assert "make check: all" in done.stdout
-    assert pytest_calls(calls) == ["uv LLM_MODE=replay run pytest"]
+    assert pytest_calls(calls) == ["uv LLM_MODE=replay run pytest -n auto --dist loadgroup"]
     assert "pnpm -r test" in calls
 
 

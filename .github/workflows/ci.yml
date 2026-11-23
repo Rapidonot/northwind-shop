@@ -1,15 +1,27 @@
 name: CI
 
+# DEV-1 (decision 0020): once per PR push. A push trigger on branches ran every job a second time on the
+# bare head; `ship` reads the PR's checks, which come from the pull_request run.
 on:
-  push:
   pull_request:
+  push:
+    branches: [main]
 
 permissions:
   contents: read
 
+# DEV-1 (decision 0020), the key from #12's plan: only `synchronize` runs share a group, so a new push
+# cancels the run on the old SHA, which `ship` never reads. Every other run, the push to main included,
+# gets its own group and is never cancelled. A plain workflow + ref group would let one run cancel another
+# on the same head, and `ship` refuses `cancel`.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event.action == 'synchronize' && 'push' || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   python:
     runs-on: ubuntu-latest
+    timeout-minutes: 35
     services:
       db:
         image: pgvector/pgvector:pg16
@@ -44,15 +56,48 @@ jobs:
       - run: uv run mypy services data evals
       - name: Secret/PAN scan of cassettes (FOUND-2)
         run: uv run python -m northwind_llm_replay.cli scan cassettes evals/contexts evals/fixtures evals/baselines docs/reviews/RAG-12-eval-review.md
-      - run: uv run pytest
-      # Runs even when the unit step fails, so one red test cannot hide integration results.
+      - run: uv run pytest -n auto --dist loadgroup
+
+  # DEV-1: the integration tests in their own job, beside `python`, so the two run at the same time. Still
+  # serial: no xdist here. A red unit test cannot hide these results, because nothing here depends on it.
+  python-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    services:
+      db:
+        image: pgvector/pgvector:pg16
+        env:
+          # Throwaway credentials for an ephemeral CI database; not a secret.
+          POSTGRES_USER: northwind
+          POSTGRES_PASSWORD: northwind-ci
+          POSTGRES_DB: northwind
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U northwind -d northwind"
+          --health-interval 2s --health-timeout 3s --health-retries 30
+    env:
+      DATABASE_URL: postgresql://northwind:northwind-ci@localhost:5432/northwind
+      # CI never spends: replay only, and no API key exists in CI secrets (decision 0001).
+      LLM_MODE: replay
+      FASTEMBED_CACHE_PATH: /home/runner/.cache/fastembed
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
+      - run: uv sync --locked
+      - name: Cache the embedding model (RAG-01 integration test)
+        uses: actions/cache@v4
+        with:
+          path: /home/runner/.cache/fastembed
+          key: fastembed-bge-small-en-v1.5
+      - name: Install pgvector extension (compose does this via infra/db/init)
+        run: psql "$DATABASE_URL" -f infra/db/init/001-extensions.sql
       - name: Integration tests
-        if: ${{ !cancelled() }}
         run: uv run pytest -m integration
 
   # RAG-12: fails the build if a metric drops beyond tolerance or an eval is stale. Replay only.
   eval-gate:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     services:
       db:
         image: pgvector/pgvector:pg16
@@ -91,6 +136,7 @@ jobs:
 
   e2e:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     services:
       db:
         image: pgvector/pgvector:pg16
@@ -137,6 +183,7 @@ jobs:
 
   portal:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v5
       - uses: pnpm/action-setup@v6

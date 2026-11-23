@@ -12,7 +12,7 @@ set -euo pipefail
 
 GH_MIN=2.103.3
 # workflow/job. Guard's jobs run main's evals/src, CI's run the PR's own (decision 0009).
-REQUIRED_JOBS="CI/python CI/eval-gate CI/e2e CI/portal Guard/baseline-label Guard/eval-integrity-main Guard/eval-gate-main"
+REQUIRED_JOBS="CI/python CI/python-integration CI/eval-gate CI/e2e CI/portal Guard/baseline-label Guard/eval-integrity-main Guard/eval-gate-main"
 MAIN_REF=refs/runner/ship-main
 HEAD_REF=refs/runner/ship-head
 # --icase-pathspecs: `Services/common/x.py` must count as a sync path on a case-insensitive clone.
@@ -196,9 +196,9 @@ check_labels() {
 }
 
 # The exit code of `gh pr checks` says nothing here: --json returns 0 with failing checks, and --watch
-# cannot be combined with it. So --watch only waits, and the buckets decide. A push and a pull_request
-# run can report the same job, so every entry must pass, and each required job must exist in its
-# workflow. Any other check that did not pass refuses too, so a new job counts from its first run.
+# cannot be combined with it. So --watch only waits, and the buckets decide. A job can report more
+# than once on one head (a re-run, or a push run from before DEV-1), so every entry must pass, and each
+# required job must exist in its workflow. Any other check that did not pass refuses too, so a new job counts from its first run.
 #
 # The one exception is main's gate failing on a PR that changes the gate, as row #8 must. A real change
 # to evals/src can make main's copy fail on purpose, so a `gate-change` label added by your account

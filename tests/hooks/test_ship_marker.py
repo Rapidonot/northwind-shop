@@ -38,10 +38,24 @@ def collect(*args: str, addopts: str = "") -> list[str]:
     return [line for line in done.stdout.splitlines() if "::" in line]
 
 
+@pytest.mark.req("DEV-1")
 def test_ci_keeps_a_bare_pytest_step() -> None:
-    """A filter on this line, or in `addopts`, would take the tests out of GitHub CI."""
+    """A filter on this line, or in `addopts`, would take the tests out of GitHub CI.
+
+    DEV-1: the line may carry the xdist flags and nothing else, so no marker, keyword, path,
+    `--deselect` or `--ignore` can ride along with them.
+    """
     ci = (REPO / ".github" / "workflows" / "ci.yml").read_text()
-    assert re.search(r"^\s*- run: uv run pytest$", ci, re.M)
+    units = re.findall(r"^\s*- run: (uv run pytest\b.*)$", ci, re.M)
+    assert units == ["uv run pytest -n auto --dist loadgroup"]
+
+
+@pytest.mark.req("DEV-1")
+def test_ci_runs_the_integration_tests_serially_with_the_plain_marker() -> None:
+    """The split job selects exactly what `make test-integration` does, and without workers."""
+    ci = (REPO / ".github" / "workflows" / "ci.yml").read_text()
+    steps = re.findall(r"^\s*(?:- )?run: (uv run pytest -m .*)$", ci, re.M)
+    assert steps == ["uv run pytest -m integration"]
 
 
 def test_addopts_does_not_name_the_marker() -> None:
