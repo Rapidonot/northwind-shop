@@ -182,9 +182,10 @@ Toolchain notes:
 Once a plan is approved, by the user or on a routine row by `advisor-reviewer`, carry on without waiting
 for prompts. The chain:
 
-implement → `test-writer` → `security-reviewer` (read-only: write the diff to a file and pass the
-path) → fix → one scoped re-review → commit → PR body (a committed file in `docs/reviews/`) → `make ci`,
-once, at that head → `advisor-reviewer` → gate report
+implement → `test-writer` (only for gate, integrity, spend or ship code) → `security-reviewer` (read-only:
+write the diff to a file and pass the path) → fix → a scoped re-review only if a medium or higher was
+fixed → commit → PR body (a committed file in `docs/reviews/`) → `advisor-reviewer`, with its fixes →
+`make ci`, once, at that head → gate report (decision 0021)
 
 Commit on the row's branch; never push. Any revised plan goes to `advisor-reviewer` before it is shown
 to the user.
@@ -210,7 +211,7 @@ Stop only for:
 8. In a row not about them, changing anything on the control surface below, except a routine row's added
    cassettes.
 9. Two failed attempts to fix the same failure.
-10. Any high or critical finding still open after the re-review.
+10. Any high or critical finding still open after its fix (and the re-review, when one runs).
 
 When stopping for a decision, first finish all work that does not depend on it (local fixes, tests,
 records). Then stop with the stopped-variant note, listing what is waiting on the answer.
@@ -238,7 +239,8 @@ installed, stop 1 applies to every row: the installed copy cannot check that a r
 
 Triage on a routine row is fixed: critical or high is stop 10. Unsafe at any severity, meaning it breaks a
 hard rule or a protected path: fix it, and stop 6 if the fix changes the design. Medium: fix it if it is
-inside the row's files, otherwise log it with an owner. Low: log it in `PROGRESS.md`, "Open items".
+inside the row's files, otherwise log it with an owner. Low: fix it if it is a real bug in the row's files; otherwise
+mention it in the PR body only, not in `PROGRESS.md`, "Open items" (decision 0021).
 
 The control surface: `CLAUDE.md`, `.claude/**`, `.github/workflows/**`, `Makefile`, `tools/*.proposed*`,
 `tools/ship.sh`, `tools/finish.sh`, `tools/refused-paths.sh`, the files in `RUNNER_SYNC_PATHS`,
