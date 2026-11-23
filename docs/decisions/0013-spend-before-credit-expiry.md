@@ -34,3 +34,12 @@ the slice default. The `$90` cap sentence is unchanged (decision 0016).
 ## After the credit expires
 
 From about 2026-11-24, the slice default in `CLAUDE.md` applies again, unless the user decides otherwise.
+
+## Amendment, 2026-11-22: credit extended to Dec 22 (the user's decision)
+
+Recorded by row 12b. The credit now expires around **2026-12-22**, not 2026-11-24. RECORD-ALL (#18) moves to
+about Dec 13–16, and the Tier B rows that call the model run before it (`PROGRESS.md`, "Ordering"). Until
+Dec 22, full runs with a generous `RUN_BUDGET` stay the default. After it, the slice default in `CLAUDE.md`
+applies again. The $90 `LLM_BUDGET_USD` cap is unchanged. `CLAUDE.md` still reads "~2026-11-24, decision
+0013": it is control surface, so the user edits that line. 2026-11-23: the user made that edit
+(`89c8227`, on row 12b's branch).

@@ -233,7 +233,7 @@ def test_no_real_cache_key_can_trip_the_pan_scan(chunks: list[Chunk]) -> None:
     """Hex keys did: 15 of 2,350 failed. The scanner allows no exemption, so keys hold no digits."""
     parents = parents_of(chunks)
     keys = {cache_key(c, parents[c.chunk_id]) for c in chunks}
-    assert len(keys) == 2351  # R01221 added at DATA_VERSION 2 (row #13b)
+    assert len(keys) == 2354  # R01221 (DATA_VERSION 2, #13b); R01222 to R01224 (3, row #32)
     assert not [k for k in keys if any(ch.isdigit() for ch in k)]
     assert not [k for k in keys if scan_text(k)]
 

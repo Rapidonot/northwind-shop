@@ -144,16 +144,26 @@ def main() -> int:
     for line in members:
         print(f"  {line!r}", file=sys.stderr)
     sys.path.append(str(Path("evals/src").resolve()))
-    from northwind_evals.integrity import added_known_failures, integrity_problems, merge_base
+    from northwind_evals.integrity import (
+        added_known_failures,
+        integrity_problems,
+        merge_base,
+        replaced_refinements,
+    )
 
     try:
         problems = integrity_problems(BASE, BASELINE)
         added = added_known_failures(merge_base(BASE), KNOWN_FAILURES)
+        replaced = replaced_refinements(merge_base(BASE), BASELINE)
     except RuntimeError as error:
         print(f"eval-integrity FAILED: {error}", file=sys.stderr)
         return 1
     for entry in added:  # one JSON line each, so text inside an entry cannot pose as output
         print(f"  known failure added: {json.dumps(entry, sort_keys=True)}")
+    # Row 12b (12a's F1, 12c's F1): what an exemption let change, as `cmd_integrity` prints it. The
+    # context exemption needs no label, so this list in the never-waived job is what a person reads.
+    for entry in replaced:
+        print(f"  refinement replaced: {json.dumps(entry, sort_keys=True)}")
     for problem in problems:
         print(f"  {problem}", file=sys.stderr)
     failed = bool(problems or members)

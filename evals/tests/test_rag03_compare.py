@@ -132,9 +132,14 @@ def test_each_planted_review_is_one_chunk_so_both_trap_counts_agree() -> None:
 
 def test_the_cli_reads_every_planted_review_from_the_answer_key() -> None:
     reviews = cli._trap_reviews()
-    assert len(reviews) == 16  # TRAP-INJ-016, appended at DATA_VERSION 2 (row #13b)
+    assert len(reviews) == 19  # TRAP-INJ-016 (DATA_VERSION 2), 017 to 019 (DATA_VERSION 3, row #32)
     assert reviews["R00712"] == "TRAP-INJ-003" and reviews["R00970"] == "TRAP-INJ-002"
     assert reviews["R01221"] == "TRAP-INJ-016"
+    assert (reviews["R01222"], reviews["R01223"], reviews["R01224"]) == (
+        "TRAP-INJ-017",
+        "TRAP-INJ-018",
+        "TRAP-INJ-019",
+    )
 
 
 # ---- the drift fingerprint --------------------------------------------------------------------
@@ -185,7 +190,7 @@ def test_hybrid_beats_dense_and_keyword_on_recall_at_5(
 
     items = load_items(REPO / "evals" / "fixtures" / "starter_set.jsonl")
     result = compare(items, cli._arms(conn_with_real_index, FastEmbedEmbedder(), items))
-    assert result.n == 64
+    assert result.n == 215  # row #32: 148 new answer items, then EV-303, 306, 308 (DATA_VERSION 3)
     assert result.hybrid_wins, result.means
 
 

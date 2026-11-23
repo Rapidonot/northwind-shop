@@ -9,8 +9,8 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
-import subprocess
 from collections.abc import Sequence
 from decimal import Decimal
 from pathlib import Path
@@ -116,15 +116,22 @@ def llm_client(llm: ScriptedLLM) -> Any:
     return anthropic_client(llm.url)
 
 
-def test_judge_py_is_unchanged_from_main() -> None:
-    shown = subprocess.run(  # noqa: S603
-        ["git", "show", "origin/main:evals/src/northwind_evals/judge.py"],  # noqa: S607
-        capture_output=True,
-        cwd=REPO,
-    )
-    if shown.returncode != 0:
-        pytest.skip("origin/main is not available in this checkout")
-    assert (REPO / "evals/src/northwind_evals/judge.py").read_bytes() == shown.stdout
+# Row #32 (the user, 2026-11-17) replaced `test_judge_py_is_unchanged_from_main`, which pinned the
+# whole file to main, with a pin of what the judge sends: a judge-side change that keeps these bytes
+# (judge v6's post-processing) still replays every judge cassette, and any change to the prompt,
+# schema, model or parameters fails here. The hash is v5's, measured before v6 was built.
+JUDGE_REQUEST_SHA256 = "d93877e3a654481347061f28a58cc9894c14aebf3027c8fd3b517938150b081e"
+
+
+def test_the_judges_request_bytes_are_pinned() -> None:
+    with ScriptedLLM() as llm:
+        llm.reply(claims(("product", True)))
+        Judge(llm_client(llm), "claude-sonnet-5-5").judge(
+            ITEM, (CHUNK, LIVE_BLOCK), "It is $279 [P1]."
+        )
+        body = llm.requests[0]["body"]
+    canonical = json.dumps(body, sort_keys=True, ensure_ascii=False).encode("utf-8")
+    assert hashlib.sha256(canonical).hexdigest() == JUDGE_REQUEST_SHA256
 
 
 def test_run_item_gives_the_judge_the_live_blocks_but_not_steer_or_source_ids() -> None:

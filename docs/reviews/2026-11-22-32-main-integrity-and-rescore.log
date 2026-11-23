@@ -1,0 +1,23 @@
+# Row #32: main's integrity code against the head, and eval-rescore after the security fixes (2026-11-22)
+# For advisor findings 1 and 5. Branch head when run: 16ae5b0cb40130907af6880acf69767d62c1b8d5; main: ee49c221243bef42bbd8bf0387a00a4cb2f04653.
+
+## 1. main's evals/src (git archive origin/main evals/src), run from this checkout
+$ git diff --stat origin/main HEAD -- evals/src/northwind_evals/integrity.py   # empty: integrity.py unchanged
+$ PYTHONPATH=$TMPDIR/main-evals/evals/src uv run python -c 'import northwind_evals.cli as c; print(c.__file__)'
+/tmp/claude-502/main-evals/evals/src/northwind_evals/cli.py
+$ PYTHONPATH=$TMPDIR/main-evals/evals/src uv run python -m northwind_evals.cli integrity
+  frozen vectors vouched (data/embeddings/fastembed-BAAI-bge-small-en-v1.5-384.jsonl, HEAD): 209 of 209, largest distance 3.824e-07 (allowed 1e-04)
+  frozen vectors vouched (data/embeddings/fastembed-BAAI-bge-small-en-v1.5-384.jsonl, disk): 209 of 209, largest distance 3.824e-07 (allowed 1e-04)
+  refinement replaced: {"item_id": "EV-084", "n": 1, "new": "9bdff847d3ee2d36", "old": "bda8800b24185ed6", "reason": "saved_context"}
+  refinement replaced: {"item_id": "EV-093", "n": 1, "new": "f42403583f8536f6", "old": "9a0b1f5d3862d6f0", "reason": "saved_context"}
+  refinement replaced: {"item_id": "EV-102", "n": 1, "new": "2158d7b1e47b1cf2", "old": "89346380c23a909e", "reason": "saved_context"}
+eval-integrity passed against origin/main
+exit=0
+
+## 2. make eval-rescore (no LLM), after f143105's security fixes
+before: e3c84ba6154e488103e91676cf77808ca172275624209606eccb9a4f0224d74a  .llm-proxy-log/baseline-candidate.json
+  overall        behaviour_ok=0.961  citation_ok=0.974  fabricated_ok=0.958  false_refusal=0.014  groundedness=0.951  n=308  relevance=0.929
+the baseline is unchanged: promote with `make -C ~/.northwind/runner eval-promote`
+[exited with code 0]
+after:  e3c84ba6154e488103e91676cf77808ca172275624209606eccb9a4f0224d74a  .llm-proxy-log/baseline-candidate.json
+candidate equals evals/baselines/dense-only.json apart from overrides: True (baseline overrides: 1 )

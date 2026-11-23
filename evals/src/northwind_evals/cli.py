@@ -12,9 +12,10 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 from collections.abc import Callable, Iterator, Mapping, Sequence
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from dataclasses import asdict, replace
 from pathlib import Path
 from typing import Any, cast
@@ -133,7 +134,20 @@ CONTRADICTIONS = Path("services/assistant/tests/contradictions.json")
 RED_TEAM = Path("evals/adversarial/rag11_red_team.jsonl")
 RETRIEVAL_REPORT = Path("docs/reviews/RAG-03-retrieval-report.md")
 SUITE = "eval-answers"
+# Row #32: runs 2 and 3 record into their own suites, for the spread; the judge repeat sends run 1's
+# judge requests again through its own suite. None of them writes the refinements, the candidate or
+# LAST_RUN (advisor H3): their results go to `side_results(suite)`, under the git-ignored log dir.
+VARIANCE_SUITES = ("eval-answers-r2", "eval-answers-r3")
+JUDGE_REPEAT_SUITE = "eval-judge-repeat"
+RUN_SUITE = re.compile(r"^(?:eval-answers(?:-r[23])?|eval-judge-repeat)$")
 ALLOW_STALE_ENV = "EVAL_ALLOW_STALE"
+
+
+SIDE_RESULTS_DIR = Path(".llm-proxy-log")
+
+
+def side_results(suite: str) -> Path:
+    return SIDE_RESULTS_DIR / f"{suite}-results.json"
 
 
 def _connect() -> psycopg.Connection:
@@ -239,17 +253,21 @@ def _context_leaks(contexts: dict[str, SavedContext], items: Sequence[EvalItem])
 
 
 @contextmanager
-def _clients(mode: str) -> Iterator[tuple[Answerer, Judge, ProxyState, SavedFirstIndex | None]]:
+def _clients(
+    mode: str, suite: str = SUITE, judge_suite: str | None = None
+) -> Iterator[tuple[Answerer, Judge, ProxyState, SavedFirstIndex | None]]:
     """The assistant and the judge, both through the proxy. In record mode the model's follow-up
-    searches hit the live index and are kept; in replay they are served from REFINEMENTS."""
+    searches hit the live index and are kept; in replay they are served from REFINEMENTS.
+    `judge_suite` (row #32's judge repeat): the judge records through its own proxy and suite while
+    the answers go through `suite` in `mode`."""
     from northwind_mcp_rag.testing import CallerIndex
     from northwind_rag.embedding import CachedEmbedder
 
     config = proxy_config(
         mode,
-        SUITE,
+        suite,
         cassette_root=Path("cassettes"),
-        log_path=None if mode == "replay" else Path(f".llm-proxy-log/{SUITE}.jsonl"),
+        log_path=None if mode == "replay" else Path(f".llm-proxy-log/{suite}.jsonl"),
     )
     recorded = load_refinements(REFINEMENTS)
     leaked = _refinement_leaks(list(recorded.values()))
@@ -257,12 +275,26 @@ def _clients(mode: str) -> Iterator[tuple[Answerer, Judge, ProxyState, SavedFirs
         raise SystemExit(f"refusing to serve refinements: internal content in {leaked}")
     live = CallerIndex(_connect, CachedEmbedder(FastEmbedEmbedder())) if mode == "record" else None
     guard = _chunk_guard()
-    with RunningProxy(config) as running:
-        judge_client = anthropic_client(f"{running.url}/_t/{encode_test_id('eval-judge')}")
-        with assistant_answerer(
-            running.url, recorded, ASSISTANT_MODEL, encode_test_id, live, guard
-        ) as (answerer, index):
-            yield answerer, Judge(judge_client), running.proxy.state, index
+    with ExitStack() as stack:
+        running = stack.enter_context(RunningProxy(config))
+        judging = running
+        if judge_suite is not None:
+            judge_config = proxy_config(
+                "record",
+                judge_suite,
+                cassette_root=Path("cassettes"),
+                log_path=Path(f".llm-proxy-log/{judge_suite}.jsonl"),
+            )
+            judging = stack.enter_context(RunningProxy(judge_config))
+        judge_client = anthropic_client(f"{judging.url}/_t/{encode_test_id('eval-judge')}")
+        answerer, index = stack.enter_context(
+            assistant_answerer(running.url, recorded, ASSISTANT_MODEL, encode_test_id, live, guard)
+        )
+        state = running.proxy.state
+        if judging is not running:
+            # One report: the judge's refusals and scan failures count as the run's.
+            state = _merged_state(running.proxy.state, judging.proxy.state)
+        yield answerer, Judge(judge_client), state, index
 
 
 def _chunk_guard() -> Callable[[Sequence[ContextChunk]], bool]:
@@ -436,8 +468,22 @@ def cmd_snapshot(_: argparse.Namespace) -> int:
     return 0
 
 
-def _build_candidate(chosen_size: str, mode: str) -> int:
-    """Scores `chosen_size` items through the proxy in `mode` and writes a baseline candidate."""
+# Every list ProxyState keeps: a judge proxy's misses, scan failures and refusals count for the run.
+_STATE_LISTS = ("misses", "scan_failures", "stale", "calls", "fallback_attempts", "refusals")
+
+
+def _merged_state(answers: ProxyState, judge: ProxyState) -> ProxyState:
+    merged = ProxyState()
+    for name in _STATE_LISTS:
+        setattr(merged, name, [*getattr(answers, name), *getattr(judge, name)])
+    return merged
+
+
+def _build_candidate(
+    chosen_size: str, mode: str, suite: str = SUITE, judge_suite: str | None = None
+) -> int:
+    """Scores `chosen_size` items through the proxy in `mode` and writes a baseline candidate. A
+    side run (another `suite`, or a `judge_suite`) writes only its own results file (row #32)."""
     items = load_items(ITEMS)
     contexts = load_contexts(CONTEXTS)
     leaked = _context_leaks(contexts, items)
@@ -460,12 +506,18 @@ def _build_candidate(chosen_size: str, mode: str) -> int:
             new.extend(index.new)
         _progress(result)
 
-    with _clients(mode) as (answerer, judge, state, index):
+    side = judge_suite or (suite if suite != SUITE else None)
+    clients = (
+        _clients(mode) if side is None else _clients(mode, suite=suite, judge_suite=judge_suite)
+    )
+    with clients as (answerer, judge, state, index):
         results = run_answers(chosen, contexts, answerer, judge, progress)
     results = with_refusals(results, state.refusals)
     if state.scan_failures:
         print(f"not writing a candidate: scanner refused {state.scan_failures}", file=sys.stderr)
         return 1
+    if side is not None:
+        return _write_side_results(side, results, items, judge.id, proxy_stops(state))
     LAST_RUN.parent.mkdir(exist_ok=True)
     LAST_RUN.write_text(json.dumps([asdict(r) for r in results], indent=2), encoding="utf-8")
     if mode == "record":
@@ -514,6 +566,29 @@ def _build_candidate(chosen_size: str, mode: str) -> int:
     return 0
 
 
+def _write_side_results(
+    side: str,
+    results: Sequence[ItemResult],
+    items: Sequence[EvalItem],
+    judge_id: str,
+    stops: Sequence[str],
+) -> int:
+    """A variance run or the judge repeat: results for the spread and kind checks, nothing else."""
+    path = side_results(side)
+    path.parent.mkdir(exist_ok=True)
+    payload = {"suite": side, "judge_id": judge_id, "results": [asdict(r) for r in results]}
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    segments = {item.id: item.segment for item in items}
+    stops = [*_print_answer_report(results, segments), *stops]
+    answers = {r.item_id: r.scores for r in results if r.status == "ok"}
+    _print_summary(summary_of({}, answers, segments)["answers"])
+    failed = [r.item_id for r in results if r.status != "ok"]
+    for line in stops:
+        print(f"  {line}", file=sys.stderr)
+    print(f"{side}: {len(results)} items, {len(failed)} not ok {failed[:10]}; results in {path}")
+    return 1 if failed or stops else 0
+
+
 def cmd_run(args: argparse.Namespace) -> int:
     """SPENDS: records answers and verdicts for a slice and writes a baseline candidate."""
     if os.environ.get("LLM_MODE") != "record":
@@ -525,8 +600,17 @@ def cmd_run(args: argparse.Namespace) -> int:
     if args.slice != "all" and not (args.slice.isdigit() and int(args.slice) > 0):
         print("--slice must be a positive number or `all`", file=sys.stderr)
         return 2
+    if not RUN_SUITE.fullmatch(args.suite):
+        print(
+            f"--suite must be {SUITE}, one of {VARIANCE_SUITES} or {JUDGE_REPEAT_SUITE}",
+            file=sys.stderr,
+        )
+        return 2
     try:
-        return _build_candidate(args.slice, "record")
+        if args.suite == JUDGE_REPEAT_SUITE:
+            # The recorded answers replay; every judge request is sent again into its own suite.
+            return _build_candidate(args.slice, "replay", judge_suite=JUDGE_REPEAT_SUITE)
+        return _build_candidate(args.slice, "record", suite=args.suite)
     except RunnerUnavailableError as e:
         print(f"error: {e}", file=sys.stderr)
         return 2
@@ -764,7 +848,7 @@ def cmd_integrity(args: argparse.Namespace) -> int:
         return 1
     for entry in added:  # one JSON line each, so text inside an entry cannot pose as output
         print(f"  known failure added: {json.dumps(entry, sort_keys=True)}")
-    for entry in replaced:  # row #12: a re-recorded answerer replaced these refinements
+    for entry in replaced:  # a re-recorded answerer (#12) or context (12c) replaced these
         print(f"  refinement replaced: {json.dumps(entry, sort_keys=True)}")
     for problem in problems:
         print(f"  {problem}", file=sys.stderr)
@@ -878,6 +962,7 @@ def main(argv: list[str] | None = None) -> int:
     commands.add_parser("snapshot").set_defaults(func=cmd_snapshot)
     run = commands.add_parser("run")
     run.add_argument("--slice", required=True, help="a number of items, or `all`")
+    run.add_argument("--suite", default=SUITE, help=f"{SUITE}, or a variance suite (row #32)")
     run.set_defaults(func=cmd_run)
     commands.add_parser("rescore").set_defaults(func=cmd_rescore)
     gate = commands.add_parser("gate")

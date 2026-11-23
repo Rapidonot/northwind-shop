@@ -9,8 +9,11 @@ Judge calibration against human labels is Window B, so these scores are uncalibr
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+import re
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
+from functools import lru_cache
+from pathlib import Path
 from typing import Any
 
 from northwind_common.llm import JUDGE_MODEL
@@ -19,7 +22,9 @@ from northwind_evals.contexts import ContextChunk
 from northwind_evals.items import EvalItem
 from northwind_evals.metrics import fixed
 
-JUDGE_VERSION = 5
+# v6 (row #32): M1's tie-break with the user's A-narrow exemption, after parsing; the request is
+# v5's, byte for byte (`test_the_judges_request_bytes_are_pinned`), so v5's cassettes replay.
+JUDGE_VERSION = 6
 JUDGE_MAX_TOKENS = 512
 RELEVANCE_SCORES = {"full": 1.0, "partial": 0.5, "none": 0.0}
 # v5 (row #13b, the user's (A)): each claim's kind. Only an unsupported product claim is a
@@ -96,6 +101,85 @@ class JudgeError(RuntimeError):
     """The judge's reply could not be used."""
 
 
+FIXTURES = Path("data/fixtures")
+_PRODUCT_ID = re.compile(r"\bP\d{4}(?:-[A-Z0-9]+)*\b", re.IGNORECASE)  # L6: any case
+_REGIONS = r"(?:US|UK|CA|EU|American|British|Canadian|European)"
+# The user's A-narrow frame (2026-11-17), anchored on the whole claim; the name is checked apart.
+_LOOKUP_OFFER = re.compile(
+    r"(?:I|we|the assistant|this assistant) (?:can|will) (?:look up|check) the "
+    rf"(?:live )?(?:{_REGIONS} )?(?:price|stock|availability) (?:of|for) (?:the )?(?P<name>.+?)\.?",
+    re.IGNORECASE,
+)
+
+
+def _name_pattern(name: str) -> re.Pattern[str]:
+    words = r"\s+".join(re.escape(word) for word in name.split())
+    return re.compile(rf"(?<![A-Za-z0-9]){words}(?![A-Za-z0-9])", re.IGNORECASE)
+
+
+@dataclass(frozen=True)
+class ProductCatalog:
+    """Catalog product names, for M1 (row #32): each full name, and each name without its brand
+    when at least two words remain, lower-cased."""
+
+    names: frozenset[str]
+
+    @classmethod
+    def from_names(cls, brand_and_name: Iterable[tuple[str, str]]) -> ProductCatalog:
+        names: set[str] = set()
+        for brand, name in brand_and_name:
+            full = " ".join(name.lower().split())
+            names.add(full)
+            prefix = " ".join(brand.lower().split()) + " "
+            rest = full[len(prefix) :] if full.startswith(prefix) else ""
+            if len(rest.split()) >= 2:
+                names.add(rest)
+        if not names:
+            raise JudgeError("the product catalog holds no names")
+        return cls(frozenset(names))
+
+    @classmethod
+    def load(cls, fixtures: Path = FIXTURES) -> ProductCatalog:
+        """Fail closed: a catalog that cannot be read is an error, never an empty list."""
+        try:
+            lines = (fixtures / "products.jsonl").read_text(encoding="utf-8").splitlines()
+            records = [json.loads(line) for line in lines if line.strip()]
+            pairs = [(str(r["brand"]), str(r["name"])) for r in records]
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            raise JudgeError(f"cannot read the product catalog: {error!r}") from None
+        return cls.from_names(pairs)
+
+    @property
+    def _patterns(self) -> tuple[re.Pattern[str], ...]:
+        return _catalog_patterns(self.names)
+
+    def is_name(self, text: str) -> bool:
+        return " ".join(text.lower().split()) in self.names
+
+    def names_product(self, claim: str) -> bool:
+        return bool(_PRODUCT_ID.search(claim)) or any(p.search(claim) for p in self._patterns)
+
+    def capability_only(self, claim: str) -> bool:
+        """The A-narrow exemption: the whole claim is an offer to look up a live price, stock or
+        availability of one catalog product, and nothing else."""
+        found = _LOOKUP_OFFER.fullmatch(claim.strip())
+        return found is not None and self.is_name(found.group("name"))
+
+    def product_kind(self, claim: str) -> bool:
+        """M1: an unsupported claim of another kind that this counts as product."""
+        return self.names_product(claim) and not self.capability_only(claim)
+
+
+@lru_cache(maxsize=8)
+def _catalog_patterns(names: frozenset[str]) -> tuple[re.Pattern[str], ...]:
+    return tuple(_name_pattern(name) for name in sorted(names))
+
+
+@lru_cache(maxsize=1)
+def default_catalog() -> ProductCatalog:
+    return ProductCatalog.load()
+
+
 @dataclass(frozen=True)
 class Verdict:
     claims_total: int
@@ -111,6 +195,9 @@ class Verdict:
     # Claims that need a citation: product and policy, and any missing or unknown kind (the user's
     # (a), row #13b). None, from a verdict built without kinds, means every claim: fail closed.
     citable: int | None = None
+    # Claims of kind product after M1, supported or not; a missing or unknown kind counts. F7 caps
+    # the live discount with it. None (a verdict built without kinds): no discount, fail closed.
+    product_claims: int | None = None
 
     @property
     def fabricated_ok(self) -> bool:
@@ -129,7 +216,9 @@ class Verdict:
         return RELEVANCE_SCORES[self.relevance]
 
 
-def parse_verdict(text: str) -> Verdict:
+def parse_verdict(text: str, catalog: ProductCatalog | None = None) -> Verdict:
+    """`catalog` defaults to the fixtures' (fail closed: an unreadable one raises)."""
+    catalog = catalog or default_catalog()
     try:
         data = json.loads(text)
         claims = data["claims"]
@@ -146,15 +235,19 @@ def parse_verdict(text: str) -> Verdict:
     if not isinstance(declined, bool) or not isinstance(behaviour_ok, bool):
         raise JudgeError("verdict has a non-boolean declined or behaviour_ok")
     unsupported: list[tuple[str, str]] = []
+    final: list[str] = []
     for claim in claims:
-        if claim.get("supported") is True:
-            continue
         kind = claim.get("kind")
-        unsupported.append(
-            (kind if kind in CLAIM_KINDS else "product", str(claim.get("claim", "")))
-        )
+        kind = kind if kind in CLAIM_KINDS else "product"
+        text_of = str(claim.get("claim", ""))
+        if claim.get("supported") is not True:
+            # M1 (row #32): naming a product makes it a product claim, unless A-narrow exempts it.
+            if kind != "product" and catalog.product_kind(text_of):
+                kind = "product"
+            unsupported.append((kind, text_of))
+        final.append(kind)
     product = sum(kind == "product" for kind, _ in unsupported)
-    citable = sum(claim.get("kind") not in ("site", "other") for claim in claims)
+    citable = sum(kind not in ("site", "other") for kind in final)
     return Verdict(
         len(claims),
         supported,
@@ -164,14 +257,20 @@ def parse_verdict(text: str) -> Verdict:
         product,
         tuple(unsupported),
         citable,
+        sum(kind == "product" for kind in final),
     )
 
 
 class Judge:
     def __init__(
-        self, client: Any, model: str = JUDGE_MODEL, max_tokens: int = JUDGE_MAX_TOKENS
+        self,
+        client: Any,
+        model: str = JUDGE_MODEL,
+        max_tokens: int = JUDGE_MAX_TOKENS,
+        catalog: ProductCatalog | None = None,
     ) -> None:
         self._client = client
+        self.catalog = catalog or default_catalog()  # loaded now: a bad catalog fails at start
         self._model = model
         self._max_tokens = max_tokens
 
@@ -197,6 +296,6 @@ class Judge:
             messages=[{"role": "user", "content": content}],
         )
         try:
-            return parse_verdict(response_text(response))
+            return parse_verdict(response_text(response), self.catalog)
         except AnswerError as error:
             raise JudgeError(str(error)) from None
