@@ -1,0 +1,294 @@
+# DEV-1 timing and node-ID evidence. Replay only, $0 (ledger total $19.657308 before and after the baseline).
+# Machine: 10 CPUs. Window A idle by the user's word, 2026-11-23. Scripts: run-stages.sh, probe.mk, compare.py (scratch, quoted in the PR body).
+
+## BEFORE (serial, head dd53b85)
+### read-only index check: SELECT index_version, count(*) FROM rag_chunks GROUP BY 1
+[('389cae01996a2dd6', 1), ('c9e30984a7723d23', 432), ('3a89123f2aaf586f', 3), ('18fe7254c8b3b262', 1919)]  -> 2,355 chunks; newest 3a89123f2aaf586f (#32 inserted 3, left 2,352)
+
+### make ci stages, in ci's order (test-integration via probe: same command plus --durations=30 --junitxml)
+head dd53b8581957145ae1fc57a080a5ee45279841b1 start 2026-11-23T06:36:26Z
+lint	4s	rc=0
+scan-cassettes	12s	rc=0
+test	2467s	rc=0
+test-integration	940s	rc=0
+eval-integrity	2s	rc=0
+eval-gate	204s	rc=0
+unit-ci-form	3267s	rc=0
+collect-ci-form	3s	rc=0
+end 2026-11-23T08:31:25Z
+
+### summaries
+make test   : 6263 passed, 9 skipped, 1005 deselected, 22 xfailed in 2463.94s (0:41:03)   (ship tests skipped by SHIP_FILTER); vitest 55 passed
+integration : 297 passed, 1 skipped, 7001 deselected in 938.45s (0:15:38)
+unit CI form: 6917 passed, 9 skipped, 351 deselected, 22 xfailed in 3265.89s (0:54:25)   (uv run pytest, ship tests included, as GitHub runs it)
+collect-only: 6948/7299 tests collected (351 deselected) in 2.06s
+make test printed 36 lines 'ERROR: failed to copy trust settings of system certificate-25291' from a subprocess; no test failed.
+
+### node-ID baseline (compare.py, junit classname::name; set size equals the collected count, so no name collapses)
+/private/tmp/claude-502/-Users-rapido-Projects-northwind-shop-b/43ede977-c86a-4a69-a062-300b5bee3ee6/scratchpad/dev1/before/unit.xml: collected 6948: passed 6917, skipped 9, xfailed 22, failed 0, error 0
+/private/tmp/claude-502/-Users-rapido-Projects-northwind-shop-b/43ede977-c86a-4a69-a062-300b5bee3ee6/scratchpad/dev1/before/integration.xml: collected 298: passed 297, skipped 1, xfailed 0, failed 0, error 0
+
+### unit: slowest 40 (CI form)
+10.89s call     services/backend/tests/backend_audit/test_be08_reconstruct.py::test_all_1000_orders_rebuild_from_reloaded_events_alone
+9.72s call     tests/ship/test_guard.py::test_a_head_with_two_merge_bases_fails
+8.99s call     services/assistant/tests/test_tool_loop.py::test_upstream_failures_become_fixed_codes[401-nope PLANTED-MARKER-7f3a-model_unavailable]
+8.15s call     services/backend/tests/orders_place/test_chk05_idempotent_placement.py::test_ten_scripted_agent_runs_yield_one_order
+8.11s call     tests/ship/test_guard.py::test_integrity_passes_members_holding_only_their_own_package
+7.96s call     tests/ship/test_guard.py::test_integrity_refuses_a_member_holding_anything_else[data/src/sitecustomize.py]
+7.90s call     tests/ship/test_guard.py::test_a_clean_pr_passes_integrity
+7.90s call     tests/ship/test_guard.py::test_integrity_refuses_a_member_holding_anything_else[evals/src/sitecustomize.py]
+7.87s call     tests/ship/test_guard.py::test_integrity_refuses_a_missing_root_config
+7.86s call     tests/ship/test_guard.py::test_integrity_refuses_a_member_config_that_moves_the_load_path[a git source]
+7.85s call     tests/ship/test_guard.py::test_integrity_refuses_a_root_config_that_moves_the_load_path[a path source]
+7.84s call     tests/ship/test_guard.py::test_integrity_refuses_a_member_holding_anything_else[services/gateway/src/northwind_evals/cli.py]
+7.83s call     tests/ship/test_guard.py::test_an_added_known_failure_is_printed
+7.83s call     tests/ship/test_guard.py::test_integrity_refuses_a_member_holding_anything_else[services/assistant/src/usercustomize.py]
+7.83s call     tests/ship/test_guard.py::test_a_plain_pycache_folder_is_not_a_member
+7.83s call     tests/ship/test_guard.py::test_integrity_refuses_a_root_config_that_moves_the_load_path[a package root]
+7.83s call     tests/ship/test_guard.py::test_an_edited_cassette_fails_integrity
+7.83s call     tests/ship/test_guard.py::test_a_badly_named_folder_with_a_valid_project_is_refused[Odd_Name]
+7.82s call     tests/ship/test_guard.py::test_integrity_refuses_a_member_config_that_moves_the_load_path[another backend]
+7.82s call     tests/ship/test_guard.py::test_nothing_in_the_pr_can_load_into_integrity
+7.82s call     tests/ship/test_guard.py::test_a_path_source_to_a_real_member_shape_passes[data]
+7.82s call     tests/ship/test_guard.py::test_integrity_refuses_a_member_config_that_moves_the_load_path[a member shape with nothing there]
+7.81s call     tests/ship/test_guard.py::test_integrity_refuses_a_member_holding_anything_else[services/assistant/src/northwind_common/__init__.py]
+7.81s call     tests/ship/test_guard.py::test_a_badly_named_folder_with_a_valid_project_is_refused[dotted.name]
+7.81s call     tests/ship/test_guard.py::test_a_badly_named_folder_with_a_valid_project_is_refused[.hidden]
+7.81s call     tests/ship/test_guard.py::test_integrity_refuses_a_member_holding_anything_else[services/assistant/src/sitecustomize.py]
+7.81s call     tests/ship/test_guard.py::test_the_measured_module_root_move_is_refused
+7.81s call     tests/ship/test_guard.py::test_the_measured_dot_member_is_refused
+7.81s call     tests/ship/test_guard.py::test_the_measured_pycache_member_is_refused
+7.80s call     tests/ship/test_guard.py::test_a_folder_in_services_that_is_not_a_member_is_refused[odd]
+7.80s call     tests/ship/test_guard.py::test_integrity_refuses_a_root_config_that_moves_the_load_path[no package line]
+7.80s call     tests/ship/test_guard.py::test_integrity_refuses_a_root_config_that_moves_the_load_path[a member elsewhere]
+7.80s call     tests/ship/test_guard.py::test_integrity_refuses_a_member_config_that_moves_the_load_path[not toml]
+7.80s call     tests/ship/test_guard.py::test_a_folder_in_services_that_is_not_a_member_is_refused[no toml]
+7.80s call     tests/ship/test_guard.py::test_integrity_refuses_a_member_config_that_moves_the_load_path[a replaced uv_build]
+7.79s call     tests/ship/test_guard.py::test_a_path_source_to_a_real_member_shape_passes[a sibling service]
+7.79s call     tests/ship/test_guard.py::test_the_measured_in_tree_wheel_is_refused
+7.79s call     tests/ship/test_guard.py::test_integrity_refuses_a_member_config_that_moves_the_load_path[a nested workspace]
+7.79s call     tests/ship/test_guard.py::test_integrity_refuses_a_member_config_that_moves_the_load_path[a local backend]
+7.79s call     tests/ship/test_guard.py::test_integrity_refuses_a_member_config_that_moves_the_load_path[module root]
+
+### integration: slowest 30
+237.41s call     services/backend/tests/orders_place/test_be05_replay_recorded.py::test_backend_replay
+17.61s call     evals/tests/test_rag03_compare.py::test_hybrid_beats_dense_and_keyword_on_recall_at_5
+17.45s call     services/rag/tests/test_drift_extra.py::test_a_shopper_never_sees_an_internal_or_foreign_region_chunk[CA-True]
+17.30s call     services/rag/tests/test_drift_extra.py::test_a_shopper_never_sees_an_internal_or_foreign_region_chunk[US-True]
+16.39s call     services/rag/tests/test_drift_extra.py::test_a_shopper_never_sees_an_internal_or_foreign_region_chunk[EU-True]
+16.30s call     services/rag/tests/test_drift_extra.py::test_a_shopper_never_sees_an_internal_or_foreign_region_chunk[UK-True]
+14.17s call     evals/tests/test_rag03_drift.py::test_embed_cache_writes_the_index_vectors_the_model_vouches_for
+12.49s call     evals/tests/test_rag03_drift.py::test_the_eval_retrieval_over_every_item_gives_the_macos_hash
+12.44s call     evals/tests/test_drift_extra.py::test_live_never_asks_the_model_for_a_frozen_query
+11.21s call     services/rag/tests/test_rag11_access.py::test_every_chunk_is_in_the_callers_region_or_all[EU]
+10.75s call     services/backend/tests/orders_place/test_be05_replay_recorded.py::test_ten_replays_yield_one_order
+10.43s call     services/rag/tests/test_rag11_access.py::test_every_chunk_is_in_the_callers_region_or_all[US]
+10.37s call     services/rag/tests/test_rag11_access.py::test_every_chunk_is_in_the_callers_region_or_all[UK]
+10.20s call     services/rag/tests/test_rag11_access.py::test_every_chunk_is_in_the_callers_region_or_all[CA]
+10.09s call     services/rag/tests/test_rag11_access.py::test_no_red_team_query_returns_an_internal_chunk_on_any_arm[UK]
+10.08s call     services/rag/tests/test_rag11_access.py::test_no_red_team_query_returns_an_internal_chunk_on_any_arm[EU]
+10.07s call     services/rag/tests/test_rag11_access.py::test_no_red_team_query_returns_an_internal_chunk_on_any_arm[US]
+10.04s call     services/rag/tests/test_rag11_access.py::test_no_red_team_query_returns_an_internal_chunk_on_any_arm[CA]
+7.58s call     services/assistant/tests/test_context.py::test_no_canary_reaches_the_model
+7.13s call     services/rag/tests/test_exact_rerank.py::test_the_fallback_keeps_the_shopper_filter[CA]
+7.13s call     services/rag/tests/test_exact_rerank.py::test_the_fallback_keeps_the_shopper_filter[US]
+6.76s call     services/rag/tests/test_exact_rerank.py::test_the_fallback_keeps_the_shopper_filter[UK]
+6.62s call     services/rag/tests/test_exact_rerank.py::test_the_fallback_keeps_the_shopper_filter[EU]
+5.42s call     services/backend/tests/orders_place/test_be05_replay_rule_driven.py::test_the_replay_checks_pass_when_the_steps_are_followed
+5.33s call     services/rag/tests/test_hybrid.py::test_keyword_search_never_returns_an_internal_chunk_to_a_shopper
+5.05s call     services/rag/tests/test_drift_extra.py::test_a_planted_internal_or_foreign_chunk_that_matches_perfectly_is_never_returned[True]
+5.04s call     services/rag/tests/test_rag11_access.py::test_a_red_team_region_claim_cannot_reach_the_filter
+4.86s call     services/rag/tests/test_rag11_access.py::test_quoting_internal_text_finds_nothing_internal[UK]
+4.85s call     services/rag/tests/test_rag11_access.py::test_quoting_internal_text_finds_nothing_internal[US]
+4.83s call     services/rag/tests/test_rag11_access.py::test_quoting_internal_text_finds_nothing_internal[CA]
+
+### junit time per file, top 14 (setup + call + teardown)
+unit.xml sum 3243s over 6948 tests; tests/ship 1938s
+     1100s   151  tests.ship.test_guard
+      580s   374  tests.ship.test_ship
+      553s   198  evals.tests.test_rag12_followup
+      165s   143  tests.ship.test_finish
+       89s   119  tests.ship.test_pre_push
+       64s   206  services.llm-replay.tests.test_runner_support
+       62s   188  services.llm-replay.tests.test_runner
+       53s    30  services.llm-replay.tests.test_makefile_targets
+       41s    33  services.assistant.tests.test_tool_loop
+       24s    30  services.backend.tests.orders_place.test_be05_place_scripted
+       24s    13  services.llm-replay.tests.test_makefile_enrich
+       21s    30  evals.tests.test_wiring
+       20s    19  services.assistant.tests.test_rag08_stream
+       20s    11  tests.hooks.test_make_check
+integration.xml sum 935s over 298 tests; tests/ship 0s
+      249s     2  services.backend.tests.orders_place.test_be05_replay_recorded
+      150s    33  services.rag.tests.test_drift_extra
+      137s    19  services.rag.tests.test_rag11_access
+       51s    58  services.assistant.tests.test_rag11_model_context
+       51s    10  services.rag.tests.test_exact_rerank
+       33s    15  services.rag.tests.test_hybrid_filters
+       33s     5  evals.tests.test_rag03_drift
+       31s    23  services.rag.tests.test_retrieve_context
+       27s    15  services.rag.tests.test_hybrid
+       27s     5  services.assistant.tests.test_context
+       23s     7  evals.tests.test_drift_extra
+       22s     9  services.rag.tests.test_retrieve_context_isolation
+       20s     9  services.rag.tests.test_frozen_vectors
+       19s     1  evals.tests.test_rag03_compare
+
+## GITHUB, before (gh run view, read 2026-11-23; job wall = completedAt - startedAt)
+run 45105451980 CI pull_request e2da795
+  portal	21s
+  python	1846s
+      Initialize containers	10s
+      Run actions/checkout@v5	3s
+      Run astral-sh/setup-uv@v7	2s
+      Run uv sync --locked	4s
+      Run uv run mypy services data evals	13s
+      Secret/PAN scan of cassettes (FOUND-2)	8s
+      Run uv run pytest	852s
+      Integration tests	949s
+  eval-gate	194s
+  e2e	133s
+      Initialize containers	8s
+      Run actions/checkout@v5	3s
+      Run astral-sh/setup-uv@v7	2s
+      Run uv sync --locked	3s
+      Run pnpm/action-setup@v6	4s
+      Run actions/setup-node@v5	2s
+      Install the browser	17s
+      Playwright smoke test on a canned model	15s
+      Smoke test replayed from the assistant-smoke cassette	73s
+run 45105445701 CI push e2da795
+  python	2124s
+      Initialize containers	8s
+      Run actions/checkout@v5	2s
+      Run astral-sh/setup-uv@v7	2s
+      Run uv sync --locked	4s
+      Run uv run mypy services data evals	18s
+      Secret/PAN scan of cassettes (FOUND-2)	10s
+      Run uv run pytest	903s
+      Integration tests	1172s
+  eval-gate	196s
+  portal	20s
+  e2e	135s
+      Set up job	2s
+      Initialize containers	7s
+      Run actions/checkout@v5	3s
+      Run astral-sh/setup-uv@v7	2s
+      Run uv sync --locked	4s
+      Run pnpm/action-setup@v6	8s
+      Run pnpm install --frozen-lockfile	2s
+      Install the browser	15s
+      Playwright smoke test on a canned model	15s
+      Smoke test replayed from the assistant-smoke cassette	72s
+run 45014524920 CI push ee49c22
+  eval-gate	76s
+  python	2102s
+      Initialize containers	8s
+      Run actions/checkout@v5	3s
+      Run astral-sh/setup-uv@v7	2s
+      Run uv sync --locked	4s
+      Cache the embedding model (RAG-01 integration test)	2s
+      Run uv run mypy services data evals	18s
+      Secret/PAN scan of cassettes (FOUND-2)	9s
+      Run uv run pytest	900s
+      Integration tests	1150s
+  portal	31s
+  e2e	128s
+      Set up job	2s
+      Initialize containers	11s
+      Run actions/checkout@v5	2s
+      Run astral-sh/setup-uv@v7	2s
+      Run uv sync --locked	3s
+      Run pnpm/action-setup@v6	4s
+      Run actions/setup-node@v5	3s
+      Install the browser	15s
+      Playwright smoke test on a canned model	12s
+      Smoke test replayed from the assistant-smoke cassette	66s
+run 44430108082 CI push cce3b22
+  python	1751s
+      Initialize containers	9s
+      Run actions/checkout@v5	3s
+      Run uv sync --locked	4s
+      Run uv run mypy services data evals	13s
+      Secret/PAN scan of cassettes (FOUND-2)	7s
+      Run uv run pytest	824s
+      Integration tests	882s
+  e2e	134s
+      Set up job	2s
+      Initialize containers	9s
+      Run actions/checkout@v5	3s
+      Run astral-sh/setup-uv@v7	2s
+      Run uv sync --locked	3s
+      Run pnpm/action-setup@v6	4s
+      Run actions/setup-node@v5	2s
+      Run pnpm install --frozen-lockfile	2s
+      Cache the embedding model	2s
+      Install the browser	18s
+      Playwright smoke test on a canned model	12s
+      Smoke test replayed from the assistant-smoke cassette	69s
+  portal	24s
+  eval-gate	84s
+run 44039967127 CI push 5539421
+  e2e	144s
+      Set up job	2s
+      Initialize containers	8s
+      Run actions/checkout@v5	6s
+      Run astral-sh/setup-uv@v7	2s
+      Run uv sync --locked	2s
+      Run pnpm/action-setup@v6	8s
+      Run actions/setup-node@v5	5s
+      Run pnpm install --frozen-lockfile	2s
+      Install the browser	31s
+      Playwright smoke test on a canned model	14s
+      Smoke test replayed from the assistant-smoke cassette	59s
+  eval-gate	72s
+  python	2074s
+      Initialize containers	8s
+      Run actions/checkout@v5	2s
+      Run astral-sh/setup-uv@v7	2s
+      Run uv sync --locked	2s
+      Run uv run mypy services data evals	17s
+      Secret/PAN scan of cassettes (FOUND-2)	10s
+      Run uv run pytest	894s
+      Integration tests	1132s
+  portal	25s
+run 45105635815 Guard pull_request e2da795
+  eval-integrity-main	6s
+  baseline-label	8s
+  eval-gate-main	150s
+      Set up job	3s
+      Initialize containers	10s
+      Run actions/checkout@v5	4s
+      Run astral-sh/setup-uv@v7	2s
+      Run uv sync --locked	4s
+      Cache the embedding model	3s
+      Build the index	2s
+      Eval gate from main's code	116s
+run 45014090832 Guard pull_request cce3b22
+  baseline-label	10s
+  eval-gate-main	65s
+      Set up job	2s
+      Initialize containers	9s
+      Run actions/checkout@v5	4s
+      Run uv sync --locked	2s
+      Build the index	2s
+      Eval gate from main's code	40s
+  eval-integrity-main	9s
+run 44430119408 Guard pull_request cce3b22
+  baseline-label	9s
+  eval-integrity-main	8s
+  eval-gate-main	86s
+      Initialize containers	7s
+      Run actions/checkout@v5	3s
+      Run astral-sh/setup-uv@v7	2s
+      Run uv sync --locked	8s
+      Build the index	3s
+      Eval gate from main's code	56s
+
+## BEFORE: junit totals of the tests/ship files (for the make test / CI-form reconciliation)
+    165.3s  143  tests.ship.test_finish
+   1099.7s  151  tests.ship.test_guard
+     88.8s  119  tests.ship.test_pre_push
+      4.1s   18  tests.ship.test_refused_paths
+    579.9s  374  tests.ship.test_ship
+  ship-marked (all but test_guard): 838.0s over 654 tests; 1,005 - 351 deselected = 654

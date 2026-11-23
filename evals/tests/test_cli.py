@@ -23,12 +23,14 @@ from northwind_evals.answerers import Answerer
 from northwind_evals.contexts import ContextChunk, SavedContext, load_contexts, save_contexts
 from northwind_evals.gate import Baseline, compare, load_baseline, save_baseline, summary_of
 from northwind_evals.items import MIN_HUMAN_REVIEWED, EvalItem, load_items
-from northwind_evals.judge import JUDGE_VERSION, Judge
+from northwind_evals.judge import JUDGE_VERSION, Judge, ProductCatalog
 from northwind_evals.testing import MessagesAnswerer
 from northwind_llm_replay.proxy import ProxyState
 from northwind_llm_replay.scripted import ScriptedLLM
 from northwind_rag.retrieval import RetrievedChunk, retriever_id
 from northwind_rag.testing import FakeEmbedder
+
+REPO = Path(__file__).resolve().parents[2]
 
 _spec = importlib.util.spec_from_file_location(
     "promote_rig", Path(__file__).with_name("promote_rig.py")
@@ -163,6 +165,11 @@ class Rig:
 @pytest.fixture
 def rig(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Rig:
     monkeypatch.delenv(cli.ALLOW_STALE_ENV, raising=False)
+    # The judge's catalog path is relative, and the tests that run the real gate chdir into an empty
+    # tree. A serial run only passed because an earlier test had already filled `default_catalog`'s
+    # cache from the checkout (DEV-1, found under xdist). Load it from the checkout on purpose.
+    catalog = ProductCatalog.load(REPO / "data" / "fixtures")
+    monkeypatch.setattr("northwind_evals.judge.default_catalog", lambda: catalog)
     return Rig(tmp_path, monkeypatch)
 
 

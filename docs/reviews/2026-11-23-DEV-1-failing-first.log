@@ -1,0 +1,28 @@
+# DEV-1 failing-first, 2026-11-23. Script: main's copy of Makefile, ci.yml, guard.yml, pyproject.toml and tools/ship.sh
+# put in place (git show origin/main:<path>), the DEV-1 tests run, the files restored (verified with cmp).
+
+## against origin/main's files
+FAILED tests/hooks/test_ci_workflow.py::test_ci_runs_on_pull_request_and_pushes_to_main_only
+FAILED tests/hooks/test_ci_workflow.py::test_every_job_has_the_planned_timeout[ci.yml]
+FAILED tests/hooks/test_ci_workflow.py::test_every_job_has_the_planned_timeout[guard.yml]
+FAILED tests/hooks/test_ci_workflow.py::test_no_job_lacks_a_timeout[ci.yml] - ...
+FAILED tests/hooks/test_ci_workflow.py::test_no_job_lacks_a_timeout[guard.yml]
+FAILED tests/hooks/test_ci_workflow.py::test_concurrency_cancels_only_superseded_synchronize_runs[ci.yml]
+FAILED tests/hooks/test_ci_workflow.py::test_concurrency_cancels_only_superseded_synchronize_runs[guard.yml]
+FAILED tests/hooks/test_ci_workflow.py::test_pytest_par_is_defined_once - Asse...
+FAILED tests/hooks/test_ci_workflow.py::test_only_test_and_check_recipes_use_the_parallel_flags
+FAILED tests/hooks/test_ci_workflow.py::test_make_test_runs_pytest_in_parallel
+FAILED tests/hooks/test_ci_workflow.py::test_xdist_is_a_dev_dependency - asser...
+FAILED tests/hooks/test_ship_marker.py::test_ci_keeps_a_bare_pytest_step - As...
+FAILED tests/hooks/test_make_check.py::test_python_paths_run_as_one_replay_pytest_call
+FAILED tests/hooks/test_make_check.py::test_python_and_portal_paths_run_both
+FAILED tests/hooks/test_make_check.py::test_the_plan_all_runs_the_whole_suite_through_make_test
+FAILED evals/tests/test_wiring.py::test_ci_integration_step_runs_after_a_unit_failure
+FAILED tests/ship/test_ship.py::test_required_jobs_are_the_jobs_in_the_workflows
+17 failed, 11 passed in 25.05s
+
+## against the row's files
+28 passed in 25.45s
+
+# Note: the file was written as tests/ship/test_ci_workflow.py and moved to tests/hooks/ afterwards, unchanged, because
+# test_ship_marker pins test_guard.py as the only unmarked file in tests/ship. The paths above use the new location.

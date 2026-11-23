@@ -14,11 +14,20 @@ on:
 permissions:
   contents: read
 
+# DEV-1 (decision 0020), the key from #12's plan: only `synchronize` runs share a group, so a new push
+# cancels the run on the old SHA, which `ship` never reads. Label, unlabel, edit, open and reopen runs
+# each get their own group and are never cancelled. A plain workflow + ref group would let one run cancel another
+# on the same head, and `ship` refuses `cancel`.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event.action == 'synchronize' && 'push' || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   # Fails a PR that changes the baseline, known_failures.json or the item set without the
   # baseline-change label.
   baseline-label:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v5
         with:
@@ -35,6 +44,7 @@ jobs:
   # installed here, so no PR code or build config runs: integrity needs only the stdlib.
   eval-integrity-main:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v5
         with:
@@ -47,6 +57,7 @@ jobs:
   # Red means main's gate does not pass this PR. `CI / eval-gate` runs the PR's own copy beside it.
   eval-gate-main:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     services:
       db:
         image: pgvector/pgvector:pg16

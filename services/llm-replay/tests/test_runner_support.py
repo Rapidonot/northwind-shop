@@ -686,6 +686,9 @@ def test_record_with_no_window_stops_with_the_command_to_open_one(
     pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.delenv("CI", raising=False)
+    # Under xdist the child inherits the worker's marker, and the plugin then refuses the run before
+    # it reaches the window check this test is about (DEV-1). The refusal has its own test, below.
+    monkeypatch.delenv("PYTEST_XDIST_WORKER", raising=False)
     monkeypatch.setenv("LLM_MODE", "record")
     monkeypatch.setenv("LLM_RUNNER_PORT", "1")
     pytester.makepyfile(PLUGIN_TEST)
@@ -704,6 +707,25 @@ def test_a_spending_run_refuses_xdist_workers(
     result = pytester.runpytest_subprocess()
     assert result.ret == pytest.ExitCode.USAGE_ERROR
     result.stderr.fnmatch_lines(["*one claimed process*"])
+
+
+@pytest.mark.req("DEV-1")
+def test_a_spending_run_with_real_xdist_workers_refuses_before_any_claim(
+    pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """DEV-1, security review L1: the test above fakes the worker marker. This one starts real
+    workers, so a later xdist that set the marker after configure (or renamed it) turns it red."""
+    monkeypatch.delenv("CI", raising=False)
+    monkeypatch.delenv("PYTEST_XDIST_WORKER", raising=False)
+    monkeypatch.setenv("LLM_MODE", "record")
+    monkeypatch.setenv("LLM_RUNNER_PORT", "1")  # a claim attempt would fail with the window hint
+    pytester.makepyfile(PLUGIN_TEST)
+    result = pytester.runpytest_subprocess("-n", "2")
+    assert result.ret != pytest.ExitCode.OK
+    output = result.stdout.str() + result.stderr.str()
+    assert "a window is one claimed process: record without xdist workers" in output
+    assert "llm-runner SUITE=demo" not in output  # no worker reached the claim
+    assert result.parseoutcomes().get("passed", 0) == 0
 
 
 def test_replay_runs_under_xdist_workers(
