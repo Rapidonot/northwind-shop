@@ -252,9 +252,14 @@ record: ## Re-record one LLM cassette suite (SUITE=name; spends API credit)
 # or above the item count is a full run), so a bare `make eval-live` cannot start a full run.
 # Unchanged requests replay for free (RAG-12, decision 0001). EVAL_SLICE is checked before use, so
 # 'x; cmd' cannot reach a shell (CC-27).
-eval-live: ## Run answer evals live and record them (EVAL_SLICE=<n>; spends API credit)
+# EVAL_SUITE (row #32), through a window opened for that suite: eval-answers-r2 or -r3 records a
+# variance run into its own suite; eval-judge-repeat replays the recorded answers and sends every
+# judge request again into its own suite. Each writes only .llm-proxy-log/<suite>-results.json,
+# never the refinements, the candidate or the last run. Unset, the command is unchanged.
+eval-live: ## Run answer evals live and record them (EVAL_SLICE=<n> [EVAL_SUITE=...]; spends API credit)
 	@[[ "$$EVAL_SLICE" =~ ^[0-9]+$$ ]] || (echo "usage: make eval-live EVAL_SLICE=<n>" && exit 2)
-	LLM_MODE=record uv run python -m northwind_evals.cli run --slice "$$EVAL_SLICE"
+	@[[ -z "$$EVAL_SUITE" || "$$EVAL_SUITE" =~ ^(eval-answers(-r[23])?|eval-judge-repeat)$$ ]] || (echo "EVAL_SUITE is eval-answers-r2, eval-answers-r3 or eval-judge-repeat" && exit 2)
+	LLM_MODE=record uv run python -m northwind_evals.cli run --slice "$$EVAL_SLICE"$${EVAL_SUITE:+ --suite "$$EVAL_SUITE"}
 
 # SPENDS API CREDIT, through the window you opened with `llm-runner SUITE=rag-enrichment`. Fills
 # data/enrichment; chunks with an entry make no call, so a second run spends nothing (RAG-02,

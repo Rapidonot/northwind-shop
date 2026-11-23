@@ -51,9 +51,9 @@ def test_every_known_failure_names_an_open_progress_row() -> None:
 
 
 @pytest.mark.req("RAG-12")
-def test_about_100_items_cover_every_segment() -> None:
+def test_about_300_items_cover_every_segment() -> None:
     counts = Counter(item.segment for item in ITEMS)
-    assert 90 <= len(ITEMS) <= 110
+    assert 300 <= len(ITEMS) <= 320  # row #32: 300, plus up to ~9 planted items in its judged phase
     assert set(counts) == set(SEGMENTS)
 
 

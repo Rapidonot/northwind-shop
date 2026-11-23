@@ -68,7 +68,8 @@ def test_no_planted_review_passed_anything_into_its_sentence() -> None:
     entries = key["injection_reviews"]
     traps = {entry["review_id"] for entry in entries if entry["trap_id"] not in appended}
     later = {entry["review_id"] for entry in entries if entry["trap_id"] in appended}
-    assert len(traps) == 15 and later == {"R01221"}
+    # R01222 to R01224 were appended at DATA_VERSION 3 (row #32), also never enriched.
+    assert len(traps) == 15 and later == {"R01221", "R01222", "R01223", "R01224"}
     for chunk in (c for c in chunks if c.source_id in later):
         assert cache.get(chunk, parents[chunk.chunk_id]) is None, chunk.chunk_id
     found = [c for c in chunks if c.source_id in traps]

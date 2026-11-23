@@ -47,11 +47,11 @@ CASSETTES = REPO / "cassettes" / SUITE
 DATA = REPO / "data" / "fixtures"
 THIS = Path(__file__).resolve().relative_to(REPO).as_posix()
 
-# The index the recording must run against (the user's change 1): main's DATA_VERSION 2. The user
-# gave `389cae01` as the dataset digest's prefix; it is the current index_version's (#13b's index),
-# so both are required, and the dataset digest must equal data/fixtures/manifest.json's.
-INDEX_DATA_VERSION = 2
-INDEX_VERSION_PREFIX = "389cae01"
+# The index the recording must run against (the user's change 1): main's DATA_VERSION. Row #32 moved
+# it to 3 (R01222 to R01224; was 2, `389cae01`, #13b's index); `3a89123f` is the v3 index_version's
+# prefix. Both are required, and the dataset digest must equal data/fixtures/manifest.json's.
+INDEX_DATA_VERSION = 3
+INDEX_VERSION_PREFIX = "3a89123f"
 
 STALE = "stale: assistant changed since the provisional recording; RECORD-ALL (#18) re-records"
 NAME = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
@@ -824,7 +824,7 @@ def _refinement(name: str, record: Mapping[str, Any]) -> Any:
     os.environ.get("LLM_MODE") != "record",
     reason="the pre-window check: run with LLM_MODE=record before recording this suite",
 )
-def test_the_live_index_is_mains_data_version_2() -> None:
+def test_the_live_index_is_mains_data_version() -> None:
     """Read-only, the pre-window check: the index a recording would search is main's. It runs only
     with LLM_MODE=record (the user's M3 answer), since window A's data and index changes would
     otherwise fail it; RECORD-ALL (#18) updates INDEX_DATA_VERSION and INDEX_VERSION_PREFIX when it
@@ -834,7 +834,7 @@ def test_the_live_index_is_mains_data_version_2() -> None:
 
 def test_the_live_index_check_runs_only_when_recording() -> None:
     """M3: the pin skips outside record mode and nowhere else."""
-    marks = {m.name: m for m in test_the_live_index_is_mains_data_version_2.pytestmark}  # type: ignore[attr-defined]
+    marks = {m.name: m for m in test_the_live_index_is_mains_data_version.pytestmark}  # type: ignore[attr-defined]
     skip = marks["skipif"]
     assert "integration" in marks
     assert skip.args == (os.environ.get("LLM_MODE") != "record",)

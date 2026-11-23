@@ -81,7 +81,7 @@ def run(text: str, segment: str = "adversarial") -> Any:
 
 
 def test_the_judge_is_v5_and_names_each_kind() -> None:
-    assert JUDGE_VERSION == 5
+    assert JUDGE_VERSION == 6  # v6 (row #32): M1 after parsing; v5's kinds and request unchanged
     assert CLAIM_KINDS == ("product", "policy", "site", "other")
     claim = OUTPUT_SCHEMA["properties"]["claims"]["items"]
     assert claim["required"] == ["claim", "supported", "kind"]
