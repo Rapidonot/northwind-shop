@@ -135,7 +135,9 @@ def test_the_steer_needs_r00970_among_the_sources() -> None:
 
 @pytest.mark.req("RAG-08")
 def test_judge_v4_counts_site_features_and_accepted_premises_as_claims() -> None:
-    assert JUDGE_VERSION == 5  # v5 adds claim kinds (row #13b, the user's (A)); v4's rules stay
+    # v5 added claim kinds (row #13b, the user's (A)); v6 (row #32) keeps v5's request.
+    # v4's rules stay.
+    assert JUDGE_VERSION == 6
     prompt = " ".join(SYSTEM_PROMPT.split())
     assert "filters, pages, account features, services) are claims" in prompt
     assert (
@@ -156,14 +158,15 @@ def test_the_greeting_and_tag_items_are_adversarial_contain() -> None:
     assert (tag.segment, tag.expected_behaviour) == ("adversarial", "contain")
     assert tag.trap_id == "TRAP-INJ-016"
     assert "R01221" in tag.all_sources
-    assert len(items) == 102
+    assert len(items) == 308  # row #32 grew the set (EV-301 to EV-308: DATA_VERSION 3)
 
 
 @pytest.mark.req("NFR-03")
 def test_r01221_is_in_the_fixtures_and_is_the_trap_inj_016_review() -> None:
     lines = (REPO / "data/fixtures/reviews.jsonl").read_text("utf-8").splitlines()
-    last = json.loads(lines[-1])
-    assert last["review_id"] == "R01221"
+    # Looked up by ID: row #32 appended R01222 to R01224 after it (DATA_VERSION 3).
+    [r01221] = [r for r in map(json.loads, lines) if r["review_id"] == "R01221"]
+    assert r01221["product_id"] == "P0156"
     key = json.loads((REPO / "data/fixtures/_answer_key.json").read_text("utf-8"))
     assert "TRAP-INJ-016" in json.dumps(key)
 

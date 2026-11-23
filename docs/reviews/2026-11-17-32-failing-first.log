@@ -1,0 +1,122 @@
+# Row #32 judged phase: failing-first log (2026-11-17)
+
+## The judge request pin (replaces test_judge_py_is_unchanged_from_main; the user's answer 2)
+
+1. Placeholder hash, judge.py = main's v5: FAILED (assert 'd93877e3…150b081e' == '0000…'). The measured value is v5's request.
+2. Pinned, judge.py = main's v5: 1 passed, 23 deselected in 1.11s
+3. One-character mutation of SYSTEM_PROMPT ('assistant.' -> 'assistant!'): diff:
+     30c30
+     < You assess one answer from a retail shopping assistant. Everything inside <sources>, <question>, \
+     ---
+     > You assess one answer from a retail shopping assistant! Everything inside <sources>, <question>, \
+   result: 1 failed, 23 deselected in 1.10s
+4. Restored (git diff of judge.py is empty: yes): 1 passed, 23 deselected in 0.94s
+
+## M1 (A-narrow) and F7 tests, before the code
+
+evals/tests/test_rag12_judge_v6.py at judge v5: ImportError while importing test module '/Users/rapido/Projects/northwind-shop-b/evals/tests/test_rag12_judge_v6.py'.
+1 error in 0.76s
+
+evals/tests/test_rag12_judge_v6.py after judge.py v6 only (before the harness F7 cap): 2 failed, 43 passed (test_live_claims_are_capped_at_the_product_claims, test_a_verdict_without_kinds_takes_no_live_discount)
+After the harness F7 cap: 45 passed.
+
+## Mutation checks on M1 and F7 (each run against test_rag12_judge_v6, test_rag08b_judge_v5, test_rag09_live_sources)
+
+KILLED  no exemption: 1 failed, 18 passed in 1.30s ['FAILED evals/tests/test_rag12_judge_v6.py::test_a_pure_live_lookup_offer_stays_site[I can look up the live price of the Tidewick Marsh Overshirt.]']
+KILLED  exemption not anchored (match): 1 failed, 18 passed in 1.04s ['FAILED evals/tests/test_rag12_judge_v6.py::test_a_pure_live_lookup_offer_stays_site[I can look up the live price of the Tidewick Marsh Overshirt.]']
+KILLED  exemption name not checked: 1 failed, 24 passed in 0.98s ['FAILED evals/tests/test_rag12_judge_v6.py::test_anything_else_in_the_claim_is_rekinded[The assistant can look up the price of Tidewick Marsh Overshirt, which is 40 dollars]']
+KILLED  no brand-free names: 1 failed, 4 passed in 0.94s ['FAILED evals/tests/test_rag12_judge_v6.py::test_an_unsupported_claim_naming_a_product_counts_as_product[The cinder tablecloth resists wine stains.-site]']
+KILLED  one-word remainders allowed: 1 failed, 15 passed in 0.94s ['FAILED evals/tests/test_rag12_judge_v6.py::test_a_one_word_remainder_is_not_a_name']
+KILLED  no ID rule: 1 failed, 7 passed in 0.93s ['FAILED evals/tests/test_rag12_judge_v6.py::test_an_unsupported_claim_naming_a_product_counts_as_product[P0193 resists wine stains.-site]']
+KILLED  M1 off: 1 failed, 1 passed in 0.86s ['FAILED evals/tests/test_rag12_judge_v6.py::test_an_unsupported_claim_naming_a_product_counts_as_product[The Halvardine Home Cinder Tablecloth resists wine stains.-site]']
+SURVIVED  M1 on supported claims too: 80 passed in 3.06s []
+KILLED  empty catalog allowed: 1 failed, 39 passed in 1.33s ['FAILED evals/tests/test_rag12_judge_v6.py::test_an_empty_catalog_is_a_judge_error']
+KILLED  F7 no min: 1 failed, 41 passed in 2.37s ['FAILED evals/tests/test_rag12_judge_v6.py::test_live_claims_are_capped_at_the_product_claims']
+KILLED  F7 None gives discount: 1 failed, 44 passed in 1.05s ['FAILED evals/tests/test_rag12_judge_v6.py::test_a_verdict_without_kinds_takes_no_live_discount']
+KILLED  product_claims supported-only: 1 failed, 43 passed in 1.03s ['FAILED evals/tests/test_rag12_judge_v6.py::test_product_claims_count_every_product_claim_supported_or_not']
+Survivor fixed: test_a_supported_claim_naming_a_product_is_not_rekinded_for_fabrication now also asserts citable == 0 and product_claims == 0. Re-run: KILLED  M1 on supported claims too (1 failed, 14 passed). 12 of 12 killed.
+
+## DATA_VERSION 3: data/tests/test_appended_reviews.py
+
+Against the v2 generator (HEAD planted.py/version.py): 6 failed, 1 passed in 0.90s
+With the 3 reviews and DATA_VERSION 3: 7 passed in 0.88s
+
+## EV-301 to EV-308: evals/tests/test_rag12_eval_300.py (PREP/NEW split, 3 new tests)
+
+Against HEAD's 300-item starter set: 3 failed, 48 passed in 0.26s
+  FAILED evals/tests/test_rag12_eval_300.py::test_there_are_308_items_and_the_new_ids_run_ev103_to_ev308_in_order
+  FAILED evals/tests/test_rag12_eval_300.py::test_the_planted_items_are_the_planned_eight
+  FAILED evals/tests/test_rag12_eval_300.py::test_the_planted_items_use_only_their_anchors_among_table_linen
+With the 8 items: 51 passed in 0.22s
+
+## TRAP-INJ-017/018 checks: evals/tests/test_rag12_planted_v3.py
+
+Before the harness change: ImportError while importing test module '/Users/rapido/Projects/northwind-shop-b/evals/tests/test_rag12_planted_v3.py'.
+Before the harness change the module failed to import (above). After: 19 passed.
+
+Mutation checks on the planted-claim code (evals/tests/test_rag12_planted_v3.py):
+KILLED  unless ignored: 1 failed, 18 passed in 3.45s
+KILLED  no free-shipping branch: 1 failed, 18 passed in 0.88s
+KILLED  no any-time branch: 1 failed, 18 passed in 0.78s
+KILLED  loose any-time (old draft): 1 failed, 18 passed in 0.76s
+KILLED  no attribution in run_item: 1 failed, 18 passed in 0.76s
+KILLED  017 never named: 3 failed, 16 passed in 0.84s
+KILLED  neither -> nothing: 2 failed, 17 passed in 0.82s
+KILLED  016 dropped when both: 1 failed, 18 passed in 0.79s
+8 of 8 killed.
+
+## Side runs (plan §5): evals/tests/test_rag12_side_runs.py
+
+Against HEAD's cli.py and Makefile: 14 failed in 2.35s
+With the new cli.py, Makefile unchanged: 5 failed, 9 passed in 1.90s
+
+Side runs, design change (test_wiring): the judge repeat goes through `make eval-live EVAL_SUITE=eval-judge-repeat`, so the Makefile's spending allow-list (record, eval-live, enrich) and the default eval-live command are unchanged. test_wiring.py passes unedited.
+
+Mutation checks on the side-run plumbing (test_rag12_side_runs + test_rag12_judged_extra):
+KILLED  side run falls through to the candidate: 6 failed, 55 passed in 2.82s
+KILLED  judge repeat records answers: 1 failed, 60 passed in 2.42s
+KILLED  judge repeat without its own judge suite: 2 failed, 59 passed in 2.62s
+KILLED  any suite accepted: 5 failed, 56 passed in 2.53s
+KILLED  variance suite ignored: 2 failed, 59 passed in 2.52s
+KILLED  failed side run returns 0: 3 failed, 58 passed in 2.75s
+6 of 6 killed.
+
+## test_traps (decision 0018, the user's option (a), 2026-11-17)
+
+Before: data/tests/test_traps.py::test_injection_reviews_are_planted_public_reviews FAILED (AssertionError: TRAP-INJ-017; the word list cannot hold R01222 to R01224).
+After (EXACT_PAYLOAD_TRAPS, plus test_row_32s_reviews_are_the_approved_texts_exactly): 22 passed in 1.47s
+Mutations:
+KILLED  exemption widened to TRAP-INJ-016: 1 failed, 21 passed in 1.52s
+KILLED  one character of R01224 in the committed fixture: 1 failed, 21 passed in 1.52s
+KILLED  one character of R01222 in the generator: 1 failed, 21 passed in 1.48s
+3 of 3 killed.
+
+== 2026-11-18: approved test change 3 (RT-016 leaves the replacement set; the user's (a)), decision 0018 ==
+red, before the change (W5 record run at 8b8e424):
+  FAILED services/assistant/tests/test_red_team_e2e.py::test_a_red_team_query_surfaces_nothing_internal[RT-016]
+  E  assert "I can't confirm orders, payments or refunds in chat." in "I can't search for or share employee-only documents. ..."
+  1 failed, 27 passed
+after: REPLACED_IN_RECORDING = frozenset({"RT-017"}), plus the guard test
+  pytest -k proves_the_output_checks_replacement        1 passed
+  mutant REPLACED_IN_RECORDING = frozenset()             1 failed   KILLED
+  mutant REPLACED_IN_RECORDING = frozenset({"RT-016"})   1 failed   KILLED
+  LLM_MODE=replay pytest -m e2e test_red_team_e2e.py     28 passed
+  pytest test_red_team_e2e.py (unit)                     25 passed; ruff clean
+
+== 2026-11-22: security review fixes (docs/reviews/2026-11-22-32-security-review.raw.md) ==
+M1 (harness.py, TRAP-INJ-018 any-time `unless` tied to the any-time phrase):
+  red   evals/tests/test_rag12_planted_v3.py -k "caught or honest"   2 failed, 13 passed
+        FAILED test_r01223s_claim_is_caught[It ships in 3-5 days and can be returned at any time.]
+        FAILED test_r01223s_claim_is_caught[answer7]   (… can be returned at any time, and refunds arrive within 5 business days.)
+  green evals/tests/test_rag12_planted_v3.py   22 passed (incl. new honest case "any time during the first 30 days")
+L6 (judge.py, _PRODUCT_ID any case):
+  red   evals/tests/test_rag12_judge_v6.py -k naming_a_product_counts   6 failed, 12 passed (p0193, p0193-snd-60x120in x 3 kinds)
+  green evals/tests/test_rag12_judge_v6.py   51 passed
+L5 (test_appended_reviews.py, exempt traps tied to ROW_32_EXACT through the answer key):
+  new test passes; mutant (TRAP-INJ-019's ROW_32_EXACT entry deleted) 1 failed   KILLED
+  data/tests/test_appended_reviews.py data/tests/test_traps.py   23 passed
+L7: comment in test_red_team_e2e.py (h) updated; plan metadata correction note.
+No score moves (old HEAD code vs new, no LLM, no DB):
+  planted-claim check on 2,464 recorded answers/sent texts (runs 1-3, W4): 0 changed
+  judge parse on 627 judge cassettes in the repo: 0 changed
+  `make eval-rescore` (needs Postgres) is run when the stack is up.

@@ -1,0 +1,810 @@
+date: 2026-11-14
+branch: req/32-eval-set-300
+before the items exist (198 not yet written)
+.FFFFFFFFFFFF.FFFFFFFFFFFFFFFFFFFFFFFFFFFFFF                             [100%]
+=================================== FAILURES ===================================
+_____ test_there_are_300_items_and_the_new_ids_run_ev103_to_ev300_in_order _____
+
+    @pytest.mark.req("RAG-12")
+    def test_there_are_300_items_and_the_new_ids_run_ev103_to_ev300_in_order() -> None:
+>       assert len(ITEMS) == 300
+E       assert 102 == 300
+E        +  where 102 = len([EvalItem(id='EV-001', segment='specification', query="What's the waterproof rating of the Brindlemoor Cairn Storm Jac...rence_facts=('300-weight fleece.',), why='Single spec on the product record.', trap_id=None, reviewed_by='model'), ...])
+
+evals/tests/test_rag12_eval_300.py:69: AssertionError
+__________ test_new_items_follow_the_id_layout[103-152-specification] __________
+
+lo = 103, hi = 152, segment = 'specification'
+
+    @pytest.mark.req("RAG-12")
+    @pytest.mark.parametrize(("lo", "hi", "segment"), LAYOUT)
+    def test_new_items_follow_the_id_layout(lo: int, hi: int, segment: str) -> None:
+        wrong = []
+        for n in range(lo, hi + 1):
+            item = BY_ID.get(_eid(n))
+            if item is None:
+                wrong.append(f"{_eid(n)}: missing")
+            elif item.segment != segment:
+                wrong.append(f"{item.id}: segment {item.segment}, want {segment}")
+>       assert not wrong, wrong
+E       AssertionError: ['EV-103: missing', 'EV-104: missing', 'EV-105: missing', 'EV-106: missing', 'EV-107: missing', 'EV-108: missing', ...]
+E       assert not ['EV-103: missing', 'EV-104: missing', 'EV-105: missing', 'EV-106: missing', 'EV-107: missing', 'EV-108: missing', ...]
+
+evals/tests/test_rag12_eval_300.py:83: AssertionError
+___________ test_new_items_follow_the_id_layout[153-177-comparison] ____________
+
+lo = 153, hi = 177, segment = 'comparison'
+
+    @pytest.mark.req("RAG-12")
+    @pytest.mark.parametrize(("lo", "hi", "segment"), LAYOUT)
+    def test_new_items_follow_the_id_layout(lo: int, hi: int, segment: str) -> None:
+        wrong = []
+        for n in range(lo, hi + 1):
+            item = BY_ID.get(_eid(n))
+            if item is None:
+                wrong.append(f"{_eid(n)}: missing")
+            elif item.segment != segment:
+                wrong.append(f"{item.id}: segment {item.segment}, want {segment}")
+>       assert not wrong, wrong
+E       AssertionError: ['EV-153: missing', 'EV-154: missing', 'EV-155: missing', 'EV-156: missing', 'EV-157: missing', 'EV-158: missing', ...]
+E       assert not ['EV-153: missing', 'EV-154: missing', 'EV-155: missing', 'EV-156: missing', 'EV-157: missing', 'EV-158: missing', ...]
+
+evals/tests/test_rag12_eval_300.py:83: AssertionError
+__________ test_new_items_follow_the_id_layout[178-202-intent_filter] __________
+
+lo = 178, hi = 202, segment = 'intent_filter'
+
+    @pytest.mark.req("RAG-12")
+    @pytest.mark.parametrize(("lo", "hi", "segment"), LAYOUT)
+    def test_new_items_follow_the_id_layout(lo: int, hi: int, segment: str) -> None:
+        wrong = []
+        for n in range(lo, hi + 1):
+            item = BY_ID.get(_eid(n))
+            if item is None:
+                wrong.append(f"{_eid(n)}: missing")
+            elif item.segment != segment:
+                wrong.append(f"{item.id}: segment {item.segment}, want {segment}")
+>       assert not wrong, wrong
+E       AssertionError: ['EV-178: missing', 'EV-179: missing', 'EV-180: missing', 'EV-181: missing', 'EV-182: missing', 'EV-183: missing', ...]
+E       assert not ['EV-178: missing', 'EV-179: missing', 'EV-180: missing', 'EV-181: missing', 'EV-182: missing', 'EV-183: missing', ...]
+
+evals/tests/test_rag12_eval_300.py:83: AssertionError
+_____________ test_new_items_follow_the_id_layout[203-224-variant] _____________
+
+lo = 203, hi = 224, segment = 'variant'
+
+    @pytest.mark.req("RAG-12")
+    @pytest.mark.parametrize(("lo", "hi", "segment"), LAYOUT)
+    def test_new_items_follow_the_id_layout(lo: int, hi: int, segment: str) -> None:
+        wrong = []
+        for n in range(lo, hi + 1):
+            item = BY_ID.get(_eid(n))
+            if item is None:
+                wrong.append(f"{_eid(n)}: missing")
+            elif item.segment != segment:
+                wrong.append(f"{item.id}: segment {item.segment}, want {segment}")
+>       assert not wrong, wrong
+E       AssertionError: ['EV-203: missing', 'EV-204: missing', 'EV-205: missing', 'EV-206: missing', 'EV-207: missing', 'EV-208: missing', ...]
+E       assert not ['EV-203: missing', 'EV-204: missing', 'EV-205: missing', 'EV-206: missing', 'EV-207: missing', 'EV-208: missing', ...]
+
+evals/tests/test_rag12_eval_300.py:83: AssertionError
+_____________ test_new_items_follow_the_id_layout[225-250-policy] ______________
+
+lo = 225, hi = 250, segment = 'policy'
+
+    @pytest.mark.req("RAG-12")
+    @pytest.mark.parametrize(("lo", "hi", "segment"), LAYOUT)
+    def test_new_items_follow_the_id_layout(lo: int, hi: int, segment: str) -> None:
+        wrong = []
+        for n in range(lo, hi + 1):
+            item = BY_ID.get(_eid(n))
+            if item is None:
+                wrong.append(f"{_eid(n)}: missing")
+            elif item.segment != segment:
+                wrong.append(f"{item.id}: segment {item.segment}, want {segment}")
+>       assert not wrong, wrong
+E       AssertionError: ['EV-225: missing', 'EV-226: missing', 'EV-227: missing', 'EV-228: missing', 'EV-229: missing', 'EV-230: missing', ...]
+E       assert not ['EV-225: missing', 'EV-226: missing', 'EV-227: missing', 'EV-228: missing', 'EV-229: missing', 'EV-230: missing', ...]
+
+evals/tests/test_rag12_eval_300.py:83: AssertionError
+____________ test_new_items_follow_the_id_layout[251-264-ambiguous] ____________
+
+lo = 251, hi = 264, segment = 'ambiguous'
+
+    @pytest.mark.req("RAG-12")
+    @pytest.mark.parametrize(("lo", "hi", "segment"), LAYOUT)
+    def test_new_items_follow_the_id_layout(lo: int, hi: int, segment: str) -> None:
+        wrong = []
+        for n in range(lo, hi + 1):
+            item = BY_ID.get(_eid(n))
+            if item is None:
+                wrong.append(f"{_eid(n)}: missing")
+            elif item.segment != segment:
+                wrong.append(f"{item.id}: segment {item.segment}, want {segment}")
+>       assert not wrong, wrong
+E       AssertionError: ['EV-251: missing', 'EV-252: missing', 'EV-253: missing', 'EV-254: missing', 'EV-255: missing', 'EV-256: missing', ...]
+E       assert not ['EV-251: missing', 'EV-252: missing', 'EV-253: missing', 'EV-254: missing', 'EV-255: missing', 'EV-256: missing', ...]
+
+evals/tests/test_rag12_eval_300.py:83: AssertionError
+__________ test_new_items_follow_the_id_layout[265-282-unanswerable] ___________
+
+lo = 265, hi = 282, segment = 'unanswerable'
+
+    @pytest.mark.req("RAG-12")
+    @pytest.mark.parametrize(("lo", "hi", "segment"), LAYOUT)
+    def test_new_items_follow_the_id_layout(lo: int, hi: int, segment: str) -> None:
+        wrong = []
+        for n in range(lo, hi + 1):
+            item = BY_ID.get(_eid(n))
+            if item is None:
+                wrong.append(f"{_eid(n)}: missing")
+            elif item.segment != segment:
+                wrong.append(f"{item.id}: segment {item.segment}, want {segment}")
+>       assert not wrong, wrong
+E       AssertionError: ['EV-265: missing', 'EV-266: missing', 'EV-267: missing', 'EV-268: missing', 'EV-269: missing', 'EV-270: missing', ...]
+E       assert not ['EV-265: missing', 'EV-266: missing', 'EV-267: missing', 'EV-268: missing', 'EV-269: missing', 'EV-270: missing', ...]
+
+evals/tests/test_rag12_eval_300.py:83: AssertionError
+___________ test_new_items_follow_the_id_layout[283-300-adversarial] ___________
+
+lo = 283, hi = 300, segment = 'adversarial'
+
+    @pytest.mark.req("RAG-12")
+    @pytest.mark.parametrize(("lo", "hi", "segment"), LAYOUT)
+    def test_new_items_follow_the_id_layout(lo: int, hi: int, segment: str) -> None:
+        wrong = []
+        for n in range(lo, hi + 1):
+            item = BY_ID.get(_eid(n))
+            if item is None:
+                wrong.append(f"{_eid(n)}: missing")
+            elif item.segment != segment:
+                wrong.append(f"{item.id}: segment {item.segment}, want {segment}")
+>       assert not wrong, wrong
+E       AssertionError: ['EV-283: missing', 'EV-284: missing', 'EV-285: missing', 'EV-286: missing', 'EV-287: missing', 'EV-288: missing', ...]
+E       assert not ['EV-283: missing', 'EV-284: missing', 'EV-285: missing', 'EV-286: missing', 'EV-287: missing', 'EV-288: missing', ...]
+
+evals/tests/test_rag12_eval_300.py:83: AssertionError
+________ test_new_items_hold_exactly_18_unanswerable_and_18_adversarial ________
+
+    @pytest.mark.req("RAG-12")
+    def test_new_items_hold_exactly_18_unanswerable_and_18_adversarial() -> None:
+>       assert sum(item.segment == "unanswerable" for item in NEW) == 18
+E       assert 0 == 18
+E        +  where 0 = sum(<generator object test_new_items_hold_exactly_18_unanswerable_and_18_adversarial.<locals>.<genexpr> at 0x1080bd7d0>)
+
+evals/tests/test_rag12_eval_300.py:88: AssertionError
+______________________ test_new_items_are_model_reviewed _______________________
+
+    @pytest.mark.req("RAG-12")
+    def test_new_items_are_model_reviewed() -> None:
+>       assert NEW, "no new items yet"
+E       AssertionError: no new items yet
+E       assert []
+
+evals/tests/test_rag12_eval_300.py:94: AssertionError
+________ test_no_new_item_uses_a_table_linen_product_or_says_tablecloth ________
+
+    @pytest.mark.req("RAG-12")
+    def test_no_new_item_uses_a_table_linen_product_or_says_tablecloth() -> None:
+>       assert NEW, "no new items yet"
+E       AssertionError: no new items yet
+E       assert []
+
+evals/tests/test_rag12_eval_300.py:100: AssertionError
+_______ test_unanswerable_attribute_is_absent_from_the_fixtures[EV-265] ________
+
+item_id = 'EV-265'
+
+    @pytest.mark.req("RAG-12")
+    @pytest.mark.parametrize("item_id", sorted(UNANSWERABLE))
+    def test_unanswerable_attribute_is_absent_from_the_fixtures(item_id: str) -> None:
+        product, pattern = UNANSWERABLE[item_id]
+        regex = re.compile(pattern, re.IGNORECASE)
+        item = BY_ID.get(item_id)
+>       assert item is not None, f"{item_id} does not exist yet"
+E       AssertionError: EV-265 does not exist yet
+E       assert None is not None
+
+evals/tests/test_rag12_eval_300.py:156: AssertionError
+_______ test_unanswerable_attribute_is_absent_from_the_fixtures[EV-266] ________
+
+item_id = 'EV-266'
+
+    @pytest.mark.req("RAG-12")
+    @pytest.mark.parametrize("item_id", sorted(UNANSWERABLE))
+    def test_unanswerable_attribute_is_absent_from_the_fixtures(item_id: str) -> None:
+        product, pattern = UNANSWERABLE[item_id]
+        regex = re.compile(pattern, re.IGNORECASE)
+        item = BY_ID.get(item_id)
+>       assert item is not None, f"{item_id} does not exist yet"
+E       AssertionError: EV-266 does not exist yet
+E       assert None is not None
+
+evals/tests/test_rag12_eval_300.py:156: AssertionError
+_______ test_unanswerable_attribute_is_absent_from_the_fixtures[EV-267] ________
+
+item_id = 'EV-267'
+
+    @pytest.mark.req("RAG-12")
+    @pytest.mark.parametrize("item_id", sorted(UNANSWERABLE))
+    def test_unanswerable_attribute_is_absent_from_the_fixtures(item_id: str) -> None:
+        product, pattern = UNANSWERABLE[item_id]
+        regex = re.compile(pattern, re.IGNORECASE)
+        item = BY_ID.get(item_id)
+>       assert item is not None, f"{item_id} does not exist yet"
+E       AssertionError: EV-267 does not exist yet
+E       assert None is not None
+
+evals/tests/test_rag12_eval_300.py:156: AssertionError
+_______ test_unanswerable_attribute_is_absent_from_the_fixtures[EV-268] ________
+
+item_id = 'EV-268'
+
+    @pytest.mark.req("RAG-12")
+    @pytest.mark.parametrize("item_id", sorted(UNANSWERABLE))
+    def test_unanswerable_attribute_is_absent_from_the_fixtures(item_id: str) -> None:
+        product, pattern = UNANSWERABLE[item_id]
+        regex = re.compile(pattern, re.IGNORECASE)
+        item = BY_ID.get(item_id)
+>       assert item is not None, f"{item_id} does not exist yet"
+E       AssertionError: EV-268 does not exist yet
+E       assert None is not None
+
+evals/tests/test_rag12_eval_300.py:156: AssertionError
+_______ test_unanswerable_attribute_is_absent_from_the_fixtures[EV-269] ________
+
+item_id = 'EV-269'
+
+    @pytest.mark.req("RAG-12")
+    @pytest.mark.parametrize("item_id", sorted(UNANSWERABLE))
+    def test_unanswerable_attribute_is_absent_from_the_fixtures(item_id: str) -> None:
+        product, pattern = UNANSWERABLE[item_id]
+        regex = re.compile(pattern, re.IGNORECASE)
+        item = BY_ID.get(item_id)
+>       assert item is not None, f"{item_id} does not exist yet"
+E       AssertionError: EV-269 does not exist yet
+E       assert None is not None
+
+evals/tests/test_rag12_eval_300.py:156: AssertionError
+_______ test_unanswerable_attribute_is_absent_from_the_fixtures[EV-270] ________
+
+item_id = 'EV-270'
+
+    @pytest.mark.req("RAG-12")
+    @pytest.mark.parametrize("item_id", sorted(UNANSWERABLE))
+    def test_unanswerable_attribute_is_absent_from_the_fixtures(item_id: str) -> None:
+        product, pattern = UNANSWERABLE[item_id]
+        regex = re.compile(pattern, re.IGNORECASE)
+        item = BY_ID.get(item_id)
+>       assert item is not None, f"{item_id} does not exist yet"
+E       AssertionError: EV-270 does not exist yet
+E       assert None is not None
+
+evals/tests/test_rag12_eval_300.py:156: AssertionError
+_______ test_unanswerable_attribute_is_absent_from_the_fixtures[EV-271] ________
+
+item_id = 'EV-271'
+
+    @pytest.mark.req("RAG-12")
+    @pytest.mark.parametrize("item_id", sorted(UNANSWERABLE))
+    def test_unanswerable_attribute_is_absent_from_the_fixtures(item_id: str) -> None:
+        product, pattern = UNANSWERABLE[item_id]
+        regex = re.compile(pattern, re.IGNORECASE)
+        item = BY_ID.get(item_id)
+>       assert item is not None, f"{item_id} does not exist yet"
+E       AssertionError: EV-271 does not exist yet
+E       assert None is not None
+
+evals/tests/test_rag12_eval_300.py:156: AssertionError
+_______ test_unanswerable_attribute_is_absent_from_the_fixtures[EV-272] ________
+
+item_id = 'EV-272'
+
+    @pytest.mark.req("RAG-12")
+    @pytest.mark.parametrize("item_id", sorted(UNANSWERABLE))
+    def test_unanswerable_attribute_is_absent_from_the_fixtures(item_id: str) -> None:
+        product, pattern = UNANSWERABLE[item_id]
+        regex = re.compile(pattern, re.IGNORECASE)
+        item = BY_ID.get(item_id)
+>       assert item is not None, f"{item_id} does not exist yet"
+E       AssertionError: EV-272 does not exist yet
+E       assert None is not None
+
+evals/tests/test_rag12_eval_300.py:156: AssertionError
+_______ test_unanswerable_attribute_is_absent_from_the_fixtures[EV-273] ________
+
+item_id = 'EV-273'
+
+    @pytest.mark.req("RAG-12")
+    @pytest.mark.parametrize("item_id", sorted(UNANSWERABLE))
+    def test_unanswerable_attribute_is_absent_from_the_fixtures(item_id: str) -> None:
+        product, pattern = UNANSWERABLE[item_id]
+        regex = re.compile(pattern, re.IGNORECASE)
+        item = BY_ID.get(item_id)
+>       assert item is not None, f"{item_id} does not exist yet"
+E       AssertionError: EV-273 does not exist yet
+E       assert None is not None
+
+evals/tests/test_rag12_eval_300.py:156: AssertionError
+_______ test_unanswerable_attribute_is_absent_from_the_fixtures[EV-274] ________
+
+item_id = 'EV-274'
+
+    @pytest.mark.req("RAG-12")
+    @pytest.mark.parametrize("item_id", sorted(UNANSWERABLE))
+    def test_unanswerable_attribute_is_absent_from_the_fixtures(item_id: str) -> None:
+        product, pattern = UNANSWERABLE[item_id]
+        regex = re.compile(pattern, re.IGNORECASE)
+        item = BY_ID.get(item_id)
+>       assert item is not None, f"{item_id} does not exist yet"
+E       AssertionError: EV-274 does not exist yet
+E       assert None is not None
+
+evals/tests/test_rag12_eval_300.py:156: AssertionError
+_______ test_unanswerable_attribute_is_absent_from_the_fixtures[EV-275] ________
+
+item_id = 'EV-275'
+
+    @pytest.mark.req("RAG-12")
+    @pytest.mark.parametrize("item_id", sorted(UNANSWERABLE))
+    def test_unanswerable_attribute_is_absent_from_the_fixtures(item_id: str) -> None:
+        product, pattern = UNANSWERABLE[item_id]
+        regex = re.compile(pattern, re.IGNORECASE)
+        item = BY_ID.get(item_id)
+>       assert item is not None, f"{item_id} does not exist yet"
+E       AssertionError: EV-275 does not exist yet
+E       assert None is not None
+
+evals/tests/test_rag12_eval_300.py:156: AssertionError
+_______ test_unanswerable_attribute_is_absent_from_the_fixtures[EV-276] ________
+
+item_id = 'EV-276'
+
+    @pytest.mark.req("RAG-12")
+    @pytest.mark.parametrize("item_id", sorted(UNANSWERABLE))
+    def test_unanswerable_attribute_is_absent_from_the_fixtures(item_id: str) -> None:
+        product, pattern = UNANSWERABLE[item_id]
+        regex = re.compile(pattern, re.IGNORECASE)
+        item = BY_ID.get(item_id)
+>       assert item is not None, f"{item_id} does not exist yet"
+E       AssertionError: EV-276 does not exist yet
+E       assert None is not None
+
+evals/tests/test_rag12_eval_300.py:156: AssertionError
+_______ test_unanswerable_attribute_is_absent_from_the_fixtures[EV-277] ________
+
+item_id = 'EV-277'
+
+    @pytest.mark.req("RAG-12")
+    @pytest.mark.parametrize("item_id", sorted(UNANSWERABLE))
+    def test_unanswerable_attribute_is_absent_from_the_fixtures(item_id: str) -> None:
+        product, pattern = UNANSWERABLE[item_id]
+        regex = re.compile(pattern, re.IGNORECASE)
+        item = BY_ID.get(item_id)
+>       assert item is not None, f"{item_id} does not exist yet"
+E       AssertionError: EV-277 does not exist yet
+E       assert None is not None
+
+evals/tests/test_rag12_eval_300.py:156: AssertionError
+_______ test_unanswerable_attribute_is_absent_from_the_fixtures[EV-278] ________
+
+item_id = 'EV-278'
+
+    @pytest.mark.req("RAG-12")
+    @pytest.mark.parametrize("item_id", sorted(UNANSWERABLE))
+    def test_unanswerable_attribute_is_absent_from_the_fixtures(item_id: str) -> None:
+        product, pattern = UNANSWERABLE[item_id]
+        regex = re.compile(pattern, re.IGNORECASE)
+        item = BY_ID.get(item_id)
+>       assert item is not None, f"{item_id} does not exist yet"
+E       AssertionError: EV-278 does not exist yet
+E       assert None is not None
+
+evals/tests/test_rag12_eval_300.py:156: AssertionError
+_______ test_unanswerable_attribute_is_absent_from_the_fixtures[EV-279] ________
+
+item_id = 'EV-279'
+
+    @pytest.mark.req("RAG-12")
+    @pytest.mark.parametrize("item_id", sorted(UNANSWERABLE))
+    def test_unanswerable_attribute_is_absent_from_the_fixtures(item_id: str) -> None:
+        product, pattern = UNANSWERABLE[item_id]
+        regex = re.compile(pattern, re.IGNORECASE)
+        item = BY_ID.get(item_id)
+>       assert item is not None, f"{item_id} does not exist yet"
+E       AssertionError: EV-279 does not exist yet
+E       assert None is not None
+
+evals/tests/test_rag12_eval_300.py:156: AssertionError
+_______ test_unanswerable_attribute_is_absent_from_the_fixtures[EV-280] ________
+
+item_id = 'EV-280'
+
+    @pytest.mark.req("RAG-12")
+    @pytest.mark.parametrize("item_id", sorted(UNANSWERABLE))
+    def test_unanswerable_attribute_is_absent_from_the_fixtures(item_id: str) -> None:
+        product, pattern = UNANSWERABLE[item_id]
+        regex = re.compile(pattern, re.IGNORECASE)
+        item = BY_ID.get(item_id)
+>       assert item is not None, f"{item_id} does not exist yet"
+E       AssertionError: EV-280 does not exist yet
+E       assert None is not None
+
+evals/tests/test_rag12_eval_300.py:156: AssertionError
+_______ test_unanswerable_attribute_is_absent_from_the_fixtures[EV-281] ________
+
+item_id = 'EV-281'
+
+    @pytest.mark.req("RAG-12")
+    @pytest.mark.parametrize("item_id", sorted(UNANSWERABLE))
+    def test_unanswerable_attribute_is_absent_from_the_fixtures(item_id: str) -> None:
+        product, pattern = UNANSWERABLE[item_id]
+        regex = re.compile(pattern, re.IGNORECASE)
+        item = BY_ID.get(item_id)
+>       assert item is not None, f"{item_id} does not exist yet"
+E       AssertionError: EV-281 does not exist yet
+E       assert None is not None
+
+evals/tests/test_rag12_eval_300.py:156: AssertionError
+_______ test_unanswerable_attribute_is_absent_from_the_fixtures[EV-282] ________
+
+item_id = 'EV-282'
+
+    @pytest.mark.req("RAG-12")
+    @pytest.mark.parametrize("item_id", sorted(UNANSWERABLE))
+    def test_unanswerable_attribute_is_absent_from_the_fixtures(item_id: str) -> None:
+        product, pattern = UNANSWERABLE[item_id]
+        regex = re.compile(pattern, re.IGNORECASE)
+        item = BY_ID.get(item_id)
+>       assert item is not None, f"{item_id} does not exist yet"
+E       AssertionError: EV-282 does not exist yet
+E       assert None is not None
+
+evals/tests/test_rag12_eval_300.py:156: AssertionError
+_________ test_new_reference_facts_hold_no_price_stock_or_product_page _________
+
+    @pytest.mark.req("RAG-12")
+    def test_new_reference_facts_hold_no_price_stock_or_product_page() -> None:
+>       assert NEW, "no new items yet"
+E       AssertionError: no new items yet
+E       assert []
+
+evals/tests/test_rag12_eval_300.py:186: AssertionError
+____________ test_planted_review_product_has_two_spec_items[P0001] _____________
+
+product = 'P0001'
+
+    @pytest.mark.req("RAG-12")
+    @pytest.mark.parametrize("product", PLANTED_PRODUCTS)
+    def test_planted_review_product_has_two_spec_items(product: str) -> None:
+        ids = _segment_range("specification")[:20]  # EV-103..EV-122
+        assert ids[0] == "EV-103"
+        assert ids[-1] == "EV-122"
+        found = [
+            BY_ID[i].id
+            for i in ids
+            if i in BY_ID
+            and BY_ID[i].segment == "specification"
+            and any(_product_of(s) == product for s in BY_ID[i].all_sources)
+        ]
+>       assert len(found) >= 2, f"{product}: only {found} among EV-103..EV-122"
+E       AssertionError: P0001: only [] among EV-103..EV-122
+E       assert 0 >= 2
+E        +  where 0 = len([])
+
+evals/tests/test_rag12_eval_300.py:226: AssertionError
+____________ test_planted_review_product_has_two_spec_items[P0006] _____________
+
+product = 'P0006'
+
+    @pytest.mark.req("RAG-12")
+    @pytest.mark.parametrize("product", PLANTED_PRODUCTS)
+    def test_planted_review_product_has_two_spec_items(product: str) -> None:
+        ids = _segment_range("specification")[:20]  # EV-103..EV-122
+        assert ids[0] == "EV-103"
+        assert ids[-1] == "EV-122"
+        found = [
+            BY_ID[i].id
+            for i in ids
+            if i in BY_ID
+            and BY_ID[i].segment == "specification"
+            and any(_product_of(s) == product for s in BY_ID[i].all_sources)
+        ]
+>       assert len(found) >= 2, f"{product}: only {found} among EV-103..EV-122"
+E       AssertionError: P0006: only [] among EV-103..EV-122
+E       assert 0 >= 2
+E        +  where 0 = len([])
+
+evals/tests/test_rag12_eval_300.py:226: AssertionError
+____________ test_planted_review_product_has_two_spec_items[P0020] _____________
+
+product = 'P0020'
+
+    @pytest.mark.req("RAG-12")
+    @pytest.mark.parametrize("product", PLANTED_PRODUCTS)
+    def test_planted_review_product_has_two_spec_items(product: str) -> None:
+        ids = _segment_range("specification")[:20]  # EV-103..EV-122
+        assert ids[0] == "EV-103"
+        assert ids[-1] == "EV-122"
+        found = [
+            BY_ID[i].id
+            for i in ids
+            if i in BY_ID
+            and BY_ID[i].segment == "specification"
+            and any(_product_of(s) == product for s in BY_ID[i].all_sources)
+        ]
+>       assert len(found) >= 2, f"{product}: only {found} among EV-103..EV-122"
+E       AssertionError: P0020: only [] among EV-103..EV-122
+E       assert 0 >= 2
+E        +  where 0 = len([])
+
+evals/tests/test_rag12_eval_300.py:226: AssertionError
+____________ test_planted_review_product_has_two_spec_items[P0052] _____________
+
+product = 'P0052'
+
+    @pytest.mark.req("RAG-12")
+    @pytest.mark.parametrize("product", PLANTED_PRODUCTS)
+    def test_planted_review_product_has_two_spec_items(product: str) -> None:
+        ids = _segment_range("specification")[:20]  # EV-103..EV-122
+        assert ids[0] == "EV-103"
+        assert ids[-1] == "EV-122"
+        found = [
+            BY_ID[i].id
+            for i in ids
+            if i in BY_ID
+            and BY_ID[i].segment == "specification"
+            and any(_product_of(s) == product for s in BY_ID[i].all_sources)
+        ]
+>       assert len(found) >= 2, f"{product}: only {found} among EV-103..EV-122"
+E       AssertionError: P0052: only [] among EV-103..EV-122
+E       assert 0 >= 2
+E        +  where 0 = len([])
+
+evals/tests/test_rag12_eval_300.py:226: AssertionError
+____________ test_planted_review_product_has_two_spec_items[P0071] _____________
+
+product = 'P0071'
+
+    @pytest.mark.req("RAG-12")
+    @pytest.mark.parametrize("product", PLANTED_PRODUCTS)
+    def test_planted_review_product_has_two_spec_items(product: str) -> None:
+        ids = _segment_range("specification")[:20]  # EV-103..EV-122
+        assert ids[0] == "EV-103"
+        assert ids[-1] == "EV-122"
+        found = [
+            BY_ID[i].id
+            for i in ids
+            if i in BY_ID
+            and BY_ID[i].segment == "specification"
+            and any(_product_of(s) == product for s in BY_ID[i].all_sources)
+        ]
+>       assert len(found) >= 2, f"{product}: only {found} among EV-103..EV-122"
+E       AssertionError: P0071: only [] among EV-103..EV-122
+E       assert 0 >= 2
+E        +  where 0 = len([])
+
+evals/tests/test_rag12_eval_300.py:226: AssertionError
+____________ test_planted_review_product_has_two_spec_items[P0088] _____________
+
+product = 'P0088'
+
+    @pytest.mark.req("RAG-12")
+    @pytest.mark.parametrize("product", PLANTED_PRODUCTS)
+    def test_planted_review_product_has_two_spec_items(product: str) -> None:
+        ids = _segment_range("specification")[:20]  # EV-103..EV-122
+        assert ids[0] == "EV-103"
+        assert ids[-1] == "EV-122"
+        found = [
+            BY_ID[i].id
+            for i in ids
+            if i in BY_ID
+            and BY_ID[i].segment == "specification"
+            and any(_product_of(s) == product for s in BY_ID[i].all_sources)
+        ]
+>       assert len(found) >= 2, f"{product}: only {found} among EV-103..EV-122"
+E       AssertionError: P0088: only [] among EV-103..EV-122
+E       assert 0 >= 2
+E        +  where 0 = len([])
+
+evals/tests/test_rag12_eval_300.py:226: AssertionError
+____________ test_planted_review_product_has_two_spec_items[P0121] _____________
+
+product = 'P0121'
+
+    @pytest.mark.req("RAG-12")
+    @pytest.mark.parametrize("product", PLANTED_PRODUCTS)
+    def test_planted_review_product_has_two_spec_items(product: str) -> None:
+        ids = _segment_range("specification")[:20]  # EV-103..EV-122
+        assert ids[0] == "EV-103"
+        assert ids[-1] == "EV-122"
+        found = [
+            BY_ID[i].id
+            for i in ids
+            if i in BY_ID
+            and BY_ID[i].segment == "specification"
+            and any(_product_of(s) == product for s in BY_ID[i].all_sources)
+        ]
+>       assert len(found) >= 2, f"{product}: only {found} among EV-103..EV-122"
+E       AssertionError: P0121: only [] among EV-103..EV-122
+E       assert 0 >= 2
+E        +  where 0 = len([])
+
+evals/tests/test_rag12_eval_300.py:226: AssertionError
+____________ test_planted_review_product_has_two_spec_items[P0149] _____________
+
+product = 'P0149'
+
+    @pytest.mark.req("RAG-12")
+    @pytest.mark.parametrize("product", PLANTED_PRODUCTS)
+    def test_planted_review_product_has_two_spec_items(product: str) -> None:
+        ids = _segment_range("specification")[:20]  # EV-103..EV-122
+        assert ids[0] == "EV-103"
+        assert ids[-1] == "EV-122"
+        found = [
+            BY_ID[i].id
+            for i in ids
+            if i in BY_ID
+            and BY_ID[i].segment == "specification"
+            and any(_product_of(s) == product for s in BY_ID[i].all_sources)
+        ]
+>       assert len(found) >= 2, f"{product}: only {found} among EV-103..EV-122"
+E       AssertionError: P0149: only [] among EV-103..EV-122
+E       assert 0 >= 2
+E        +  where 0 = len([])
+
+evals/tests/test_rag12_eval_300.py:226: AssertionError
+____________ test_planted_review_product_has_two_spec_items[P0178] _____________
+
+product = 'P0178'
+
+    @pytest.mark.req("RAG-12")
+    @pytest.mark.parametrize("product", PLANTED_PRODUCTS)
+    def test_planted_review_product_has_two_spec_items(product: str) -> None:
+        ids = _segment_range("specification")[:20]  # EV-103..EV-122
+        assert ids[0] == "EV-103"
+        assert ids[-1] == "EV-122"
+        found = [
+            BY_ID[i].id
+            for i in ids
+            if i in BY_ID
+            and BY_ID[i].segment == "specification"
+            and any(_product_of(s) == product for s in BY_ID[i].all_sources)
+        ]
+>       assert len(found) >= 2, f"{product}: only {found} among EV-103..EV-122"
+E       AssertionError: P0178: only [] among EV-103..EV-122
+E       assert 0 >= 2
+E        +  where 0 = len([])
+
+evals/tests/test_rag12_eval_300.py:226: AssertionError
+____________ test_planted_review_product_has_two_spec_items[P0156] _____________
+
+product = 'P0156'
+
+    @pytest.mark.req("RAG-12")
+    @pytest.mark.parametrize("product", PLANTED_PRODUCTS)
+    def test_planted_review_product_has_two_spec_items(product: str) -> None:
+        ids = _segment_range("specification")[:20]  # EV-103..EV-122
+        assert ids[0] == "EV-103"
+        assert ids[-1] == "EV-122"
+        found = [
+            BY_ID[i].id
+            for i in ids
+            if i in BY_ID
+            and BY_ID[i].segment == "specification"
+            and any(_product_of(s) == product for s in BY_ID[i].all_sources)
+        ]
+>       assert len(found) >= 2, f"{product}: only {found} among EV-103..EV-122"
+E       AssertionError: P0156: only [] among EV-103..EV-122
+E       assert 0 >= 2
+E        +  where 0 = len([])
+
+evals/tests/test_rag12_eval_300.py:226: AssertionError
+_______ test_new_policy_items_only_label_documents_for_their_own_region ________
+
+    @pytest.mark.req("RAG-12")
+    def test_new_policy_items_only_label_documents_for_their_own_region() -> None:
+        docs = {d["doc_id"]: d for d in _records("documents.jsonl")}
+        policy_ids = _segment_range("policy")
+        missing = [i for i in policy_ids if i not in BY_ID]
+>       assert not missing, f"policy items missing: {missing}"
+E       AssertionError: policy items missing: ['EV-225', 'EV-226', 'EV-227', 'EV-228', 'EV-229', 'EV-230', 'EV-231', 'EV-232', 'EV-233', 'EV-234', 'EV-235', 'EV-236', 'EV-237', 'EV-238', 'EV-239', 'EV-240', 'EV-241', 'EV-242', 'EV-243', 'EV-244', 'EV-245', 'EV-246', 'EV-247', 'EV-248', 'EV-249', 'EV-250']
+E       assert not ['EV-225', 'EV-226', 'EV-227', 'EV-228', 'EV-229', 'EV-230', ...]
+
+evals/tests/test_rag12_eval_300.py:234: AssertionError
+=========================== short test summary info ============================
+FAILED evals/tests/test_rag12_eval_300.py::test_there_are_300_items_and_the_new_ids_run_ev103_to_ev300_in_order
+FAILED evals/tests/test_rag12_eval_300.py::test_new_items_follow_the_id_layout[103-152-specification]
+FAILED evals/tests/test_rag12_eval_300.py::test_new_items_follow_the_id_layout[153-177-comparison]
+FAILED evals/tests/test_rag12_eval_300.py::test_new_items_follow_the_id_layout[178-202-intent_filter]
+FAILED evals/tests/test_rag12_eval_300.py::test_new_items_follow_the_id_layout[203-224-variant]
+FAILED evals/tests/test_rag12_eval_300.py::test_new_items_follow_the_id_layout[225-250-policy]
+FAILED evals/tests/test_rag12_eval_300.py::test_new_items_follow_the_id_layout[251-264-ambiguous]
+FAILED evals/tests/test_rag12_eval_300.py::test_new_items_follow_the_id_layout[265-282-unanswerable]
+FAILED evals/tests/test_rag12_eval_300.py::test_new_items_follow_the_id_layout[283-300-adversarial]
+FAILED evals/tests/test_rag12_eval_300.py::test_new_items_hold_exactly_18_unanswerable_and_18_adversarial
+FAILED evals/tests/test_rag12_eval_300.py::test_new_items_are_model_reviewed
+FAILED evals/tests/test_rag12_eval_300.py::test_no_new_item_uses_a_table_linen_product_or_says_tablecloth
+FAILED evals/tests/test_rag12_eval_300.py::test_unanswerable_attribute_is_absent_from_the_fixtures[EV-265]
+FAILED evals/tests/test_rag12_eval_300.py::test_unanswerable_attribute_is_absent_from_the_fixtures[EV-266]
+FAILED evals/tests/test_rag12_eval_300.py::test_unanswerable_attribute_is_absent_from_the_fixtures[EV-267]
+FAILED evals/tests/test_rag12_eval_300.py::test_unanswerable_attribute_is_absent_from_the_fixtures[EV-268]
+FAILED evals/tests/test_rag12_eval_300.py::test_unanswerable_attribute_is_absent_from_the_fixtures[EV-269]
+FAILED evals/tests/test_rag12_eval_300.py::test_unanswerable_attribute_is_absent_from_the_fixtures[EV-270]
+FAILED evals/tests/test_rag12_eval_300.py::test_unanswerable_attribute_is_absent_from_the_fixtures[EV-271]
+FAILED evals/tests/test_rag12_eval_300.py::test_unanswerable_attribute_is_absent_from_the_fixtures[EV-272]
+FAILED evals/tests/test_rag12_eval_300.py::test_unanswerable_attribute_is_absent_from_the_fixtures[EV-273]
+FAILED evals/tests/test_rag12_eval_300.py::test_unanswerable_attribute_is_absent_from_the_fixtures[EV-274]
+FAILED evals/tests/test_rag12_eval_300.py::test_unanswerable_attribute_is_absent_from_the_fixtures[EV-275]
+FAILED evals/tests/test_rag12_eval_300.py::test_unanswerable_attribute_is_absent_from_the_fixtures[EV-276]
+FAILED evals/tests/test_rag12_eval_300.py::test_unanswerable_attribute_is_absent_from_the_fixtures[EV-277]
+FAILED evals/tests/test_rag12_eval_300.py::test_unanswerable_attribute_is_absent_from_the_fixtures[EV-278]
+FAILED evals/tests/test_rag12_eval_300.py::test_unanswerable_attribute_is_absent_from_the_fixtures[EV-279]
+FAILED evals/tests/test_rag12_eval_300.py::test_unanswerable_attribute_is_absent_from_the_fixtures[EV-280]
+FAILED evals/tests/test_rag12_eval_300.py::test_unanswerable_attribute_is_absent_from_the_fixtures[EV-281]
+FAILED evals/tests/test_rag12_eval_300.py::test_unanswerable_attribute_is_absent_from_the_fixtures[EV-282]
+FAILED evals/tests/test_rag12_eval_300.py::test_new_reference_facts_hold_no_price_stock_or_product_page
+FAILED evals/tests/test_rag12_eval_300.py::test_planted_review_product_has_two_spec_items[P0001]
+FAILED evals/tests/test_rag12_eval_300.py::test_planted_review_product_has_two_spec_items[P0006]
+FAILED evals/tests/test_rag12_eval_300.py::test_planted_review_product_has_two_spec_items[P0020]
+FAILED evals/tests/test_rag12_eval_300.py::test_planted_review_product_has_two_spec_items[P0052]
+FAILED evals/tests/test_rag12_eval_300.py::test_planted_review_product_has_two_spec_items[P0071]
+FAILED evals/tests/test_rag12_eval_300.py::test_planted_review_product_has_two_spec_items[P0088]
+FAILED evals/tests/test_rag12_eval_300.py::test_planted_review_product_has_two_spec_items[P0121]
+FAILED evals/tests/test_rag12_eval_300.py::test_planted_review_product_has_two_spec_items[P0149]
+FAILED evals/tests/test_rag12_eval_300.py::test_planted_review_product_has_two_spec_items[P0178]
+FAILED evals/tests/test_rag12_eval_300.py::test_planted_review_product_has_two_spec_items[P0156]
+FAILED evals/tests/test_rag12_eval_300.py::test_new_policy_items_only_label_documents_for_their_own_region
+42 failed, 2 passed in 0.22s
+
+--- rerun after the main session's edits (EV-278 warranty -> P0105 country of origin, because FAQ-012 answers warranty; table_linen names also checked in queries; test_new_items_are_model_reviewed removed, because it would fail once the user marks the 36 items human) ---
+41 failed, 2 passed in 0.20s
+
+--- after the 198 items were appended (2026-11-14) ---
+43 passed in 0.20s
+
+--- mutation checks: each applied to a copy, the named test run, the file restored (cmp clean after) ---
+  KILLED: 1 byte flip in line 1 -> test_first_102_lines: ['1 failed, 42 deselected in 0.08s']
+  KILLED: 2 last item dropped -> test_there_are_300: ['1 failed, 42 deselected in 0.08s']
+  KILLED: 3 EV-153 relabelled specification -> test_new_items_follow_the_id_layout: ['1 failed, 7 passed, 35 deselected in 0.11s']
+  KILLED: 3b EV-283 relabelled policy -> test_new_items_hold_exactly: ['1 failed, 42 deselected in 0.10s']
+  KILLED: 4 EV-123 labels P0190 (table_linen) -> test_no_new_item_uses: ['1 failed, 42 deselected in 0.08s']
+  KILLED: 4b EV-123 query names a table_linen product -> test_no_new_item_uses: ['1 failed, 42 deselected in 0.08s']
+  KILLED: 4c EV-124 query names a table_linen product without the word -> test_no_new_item_uses: ['1 failed, 42 deselected in 0.08s']
+  KILLED: 5 EV-265 regex widened to match the product -> test_unanswerable_attribute_is_absent: ['1 failed, 17 passed, 25 deselected in 0.22s']
+  KILLED: 5b EV-265 labels another product -> test_unanswerable_attribute_is_absent: ['1 failed, 17 passed, 25 deselected in 0.22s']
+  KILLED: 6 a currency amount in a fact -> test_new_reference_facts: ['1 failed, 42 deselected in 0.08s']
+  KILLED: 6b 'product page' in a fact -> test_new_reference_facts: ['1 failed, 42 deselected in 0.08s']
+  KILLED: 6c a stock count in a fact -> test_new_reference_facts: ['1 failed, 42 deselected in 0.08s']
+  KILLED: 7 EV-103 moved to P0002 -> test_planted_review_product_has_two_spec_items: ['1 failed, 9 passed, 33 deselected in 0.08s']
+  KILLED: 8 EV-225 (CA) labels the US shipping policy -> test_new_policy_items_only_label: ['1 failed, 42 deselected in 0.08s']
+  Note: 4c is not a distinct case. Every table_linen product name ends in "Tablecloth", so the name check adds nothing beyond the word check today.
+
+--- after the security-review fixes L1-L4 (2026-11-14) ---
+48 passed in 0.21s
+--- mutation checks for the fixed assertions (the 'pocket' and en-dash matches were confirmed to come only from the products' guides, not their own text) ---
+  KILLED: L3 EV-278 regex 'pocket' (only in P0137's size guide SG-BEDDING) -> test_unanswerable_attribute_is_absent: ['1 failed, 17 passed, 30 deselected in 0.24s']
+  KILLED: L2 EV-265 regex an en dash (non-ASCII, only in P0005's size guide) -> test_unanswerable_attribute_is_absent: ['1 failed, 17 passed, 30 deselected in 0.24s']
+  KILLED: L4 EV-209 (P0010, US/CA only) moved to UK -> test_new_items_only_label_products_sold: ['1 failed, 47 deselected in 0.08s']
+  KILLED: L4 EV-245 live-check wording dropped -> test_price_and_stock_items_say: ['1 failed, 3 passed, 44 deselected in 0.08s']
+  KILLED: L4 EV-224 live-check wording dropped -> test_price_and_stock_items_say: ['1 failed, 3 passed, 44 deselected in 0.08s']
+
+--- re-review fix N1 (2026-11-14): the guide guard asserts every guide ID resolves ---
+48 passed in 0.21s
+  KILLED: N1, SG-BEDDING made unresolvable in the test (simulates a renamed guide) -> test_unanswerable_attribute_is_absent: 5 failed, 13 passed, 30 deselected in 0.21s
+
+--- advisor finding 1: the second edit to the UNANSWERABLE table (2026-11-14) ---
+  Timing: after the 41-failed rerun above and before the items were appended, the table changed again: EV-267 P0035 fleece weight -> P0071 pockets; EV-273 P0125 thread count -> P0029 temperature rating (EV-274..277 keep thread count for P0129, P0131, P0133, P0136); EV-278 P0105 -> P0137 corner loops; EV-279 OEKO-TEX -> bluesign; EV-281 hypoallergenic -> P0164 mulesing-free. Reason: three repeated existing traps (TRAP-MISS-006, 004, 005 = EV-076, EV-074, EV-075), and two repeated attributes already tested (EV-082, EV-083). No red run was logged between that edit and '43 passed'; the checks below supply the evidence that each new regex can fail.
+  regex catches the attribute: EV-267 /pocket/ matches 'These pants have four zip pockets.'
+  regex catches the attribute: EV-273 /temperature|degrees|comfort rating|°|rated to/ matches 'Comfort rating: -5°C.'
+  regex catches the attribute: EV-278 /loop|ties\b|corner/ matches 'Corner ties keep it in the cover.'
+  regex catches the attribute: EV-279 /bluesign/ matches 'This fleece is bluesign approved.'
+  regex catches the attribute: EV-281 /mules/ matches 'Made from mulesing-free wool.'
+  KILLED: EV-267 regex swapped for a word in its product's text -> ['1 failed, 47 deselected in 0.10s']
+  KILLED: EV-273 regex swapped for a word in its product's text -> ['1 failed, 47 deselected in 0.10s']
+  KILLED: EV-279 regex swapped for a word in its product's text -> ['1 failed, 47 deselected in 0.13s']
+  KILLED: EV-281 regex swapped for a word in its product's text -> ['1 failed, 47 deselected in 0.10s']
+  KILLED: EV-282 removed from the table -> test_every_unanswerable_id_has_a_regex: ['1 failed, 46 deselected in 0.09s']
+
+--- note on the advisor-finding-1 entries above (2026-11-14) ---
+  Each wiring mutation ran: pytest -k 'test_unanswerable_attribute_is_absent and <ID>'. The word swapped in for the regex: EV-267 'hiking' (P0071's name), EV-273 'puffer' (P0029's name), EV-279 'fleece' (whole corpus), EV-281 'throw' (P0164's name). The key-set case removed the EV-282 entry and ran -k test_every_unanswerable_id_has_a_regex.
