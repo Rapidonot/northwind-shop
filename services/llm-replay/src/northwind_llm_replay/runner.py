@@ -406,6 +406,10 @@ class RunnerGate:
         if method != "POST" or raw_path != PRICED_PATH or query not in ALLOWED_QUERIES:
             message = "the runner forwards only POST /v1/messages"
             return "refused-path", error_response(403, "permission", False, message)
+        if len(raw) > MAX_BODY_BYTES:
+            # The bytes to forward, which a reorder may have re-serialized (row #16, review L3).
+            message = f"a request body is at most {MAX_BODY_BYTES} bytes"
+            return "refused-body", error_response(413, "validation", False, message)
         if not isinstance(body, dict) or not _has_one_meaning(raw):
             message = "request body must be a JSON object with no duplicate keys"
             return "refused-body", error_response(400, "validation", False, message)

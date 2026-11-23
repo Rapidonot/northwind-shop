@@ -109,14 +109,20 @@ class CassetteStore:
         p.write_text(text, encoding="utf-8")
         return p
 
-    def miss_diff(self, match: dict[str, Any], max_lines: int = 200) -> str:
-        """Unified diff of `match` against the most similar cassette with the same method + path."""
+    def miss_diff(
+        self, match: dict[str, Any], test_id: str | None = None, max_lines: int = 200
+    ) -> str:
+        """Unified diff of `match` against the most similar cassette with the same method + path:
+        of `test_id`'s cassettes if it has any, so a miss is reported in seconds (row #16), else of
+        the whole suite."""
         candidates = [
             c
             for c in self.all()
             if c.match.get("method") == match.get("method")
             and c.match.get("path") == match.get("path")
         ]
+        same_test = [c for c in candidates if test_id is not None and c.test_id == test_id]
+        candidates = same_test or candidates
         if not candidates:
             return f"(no cassette in {self.dir} for {match.get('method')} {match.get('path')})"
         want = canonical(match)

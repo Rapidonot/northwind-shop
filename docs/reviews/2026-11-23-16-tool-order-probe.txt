@@ -1,0 +1,21 @@
+Row #16, 2026-11-23: why a replay can miss on parallel tool results, and which assistant-side fixes work.
+No LLM, no spend: the real bundled CLI (claude-agent-sdk 0.2.178), a scripted model, a real mcp-rag (served by a
+retriever that sleeps 2 s on the tool call) and a real mcp-catalog over HTTP. One model turn asks for two tools
+in this order: toolu_a = retrieve_context (slow), toolu_b = get_product (fast). The probe reads the order of the
+tool_result blocks in the next model request. Script: the session scratchpad's order_probe.py / order_probe2.py.
+
+  setting                                        calls (s from start)                        tool_result order
+  default                                        rag 0.44-2.45, catalog 0.45                 b, a  (completion)
+  CLAUDE_CODE_MAX_TOOL_USE_CONCURRENCY=1         rag 3.41-5.41, catalog 3.41                 b, a  (still parallel)
+  read_only_hint=False on the read tools         rag 0.85-2.86, catalog 2.87                 a, b  (serial, tool_use order)
+  PreToolUse/PostToolUse sequencer (SDK hooks)   no hook call seen; rag and catalog at 0.73  b, a
+
+So the CLI runs tools annotated read-only in parallel and appends their results as they finish; the concurrency
+setting does not serialize them, and SDK hooks do not run under the factory's `--bare` (no hook call was seen).
+Turning the read-only hint off serializes them, but the read tools are read-only, and tests/mcp/test_contract.py,
+tests/mcp/test_cc10_contract_errors.py and services/mcp-catalog/tests/test_tools.py pin the hint.
+
+Recordings whose parallel tool results are not in tool_use order, every suite: one, eval-answers EV-165 seq 1
+(retrieve_context, search_products; recorded search_products first). In order but exposed: eval-answers 12 more
+requests (EV-029, 030, 205, 213, 217, 245), assistant-smoke 2 (test_a_price_changed_while_the_catalog_runs_is_the_one_quoted,
+five parallel get_price calls: the #12 flake), backend-audit 6.
