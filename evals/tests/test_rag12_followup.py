@@ -36,7 +36,7 @@ from northwind_evals.gate import (
 )
 from northwind_evals.harness import citations_ok, run_item
 from northwind_evals.items import EvalItem, load_items
-from northwind_evals.judge import JUDGE_VERSION, Judge
+from northwind_evals.judge import JUDGE_VERSION, Judge, ProductCatalog
 from northwind_evals.testing import MessagesAnswerer
 from northwind_llm_replay.proxy import ProxyState
 from northwind_llm_replay.scan import load_canaries
@@ -456,6 +456,11 @@ def test_rescore_with_a_request_that_has_no_recording_makes_no_candidate_no_call
     """The real proxy in replay over an empty cassette tree. Upstream is wired to fail loudly, and
     the ledger is pointed at a path that must never appear."""
     rig.setup()
+    # The judge's catalog path is relative and the chdir below leaves an empty tree: this passed
+    # only when an earlier test in the worker had filled `default_catalog`'s cache (row 32b, found
+    # under xdist; DEV-1's test_cli fix). Load it from the checkout first, on purpose.
+    catalog = ProductCatalog.load(REPO / "data" / "fixtures")
+    monkeypatch.setattr("northwind_evals.judge.default_catalog", lambda: catalog)
     monkeypatch.chdir(tmp_path)  # `cassettes/` is relative to the working directory: empty
     monkeypatch.setattr(cli, "_context_leaks", lambda contexts, items: [])
     ledger_file = tmp_path / "ledger" / "ledger.jsonl"

@@ -71,6 +71,8 @@ Extra hardening is not pursued for its own sake.
 1. **No new Low items in Open items.**
    - A low finding that is not a real bug goes in the PR body only.
    - A real bug is fixed in the row or logged with a named owning row.
+   - In CLAUDE.md's routine triage: a Low that is a real bug in the row's files is fixed; a real bug elsewhere goes
+     in `PROGRESS.md`, "Open items", with a named owning row; any other Low goes in the PR body only.
 2. **One security pass per row.** A scoped re-review happens only when a Medium or higher finding was fixed.
 3. **Failing-first tests for behaviour changes.** Mutants only for gate, integrity, spend and ship code.
 4. **Plans stay short:** criteria, changes, tests, paths, stops.
@@ -79,6 +81,22 @@ Extra hardening is not pursued for its own sake.
 5. **Records stay short.** A PROGRESS row's notes cell is a few lines plus links to `docs/reviews/`, not a
    transcript. Detail lives in the review files.
 6. **No hardening rows.** Bundle any needed fix into the next feature row that touches the same code.
+7. **`test-writer` runs for gate, integrity, spend, ship and hard-rule code.**
+   - Hard-rule code means the hard-rule 1, 6, 7, 8 and 9 paths listed under CLAUDE.md's "Routine rows".
+   - Elsewhere the session writes the tests itself, failing first (rule 3).
+8. **The chain order (added by the user in row 32b):**
+   - implement;
+   - `test-writer` where rule 7 says;
+   - one `security-reviewer` pass, then fixes;
+   - a scoped re-review only after a Medium or higher fix;
+   - commit;
+   - PR body;
+   - **`advisor-reviewer`, with its fixes**;
+   - **the single `make ci`**, once, at the head the advisor read (a re-read if its fixes moved the head);
+   - the gate report.
+
+   Any change after `make ci` is a new commit and another `make ci`.
+9. **Stop 10** is a high or critical finding still open after its fix, and after the re-review when one runs.
 
 ## Consequences
 
@@ -91,6 +109,7 @@ Extra hardening is not pursued for its own sake.
   The items themselves are not moved or rewritten in row 32b: window A's #16 edits the same section. The archive move
   belongs to the conflict-free-records row after #16 ships.
 - `CLAUDE.md` is control surface, so row 32b does not edit it.
-  - The user edited it for this decision in `5b01c9f`.
-  - Where that edit goes beyond what is recorded here (`test-writer` scope, `advisor-reviewer` before `make ci`), row
-    32b's gate report names it for the user to record or adjust.
+  - The user edited it for this decision in `5b01c9f` and `9ba412e`.
+  - Rules 1, 7, 8 and 9 above record those edits, so CLAUDE.md's "(decision 0021)" covers them.
+  - `tests/hooks/test_stop_conditions.py` pins the new wording as tightly as the old: the chain order with the advisor
+    before `make ci`, stop 10, and the Low rule with its owner clause.
