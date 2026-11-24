@@ -1,0 +1,50 @@
+# Row #27 failing-first log (scripted, single files, serially; no database)
+# base f84f97df528956c6fd76bb0db8d3c3fb69175ced (origin/main f84f97d), before any fix
+
+## 2026-11-24T13:45:11Z bundled fixes, tests only
+$ uv run pytest -p no:cacheprovider -q services/gateway/tests/test_27_session_cookie_parsing.py
+services/gateway/tests/test_27_session_cookie_parsing.py:63: AssertionError
+E       AssertionError: assert ['nw_session=...t; Path=/api'] == []
+services/gateway/tests/test_27_session_cookie_parsing.py:63: AssertionError
+E       AssertionError: assert ['nw_session=...t; Path=/api'] == []
+services/gateway/tests/test_27_session_cookie_parsing.py:63: AssertionError
+E       AssertionError: assert ['nw_session=...t; Path=/api'] == []
+services/gateway/tests/test_27_session_cookie_parsing.py:63: AssertionError
+E       AssertionError: assert 'cccccccccccc...ccccccccccccc' == 'bbbbbbbbbbbb...bbbbbbbbbbbbb'
+services/gateway/tests/test_27_session_cookie_parsing.py:86: AssertionError
+FAILED services/gateway/tests/test_27_session_cookie_parsing.py::test_another_apps_cookie_does_not_hide_the_session[other app=1; {cookie}]
+FAILED services/gateway/tests/test_27_session_cookie_parsing.py::test_another_apps_cookie_does_not_hide_the_session[flag; {cookie}]
+FAILED services/gateway/tests/test_27_session_cookie_parsing.py::test_another_apps_cookie_does_not_hide_the_session[{cookie}; flag]
+FAILED services/gateway/tests/test_27_session_cookie_parsing.py::test_another_apps_cookie_does_not_hide_the_session[a="x; {cookie}]
+FAILED services/gateway/tests/test_27_session_cookie_parsing.py::test_the_first_session_cookie_wins_when_two_are_sent
+5 failed, 5 passed in 0.88s
+$ uv run pytest -p no:cacheprovider -q services/backend/tests/test_27_escalate_card_check.py
+E       AssertionError: assert Ok(value=Order(order_id='O000001', shopper_id='S0103', region='US', lines=(OrderLine(product_id='P0102', variant_id='P...scalation='fraud_review', address_on_file=False, dry_run=False, payment_status=None, captured_minor=0), is_error=False) == ToolError(error_category=<ErrorCategory.VALIDATION: 'validation'>, is_retryable=False, code='card_data_refused', message='Card data is not accepted here. Use a payment token.', is_error=True)
+services/backend/tests/test_27_escalate_card_check.py:43: AssertionError
+E       AssertionError: assert Ok(value=Order(order_id='O000001', shopper_id='S0103', region='US', lines=(OrderLine(product_id='P0102', variant_id='P...scalation='fraud_review', address_on_file=False, dry_run=False, payment_status=None, captured_minor=0), is_error=False) == ToolError(error_category=<ErrorCategory.VALIDATION: 'validation'>, is_retryable=False, code='card_data_refused', message='Card data is not accepted here. Use a payment token.', is_error=True)
+services/backend/tests/test_27_escalate_card_check.py:43: AssertionError
+E       AssertionError: assert Ok(value=Order(order_id='O000001', shopper_id='S0103', region='US', lines=(OrderLine(product_id='P0102', variant_id='P...scalation='fraud_review', address_on_file=False, dry_run=False, payment_status=None, captured_minor=0), is_error=False) == ToolError(error_category=<ErrorCategory.VALIDATION: 'validation'>, is_retryable=False, code='card_data_refused', message='Card data is not accepted here. Use a payment token.', is_error=True)
+services/backend/tests/test_27_escalate_card_check.py:43: AssertionError
+FAILED services/backend/tests/test_27_escalate_card_check.py::test_card_data_in_an_escalation_context_is_refused[context0]
+FAILED services/backend/tests/test_27_escalate_card_check.py::test_card_data_in_an_escalation_context_is_refused[context1]
+FAILED services/backend/tests/test_27_escalate_card_check.py::test_card_data_in_an_escalation_context_is_refused[context2]
+3 failed, 2 passed in 0.12s
+$ uv run pytest -p no:cacheprovider -q tests/infra/test_27_compose_binding.py
+E       AssertionError: assert ['${POSTGRES_...:-5432}:5432'] == ['127.0.0.1:$...:-5432}:5432']
+tests/infra/test_27_compose_binding.py:21: AssertionError
+FAILED tests/infra/test_27_compose_binding.py::test_postgres_is_published_on_loopback_only
+1 failed, 1 passed in 0.07s
+
+## 2026-11-24T13:45:32Z after the fixes (session.py lenient parser; orders.py raw-text card check; compose 127.0.0.1)
+$ uv run pytest -p no:cacheprovider -q services/gateway/tests/test_27_session_cookie_parsing.py
+10 passed in 0.57s
+$ uv run pytest -p no:cacheprovider -q services/gateway/tests/test_cart_session.py
+20 passed in 1.11s
+$ uv run pytest -p no:cacheprovider -q services/backend/tests/test_27_escalate_card_check.py
+5 passed in 0.10s
+$ uv run pytest -p no:cacheprovider -q services/backend/tests/test_found3_card_data.py
+69 passed in 0.09s
+$ uv run pytest -p no:cacheprovider -q tests/infra/test_27_compose_binding.py
+2 passed in 0.05s
+$ uv run pytest -p no:cacheprovider -q services/llm-replay/tests/test_runner_support.py
+207 passed in 36.63s

@@ -26,7 +26,6 @@ import logging
 import re
 import secrets
 from collections.abc import Callable
-from http.cookies import CookieError, SimpleCookie
 from typing import Any
 
 from northwind_common.mcp_gate import ASGIApp, Message, Receive, Scope, Send
@@ -63,18 +62,28 @@ def verified(key: bytes, value: str) -> str | None:
     return session if hmac.compare_digest(_mac(key, session), mac) else None
 
 
+def cookie_values(scope: Scope, name: str) -> list[str]:
+    """Every value sent for cookie `name`, in header order. Lenient on purpose (H10, row #27): each
+    `;`-separated pair is read on its own, so a valueless cookie (`flag`), a name with a space or an
+    unclosed quote from another localhost app no longer hides ours, as `SimpleCookie` did by
+    dropping the whole jar. A value is taken as sent, with no unquoting: only the exact bytes the
+    gateway signed verify (`verified`)."""
+    found: list[str] = []
+    for header, value in scope.get("headers") or ():
+        if bytes(header) != b"cookie":
+            continue
+        for pair in bytes(value).decode("latin-1").split(";"):
+            key, sep, item = pair.partition("=")
+            if sep and key.strip() == name:
+                found.append(item.strip())
+    return found
+
+
 def _cookie_value(scope: Scope) -> str:
-    for name, value in scope.get("headers") or ():
-        if bytes(name) != b"cookie":
-            continue
-        try:
-            jar: SimpleCookie = SimpleCookie(bytes(value).decode("latin-1"))
-        except CookieError:
-            continue
-        morsel = jar.get(COOKIE)
-        if morsel is not None:
-            return morsel.value
-    return ""
+    """The first `nw_session` value sent. Browsers send a cookie with a longer path first, so ours
+    (`Path=/api`) comes before one another app set on `/`."""
+    values = cookie_values(scope, COOKIE)
+    return values[0] if values else ""
 
 
 def set_cookie_header(key: bytes, session: str) -> tuple[bytes, bytes]:
