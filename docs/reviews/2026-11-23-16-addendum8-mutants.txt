@@ -24,10 +24,17 @@ On the tree at 45469f1 (code unchanged since 16cd485). A mutant is killed when a
 The first `l3-runner-main` run hit a harness error: main's module had to be in sys.modules for its dataclasses to
 load. After that was fixed, the rerun is the result above.
 
-Control runs (no mutant) of the three new test files: 5 runs, 3 with all 180 passing and 2 with 179 passed and
-1 failed. The one failure named was the end-to-end
-test_the_model_sees_the_same_second_request_whichever_tool_finishes_first. Repeat runs of the two end-to-end
-tests: 1 failure in 16. In the failing run the CLI's second request had `"tools": []`, and the MCP gates logged
-"request refused: token" twice, so the CLI had connected to neither server. That is a connection failure in the
-test's setup, not a tool-result order: both requests' results were in tool_use order. The cause is under
-investigation; see the gate report.
+Runs of test_the_model_sees_the_same_second_request_whichever_tool_finishes_first, every one so far:
+
+  where                                                 runs   failed
+  control runs (all three new test files, no mutant)       5   2: one named this test, the other's name not captured
+  loop 1 (this test alone)                                 6   0
+  loop 2 (both end-to-end tests, under caffeinate)         6   1: run 12, then the loop stopped
+  loop 3 (this test alone, token-refusal diagnostics)     30   0
+  total                                                   47   3, of which 2 are confirmed as this test
+
+In the failing run of loop 2, the CLI's second request had `"tools": []` and `toolu_b`'s result was "No such tool
+available". Both MCP gates logged "request refused: token", so the CLI connected to neither server. Both
+requests' results were in tool_use order. That is a connection failure in the test's setup, not an ordering
+failure. A passing run logs no refusal. The cause is not found. The failure signature matches #15's open item
+(stale replay when a turn outlives the 120 s token), but a 9-second test does not reach 120 s.
