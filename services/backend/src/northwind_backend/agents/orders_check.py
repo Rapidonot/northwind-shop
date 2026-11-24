@@ -23,7 +23,7 @@ from claude_agent_sdk import SdkMcpTool, tool
 from northwind_backend.agents.messages import model_envelope
 from northwind_backend.agents.runtime import RunState, Step, SubagentSpec, run_subagent
 from northwind_backend.audit import AuditContext, AuditWriteError, card_data, outcome_ref
-from northwind_backend.errors import AUDIT_UNAVAILABLE, AgentResult, Ok, Result
+from northwind_backend.errors import AUDIT_UNAVAILABLE, AgentResult, Ok, Result, permission
 from northwind_backend.fakes._base import NOT_PERMITTED
 from northwind_backend.ports import FraudAssessment, FraudPort, PaymentIntent, PaymentPort
 from northwind_backend.recovery import Recovered, RetryPolicy, call_with_recovery
@@ -45,6 +45,9 @@ PAYMENT_TOOL_NAME = f"mcp__{SERVER_NAME}__{PAYMENT_TOOL}"
 FRAUD_STEP = "fraud_assessments"
 PAYMENT_STEP = "payment_status"
 DEFAULT_POLICY = RetryPolicy()
+INTENT_NOT_FOR_ORDER = permission(
+    "intent_not_for_order", "This payment intent belongs to another order, so it is not shown."
+)
 _ORDER_ID = re.compile(r"O\d{6}", re.ASCII)
 _INTENT_ID = re.compile(r"pi_\d{6}", re.ASCII)
 
@@ -198,7 +201,13 @@ def _tools(
         value: Any = None
         if isinstance(done.result, Ok):
             intent: PaymentIntent = done.result.value
-            value = _plain(intent, _INTENT_FIELDS)
+            if intent.order_id != task.order_id:
+                # Row #24, security review M1: a task's intent may come from a model's plan, so an
+                # intent of another order is refused here and its values reach neither the model nor
+                # the answer (the port read itself is audited as it happened).
+                done = Recovered(INTENT_NOT_FOR_ORDER, done.attempts)
+            else:
+                value = _plain(intent, _INTENT_FIELDS)
         state.record(PAYMENT_STEP, intent_id, done, {"intent_id": intent_id}, value)
         return _payload(PAYMENT_TOOL, done.result, value)
 
