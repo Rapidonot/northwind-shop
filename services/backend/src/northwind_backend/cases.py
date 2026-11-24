@@ -2,9 +2,9 @@
 
 A case is what staff act on without the transcript: the order, the amounts, the root cause, the
 recommended action and a summary. Code fills in every field but the summary, from tool data: the
-order store, the catalog's live prices and the action table (hard rule 2). The summary is the Care
-agent's, written from an untrusted transcript, kept as one line of plain text and labelled by
-`summary_source`.
+order store and the action table (hard rule 2); there is no live catalog read (the user, row
+#26). The summary is the Care agent's, written from an untrusted transcript, kept as one line of
+plain text and labelled by `summary_source`.
 
 `mcp-cases` doesn't exist yet, so the queue is this port with an in-memory fake
 (`fakes/cases.py`). A case never holds transcript text, a payment token, a postal code or card data.
@@ -28,9 +28,16 @@ NO_SUMMARY = "No summary: the Care agent gave none that could be used. Act on th
 
 
 @dataclass(frozen=True, slots=True)
+class CaseLine:
+    variant_id: str
+    quantity: int
+
+
+@dataclass(frozen=True, slots=True)
 class CaseAmounts:
-    """Minor units. `order_total_minor` is the lines at the catalog's live prices, None if a price
-    could not be read; the payment fields are what the order's payment claim last reported."""
+    """Minor units. `order_total_minor` would be the lines at their order-time prices; the lines
+    carry none today, so it is None and the case is flagged `total_unavailable`. The payment fields
+    are what the order's payment claim last reported."""
 
     order_total_minor: int | None
     authorized_minor: int
@@ -47,6 +54,7 @@ class CaseDraft:
     order_status: str
     root_cause: str
     recommended_action: str
+    lines: tuple[CaseLine, ...]
     amounts: CaseAmounts
     summary: str
     summary_source: SummarySource
@@ -54,9 +62,10 @@ class CaseDraft:
     correlation_id: str
 
     def code_fields(self) -> dict[str, Any]:
-        """What the queue's idempotency compares: only what code filled in. The summary and the
-        correlation ID are left out, so a retry whose model wrote other words gets the first case
-        back, summary included (the user's change 1 to the plan)."""
+        """What the queue's idempotency compares: only what code filled in. The summary, the
+        correlation ID and the `summary_missing` flag are left out, so a retry whose model wrote
+        other words, or wrote nothing usable the first time, gets the first case back, summary
+        included (the user's change 1 to the plan; security review L4, the user's decision)."""
         return {
             "order_id": self.order_id,
             "shopper_id": self.shopper_id,
@@ -64,8 +73,9 @@ class CaseDraft:
             "order_status": self.order_status,
             "root_cause": self.root_cause,
             "recommended_action": self.recommended_action,
+            "lines": [asdict(line) for line in self.lines],
             "amounts": asdict(self.amounts),
-            "flags": list(self.flags),
+            "flags": [flag for flag in self.flags if flag != "summary_missing"],
         }
 
 
@@ -83,6 +93,7 @@ class Case(CaseDraft):
             order_status=draft.order_status,
             root_cause=draft.root_cause,
             recommended_action=draft.recommended_action,
+            lines=draft.lines,
             amounts=draft.amounts,
             summary=draft.summary,
             summary_source=draft.summary_source,
@@ -95,6 +106,7 @@ class Case(CaseDraft):
     def to_dict(self) -> dict[str, Any]:
         body = asdict(self)
         body["flags"] = list(self.flags)
+        body["lines"] = [asdict(line) for line in self.lines]
         body["summary_label"] = SUMMARY_LABEL[self.summary_source]
         return body
 
@@ -108,7 +120,9 @@ class Case(CaseDraft):
             f"(shopper {self.shopper_id}, {self.region}, {self.order_status})",
             f"Root cause: {self.root_cause}",
             f"Recommended action: {self.recommended_action}",
-            f"Order total (minor units, live prices): {total}",
+            "Lines: "
+            + ("; ".join(f"{ln.quantity} x {ln.variant_id}" for ln in self.lines) or "none"),
+            f"Order total (minor units): {total}",
             f"Payment: {a.payment_status or 'none reported'}; authorized {a.authorized_minor}, "
             f"captured {a.captured_minor} {cur}".rstrip(),
             f"Flags: {', '.join(self.flags) or 'none'}",
@@ -138,6 +152,8 @@ def missing_for_staff(case: CaseDraft) -> list[str]:
         missing.append("summary")
     if case.amounts.order_total_minor is None and "total_unavailable" not in case.flags:
         missing.append("amounts")
+    if not case.lines:
+        missing.append("lines")
     return missing
 
 

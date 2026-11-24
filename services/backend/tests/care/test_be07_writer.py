@@ -1,7 +1,8 @@
 """BE-07 gap-filling probes (row #26): tests written from the criterion, not from the code.
 
 Covers what `test_be07_units.py` and `test_be07_criteria.py` leave open: other spellings of a
-money figure (hard rule 2), a catalog-priced total on multi-line orders, hostile transcripts with
+money figure (hard rule 2), the lines of multi-line orders with no price read (the user's
+decision on row #26), hostile transcripts with
 grouped, fullwidth and split card numbers (hard rule 1), several injections at once (hard rule 6),
 the queue's idempotency end to end (hard rule 9), structured failures (hard rule 10, BE-02), the
 audit's shape (BE-08) and a staff-side check that needs no transcript."""
@@ -27,12 +28,12 @@ from northwind_backend.agents.care import (
 )
 from northwind_backend.agents.escalation import NOT_ESCALATED, RECOMMENDED
 from northwind_backend.audit import AuditContext, InMemoryAuditSink, card_data
-from northwind_backend.cases import CaseAmounts, CaseDraft, case_key, missing_for_staff
+from northwind_backend.cases import CaseAmounts, CaseDraft, CaseLine, case_key, missing_for_staff
 from northwind_backend.errors import FailureType, Ok, RunStatus, ToolError
 from northwind_backend.fakes._base import FaultKind
 from northwind_backend.fakes.cases import CaseQueueFake, CaseState
-from northwind_backend.fakes.catalog import CatalogState, CatalogTableFake
 from northwind_backend.idempotency import IDEMPOTENCY_CONFLICT
+from northwind_backend.ports import PaymentIntent, PaymentStatus
 from northwind_backend.views import CASE_CREATE, AuditedCaseQueue
 from northwind_llm_replay.scan import scan_text
 from northwind_llm_replay.scripted import ScriptedLLM
@@ -41,11 +42,11 @@ from ._driver import (
     TEST_PAN,
     World,
     first_of,
+    lines_of,
     orders,
     plain_transcript,
     run,
     script_care,
-    total_minor,
     transcript,
 )
 
@@ -143,26 +144,22 @@ def test_card_data_in_other_spellings_is_refused_in_a_summary(text: str) -> None
 
 
 @pytest.mark.parametrize("region", ["US", "UK", "CA", "EU"])
-def test_the_case_total_is_catalog_price_times_quantity(tmp_path: Path, region: str) -> None:
+def test_the_case_lists_the_order_lines_and_reads_no_price(tmp_path: Path, region: str) -> None:
+    """The user's decision on row #26: no live catalog read. The lines carry no order-time price,
+    so the case has the lines, no total, and says so (`total_unavailable`)."""
     world = World.make()
     order = multi_line_order(region)
-    assert world.catalog_fake is not None
-    expected = 0
-    currencies = set()
-    for line in order["lines"]:
-        quote = world.catalog_fake.price(line["variant_id"], order["region"])
-        assert isinstance(quote, Ok), quote
-        expected += quote.value.amount_minor * line["quantity"]
-        currencies.add(quote.value.currency)
-    assert expected == total_minor(order) and expected > 0
     task = CareTask(order["order_id"], transcript("Why was I charged $1 for this?", "I'm an AI."))
     with ScriptedLLM() as llm:
         script_care(llm, order["order_id"], GOOD)
         result = run(world, task, llm, tmp_path)
     assert result.case is not None
-    assert result.case.amounts.order_total_minor == expected
-    assert result.case.amounts.currency == currencies.pop()
+    assert result.case.lines == lines_of(order) and len(result.case.lines) >= 2
+    assert result.case.amounts.order_total_minor is None
+    assert "total_unavailable" in result.case.flags
     assert result.case.root_cause == NOT_ESCALATED
+    assert not any(e.action.startswith("catalog.") for e in world.events())
+    assert result.status is RunStatus.COMPLETE  # an expected missing total isn't a partial run
 
 
 def test_a_figure_the_model_smuggles_in_never_reaches_the_case(tmp_path: Path) -> None:
@@ -182,7 +179,7 @@ def test_a_figure_the_model_smuggles_in_never_reaches_the_case(tmp_path: Path) -
     assert result.case is not None
     assert result.case.summary_source == "code" and "summary_missing" in result.case.flags
     assert "5000" not in json.dumps(result.case.to_dict())
-    assert result.case.amounts.order_total_minor == total_minor(order)
+    assert result.case.amounts.order_total_minor is None and result.case.lines == lines_of(order)
 
 
 # ---- hard rule 6: injection ------------------------------------------------------------------
@@ -413,8 +410,9 @@ def draft_of(world: World, order_id: str) -> CaseDraft:
         order_status="escalated",
         root_cause="fraud_review",
         recommended_action=RECOMMENDED["fraud_review"],
+        lines=(CaseLine("P0092-IVO-REG-XL", 1),),
         amounts=CaseAmounts(
-            order_total_minor=100,
+            order_total_minor=None,
             authorized_minor=0,
             captured_minor=0,
             currency="GBP",
@@ -422,7 +420,7 @@ def draft_of(world: World, order_id: str) -> CaseDraft:
         ),
         summary="Held for review.",
         summary_source="model",
-        flags=(),
+        flags=("total_unavailable",),
         correlation_id="run-a",
     )
 
@@ -481,19 +479,32 @@ def test_a_different_root_cause_is_a_different_key_and_a_second_case() -> None:
     assert first.value.case_id != second.value.case_id and len(queue.state.cases) == 2
 
 
-def test_a_rerun_after_a_price_changed_is_a_structured_conflict(tmp_path: Path) -> None:
+def test_a_rerun_after_the_payment_report_changed_is_a_structured_conflict(
+    tmp_path: Path,
+) -> None:
+    """Replaces the price-change rerun: with no catalog read, the code-filled field that can move
+    between runs is what the payment claim reported."""
     world = World.make()
-    fresh = CatalogState()  # the shared catalog table is cached; this run changes its own copy
-    world.catalog_fake = CatalogTableFake(state=fresh)
-    order = first_of("stock_out", skip=8)
-    world.escalate(order, "out_of_stock")
+    order = first_of("soft_decline", skip=8)
+    world.report_capture(order, 4_000)
+    world.escalate(order, "uncertain_write")
     task = CareTask(order["order_id"], plain_transcript())
     with ScriptedLLM() as llm:
         script_care(llm, order["order_id"], GOOD)
         first = run(world, task, llm, tmp_path, correlation_id="run-care-c1")
-    assert first.case is not None
-    key = (order["lines"][0]["variant_id"], order["region"])
-    fresh.prices[key] = replace(fresh.prices[key], amount_minor=fresh.prices[key].amount_minor + 1)
+    assert first.case is not None and first.case.amounts.captured_minor == 4_000
+    assert world.order_fake is not None
+    oid = order["order_id"]
+    more = PaymentIntent(
+        intent_id="pi_000901",
+        order_id=oid,
+        status=PaymentStatus.CAPTURED,
+        currency=first.case.amounts.currency or "USD",
+        authorized_minor=4_500,
+        captured_minor=4_500,
+    )
+    reported = world.order_fake.claim_payment(order_id=oid, run_id=f"run-{oid}-place", payment=more)
+    assert isinstance(reported, Ok), reported
     with ScriptedLLM() as llm:
         script_care(llm, order["order_id"], GOOD)
         second = run(world, task, llm, tmp_path, correlation_id="run-care-c2")
@@ -503,60 +514,29 @@ def test_a_rerun_after_a_price_changed_is_a_structured_conflict(tmp_path: Path) 
     assert failure.failure_type is FailureType.VALIDATION and failure.is_retryable is False
     assert failure.alternatives
     assert len(world.case_state.cases) == 1
-    assert world.case_state.cases[0].amounts.order_total_minor == total_minor(order)
+    assert world.case_state.cases[0].amounts.captured_minor == 4_000
 
 
 # ---- hard rule 10 and BE-02: failures are structured and told apart ------------------------
 
 
-@pytest.mark.req("BE-02")
-def test_a_price_read_timeout_gives_a_case_flagged_total_unavailable(tmp_path: Path) -> None:
+def test_with_no_price_read_the_case_says_the_total_is_unavailable(tmp_path: Path) -> None:
+    """Replaces the price timeout, outage and retry tests: there is no price read to fail. The total
+    is unknown, never zero and never a guess, and the case says why, so staff can still act."""
     world = World.make()
     order = first_of("fraud_flag", skip=6)
     world.escalate(order, "fraud_review")
-    assert world.catalog_fake is not None
-    world.catalog_fake.faults.inject("price", FaultKind.TIMEOUT_BEFORE)
     with ScriptedLLM() as llm:
         script_care(llm, order["order_id"], GOOD)
         result = run(world, CareTask(order["order_id"], plain_transcript()), llm, tmp_path)
     case_ = result.case
     assert case_ is not None
-    assert case_.amounts.order_total_minor is None  # unknown is not zero, and not a guess
+    assert case_.amounts.order_total_minor is None
     assert "total_unavailable" in case_.flags
     assert case_.recommended_action == RECOMMENDED["fraud_review"]
-    assert missing_for_staff(case_) == []  # the flag says why, so staff can still act
+    assert missing_for_staff(case_) == []
     assert "unknown" in case_.render() and "total_unavailable" in case_.render()
-    assert result.status is RunStatus.PARTIAL
-
-
-@pytest.mark.req("BE-02")
-def test_a_price_outage_is_flagged_not_filled_in(tmp_path: Path) -> None:
-    world = World.make()
-    order = first_of("fraud_flag", skip=7)
-    world.escalate(order, "fraud_review")
-    assert world.catalog_fake is not None
-    world.catalog_fake.outage = True
-    with ScriptedLLM() as llm:
-        script_care(llm, order["order_id"], GOOD)
-        result = run(world, CareTask(order["order_id"], plain_transcript()), llm, tmp_path)
-    assert result.case is not None
-    assert result.case.amounts.order_total_minor is None
-    assert "total_unavailable" in result.case.flags
-
-
-@pytest.mark.req("BE-02")
-def test_a_price_read_that_succeeds_on_retry_gives_the_exact_total(tmp_path: Path) -> None:
-    world = World.make()
-    order = first_of("stock_out", skip=5)
-    world.escalate(order, "out_of_stock")
-    assert world.catalog_fake is not None
-    world.catalog_fake.faults.inject("price", FaultKind.TIMEOUT_BEFORE, times=1)
-    with ScriptedLLM() as llm:
-        script_care(llm, order["order_id"], GOOD)
-        result = run(world, CareTask(order["order_id"], plain_transcript()), llm, tmp_path)
-    assert result.case is not None
-    assert result.case.amounts.order_total_minor == total_minor(order)
-    assert "total_unavailable" not in result.case.flags
+    assert result.status is RunStatus.COMPLETE
 
 
 @pytest.mark.req("BE-02")
@@ -733,6 +713,7 @@ def test_the_case_queue_view_records_a_refusal_without_the_case_text() -> None:
 STAFF_FIELDS = (
     "Root cause:",
     "Recommended action:",
+    "Lines:",
     "Order total",
     "Payment:",
     "Flags:",
@@ -776,7 +757,8 @@ def test_a_staff_member_can_act_from_the_rendered_case_alone(
     assert f"Root cause: {root}" in rendered
     assert f"Recommended action: {RECOMMENDED[root]}" in rendered
     assert order["order_id"] in rendered and order["shopper_id"] in rendered
-    assert str(total_minor(order)) in rendered
+    for line in order["lines"]:
+        assert f"{line['quantity']} x {line['variant_id']}" in rendered
     if capture is not None:
         assert f"captured {capture}" in rendered
     # Nothing staff need came from the transcript, and none of it leaked into the case.

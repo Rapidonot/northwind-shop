@@ -57,3 +57,31 @@ FAILED services/backend/tests/care/test_be07_units.py::test_n7_ideographic_dots_
 Note: the N6 test failed first in a wrong shape (fragments too far apart for any join); it was rewritten to adjacent fields before the fix, and the rewritten version was not run before the fix.
 After the fixes: test_be07_units.py 71 passed; test_be07_writer.py 75 passed; test_be07_criteria.py 18 passed
 N1 (medium, unsafe) and N2 (medium) are open, waiting on the user: no test for them is committed yet.
+
+# The user's decisions (option (b) masking, no catalog read, L4, N4, pin): scenarios on 93566a0's source vs the change
+(a script run with PYTHONPATH on an export of 93566a0's services/backend/src; output below)
+93566a0: 4/2-digit split, no withheld turn: digits shown = [] (already caught by the turn windows: this test did not fail first)
+93566a0: 4/2-digit split around a withheld turn: digits shown = ['11'] (a fragment leaked)
+93566a0: N1 trace: '4242' in prompt = True
+93566a0: N2 trace (dates): turns withheld = 3 of 3
+93566a0: N4 'try 2 other sizes': summary_has_money
+change:  [] / [] / False / 0 of 3 / accepted
+test_be08_views.py::test_every_view_built_under_src_uses_a_read_only_constant failed on 93566a0 (stop 5) and passes after the approved pin change.
+Tests rewritten for the no-catalog decision (behaviour removed, not weakened after a failure): writer test_the_case_total_is_catalog_price_times_quantity -> test_the_case_lists_the_order_lines_and_reads_no_price; test_a_rerun_after_a_price_changed_is_a_structured_conflict -> test_a_rerun_after_the_payment_report_changed_is_a_structured_conflict; the three price timeout/outage/retry tests -> test_with_no_price_read_the_case_says_the_total_is_unavailable; criteria test_l6_... -> test_the_case_currency_is_the_payment_claims_own; units test_m1_ordinary_numbers_across_turns_are_kept -> ..._with_only_their_longer_numbers_masked; units conflict test: summary_missing no longer conflicts (L4), total_unavailable and lines do.
+After: test_be07_units.py 88 passed; test_be07_writer.py 73 passed; test_be07_criteria.py 20 passed; test_be08_views.py 26 passed
+
+# Security re-review pass 3: F1 and F2 (low, unsafe in effect): new tests run before the fix
+FAILED services/backend/tests/care/test_be07_units.py::test_f1_single_digits_across_turns_never_reach_the_model[None]
+FAILED services/backend/tests/care/test_be07_units.py::test_f1_single_digits_across_turns_never_reach_the_model[cvv 123]
+FAILED services/backend/tests/care/test_be07_units.py::test_f1_hidden_and_spaced_digits_never_reach_the_model[card 4\u200b1\u200b1\u200b1, 1\u200b1\u200b1\u200b1, 1\u200b1\u200b1\u200b1, 1\u200b1\u200b1\u200b1]
+FAILED services/backend/tests/care/test_be07_units.py::test_f1_hidden_and_spaced_digits_never_reach_the_model[card 4\u03011\u03011\u03011\u0301 1\u03011\u03011\u03011\u0301 1\u03011\u03011\u03011\u0301 1\u03011\u03011\u03011\u0301]
+FAILED services/backend/tests/care/test_be07_units.py::test_f1_hidden_and_spaced_digits_never_reach_the_model[card \u2477\u2474\u2474\u2474 \u2474\u2474\u2474\u2474 \u2474\u2474\u2474\u2474 \u2474\u2474\u2474\u2474]
+FAILED services/backend/tests/care/test_be07_units.py::test_f1_hidden_and_spaced_digits_never_reach_the_model[card \x04\x01\x01\x01 \x01\x01\x01\x01 \x01\x01\x01\x01 \x01\x01\x01\x01]
+FAILED services/backend/tests/care/test_be07_units.py::test_f1_hidden_and_spaced_digits_never_reach_the_model[card 4.1.1.1 / 1-1-1-1 then 1_1_1_1 and 1/1/1/1]
+FAILED services/backend/tests/care/test_be07_units.py::test_f1_a_dotted_security_code_is_masked
+FAILED services/backend/tests/care/test_be07_units.py::test_f2_only_the_tasks_own_order_id_is_kept
+FAILED services/backend/tests/care/test_be07_units.py::test_f2_an_order_id_in_another_script_is_not_kept
+FAILED services/backend/tests/care/test_be07_units.py::test_f1_ordinary_numbers_are_still_kept
+11 failed, 1 passed, 87 deselected in 0.51s
+(the combining-mark and parenthesized cases were first written too weak or with lost escapes; rewritten, then run before the fix as above)
+After the fix: test_be07_units.py 99 passed; test_be07_writer.py 73 passed; test_be07_criteria.py 20 passed; test_be08_views.py 26 passed

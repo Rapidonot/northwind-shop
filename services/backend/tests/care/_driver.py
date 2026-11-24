@@ -1,9 +1,10 @@
 """Test-only helpers for row #26 (BE-07). Not product code; nothing under `src` imports this.
 
-A world is the order store seeded from `data/backend/`, the catalog's live tables and an empty case
-queue. An order is put in the state the Orders agent would have left it in straight on the fakes:
-escalated with a reason, and for some, a payment reported on its claim. Amounts on a claim are test
-figures, not prices; the order total comes from the catalog's price table (hard rule 2)."""
+A world is the order store seeded from `data/backend/` and an empty case queue (no catalog: the
+Care agent reads no prices, the user's decision on row #26). An order is put in the state the
+Orders agent would have left it in straight on the fakes: escalated with a reason, and for some,
+a payment reported on its claim. Amounts on a claim are test
+figures, not prices."""
 
 from __future__ import annotations
 
@@ -25,9 +26,9 @@ from northwind_backend.agents.care import (
     run_care,
 )
 from northwind_backend.audit import AuditContext, AuditEvent, InMemoryAuditSink
+from northwind_backend.cases import CaseLine
 from northwind_backend.errors import Ok
 from northwind_backend.fakes.cases import CaseQueueFake, CaseState
-from northwind_backend.fakes.catalog import CatalogState, CatalogTableFake
 from northwind_backend.fakes.orders import OrderState, OrderStoreFake
 from northwind_backend.ports import PaymentIntent, PaymentStatus
 from northwind_backend.recovery import RetryPolicy
@@ -51,21 +52,12 @@ def orders() -> tuple[dict[str, Any], ...]:
         return tuple(json.loads(line) for line in handle if line.strip())
 
 
-@cache
-def catalog_state() -> CatalogState:
-    return CatalogState()
-
-
 def first_of(exception: str | None, skip: int = 0) -> dict[str, Any]:
     return [o for o in orders() if o["exception"] == exception][skip]
 
 
-def total_minor(order: dict[str, Any]) -> int:
-    prices = catalog_state().prices
-    return sum(
-        prices[(line["variant_id"], order["region"])].amount_minor * line["quantity"]
-        for line in order["lines"]
-    )
+def lines_of(order: dict[str, Any]) -> tuple[CaseLine, ...]:
+    return tuple(CaseLine(line["variant_id"], line["quantity"]) for line in order["lines"])
 
 
 @dataclass
@@ -74,20 +66,18 @@ class World:
     case_state: CaseState = field(default_factory=CaseState)
     sink: InMemoryAuditSink = field(default_factory=InMemoryAuditSink)
     order_fake: OrderStoreFake | None = None
-    catalog_fake: CatalogTableFake | None = None
     case_fake: CaseQueueFake | None = None
 
     @classmethod
     def make(cls) -> World:
         world = cls(OrderState.from_data(DATA))
         world.order_fake = OrderStoreFake(state=world.order_state)
-        world.catalog_fake = CatalogTableFake(state=catalog_state())
         world.case_fake = CaseQueueFake(state=world.case_state)
         return world
 
     def ports(self) -> CarePorts:
-        assert self.order_fake and self.catalog_fake and self.case_fake
-        return CarePorts(orders=self.order_fake, catalog=self.catalog_fake, cases=self.case_fake)
+        assert self.order_fake and self.case_fake
+        return CarePorts(orders=self.order_fake, cases=self.case_fake)
 
     def escalate(self, order: dict[str, Any], reason: str) -> None:
         assert self.order_fake is not None

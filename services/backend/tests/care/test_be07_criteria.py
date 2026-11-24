@@ -21,6 +21,7 @@ from northwind_backend.agents.care import (
     WITHHELD,
     CarePorts,
     CareTask,
+    Turn,
 )
 from northwind_backend.agents.escalation import NOT_ESCALATED, RECOMMENDED
 from northwind_backend.cases import missing_for_staff
@@ -35,10 +36,10 @@ from ._driver import (
     TEST_PAN,
     World,
     first_of,
+    lines_of,
     plain_transcript,
     run,
     script_care,
-    total_minor,
     transcript,
 )
 
@@ -93,7 +94,8 @@ def test_staff_can_act_on_a_case_without_the_transcript(
     assert case_.root_cause == reason
     assert case_.recommended_action == RECOMMENDED[reason]
     assert case_.order_id == order["order_id"] and case_.shopper_id == order["shopper_id"]
-    assert case_.amounts.order_total_minor == total_minor(order)
+    assert case_.lines == lines_of(order)
+    assert case_.amounts.order_total_minor is None and "total_unavailable" in case_.flags
     assert case_.summary == GOOD and case_.summary_source == "model"
     assert missing_for_staff(case_) == []
     # Queued, and nothing in it is transcript text.
@@ -136,7 +138,7 @@ def test_amounts_come_from_the_tools_never_the_transcript_or_the_summary(tmp_pat
     amounts = result.case.amounts
     assert amounts.captured_minor == 5_000 and amounts.authorized_minor == 5_000
     assert amounts.payment_status == "captured" and amounts.currency
-    assert amounts.order_total_minor == total_minor(order)
+    assert amounts.order_total_minor is None and result.case.lines == lines_of(order)
     assert result.case.summary == second
     assert "999" not in case_json(result)
     # The first summary was refused back to the model with a validation error.
@@ -230,9 +232,17 @@ def test_the_agent_has_exactly_two_tools_and_no_payment_port(tmp_path: Path) -> 
     names = {t["name"] for r in requests for t in r["body"].get("tools", [])}
     assert names == {ORDER_TOOL_NAME, SUMMARY_TOOL_NAME}
     assert frozenset({"get"}) == CARE_READ
-    assert set(CarePorts.__dataclass_fields__) == {"orders", "catalog", "cases"}
+    assert set(CarePorts.__dataclass_fields__) == {"orders", "cases"}
     source = inspect.getsource(care)
-    for name in ("PaymentPort", "AuditedPaymentPort", "fakes.payment", "FraudPort", "escalate("):
+    for name in (
+        "PaymentPort",
+        "AuditedPaymentPort",
+        "fakes.payment",
+        "FraudPort",
+        "escalate(",
+        "CatalogPort",
+        "AuditedCatalogPort",
+    ):
         assert name not in source, name
 
 
@@ -419,7 +429,9 @@ def test_the_demo_prints_a_case_staff_can_read(
     assert audit.read_text(encoding="utf-8").strip()
 
 
-def test_l6_a_payment_in_another_currency_is_flagged_not_folded(tmp_path: Path) -> None:
+def test_the_case_currency_is_the_payment_claims_own(tmp_path: Path) -> None:
+    """Replaces security review L6's currency-mismatch test: with no catalog read there is no
+    second currency to fold in; the case shows the claim's own currency next to its amounts."""
     world = World.make()
     order = next(o for o in first_of_all("soft_decline") if o["region"] != "EU")
     world.report_capture(order, 5_000, currency="EUR")
@@ -428,10 +440,38 @@ def test_l6_a_payment_in_another_currency_is_flagged_not_folded(tmp_path: Path) 
         script_care(llm, order["order_id"], GOOD)
         result = run(world, CareTask(order["order_id"], plain_transcript()), llm, tmp_path)
     assert result.case is not None
-    assert {"currency_mismatch", "total_unavailable"} <= set(result.case.flags)
-    assert result.case.amounts.order_total_minor is None
     assert result.case.amounts.currency == "EUR" and result.case.amounts.captured_minor == 5_000
+    assert result.case.amounts.order_total_minor is None
+    assert "total_unavailable" in result.case.flags
     assert missing_for_staff(result.case) == []
+
+
+@pytest.mark.parametrize("withheld_between", [False, True])
+def test_a_split_card_never_reaches_the_model_end_to_end(
+    tmp_path: Path, withheld_between: bool
+) -> None:
+    """The user's option (b), through the real CLI: a card in 4- and 2-digit groups across turns,
+    with and without a withheld turn between, is in no request the model gets."""
+    world = World.make()
+    order = first_of("soft_decline", skip=9)
+    world.escalate(order, "payment_declined")
+    turns = [
+        Turn("shopper", "my number starts 4111 11"),
+        Turn("assistant", "I'm an AI assistant and I can't take card numbers in chat."),
+        Turn("shopper", "then 11 1111 and"),
+        Turn("shopper", "11 11 then 11 to finish"),
+    ]
+    if withheld_between:
+        turns.insert(2, Turn("shopper", "cvv 123"))
+    with ScriptedLLM() as llm:
+        script_care(llm, order["order_id"], GOOD)
+        result = run(world, CareTask(order["order_id"], tuple(turns)), llm, tmp_path)
+        bodies = json.dumps([r["body"] for r in llm.requests], ensure_ascii=False)
+    assert result.case is not None
+    assert "4111" not in bodies and "1111" not in bodies
+    assert TEST_PAN.replace(" ", "") not in "".join(ch for ch in bodies if ch.isdigit())
+    if withheld_between:
+        assert WITHHELD in bodies
 
 
 def first_of_all(exception: str) -> list[dict[str, Any]]:

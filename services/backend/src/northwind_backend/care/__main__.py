@@ -21,7 +21,6 @@ from northwind_backend.agents.care import CarePorts, CareTask, Turn, run_care
 from northwind_backend.audit import AuditContext, AuditSink, InMemoryAuditSink, JsonlAuditSink
 from northwind_backend.errors import Ok
 from northwind_backend.fakes.cases import CaseQueueFake, CaseState
-from northwind_backend.fakes.catalog import CatalogTableFake
 from northwind_backend.fakes.orders import OrderState, OrderStoreFake
 
 DATA = Path("data/backend")
@@ -30,7 +29,6 @@ DATA = Path("data/backend")
 def fixture_ports(data: Path = DATA) -> CarePorts:
     return CarePorts(
         orders=OrderStoreFake(state=OrderState.from_data(data)),
-        catalog=CatalogTableFake(),
         cases=CaseQueueFake(state=CaseState()),
     )
 

@@ -10,15 +10,13 @@ Views share the fake instance they wrap, so the one-payment-per-order rule, the 
 and the refund cap hold across callers. This closes FOUND-3 open medium (1).
 
 Agents get the read-only sets below, the Orders agent's placement task (row #21) gets the named
-placement sets, in `agents/orders_place.py` only, and the Care agent (row #26) gets `CARE_READ` and
-`CARE_PRICES` (reads) and `CASE_CREATE` (its one write, made by code, never by its model), in
-`agents/care.py` only. The read-only and placement sets are pinned in `test_be08_views.py`
-(the Care sets in `tests/care/test_be07_units.py`, and in `test_be08_views.py` once the user
-approves that pin change, row #26 stop 5), with the AST pin that keeps every money method name
-out of `src` except here, in `fakes/`, and `authorize` and
-`capture` in `orders_place.py` (L2, N3; the user's approval of row #21's plan, stop 5). No agent set
-holds `void` or `refund` (hard rule 8, PRD §7). This is the only module that maps port method names
-to audit action names (R7).
+placement sets, in `agents/orders_place.py` only, and the Care agent (row #26) gets `CARE_READ` (a
+read) and `CASE_CREATE` (its one write, made by code, never by its model), in `agents/care.py`
+only. All are pinned in `test_be08_views.py` (row #26's change approved by the user, stop 5), with
+the AST pin that keeps every money method name out of `src` except here, in `fakes/`, and
+`authorize` and `capture` in `orders_place.py` (L2, N3; the user's approval of row #21's plan,
+stop 5). No agent set holds `void` or `refund` (hard rule 8, PRD §7). This is the only module that
+maps port method names to audit action names (R7).
 """
 
 from __future__ import annotations
@@ -62,9 +60,8 @@ CATALOG_READ = frozenset({"price", "stock"})
 ORDERS_PLACE = frozenset({"get", "use_address_on_file", "confirm", "escalate", "claim_payment"})
 
 # The Care agent (row #26, BE-07; PRD §7 Care row). Its model's one data tool reads the order. Code,
-# never the model, reads the live prices for the order total and queues the case.
+# never the model, queues the case. No catalog read (the user, row #26).
 CARE_READ = frozenset({"get"})
-CARE_PRICES = frozenset({"price"})
 CASE_CREATE = frozenset({"create_case"})
 
 
