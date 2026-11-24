@@ -655,8 +655,10 @@ def _brands(fixtures_dir: Path = FIXTURES_DIR) -> tuple[str, ...]:
 
 @lru_cache(maxsize=1)
 def _product_name_pattern(fixtures_dir: Path = FIXTURES_DIR) -> re.Pattern[str]:
-    """Each catalog product as its brand and model word ("Corvane Ridge", "Halvardine Home
-    Orchard"), from the catalog itself (row #11, the named-product exception)."""
+    """Each catalog product a shopper can see as its brand and model word ("Corvane Ridge",
+    "Halvardine Home Orchard"), from the catalog itself (row #11, the named-product exception).
+    Internal products give no key, so the exception is not an existence oracle for their names
+    (security H2-L1, hard rule 7)."""
     path = fixtures_dir / "products.jsonl"
     assert_ingestible(path)
     keys: set[str] = set()
@@ -664,6 +666,8 @@ def _product_name_pattern(fixtures_dir: Path = FIXTURES_DIR) -> re.Pattern[str]:
         if not line.strip():
             continue
         product = json.loads(line)
+        if product.get("visibility") != "public":
+            continue
         brand, name = str(product["brand"]), str(product["name"])
         rest = name[len(brand) :].split() if name.startswith(brand) else []
         if rest:

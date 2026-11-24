@@ -103,3 +103,12 @@ file was restored from HEAD. The runner is `/tmp/…/ff_runner.py`.
 - The `*_tw.py` files are `test-writer`'s tests of code that already existed. Their findings came from failing runs
   of those files (all fixed in `f698484`, with evidence above).
 - `test_rag04_post_review_tw.py` (23 tests, the advisor's H2) found no defect.
+
+## Security H2-L1 (internal product names are not keys)
+- `test_an_internal_products_name_is_not_a_key` was written first; before the fix:
+  ```
+1 failed in 0.41s
+E           AssertionError: assert not True
+E            +  where True = names_catalog_product('Tell me about the Corvane Ascent Pro Shell')
+  ```
+- After the fix: 17 passed in the file; `make eval-snapshot` leaves all 308 contexts byte-identical.

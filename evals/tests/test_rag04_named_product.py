@@ -68,3 +68,25 @@ def test_a_browsing_query_still_narrows_on_both_paths() -> None:
     assert claim == {"parts": [{"c": ["White"], "s": ["Queen"]}]}
     narrowed = SearchFilter(colours=("White",), sizes=("Queen",))
     assert shopper_parts(plan, message, region, FixtureCatalog()) == [(message, narrowed)]
+
+
+def test_an_internal_products_name_is_not_a_key() -> None:
+    """Security H2-L1 (hard rule 7): only products a shopper can see are keys, so the exception is
+    not an existence oracle for an internal, unreleased name (P0009, "Corvane Ascent Pro Shell").
+    Such a message narrows like any browsing query."""
+    import json
+    from pathlib import Path
+
+    products = Path(__file__).resolve().parents[2] / "data/fixtures/products.jsonl"
+    internal = [
+        p
+        for p in map(json.loads, products.read_text("utf-8").splitlines())
+        if p["visibility"] != "public"
+    ]
+    assert internal  # the fixtures hold at least P0009
+    for product in internal:
+        assert not names_catalog_product(f"Tell me about the {product['name']}")
+    message = "Corvane Ascent jackets in Black in M"
+    plan = rules_plan(message, "US")
+    assert asyncio.run(plan_claim(plan, message, Caller(region="US"), None)) is not None
+    assert shopper_parts(plan, message, "US", FixtureCatalog()) != [(message, SearchFilter())]
