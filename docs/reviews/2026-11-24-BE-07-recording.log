@@ -1,0 +1,16 @@
+LLM_MODE=record uv run pytest -m "" --llm-suite "$SUITE"
+============================= test session starts ==============================
+platform darwin -- Python 3.12.16, pytest-9.2.0, pluggy-1.7.0
+rootdir: /Users/rapido/Projects/northwind-shop-b
+configfile: pyproject.toml
+testpaths: services, data, evals, tests
+plugins: northwind-llm-replay-0.0.0, xdist-3.8.0, Faker-40.44.0, anyio-4.16.0
+collected 8129 items / 8123 deselected / 6 selected
+
+services/backend/tests/care/test_be07_recorded.py ......                 [100%]
+
+===================== 6 passed, 8123 deselected in 31.35s ======================
+
+Ledger before: $26.751155; after: $26.753027; suite backend-care: 18 calls, $0.001872 (make llm-spend).
+Cassettes: 18 files under cassettes/backend-care/ (all added, none modified or hand-written); make scan-cassettes: clean.
+Replay: services/backend/tests/care/test_be07_recorded.py 6 passed, three runs in a row (5.4 s each).
