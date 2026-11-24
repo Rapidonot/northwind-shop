@@ -1,6 +1,6 @@
 """RAG-04 (row #11): a query plan's filters and parts in retrieval, over a real ingest.
 
-Integration: a throwaway schema in the database named by DATABASE_URL (the row runs on `northwind_16`).
+Integration: a throwaway schema in the DATABASE_URL database (the row runs on `northwind_16`).
 Colour and size narrow through the index's metadata (NULL passes: documents), the product allow-list
 narrows product, variant and review chunks only, and one part with no filter is `retrieve_context`
 exactly. Audience and region still come from the caller (hard rule 7).

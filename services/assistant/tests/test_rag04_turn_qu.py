@@ -300,3 +300,26 @@ def test_a_failing_client_keeps_the_rules_plan() -> None:
     understand = Understander(live=False, client_for=lambda _: Broken())
     understood = asyncio.run(understand.plan(MULTI, "US", "http://unused"))
     assert understood.path == "error" and understood.plan == rules_plan(MULTI, "US")
+
+
+class PlainOnly:
+    """A test double with no `search_planned`, like the cart journey's fixture retriever."""
+
+    def __init__(self) -> None:
+        self.queries: list[str] = []
+
+    def search(self, query: str, caller: Caller) -> list[RetrievedChunk]:
+        self.queries.append(query)
+        return [chunk("P0121")]
+
+
+def test_a_double_without_plans_searches_plain(tmp_path: Path) -> None:
+    """Row #11: `CallerSearcher` drops the plan for a double that cannot run one (a plan only
+    narrows); the production `IndexSearcher` always runs it."""
+    message = "Queen sheet sets in white, please."
+    double = PlainOnly()
+    with ScriptedLLM() as llm:
+        llm.reply_stream("Sheets [P0121].")
+        events, _ = ask(llm, double, message, tmp_path)  # type: ignore[arg-type]
+    assert double.queries == [message]
+    assert not [e for e in events if isinstance(e, TurnError)]
