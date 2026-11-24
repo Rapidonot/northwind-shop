@@ -9,12 +9,14 @@ same-key retry settles it.
 Views share the fake instance they wrap, so the one-payment-per-order rule, the idempotency store
 and the refund cap hold across callers. This closes FOUND-3 open medium (1).
 
-Agents get the read-only sets below, and the Orders agent's placement task (row #21) gets the named
-placement sets, in `agents/orders_place.py` only; both pinned in `test_be08_views.py`, with the AST
-pin that keeps every money method name out of `src` except here, in `fakes/`, and `authorize` and
-`capture` in `orders_place.py` (L2, N3; the user's approval of row #21's plan, stop 5). No agent set
-holds `void` or `refund` (hard rule 8, PRD §7). This is the only module that maps port method names
-to audit action names (R7).
+Agents get the read-only sets below, the Orders agent's placement task (row #21) gets the named
+placement sets, in `agents/orders_place.py` only, and the Care agent (row #26) gets `CARE_READ` (a
+read) and `CASE_CREATE` (its one write, made by code, never by its model), in `agents/care.py`
+only. All are pinned in `test_be08_views.py` (row #26's change approved by the user, stop 5), with
+the AST pin that keeps every money method name out of `src` except here, in `fakes/`, and
+`authorize` and `capture` in `orders_place.py` (L2, N3; the user's approval of row #21's plan,
+stop 5). No agent set holds `void` or `refund` (hard rule 8, PRD §7). This is the only module that
+maps port method names to audit action names (R7).
 """
 
 from __future__ import annotations
@@ -24,6 +26,7 @@ from collections.abc import Callable, Mapping
 from typing import Any
 
 from northwind_backend.audit import AuditContext, AuditWriteError, outcome_ref
+from northwind_backend.cases import Case, CaseDraft, CasePort
 from northwind_backend.errors import AUDIT_INCOMPLETE, AUDIT_UNAVAILABLE, UNEXPECTED, Result
 from northwind_backend.fakes._base import NOT_PERMITTED
 from northwind_backend.ports import (
@@ -55,6 +58,11 @@ FRAUD_PLACE = frozenset({"assess"})
 CATALOG_READ = frozenset({"price", "stock"})
 # `claim_payment`: the payment claim (F1, the user's Option 1; pin change approved, stop 5).
 ORDERS_PLACE = frozenset({"get", "use_address_on_file", "confirm", "escalate", "claim_payment"})
+
+# The Care agent (row #26, BE-07; PRD §7 Care row). Its model's one data tool reads the order. Code,
+# never the model, queues the case. No catalog read (the user, row #26).
+CARE_READ = frozenset({"get"})
+CASE_CREATE = frozenset({"create_case"})
 
 
 def _amount(amount: Money | None) -> dict[str, object]:
@@ -417,5 +425,33 @@ class AuditedOrderStore(_View):
                 reason=reason,
                 context=context,
                 dry_run=dry_run,
+            ),
+        )
+
+
+class AuditedCaseQueue(_View):
+    """The case queue (row #26). The audit gets the key, the order and the code-derived root cause;
+    the summary is never written (its type and length are, in the outcome)."""
+
+    def __init__(self, fake: CasePort, audit: AuditContext, *, allowed: frozenset[str]) -> None:
+        super().__init__(audit, allowed)
+        self._fake = fake
+
+    def create_case(
+        self, *, idempotency_key: str, case: CaseDraft, dry_run: bool = False
+    ) -> Result[Case]:
+        inputs = {
+            "idempotency_key": idempotency_key,
+            "order_id": case.order_id,
+            "root_cause": case.root_cause,
+            "flags": case.flags,
+            "dry_run": dry_run,
+        }
+        return self._run(
+            "create_case",
+            "case.create",
+            inputs,
+            lambda: self._fake.create_case(
+                idempotency_key=idempotency_key, case=case, dry_run=dry_run
             ),
         )

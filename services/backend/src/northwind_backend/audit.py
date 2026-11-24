@@ -39,6 +39,7 @@ from pathlib import Path
 from typing import Any, Literal, Protocol
 
 from northwind_backend.carriers import CARRIERS, TRACKING_NUMBER
+from northwind_backend.cases import CASE_ID, Case
 from northwind_backend.errors import Ok, ToolError
 from northwind_backend.ports import (
     FraudAssessment,
@@ -75,6 +76,9 @@ _ID_PATTERNS: dict[str, re.Pattern[str]] = {
     "errorCategory": _CODE,
     "last_status": _CODE,
     "escalation": _CODE,
+    # Row #26 (BE-07): a queued case and its code-derived root cause.
+    "case_id": CASE_ID,
+    "root_cause": _CODE,
     "variant_id": re.compile(r"P\d{4}(?:-[A-Z0-9]{1,16}){1,4}", re.ASCII),
 }
 _MINOR_FIELDS = frozenset({"amount_minor", "authorized_minor", "captured_minor", "refunded_minor"})
@@ -139,7 +143,7 @@ def _ref(name: str, value: object) -> Any:
         return value if type(value) is bool else _shape(value)
     if name == "carrier":
         return value if value in CARRIERS else _shape(value)
-    if name == "reasons":
+    if name in ("reasons", "flags"):
         if isinstance(value, list | tuple) and all(
             isinstance(v, str) and _CODE.fullmatch(v) for v in value
         ):
@@ -172,6 +176,16 @@ def _value_ref(value: object) -> dict[str, Any]:
         }
     if isinstance(value, PaymentIntent | Shipment | FraudAssessment | PriceQuote | StockLevel):
         return {f.name: _ref(f.name, getattr(value, f.name)) for f in fields(value)}
+    if isinstance(value, Case):
+        # The summary is model text: its type and length only (row #26).
+        return {
+            "case_id": _ref("case_id", value.case_id),
+            "order_id": _ref("order_id", value.order_id),
+            "root_cause": _ref("root_cause", value.root_cause),
+            "flags": _ref("flags", value.flags),
+            "summary": _shape(value.summary),
+            "dry_run": _ref("dry_run", value.dry_run),
+        }
     if isinstance(value, Tracking):
         last = value.events[-1].status if value.events else None
         return {

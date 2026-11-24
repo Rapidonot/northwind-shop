@@ -25,6 +25,7 @@ READS: dict[str, str] = {
     "get_payment_status": "payment status lookup",
     "validate_order": "order check",
     "track_shipment": "tracking lookup",
+    "get_order": "order lookup",
 }
 # Write tools: what may have happened.
 WRITES: dict[str, str] = {

@@ -317,6 +317,7 @@ def money_routes(tree: ast.AST) -> list[str]:
 # Row #21 (the user's approval of its plan, stop 5): the Orders agent's placement task may reach
 # `authorize` and `capture`, as attributes of its payment view, and nothing else on the money list.
 PLACEMENT_MODULE = "agents/orders_place.py"
+CARE_MODULE = "agents/care.py"
 PLACEMENT_ROUTES = frozenset({"attribute authorize", "attribute capture"})
 
 
@@ -385,11 +386,15 @@ def test_every_view_built_under_src_uses_a_read_only_constant() -> None:
         "AuditedCarrierPort",
         "AuditedCatalogPort",
         "AuditedOrderStore",
+        # Row #26 (stop 5, approved by the user 2026-11-24): the case queue's view is checked too.
+        "AuditedCaseQueue",
     }
     # Advisor finding 8: CATALOG_READ is admitted in the placement module only, as approved.
     read_only = {"PAYMENT_READ_ONLY", "FRAUD_READ_ONLY", "CARRIER_READ_ONLY"}
     # Row #21 (stop 5, approved): the placement sets, in the placement module only.
     placement = {"PAYMENT_PLACE", "FRAUD_PLACE", "CATALOG_READ", "ORDERS_PLACE"}
+    # Row #26 (stop 5, approved): the Care agent's sets, in the Care module only. No catalog read.
+    care = {"CARE_READ", "CASE_CREATE"}
     built = 0
     for path in _src_modules():
         if _rel(path) == "views.py":
@@ -408,9 +413,25 @@ def test_every_view_built_under_src_uses_a_read_only_constant() -> None:
                 built += 1
                 allowed = [k.value for k in node.keywords if k.arg == "allowed"]
                 assert allowed and isinstance(allowed[0], ast.Name), path
-                constants = placement if _rel(path) == PLACEMENT_MODULE else read_only
+                constants = (
+                    placement
+                    if _rel(path) == PLACEMENT_MODULE
+                    else care
+                    if _rel(path) == CARE_MODULE
+                    else read_only
+                )
                 assert allowed[0].id in constants, (path, allowed[0].id)
     assert built >= 2  # the Orders subagent's payment and fraud views
+
+
+def test_the_care_sets_are_exactly_these() -> None:
+    """Row #26: the values, not only the names, so a set can't grow silently (security review,
+    pin comment 1). `CASE_CREATE` is the Care module's one write, made by code, never its model."""
+    from northwind_backend import views
+
+    assert frozenset({"get"}) == views.CARE_READ
+    assert frozenset({"create_case"}) == views.CASE_CREATE
+    assert not hasattr(views, "CARE_PRICES")
 
 
 def test_nothing_under_src_imports_the_test_driver() -> None:
