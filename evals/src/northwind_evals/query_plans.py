@@ -138,3 +138,17 @@ def planner(
         return shopper_parts(plan, message, region, store)
 
     yield parts
+
+
+def part_texts(
+    messages: Sequence[tuple[str, str]], cassettes: Path = Path("cassettes")
+) -> list[str]:
+    """Row #11 (security review M2): the rewritten part texts the planned first search embeds, from
+    the replayed plans, so they get frozen vectors like every other query (decision 0012). A part
+    that searches the raw message needs none: the message is frozen already."""
+    texts: list[str] = []
+    with planner(messages, cassettes) as parts:
+        for message, region in messages:
+            if rules_plan(message, region).needs_model:
+                texts += [text for text, _ in parts(message, region) if text != message]
+    return list(dict.fromkeys(texts))

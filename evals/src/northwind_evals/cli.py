@@ -719,13 +719,17 @@ def cmd_gate(args: argparse.Namespace) -> int:
 
 def _frozen_queries(items: Sequence[EvalItem]) -> list[str]:
     """Every query whose ranking a recording or the gate depends on: the eval items, the smoke
-    questions and the RAG-11 red-team queries. Follow-up searches the model writes are not here;
-    they embed live (D4)."""
+    questions and the RAG-11 red-team queries, and since row #11 the rewritten part texts of the
+    eval items' planned first searches (replayed from `query-understanding`; security review M2).
+    Follow-up searches the model writes are not here; they embed live (D4)."""
+    from northwind_evals.query_plans import part_texts
+
     portal = json.loads(SMOKE_QUESTIONS.read_text(encoding="utf-8"))
     traps = json.loads(CONTRADICTIONS.read_text(encoding="utf-8"))
     red_team = [json.loads(line)["query"] for line in RED_TEAM.read_text("utf-8").splitlines()]
     texts = [item.query for item in items] + list(portal.values()) + [t["question"] for t in traps]
     texts += red_team
+    texts += part_texts([(item.query, item.region) for item in items])
     return list(dict.fromkeys(texts))
 
 

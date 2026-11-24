@@ -162,3 +162,19 @@ def test_a_refused_take_extends_the_cap_entry() -> None:
     assert not asyncio.run(ledger.take("t", 1100))  # a later-expiring token is refused...
     now[0] = 1060.0
     assert not asyncio.run(ledger.take("t", 1100))  # ...and stays refused after the first expiry
+
+
+def test_the_planned_part_texts_are_frozen_queries() -> None:
+    """Security review M2: every rewritten part text the gate's planned first search embeds is in
+    `_frozen_queries`, so `make embed-cache` freezes it and `CHECK=1` sees a missing one."""
+    from northwind_evals.cli import ITEMS, _frozen_queries
+    from northwind_evals.items import load_items
+
+    repo = Path(__file__).resolve().parents[2]
+    items = load_items(repo / ITEMS)
+    texts = query_plans.part_texts(
+        [(i.query, i.region) for i in items], cassettes=repo / "cassettes"
+    )
+    assert texts  # W1 recorded Haiku's plans; their rewritten parts are new queries
+    assert set(texts) <= set(_frozen_queries(items))
+    assert not set(texts) & {i.query for i in items}
