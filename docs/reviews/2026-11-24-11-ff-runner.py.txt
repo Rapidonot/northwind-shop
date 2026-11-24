@@ -50,4 +50,5 @@ for label, swaps, mutation, tests in CASES:
     out.append(f"- **{label}** ({src}): `{summary}`" + (f"\n  `{first_e[:220]}`" if first_e else ''))
     print(out[-1], flush=True)
 assert not git('status','--porcelain').stdout.strip(), 'tree not clean after'
+os.makedirs(os.environ['TMPDIR']+'/row11', exist_ok=True)
 open(os.environ['TMPDIR']+'/row11/ff-after.md','w').write('\n'.join(out)+'\n')
