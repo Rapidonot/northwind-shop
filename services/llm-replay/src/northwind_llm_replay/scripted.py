@@ -16,7 +16,7 @@ import json
 import threading
 from collections import deque
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Self
 
 import uvicorn
 from starlette.applications import Starlette
@@ -158,30 +158,22 @@ def blocks_sse(
     return "".join(parts)
 
 
-class ScriptedLLM:
-    """`with ScriptedLLM() as llm: llm.reply("hi"); client = anthropic_client(base_url=llm.url)`."""
+class _Replies:
+    """The ways to script a reply. Each appends to `queue`, which is served in order."""
 
-    def __init__(self, *, require_placeholder: bool = True, port: int = 0) -> None:
-        self.queue: deque[Scripted] = deque()
-        self.requests: list[dict[str, Any]] = []
-        self.require_placeholder = require_placeholder
-        self._lock = threading.Lock()
-        app = Starlette(routes=[Route("/{path:path}", self._handle, methods=["GET", "POST"])])
-        self._server = ServerThread(app, port)
+    queue: deque[Scripted]
 
-    def reply(self, text: str, **usage: int) -> ScriptedLLM:
+    def reply(self, text: str, **usage: int) -> Self:
         self.queue.append(
             Scripted(text=text, usage=usage or {"input_tokens": 10, "output_tokens": 5})
         )
         return self
 
-    def reply_raw(
-        self, status: int, body: str, content_type: str = "application/json"
-    ) -> ScriptedLLM:
+    def reply_raw(self, status: int, body: str, content_type: str = "application/json") -> Self:
         self.queue.append(Scripted(raw=(status, content_type, body)))
         return self
 
-    def reply_stream(self, *chunks: str, model: str = "scripted") -> ScriptedLLM:
+    def reply_stream(self, *chunks: str, model: str = "scripted") -> Self:
         """A text answer in several deltas, as a real stream arrives."""
         blocks = [{"type": "text", "chunks": list(chunks)}]
         usage = {"input_tokens": 10, "output_tokens": 5}
@@ -190,16 +182,69 @@ class ScriptedLLM:
 
     def reply_tool_use(
         self, name: str, arguments: dict[str, Any], tool_id: str = "toolu_scripted"
-    ) -> ScriptedLLM:
+    ) -> Self:
         """A turn that calls one tool. Use `reply` or `reply_stream` for the turn after it."""
         blocks = [{"type": "tool_use", "id": tool_id, "name": name, "input": arguments}]
         usage = {"input_tokens": 10, "output_tokens": 5}
         body = blocks_sse("scripted", blocks, "tool_use", usage, f"msg_{tool_id}")
         return self.reply_raw(200, body, "text/event-stream")
 
-    def reply_cut_stream(self, text: str = "partial") -> ScriptedLLM:
+    def reply_cut_stream(self, text: str = "partial") -> Self:
         self.queue.append(Scripted(text=text, cut_stream=True))
         return self
+
+
+class ScriptedRoute(_Replies):
+    """Replies kept for requests whose system prompt contains `marker` (row #24): agents that run
+    at the same time each get their own script, in order, whatever order their requests arrive."""
+
+    def __init__(self, marker: str) -> None:
+        self.marker = marker
+        self.queue = deque()
+
+
+def system_text(body: Any) -> str:
+    """The request's system prompt as one string: a plain string, or the text of its blocks."""
+    system = body.get("system") if isinstance(body, dict) else None
+    if isinstance(system, str):
+        return system
+    if isinstance(system, list):
+        return "\n".join(str(block.get("text", "")) for block in system if isinstance(block, dict))
+    return ""
+
+
+class ScriptedLLM(_Replies):
+    """`with ScriptedLLM() as llm: llm.reply("hi"); client = anthropic_client(base_url=llm.url)`.
+
+    By default every request takes the next reply from one queue. `route(marker)` keeps a separate
+    queue for requests whose system prompt contains `marker`; a request that matches no route still
+    takes from the default queue, so a script with no routes behaves exactly as before."""
+
+    def __init__(self, *, require_placeholder: bool = True, port: int = 0) -> None:
+        self.queue = deque()
+        self.routes: list[ScriptedRoute] = []
+        self.requests: list[dict[str, Any]] = []
+        self.require_placeholder = require_placeholder
+        self._lock = threading.Lock()
+        app = Starlette(routes=[Route("/{path:path}", self._handle, methods=["GET", "POST"])])
+        self._server = ServerThread(app, port)
+
+    def route(self, marker: str) -> ScriptedRoute:
+        """The first route whose marker the system prompt contains wins."""
+        if not marker:
+            raise ValueError("a route needs a marker")
+        route = ScriptedRoute(marker)
+        self.routes.append(route)
+        return route
+
+    def _queue_for(self, body: Any) -> deque[Scripted]:
+        if not self.routes:
+            return self.queue
+        text = system_text(body)
+        for route in self.routes:
+            if route.marker in text:
+                return route.queue
+        return self.queue
 
     @property
     def url(self) -> str:
@@ -226,7 +271,8 @@ class ScriptedLLM:
                 }
             )
             n = len(self.requests)
-            item = self.queue.popleft() if self.queue else None
+            queue = self._queue_for(body)
+            item = queue.popleft() if queue else None
         if self.require_placeholder:
             creds = [headers.get("x-api-key"), headers.get("authorization")]
             if PLACEHOLDER_API_KEY not in creds and f"Bearer {PLACEHOLDER_API_KEY}" not in creds:
