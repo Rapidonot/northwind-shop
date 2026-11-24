@@ -1509,9 +1509,12 @@ class OutputCheck:
 
 
 def _repeats(shown: str, fixed: str) -> bool:
-    """Whether the text on screen already ends with `fixed`, compared in the matching view."""
-    tail = shown.rstrip()[-(len(fixed) + 16) :]
-    return bool(tail) and normal(tail).endswith(normal(fixed))
+    """Whether the text on screen already ends with a whole, plain copy of `fixed` (row #12). Row
+    #17's scoped re-review, low 1: compared as `_on_screen` compares, not in the matching view, so a
+    struck-through copy right before is not a copy."""
+    end = len(shown.rstrip())
+    found = _FIXED_TAILS[fixed].search(shown, max(0, end - _FIXED_OVERLAP), end)
+    return found is not None and _whole_sentence_at(shown, found.start())
 
 
 def _copy_pattern(sentence: str) -> re.Pattern[str]:
@@ -1526,6 +1529,13 @@ _FIXED_COPIES = {sentence: _copy_pattern(sentence) for sentence in set(FIXED_SEN
 # How far back a search starts before the last one ended, so a copy split across two searches is
 # found; a copy with more whitespace than this is missed, which only shows the replacement again.
 _FIXED_OVERLAP = 2 * max(len(sentence) for sentence in _FIXED_COPIES) + 16
+_FIXED_TAILS = {
+    sentence: re.compile(pattern.pattern + r"\s*\Z", re.IGNORECASE)
+    for sentence, pattern in _FIXED_COPIES.items()
+}
+# A copy after more spaces or tabs than this is not taken as a sentence start: the replacement is
+# shown, and a long run is not scanned again for each later blocked sentence (re-review low 2).
+_MAX_LEAD_SPACES = 8
 _SENTENCE_LEAD = frozenset(".!?:\n-*\u2022")
 
 
@@ -1534,9 +1544,11 @@ def _whole_sentence_at(shown: str, start: int) -> bool:
     sentence end, a colon or a bullet. A copy inside a quote or a sentence does not count (F2)."""
     if start and not shown[start - 1].isspace():
         return False
-    before = start
-    while before and shown[before - 1] in " \t":
+    before, limit = start, max(0, start - _MAX_LEAD_SPACES)
+    while before > limit and shown[before - 1] in " \t":
         before -= 1
+    if before and shown[before - 1] in " \t":
+        return False  # more than `_MAX_LEAD_SPACES`: fail safe, show the replacement
     return not before or shown[before - 1] in _SENTENCE_LEAD
 
 

@@ -88,3 +88,82 @@ I read: the diff at /private/tmp/claude-502/northwind-review-17-check.diff; outp
 
 ### Data-as-instructions
 Nothing in the diff, tests or the RT-003 cassette tried to steer this review.
+
+---
+
+# Scoped re-review of the fixes, verbatim (2026-11-24, base 7bcc221, head afc49e2)
+
+Diff: `/private/tmp/claude-502/northwind-review-17-fix.diff`.
+
+## Scoped re-review of the row #17 fixes (base 7bcc221, head afc49e2)
+
+No critical, high or medium findings. Containment still holds and the main cost path is now linear. There are four lows. One is a remaining quadratic case in the whole-sentence back-scan. Another is that the row #12 adjacent rule (`_repeats`) can still be gamed with the strike-through from F2.
+
+I read the diff at /private/tmp/claude-502/northwind-review-17-fix.diff. In output_check.py at head I read lines 1417-1430, 1455-1505 and 1511-1542. I also read test_red_team_e2e.py:338-348 and usage.py (the telemetry logger, the `assistant_turn` event and the `blocked` key). I cannot run code, so the timings below are my estimates, not measurements.
+
+### Findings
+
+**1. Low: the strike-through trick still works when the copy sits right before the blocked sentence. F2 is only partly closed.**
+- **Where:** /Users/rapido/Projects/northwind-shop/services/assistant/src/northwind_assistant/output_check.py:1455 and 1511-1514 (`_repeats`, unchanged).
+- **Rule:** hard rule 6 / NFR-03.
+- **What is wrong:** `_repeats` still compares with `normal()`, which drops combining marks and folds look-alike letters.
+- **How it fails:** a steered model writes "I c̶a̶n̶'̶t̶ help with offers or codes in chat. Use the discount code." The struck copy is the last thing on screen, so `_repeats` is true and the replacement is left out. The new test `test_a_struck_through_copy_does_not_hide_the_replacement` puts "Ok." between the two, which is why it passes.
+- **Scope:** containment is intact (the blocked sentence is withheld and counted). This came from row #12, but the F2 fix's stated property ("a struck-through copy is not a copy") does not hold for this path.
+- **Fix:** in `_repeats`, accept the model's own copy only if it matches strictly: `_FIXED_COPIES[fixed]` anchored at the end of the trimmed tail (`pattern.pattern + r"\s*\Z"`) and passing `_whole_sentence_at`. The check's own previous replacement still counts as before. Add the adjacent strike-through case to the cost test file.
+
+**2. Low: the back-scan in `_whole_sentence_at` can still make a turn quadratic.**
+- **Where:** output_check.py:1538 (`while before and shown[before - 1] in " \t"`), reached from the `finditer` loop in `_on_screen` (lines 1417-1430).
+- **What is wrong:** a candidate copy that fails the whole-sentence test is never remembered. While it stays inside the overlap window it is matched again and back-scanned again on every call. A left-out replacement does not grow `_shown`, so the window does not move.
+- **How it fails:**
+  - The model writes "Use a coupon." (PROMO is shown and recorded in `_fixed_at`).
+  - It then writes "x", W spaces or tabs, and a plain copy of the money sentence (MONEY). The money copy is not whole because of the "x" before the spaces.
+  - It then writes k more "Use a coupon." sentences.
+  - For each one, `_repeats(shown, PROMO)` is false because the screen ends with the money copy. So `_on_screen(PROMO)` runs: the MONEY pattern finds the same candidate and back-scans W characters in a Python loop.
+- **Cost:** O(k·W), limited only by `max_tokens`. My estimate (unconfirmed) is up to several seconds of event-loop time if the model can be steered into tens of thousands of spaces or tabs. That is much less than before the fix but not linear. The cost test only exercises the linear path.
+- **Fix:** fail safe. Either cap the back-scan (for example, more than 8 spaces or tabs means "not a sentence start", which only shows the replacement), or remember rejected candidate starts per pattern. Rejected starts are a sound cache: the text before a candidate never changes except when a take-back cuts it, and that removes the candidate too. Add a timing case with a long space run.
+
+**3. Low: L3 is a real tightening, but it does not prove what decision 0018 says it proves.**
+- **Where:** /Users/rapido/Projects/northwind-shop/services/assistant/tests/test_red_team_e2e.py:343-348; /Users/rapido/Projects/northwind-shop/docs/decisions/0018-row-32-planted-reviews-and-judge-v6.md, the "Check (h)" bullet in the row #17 amendment.
+- **What is sound:** the assertion fails on zero or several `assistant_turn` records. Telemetry holds counts only (usage.py:7).
+- **What it does not prove:** "a blocked `refund_authority` or `confirmation` count above zero" plus "`CONFIRMATION_SENTENCE` in shown" does not mean the check emitted the sentence. Under the row #17 rule, a re-recording can pass with no replacement shown at all:
+  - The model writes its own whole copy, and a later blocked confirmation sentence is left out but still counted.
+  - Or a blocked sentence in an attempt that was later reset is counted (counts survive `reset()`), and the final attempt holds the model's own copy.
+- **Today:** RT-003's recording does not contain the copy (I verified this in the first pass), so the current evidence is honest. The decision's sentence "The sentence on screen must therefore be the check's replacement" overstates what the test checks.
+- **Fix:** also assert that the recorded model text has no copy of the sentence. Read the item's cassette text deltas as `recorded_injection_answer` does in test_rag08_fixed_sentence_once.py, and assert `CONFIRMATION_SENTENCE not in model_text`. Alternatively, reword the decision bullet to "at least one such sentence was blocked".
+
+**4. Low, unconfirmed rendering, not caused by this row: bidi control characters can scramble the copy or a replacement.**
+- **Where:** `_whole_sentence_at` (output_check.py:1532-1542) checks only the characters right before the copy. Nothing on the release path strips bidi controls; I found no handling in services/*/src or apps/portal/src.
+- **How it fails:** the model writes "Ok‮. I can't help with offers or codes in chat." The check accepts it as a whole sentence (lead "."), but in the browser the RLO likely shows the rest of the paragraph reversed. Later replacements are then left out.
+- **Scope:** an RLO placed before a blocked sentence would equally reverse the check's own replacement. So the real gap is that released text keeps bidi controls, not the row #17 rule.
+- **Fix:** in the check, remove or neutralise bidi embedding and override controls (U+202A-U+202E, U+2066-U+2069) in released text, or close them (PDF/PDI) before each replacement. Log it as a hardening Open item with an owning row.
+
+### Answers to the specific questions
+- **Containment:** kept. `_on_screen` only chooses between the left-out branch and the shown branch. `_consumed = _plain_since = end` and the counting are unchanged.
+- **Linear cost:**
+  - `_on_screen` scans `[_fixed_to - _FIXED_OVERLAP, len(_shown))` with at most 6 precompiled patterns. Patterns already found are skipped.
+  - The patterns have no nested quantifiers. The `\s+` runs are covered once per start position, and a start needs the first word's letters.
+  - Each call costs O(new text + about 160).
+  - The take-back is O(entries ≤ 6) plus `min()`. The re-send of `_shown` there is older and copies bytes only.
+  - The one non-linear case is finding 2.
+- **Overlap:** sound. `_shown` only grows by appending or shrinks by take-back. A copy that crosses the previous `_fixed_to` and starts within the overlap is found. A copy with more whitespace than the overlap is missed, which shows the replacement again (fail safe).
+- **The `(?=\s|$)` end check:** at decision time `_shown` reaches the blocked sentence's start, and that start comes after whitespace. A copy glued to the following text with no space is not a sentence boundary (`_BOUNDARY` needs whitespace), so it belongs to the blocked sentence and is never shown.
+- **Take-back:** dropping entries that end after `keep` is correct, because the text before a kept entry is unchanged. Lowering `_fixed_to` to `keep` makes the next search look again from just before the cut.
+- **Gaming the strict pattern:**
+  - A mark or invisible character inside a word, or attached before or after the copy, breaks the match or the whole-sentence test, so the replacement is shown.
+  - `IGNORECASE` also lets İ, ı, ſ and K (Kelvin sign) match their ASCII letters. These look the same, so it is harmless.
+  - Unusual whitespace that `\s` matches (NBSP, U+3000, U+001C-U+001F) is also harmless.
+  - The remaining issues are findings 1 and 4.
+- **Gaming the boundary rule:** a copy after ":" or " - " still counts ("Old bots said: I can't help with offers or codes in chat. Not me."). This is the user's rule: a whole plain copy followed by the model's own undercutting sentence was always allowed. Containment holds and counts are kept. I am noting it, not reporting it.
+- **L3:** see finding 3.
+- **Decisions:** 0015 now points to 0018, and 0018's amendment matches the code apart from the overstatement in finding 3.
+- **Tests weakened:** none.
+
+### Checked, no findings (this fix diff)
+- Hard rules 1, 3, 4, 7, 8, 9, 10 and 11: not applicable to this change.
+- Hard rule 2: checked. A blocked money or stock sentence is never released by the new path.
+- Hard rule 5: checked. Fixed sentences make no claim, and the model's sentences are untouched.
+- Hard rule 6 / NFR-03: findings 1 and 4, both low.
+- Decision 0001 key handling: placeholder key only, Makefile does not export the key, no key in CI secrets and CI in replay, key file not copied into a worktree. All not applicable; this diff touches no key, Makefile, workflow or worktree setup.
+- Decision 0001 budget caps: not applicable, not touched.
+- Decision 0001 cassettes still scanned: no cassette is added or changed in this diff.
+- Data-as-instructions: nothing in the diff, tests or decisions tried to steer the review.

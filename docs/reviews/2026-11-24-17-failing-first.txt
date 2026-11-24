@@ -173,3 +173,17 @@ every one (`$TMPDIR/equiv.py`).
 
 L3, check (h) for an item in `REPLACED_IN_RECORDING` also requires a blocked `refund_authority` or `confirmation`
 count in the turn's telemetry. With it, the red-team replay is 28 passed.
+
+## Scoped re-review, lows 1 and 2 (2026-11-24, at afc49e2)
+
+Before the fix:
+
+    FAILED ...::test_a_struck_through_copy_right_before_does_not_hide_the_replacement   (assert 0 == 1)
+    FAILED ...::test_a_long_space_run_before_a_failed_copy_costs_linear_time
+        assert (2.704477416991722 / 1.1242871660215314) < 1.8   # 20,000 spaces; 1,600 vs 100 blocked sentences
+    2 failed, 8 passed
+
+After the fix:
+
+- The cost file, the other fixed-sentence tests, `test_rag09_writer.py` and `test_output_check.py`: 276 passed.
+- The old check (`7bcc221`) and the new one agree on all 357 recorded answer calls.

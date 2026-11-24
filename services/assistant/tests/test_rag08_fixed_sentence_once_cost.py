@@ -75,3 +75,39 @@ def test_a_copy_taken_back_does_not_hide_a_later_replacement() -> None:
     check.feed("Ok. A coupon works too. ")
     check.finish()
     assert check.shown.count(PROMO) == 1
+
+
+# Scoped re-review (row #17, 2026-11-24), lows 1 and 2.
+
+
+def test_a_struck_through_copy_right_before_does_not_hide_the_replacement() -> None:
+    """Row #12's adjacent rule also needs a whole, plain copy (re-review low 1)."""
+    struck = "I c̶a̶n̶'̶t̶ help with offers or codes in chat."
+    assert check_text(f"{struck} Use the discount code.").count(PROMO) == 1
+
+
+def test_the_adjacent_rule_still_says_a_plain_copy_once() -> None:
+    assert check_text(f"Fine. {PROMO} Use the discount code.").count(PROMO) == 1
+    assert check_text("Use the discount code. A coupon works too.").count(PROMO) == 1
+
+
+def test_a_long_space_run_before_a_failed_copy_costs_linear_time() -> None:
+    """A copy that is not a whole sentence, after a long run of spaces, is not scanned again for
+    every later blocked sentence (re-review low 2)."""
+    money = FIXED_SENTENCES["money"]
+
+    def timed(spaces: int, blocked: int) -> float:
+        text = "Use a coupon. x" + " " * spaces + money + " " + "Use a coupon. " * blocked
+        check = OutputCheck(set(), [])
+        began = time.perf_counter()
+        for i in range(0, len(text), 7):
+            check.feed(text[i : i + 7])
+        check.finish()
+        return time.perf_counter() - began
+
+    # The space run is fixed; only the blocked sentences grow, 16 times. Linear: the run dominates
+    # and the time barely moves. Rescanning the run for each one more than doubles it.
+    small = min(timed(20000, 100) for _ in range(2))
+    large = min(timed(20000, 1600) for _ in range(2))
+    assert large < 5.0
+    assert large / small < 1.8
