@@ -117,3 +117,24 @@ E       AssertionError: assert ['You are the...ers subagent'] == []
 run together.
 Fixed test, 20 separate serial runs (uv run pytest -p no:randomly -q <test id>): passed 20 of 20, each about 3 s.
 Under xdist: uv run pytest -n 4 -q services/backend/tests: 890 passed in 57.32s.
+The 20 serial runs' summary lines, in order, from their captured output (advisor re-read 2 noted that the line above is a claim, not output):
+1 passed in 2.07s
+1 passed in 1.75s
+1 passed in 1.75s
+1 passed in 1.77s
+1 passed in 1.76s
+1 passed in 1.87s
+1 passed in 1.75s
+1 passed in 1.84s
+1 passed in 1.85s
+1 passed in 1.75s
+1 passed in 1.75s
+1 passed in 1.74s
+1 passed in 1.74s
+1 passed in 1.85s
+1 passed in 1.86s
+1 passed in 1.74s
+1 passed in 1.87s
+1 passed in 1.85s
+1 passed in 1.89s
+1 passed in 1.83s
