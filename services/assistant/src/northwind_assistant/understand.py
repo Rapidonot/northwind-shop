@@ -218,7 +218,9 @@ class Understander:
         self.deadline = deadline
         self.model = model
         self.vocab = vocab or Vocabulary.load()
-        self._client_for = client_for or (lambda base_url: anthropic_client(base_url))
+        # Live mode: no SDK retries, which would run on past the deadline uncounted (review L7).
+        retries = {"max_retries": 0} if self.live else {}
+        self._client_for = client_for or (lambda base_url: anthropic_client(base_url, **retries))
         self._cache: OrderedDict[tuple[str, str, int], QueryPlan] = OrderedDict()
 
     def _cached(self, key: tuple[str, str, int]) -> QueryPlan | None:
@@ -254,6 +256,7 @@ class Understander:
         if cached is not None:
             return Understood(cached, "cache", took())
         request = build_request(message, region, self.vocab, self.model)
+        quiet_client_logs()  # the SDK's DEBUG logs hold the request body (security review L6)
         client = self._client_for(base_url)
         call = asyncio.to_thread(client.messages.create, **request)
         try:
@@ -325,7 +328,9 @@ class LiveFilter:
             body = json.loads(getattr(result.content[0], "text", ""))
         except ValueError:
             return None
-        products = body.get("products") if isinstance(body, dict) else None
+        if not isinstance(body, dict):  # security review L5: any other reply drops the filter
+            return None
+        products = body.get("products")
         if body.get("region") != caller.region or not isinstance(products, list):
             return None
         if not all(isinstance(p, str) for p in products):

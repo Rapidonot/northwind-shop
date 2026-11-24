@@ -14,11 +14,13 @@ report's E1 rule were fixed on it before measuring.
 from __future__ import annotations
 
 import asyncio
+from collections import Counter
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
 
 from northwind_assistant.understand import Understander
+from northwind_common.mcp_token import RAG_SERVER, mint, product_bitmap
 from northwind_llm_replay.proxy import RunningProxy, encode_test_id
 from northwind_llm_replay.runner import proxy_config
 from northwind_mcp_catalog.live import FixtureCatalog, eligible_products
@@ -29,6 +31,8 @@ SUITE = "query-understanding"
 TEST_ID = "query-understanding"
 
 Parts = list[tuple[str, SearchFilter]]
+# A plan from a replayed reply: Haiku's, or a refused reply's rules plan, which replays the same.
+REPLAYED = frozenset({"model", "invalid"})
 
 
 def search_parts(plan: QueryPlan, region: str, store: FixtureCatalog) -> Parts:
@@ -52,6 +56,49 @@ def search_parts(plan: QueryPlan, region: str, store: FixtureCatalog) -> Parts:
     return parts
 
 
+_CHECK_KEY = b"query-plan-size-check-only-never-a-real-key!"
+
+
+def shopper_parts(plan: QueryPlan, message: str, region: str, store: FixtureCatalog) -> Parts:
+    """`search_parts`, then the gateway's own fallbacks (security review L4), so the gate scores the
+    search a shopper gets: a plan that narrows nothing is the plain search; a product list outside
+    the bitmap drops that part's live filter; a claim the token cannot hold is the plain search."""
+    if plan.is_plain(message):
+        return [(message, SearchFilter())]
+    parts = search_parts(plan, region, store)
+    claim_parts: list[dict[str, object]] = []
+    kept: Parts = []
+    for text, narrow in parts:
+        claim: dict[str, object] = {}
+        if text != message:
+            claim["q"] = text
+        if narrow.colours:
+            claim["c"] = list(narrow.colours)
+        if narrow.sizes:
+            claim["s"] = list(narrow.sizes)
+        if narrow.products is not None:
+            try:
+                claim["p"] = product_bitmap(narrow.products)
+            except ValueError:
+                narrow = SearchFilter(colours=narrow.colours, sizes=narrow.sizes)
+        claim_parts.append(claim)
+        kept.append((text, narrow))
+    if claim_parts == [{}]:
+        return [(message, SearchFilter())]
+    try:
+        mint(
+            audience="shopper",
+            region=region,
+            agent="shopper-assistant",
+            key=_CHECK_KEY,
+            server=RAG_SERVER,
+            plan={"parts": claim_parts},
+        )
+    except ValueError:
+        return [(message, SearchFilter())]  # `mint_planned` falls back the same way
+    return kept
+
+
 @contextmanager
 def planner(
     messages: Sequence[tuple[str, str]], cassettes: Path = Path("cassettes")
@@ -66,17 +113,28 @@ def planner(
         with RunningProxy(config) as running:
             understand = Understander(live=False)
             base_url = f"{running.url}/_t/{encode_test_id(TEST_ID)}"
+            failed: Counter[str] = Counter()
             for message, region in needed:
                 understood = asyncio.run(understand.plan(message, region, base_url))
                 plans[(message, region)] = understood.plan
-            if running.proxy.state.misses:
+                if understood.path not in REPLAYED:
+                    failed[understood.path] += 1
+            state = running.proxy.state
+            if state.misses:
                 raise SystemExit(
-                    f"{len(running.proxy.state.misses)} query-understanding replay misses: "
+                    f"{len(state.misses)} query-understanding replay misses: "
                     f"re-record with `make record SUITE={SUITE}`"
+                )
+            if failed or state.fallback_attempts:
+                # Security review M1: any other failure (a refused request, a proxy that did not
+                # answer) would quietly score the rules plan, a search no shopper gets.
+                raise SystemExit(
+                    f"query-understanding replay did not answer every plan: {dict(failed)}"
+                    f"{' and a fallback beta' if state.fallback_attempts else ''}"
                 )
 
     def parts(message: str, region: str) -> Parts:
         plan = plans.get((message, region)) or rules_plan(message, region)
-        return search_parts(plan, region, store)
+        return shopper_parts(plan, message, region, store)
 
     yield parts

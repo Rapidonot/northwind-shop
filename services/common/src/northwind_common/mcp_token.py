@@ -139,7 +139,10 @@ def plan_ok(plan: Any) -> bool:
             if items is not None and not (
                 isinstance(items, list)
                 and 1 <= len(items) <= PLAN_MAX_LIST
-                and all(isinstance(i, str) and 0 < len(i) <= PLAN_MAX_ITEM for i in items)
+                and all(
+                    isinstance(i, str) and 0 < len(i) <= PLAN_MAX_ITEM and not contains_card_data(i)
+                    for i in items
+                )
             ):
                 return False
         bitmap = part.get("p")
@@ -197,7 +200,7 @@ def mint(
         audience != "shopper" or not isinstance(session, str) or not SESSION_ID.fullmatch(session)
     ):
         raise ValueError("a session is 32 lowercase hex characters, on a shopper token only")
-    if turn is not None and not (isinstance(turn, str) and _UUID4.match(turn)):
+    if turn is not None and not (isinstance(turn, str) and _UUID4.fullmatch(turn)):
         raise ValueError("a turn is a version-4 UUID")
     if plan is not None and not (server == RAG_SERVER and plan_ok(plan)):
         raise ValueError("a query plan is for northwind-rag only, in the allowed shape")
@@ -246,7 +249,7 @@ def _claims(body: Any, now: float) -> Claims:
         or srv not in SERVERS
         or not (region is None or (isinstance(region, str) and _REGION.match(region)))
         or (aud == "shopper" and region is None)
-        or not (isinstance(turn, str) and _UUID4.match(turn))
+        or not (isinstance(turn, str) and _UUID4.fullmatch(turn))
         or not isinstance(exp, int)
         or isinstance(exp, bool)
         or exp <= now

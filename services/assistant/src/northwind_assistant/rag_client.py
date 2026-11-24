@@ -26,7 +26,16 @@ from northwind_common.rag_tool import TOOL_NAME
 
 AGENT = "shopper-assistant"
 # Every logger under these names stays at WARNING or above, whatever the root level.
-QUIET_LOGGERS = ("mcp.client", "mcp.shared", "httpx", "httpcore", "httpx2", "httpcore2")
+# Row #11: `anthropic` too, since query understanding sends the shopper's message to Haiku.
+QUIET_LOGGERS = (
+    "mcp.client",
+    "mcp.shared",
+    "httpx",
+    "httpcore",
+    "httpx2",
+    "httpcore2",
+    "anthropic",
+)
 
 
 def quiet_client_logs() -> None:

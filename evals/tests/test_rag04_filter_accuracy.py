@@ -49,10 +49,13 @@ def test_filter_extraction_is_at_least_95_of_100(llm_proxy: Any) -> None:
     assert len(items) == 100
     correct, paths, per_field, split = 0, Counter[str](), Counter[str](), 0
     misses: list[str] = []
+    model_ms: list[int] = []  # NFR-13 input: wall time of each Haiku plan, from this client
     for item in items:
         understood = asyncio.run(understand.plan(item["query"], item["region"], llm_proxy.base_url))
         predicted = understood.plan.label_parts()
         paths[understood.path] += 1
+        if understood.path == "model":
+            model_ms.append(understood.ms)
         if filters_match(predicted, item["parts"]):
             correct += 1
         else:
@@ -70,6 +73,8 @@ def test_filter_extraction_is_at_least_95_of_100(llm_proxy: Any) -> None:
         "per_field": {name: per_field[name] for name in FIELDS},
         "split_correct": split,
         "rules_only_correct": rules_only,
+        "mode": llm_proxy.mode,
+        "model_ms": sorted(model_ms),
     }
     REPORT.parent.mkdir(exist_ok=True)
     REPORT.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")

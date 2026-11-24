@@ -33,10 +33,12 @@ class SearchLedger:
                 return False
             for key in [k for k, (_, e) in self._used.items() if e <= now]:
                 del self._used[key]
-            used, _ = self._used.get(turn, (0, exp))
+            used, held = self._used.get(turn, (0, exp))
             if used >= self._max:
                 return False
-            self._used[turn] = (used + 1, exp)
+            # Row #11 (security review L1): one turn can have two tokens (the planned first search's
+            # and the CLI's) with different expiries; keep the later, so the count outlives both.
+            self._used[turn] = (used + 1, max(exp, held))
             return True
 
     def used(self, turn: str) -> int:

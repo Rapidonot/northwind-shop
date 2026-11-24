@@ -526,9 +526,12 @@ def _whole(value: Decimal) -> int:
     return int(value.quantize(Decimal(1), rounding=ROUND_HALF_UP)) * 100
 
 
-def _around(minor: int) -> tuple[int, int]:
+def _around(minor: int) -> tuple[int | None, int | None]:
+    """X ± 20%, in whole units; a bound outside 0 < x <= MAX_MINOR is left open, so every path
+    (the gateway's live filter and the eval planner) reads the same price (security review L4)."""
     units = Decimal(minor) / 100
-    return _whole(units * AROUND[0]), _whole(units * AROUND[1])
+    low, high = _whole(units * AROUND[0]), _whole(units * AROUND[1])
+    return (low if low > 0 else None), (min(high, MAX_MINOR) if high > 0 else None)
 
 
 @dataclass(frozen=True)
@@ -596,7 +599,8 @@ def _price(text: str, region: str) -> _PriceRead:
                 reads.append(Price(currency, minor, None))
             elif _AROUND_WORDS.search(before) or after.startswith(("-ish", "ish", " or so")):
                 low, high = _around(minor)
-                reads.append(Price(currency, low, high))
+                if low is not None or high is not None:
+                    reads.append(Price(currency, low, high))
             else:
                 unbounded = True
     real = [r for r in reads if r.currency]
@@ -819,7 +823,7 @@ def _checked_part(raw: Any, region: str, vocab: Vocabulary) -> Part | None:
                 price = Price(currency, amount, amount_to)
             else:
                 low, high = _around(amount)
-                price = Price(currency, low, high)
+                price = None if low is None and high is None else Price(currency, low, high)
     filters = Filters(
         colour=tuple(sorted(names)) or None,
         size=tuple(sorted(set(sizes))) or None,
