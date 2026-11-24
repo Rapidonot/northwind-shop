@@ -863,10 +863,16 @@ def record_turn(
 
             with serve_retriever(retriever, Caller, key=KEY) as (url, _):
                 asyncio.run(go(RagEndpoint(url, KEY)))
-    bodies = [
-        json.loads(p.read_text(encoding="utf-8"))["match"]["body"]
-        for p in sorted((tmp / "cassettes" / "t").glob("*.json"))
-    ]
+    # In request order: a cassette's file name is its request hash, so sorting by name orders
+    # the turn's calls by hash, which any prompt change can flip (row #17's make ci). Each call
+    # of the turn adds messages, so the message count is the request order.
+    bodies = sorted(
+        (
+            json.loads(p.read_text(encoding="utf-8"))["match"]["body"]
+            for p in (tmp / "cassettes" / "t").glob("*.json")
+        ),
+        key=lambda body: len(body["messages"]),
+    )
     return TurnRun(llm.requests, bodies)
 
 

@@ -269,9 +269,14 @@ def test_one_money_sentence_across_deltas_even_when_split_between_sentences() ->
     assert shown.rstrip().endswith("Wash cold.")
 
 
-def test_a_repeat_separated_by_other_text_is_shown_again() -> None:
+def test_a_repeat_separated_by_other_text_is_shown_once() -> None:
+    """Row #17 (the user's item 3, after window 1) reverses row #12's rule here: a fixed sentence
+    already on screen in this answer is not shown again, even with other text between. Both
+    blocked sentences are still counted; the model's own sentence stays."""
     shown = check_text("It costs $5. Wash cold. It costs $6.", live=USD250)
-    assert shown.count(MONEY) == 2
+    assert shown.count(MONEY) == 1
+    assert shown == f"{MONEY} Wash cold. "
+    assert hits("It costs $5. Wash cold. It costs $6.", live=USD250) == {"money": 2}
 
 
 def test_a_wrong_price_then_a_live_one_shows_one_sentence_and_the_live_price() -> None:

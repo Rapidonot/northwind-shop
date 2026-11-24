@@ -6,15 +6,41 @@ export type ErrorCode =
   | "replay_miss"
   | "internal";
 
+/** A cited source, as the gateway describes it (row #17, SA-02). Title, brand and department come
+ * only from trusted sources; a review has its ID and type only. There is no price or stock field. */
+export type SourceCard = {
+  id: string;
+  type: string;
+  title?: string;
+  brand?: string;
+  department?: string;
+};
+
 export type ChatEvent =
   | { type: "token"; text: string }
   | { type: "reset" }
-  | { type: "citations"; sourceIds: string[] }
+  | { type: "citations"; sourceIds: string[]; sources: SourceCard[] }
   | { type: "error"; code: ErrorCode }
   | { type: "refused"; message: string }
   | { type: "done" };
 
 const GENERIC_REFUSAL = "That message could not be accepted.";
+
+const CARD_TEXT = ["title", "brand", "department"] as const;
+
+/** A card is kept only with a string `id` and `type`; of the rest, only string fields are copied
+ * (row #17, security review L1), so a malformed item can neither crash the chat nor make a card. */
+function toCard(item: unknown): SourceCard[] {
+  if (typeof item !== "object" || item === null) return [];
+  const raw = item as Record<string, unknown>;
+  if (typeof raw.id !== "string" || typeof raw.type !== "string") return [];
+  const card: SourceCard = { id: raw.id, type: raw.type };
+  for (const key of CARD_TEXT) {
+    const value = raw[key];
+    if (typeof value === "string") card[key] = value;
+  }
+  return [card];
+}
 
 function toEvent(name: string, data: string): ChatEvent | null {
   const body = JSON.parse(data) as Record<string, unknown>;
@@ -24,7 +50,11 @@ function toEvent(name: string, data: string): ChatEvent | null {
     case "reset":
       return { type: "reset" };
     case "citations":
-      return { type: "citations", sourceIds: body.source_ids as string[] };
+      return {
+        type: "citations",
+        sourceIds: body.source_ids as string[],
+        sources: Array.isArray(body.sources) ? body.sources.flatMap(toCard) : [],
+      };
     case "error":
       return { type: "error", code: body.code as ErrorCode };
     case "done":

@@ -400,3 +400,7 @@ the range exception as "in stock" does.
 - **The pattern change after a recording** (stop 7 above) is approved with the plan.
 
 The changed shown answers are re-judged in W6. Tests: `services/assistant/tests/test_rag08_offer_drop.py`.
+
+## Row #17 note (2026-11-24)
+
+`REPLACED_IN_RECORDING` is now `{"RT-003"}`. See decision 0018, "Row #17 amendment".

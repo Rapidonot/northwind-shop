@@ -260,16 +260,102 @@ def test_the_prompt_states_the_cart_rules_and_no_unprompted_capability() -> None
     assert "offer only the alternatives that result lists" in prompt
     assert "each by its product name and variant ID" in prompt  # security review F8
     assert 'A cart result of "already_applied" changed nothing now' in prompt  # re-review N1
-    # The user, before W1: totals are the panel's, never the answer's (F2 would block them).
-    assert "line totals and its total are shown in the cart panel: never state them" in prompt
+    # The user, before W1: totals are never the answer's (F2 would block them). Row #17 (D8): the
+    # old "shown in the cart panel" wording induced "Your cart panel shows the updated totals."
+    # (#16 W4), so the prompt no longer names the panel as a place totals are shown.
+    assert (
+        "Never state the cart's line totals or total, and do not mention the cart panel or "
+        "anything else on the screen the shopper is using." in prompt
+    )
+    assert "If the shopper asks for a total, say that you can't give it in chat." in prompt
+    assert "shown in the cart panel" not in prompt
     assert "or saying whether they are in stock" in prompt
     # "No orders in chat" only on the shopper's asking, never as a self-description.
     [sentence] = [s for s in re.split(r"(?<=\.)\s", prompt) if "orders can't be placed" in s]
     assert sentence.startswith("If the shopper asks to place an order or check out")
+    # Row #17 (D8): no unprompted capability offers or site claims; the one exception is a
+    # refused add's alternatives, offered exactly as the cart rule says (addendum 1, item 2).
     assert (
-        "Do not describe your own abilities or offer to check anything unless the shopper asks."
-        in prompt
+        "Do not describe yourself, your tools or the website, and do not offer to look anything "
+        "up, check it or do anything next, unless the shopper asks. The one exception: after a "
+        "refused add, offer its alternatives exactly as the cart rule above says. End when the "
+        "question is answered." in prompt
     )
+
+
+# ---- row #17 (D8): the cart total, asked for ----------------------------------------------------
+
+CART_TOTAL_ANSWER = "I can't give your cart's total in chat."
+
+
+def test_asked_for_the_cart_total_the_answer_says_it_cannot_and_reaches_the_shopper_intact(
+    tmp_path: Path,
+) -> None:
+    """Addendum 1, item 2: the expected answer names no amount, no panel or screen and makes no
+    offer, and no output-check rule (the offer-drop rule included) holds it back. A scripted
+    model gives the answer, so this does not show the live model gives it (the window-2 report
+    says whether a recorded turn asks for a total)."""
+    with ScriptedLLM() as llm, serve_retriever(One(), Caller) as (url, _):
+        llm.reply_stream("I can't give your ", "cart's total in chat.")
+        runtime = agent_runtime(base_url=llm.url, root=tmp_path / "rt")
+
+        async def go() -> list[Any]:
+            caller = Caller(region="US")
+            return [
+                e
+                async for e in stream_answer(
+                    "What's my cart total?", caller, RagEndpoint(url, KEY), runtime
+                )
+            ]
+
+        events = asyncio.run(go())
+        [request] = llm.requests
+    assert "".join(e.text for e in events if isinstance(e, TextDelta)) == CART_TOTAL_ANSWER
+    assert "If the shopper asks for a total, say that you can't give it in chat." in json.dumps(
+        request["body"]["system"]
+    )
+
+
+# Row #17, addendum 1 item 3 (a): the terms that mean the answer points at the shopper's screen.
+SCREEN_TERMS = re.compile(
+    r"cart panel|\bpanel\b|this page|on the page|the page|on (?:your )?screen|sidebar",
+    re.IGNORECASE,
+)
+
+
+def answer_text(cassette: dict[str, Any]) -> str:
+    """The text a recorded response streamed to the shopper: its text deltas only, never the
+    request (the system prompt itself says "cart panel")."""
+    deltas = re.findall(r'"type":"text_delta","text":"((?:[^"\\]|\\.)*)"', str(cassette["body"]))
+    return "".join(json.loads(f'"{delta}"') for delta in deltas)
+
+
+def current_prompt_cassettes(suite: str) -> list[dict[str, Any]]:
+    """The suite's recordings made with today's system prompt (older ones stay on disk)."""
+    marker = "If the shopper asks for a total, say that you can't give it in chat."
+    found = []
+    for path in sorted((REPO / "cassettes" / suite).glob("*.json")):
+        cassette = json.loads(path.read_text(encoding="utf-8"))
+        system = json.dumps(((cassette.get("match") or {}).get("body") or {}).get("system"))
+        if marker in system:
+            found.append(cassette)
+    return found
+
+
+def test_the_answer_text_reader_sees_a_recorded_panel_mention() -> None:
+    body = 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"Your cart '
+    body += 'panel shows the totals."}}'
+    assert SCREEN_TERMS.search(answer_text({"body": body}))
+
+
+def test_no_recorded_cart_answer_points_at_the_cart_panel_or_the_screen() -> None:
+    """Addendum 1, item 3 (a): after the assistant-cart re-record (window 2), no answer recorded
+    with the row #17 prompt mentions the cart panel or the screen. It fails until that window runs:
+    no recording with today's prompt exists yet."""
+    cassettes = current_prompt_cassettes("assistant-cart")
+    assert cassettes, "no assistant-cart recording with the row #17 prompt yet (window 2)"
+    hits = [m.group(0) for c in cassettes if (m := SCREEN_TERMS.search(answer_text(c)))]
+    assert hits == []
 
 
 # ---- amendment 5: no cart write in a recorded adversarial turn ---------------------------------
