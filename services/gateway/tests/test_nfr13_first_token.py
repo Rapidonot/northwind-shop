@@ -61,8 +61,10 @@ class PacedModel:
     pace: float = 0.0
     gaps: dict[int, float] = field(default_factory=dict)
     requests: int = 0
+    # (request arrival, first delta sent), perf_counter seconds, per request (the 30-turn run).
+    marks: list[tuple[float, float]] = field(default_factory=list)
 
-    async def _stream(self) -> AsyncIterator[bytes]:
+    async def _stream(self, arrived: float) -> AsyncIterator[bytes]:
         await asyncio.sleep(self.first_delay)
         usage = {"input_tokens": 10, "output_tokens": 1}
         start = message_json("paced", "", usage, "msg_paced") | {"content": [], "stop_reason": None}
@@ -74,6 +76,8 @@ class PacedModel:
             if index:
                 await asyncio.sleep(self.pace)
             delta = {"type": "text_delta", "text": chunk}
+            if not index:
+                self.marks.append((arrived, time.perf_counter()))
             yield _event("content_block_delta", {"index": 0, "delta": delta})
             await asyncio.sleep(self.gaps.get(index, 0.0))
         yield _event("content_block_stop", {"index": 0})
@@ -87,9 +91,10 @@ class PacedModel:
         yield _event("message_stop", {})
 
     async def _handle(self, request: Request) -> StreamingResponse:
+        arrived = time.perf_counter()
         await request.body()
         self.requests += 1
-        return StreamingResponse(self._stream(), media_type="text/event-stream")
+        return StreamingResponse(self._stream(arrived), media_type="text/event-stream")
 
     @contextmanager
     def serving(self) -> Iterator[str]:
@@ -118,6 +123,7 @@ class Timing:
     first_token_ms: float | None
     done_ms: float
     events: tuple[str, ...]
+    started: float = 0.0  # perf_counter at the POST
 
 
 def measure(gateway_url: str, message: str, timeout: float = 60.0) -> Timing:
@@ -137,7 +143,7 @@ def measure(gateway_url: str, message: str, timeout: float = 60.0) -> Timing:
             if name == "token" and first is None:
                 first = (time.perf_counter() - started) * 1000
     done = (time.perf_counter() - started) * 1000
-    return Timing(first, done, tuple(names))
+    return Timing(first, done, tuple(names), started)
 
 
 def percentile(values: Sequence[float], q: float) -> float:
@@ -216,3 +222,104 @@ def test_the_fake_ends_its_first_delta_mid_sentence() -> None:
 )
 def test_percentile_is_nearest_rank(values: list[float], q: float, expected: float) -> None:
     assert percentile(values, q) == expected
+
+
+# ---- the 30-turn measurement (run by hand, outside any window) --------------------------------
+
+
+def main() -> None:
+    """Run: `DATABASE_URL=…/northwind_16 uv run --offline python <this file> [--runs 30]`.
+
+    The production surface in replay: mcp-rag over the real index with the live FastEmbed embedder
+    (mcp-rag's default), mcp-catalog over the verified fixtures, the real CLI and gateway, and the
+    paced fake as the model. One warm-up turn, then `--runs` sequential turns over the five smoke
+    questions. Prints JSON: per turn, POST to first token; the part before the model's request
+    arrives (gateway, session, search, CLI start-up); and the part after its first delta (output
+    check hold-back, transport). Local overhead = first token minus the fake's own wait (0 here)."""
+    import argparse
+    import os
+    import statistics
+    import tempfile
+    from pathlib import Path
+
+    import psycopg
+
+    from northwind_assistant.catalog_client import CatalogEndpoint
+    from northwind_mcp_catalog import testing as catalog_testing
+    from northwind_mcp_catalog.live import FixtureCatalog
+    from northwind_mcp_rag.testing import CallerIndex
+    from northwind_rag.embedding import FastEmbedEmbedder
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--runs", type=int, default=30)
+    parser.add_argument(
+        "--pace", type=float, default=0.05, help="seconds between the fake's deltas"
+    )
+    args = parser.parse_args()
+    repo = Path(__file__).resolve().parents[3]
+    questions = list(json.loads((repo / "apps/portal/e2e/questions.json").read_text()).values())
+
+    def connect() -> psycopg.Connection:
+        return psycopg.connect(os.environ["DATABASE_URL"], autocommit=True)
+
+    model = PacedModel(pace=args.pace)
+    index = CallerIndex(connect, FastEmbedEmbedder())
+    with (
+        tempfile.TemporaryDirectory() as root,
+        model.serving() as model_url,
+        serve_retriever(index, Caller) as (rag_url, _),
+        catalog_testing.running(catalog_testing.server(FixtureCatalog(), key=KEY)) as catalog_url,
+    ):
+        services = ChatServices(
+            RagEndpoint(rag_url, KEY),
+            agent_runtime(base_url=model_url, root=Path(root) / "rt"),
+            CatalogEndpoint(catalog_url, KEY),
+        )
+        app.dependency_overrides[chat_services] = lambda: services
+        try:
+            with serving_app(app) as url:
+                warm = measure(url, questions[0])
+                turns: list[dict[str, Any]] = []
+                for n in range(args.runs):
+                    before = len(model.marks)
+                    timing = measure(url, questions[n % len(questions)])
+                    arrived, first_delta = model.marks[before]
+                    turns.append(
+                        {
+                            "question": n % len(questions),
+                            "first_token_ms": timing.first_token_ms,
+                            "before_model_ms": (arrived - timing.started) * 1000,
+                            "after_first_delta_ms": None
+                            if timing.first_token_ms is None
+                            else timing.first_token_ms - (first_delta - timing.started) * 1000,
+                            "model_requests": len(model.marks) - before,
+                        }
+                    )
+        finally:
+            app.dependency_overrides.clear()
+    firsts = [t["first_token_ms"] for t in turns if t["first_token_ms"] is not None]
+    report = {
+        "runs": args.runs,
+        "pace_s": args.pace,
+        "chunks": list(DEFAULT_CHUNKS),
+        "warm_up_first_token_ms": warm.first_token_ms,
+        "first_token_ms": {
+            "p50": percentile(firsts, 50),
+            "p95": percentile(firsts, 95),
+            "max": max(firsts),
+            "mean": statistics.fmean(firsts),
+        },
+        "before_model_ms_p50_p95": [
+            percentile([t["before_model_ms"] for t in turns], q) for q in (50, 95)
+        ],
+        "after_first_delta_ms_p50_p95": [
+            percentile([t["after_first_delta_ms"] for t in turns if t["after_first_delta_ms"]], q)
+            for q in (50, 95)
+        ],
+        "turns": turns,
+    }
+    print(json.dumps(report, indent=2))
+
+
+if __name__ == "__main__":
+    main()
