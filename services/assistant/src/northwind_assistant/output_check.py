@@ -1441,6 +1441,12 @@ class OutputCheck:
                         and self._shown[-1:].isspace()
                     ):
                         end += 1
+                elif _shown_before(self._shown, fixed):
+                    # Row #17 (the user's item 3): the same fixed sentence is already on screen in
+                    # this answer, with other text since, so this replacement is left out as a
+                    # dropped sentence is, keeping the first. Still counted; the model's own
+                    # sentences are untouched.
+                    self._skip_space = not self._shown or self._shown[-1:].isspace()
                 else:
                     sentence = self._lead + fixed
                     self._shown += sentence
@@ -1483,6 +1489,11 @@ def _repeats(shown: str, fixed: str) -> bool:
     """Whether the text on screen already ends with `fixed`, compared in the matching view."""
     tail = shown.rstrip()[-(len(fixed) + 16) :]
     return bool(tail) and normal(tail).endswith(normal(fixed))
+
+
+def _shown_before(shown: str, fixed: str) -> bool:
+    """Whether `fixed` is anywhere in the text on screen, compared in the matching view (row #17)."""
+    return bool(shown) and normal(fixed) in normal(shown)
 
 
 def check_text(

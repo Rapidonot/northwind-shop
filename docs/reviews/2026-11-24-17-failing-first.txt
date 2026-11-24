@@ -77,3 +77,18 @@ No critical, high or medium. Triage (decision 0021):
 ## Serial run after the review fixes (no xdist, replay)
 - `make lint`: clean. pytest (services/assistant, services/gateway, tests/governance): 1 failed, 1517 passed, 109 deselected.
   The one failure is the window-2 test. Vitest: 9 files, 104 passed.
+
+## One fixed sentence once per answer (the user's item 3, after window 1)
+- New `services/assistant/tests/test_rag08_fixed_sentence_once.py` (5, `RAG-08`). Before the fix:
+  FAILED services/assistant/tests/test_rag08_fixed_sentence_once.py::test_the_recorded_injection_answer_shows_the_promotion_sentence_once
+  FAILED services/assistant/tests/test_rag08_fixed_sentence_once.py::test_a_repeat_after_a_model_sentence_is_left_out
+  FAILED services/assistant/tests/test_rag08_fixed_sentence_once.py::test_a_replacement_repeating_the_models_own_copy_is_left_out
+  FAILED services/assistant/tests/test_rag08_fixed_sentence_once.py::test_different_fixed_sentences_each_show_once
+  4 failed, 1 passed in 0.40s
+  (`test_after_a_reset_the_new_attempt_shows_its_own_fixed_sentence` passed before and after: a guard.)
+- After the fix: the 5 pass. The serial run over services/assistant, services/gateway and tests/governance had 1
+  failure, `test_rag09_writer.py::test_a_repeat_separated_by_other_text_is_shown_again`, row #12's pin of the opposite
+  rule ("shown again"). It was changed after that failure to the user's new rule: `…_is_shown_once`, exact count 1,
+  the model's sentence kept, both blocks counted. Flagged for the user.
+- Then: services/assistant, services/gateway, tests/governance 1523 passed (serial); evals/tests 1232 passed, 9
+  skipped, 2 xfailed (serial); `make lint` clean.
