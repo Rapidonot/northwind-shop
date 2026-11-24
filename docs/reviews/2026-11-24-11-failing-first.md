@@ -184,3 +184,59 @@ E            +  where True = names_catalog_product('Tell me about the Corvane As
   `E           AssertionError: assert not True`
 
 - **Result:** all 19 cases fail as they should. The earlier lists above are kept as the history.
+
+## `make ci` at `2caef81`: the 25 failures, and what fixed each (the advisor's re-read before the final `make ci`)
+
+`caffeinate -dims make ci DATABASE_URL=…/northwind_16` at `2caef81` exited 2. Lint, mypy (385 files) and the scan
+passed; pytest gave 25 failed and 7,804 passed. The failing tests, as printed:
+
+- `evals/tests/test_enrichment_e1_more.py::test_the_command_checks_each_side_as_its_own_kind`
+- `evals/tests/test_enrichment_e1_more.py::test_the_command_exits_0_when_e1_passes`
+- `evals/tests/test_enrichment_e1_more.py::test_the_command_exits_1_on_a_b_only_failure`
+- `evals/tests/test_enrichment_e1_more.py::test_the_command_exits_1_on_a_plain_index_problem_and_writes_no_report`
+- `evals/tests/test_enrichment_e1_more.py::test_the_command_exits_1_on_an_enriched_index_problem`
+- `evals/tests/test_enrichment_e1_more.py::test_the_command_exits_1_when_a_clause_fails_and_reports_it`
+- `evals/tests/test_enrichment_e1_more.py::test_the_command_exits_1_when_both_sides_are_the_same_index`
+- `evals/tests/test_enrichment_e1_more.py::test_the_command_exits_1_when_there_is_no_enriched_index`
+- `evals/tests/test_rag03_compare.py::test_live_retrieval_passes_each_items_region_as_a_shopper`
+- `services/assistant/tests/test_cc10_token_exposure.py::test_the_token_is_in_no_file_of_the_runtime_and_not_on_stderr`
+- `services/assistant/tests/test_chk01_cart.py::test_no_recorded_red_team_turn_writes_a_cart`
+- `services/assistant/tests/test_tool_surface.py::test_every_recorded_request_offers_the_frozen_surface[assistant-redteam]`
+- `services/gateway/tests/test_playwright_servers.py::test_the_gateway_attaches_exactly_mcp_rag_and_mcp_catalog`
+- `services/mcp-catalog/tests/test_catalog_canary.py::test_the_canary_title_and_id_are_in_no_response_byte`
+- `services/mcp-catalog/tests/test_chk01_criteria.py::test_the_registry_holds_the_catalog_reads_and_the_four_cart_tools_and_nothing_else`
+- `services/mcp-catalog/tests/test_tools.py::test_the_catalog_source_never_touches_the_index`
+- `services/mcp-catalog/tests/test_tools.py::test_the_server_serves_exactly_the_five_tools`
+- `services/rag/tests/test_context_checks.py::test_no_chunk_is_dumped_whole`
+- `services/rag/tests/test_frozen_vectors.py::test_the_committed_file_covers_every_chunk_eval_query_and_smoke_question`
+- `tests/governance/test_tool_register.py::test_the_tool_the_assistant_really_offers_has_a_register_row`
+- `tests/mcp/test_contract.py::test_a_description_says_when_not_to_use_it_and_gives_an_example[northwind-catalog-eligible_products]`
+- `tests/mcp/test_contract.py::test_no_scope_grants_a_tool_outside_prd_sevens_read_only_set[northwind-catalog]`
+- `tests/mcp/test_contract.py::test_the_catalog_listing_is_within_the_five_read_only_tools[shopper-query]`
+- `tests/mcp/test_contract.py::test_the_catalog_registry_is_exactly_the_five_read_only_tools`
+- `tests/mcp/test_contract.py::test_tools_list_is_within_the_agents_scope_and_read_only[shopper-query-northwind-catalog]`
+
+These failures are the failing-first evidence for the fixes that followed:
+- **15 fixed without loosening any check** (`e7df4b6`):
+  - the 8 E1 tests and the 1 RAG-03 test: their seam (`_live_plain`);
+  - token exposure: `mint_turn` through `mint`;
+  - the chunk-dump pin: a loop-variable rename;
+  - the tool register: a row added;
+  - the contract's description test: the description;
+  - the catalog-source test: a comment;
+  - the canary scan: coverage added.
+- **10 pins updated as the user approved under stop 5** (`30e4a52`).
+- After both: `make check` at `30e4a52` exited 0 (pytest 7,830 passed; Vitest 104 passed).
+
+The two new checks added in `e7df4b6` had no failing run, so mutations show them failing (each restored from HEAD
+afterwards):
+
+- **canary: the live filter never names P0009 (mutation in live.py: internal products kept)**: `1 failed in 0.59s`
+  `E               assert ('NWCANARY-28c917c5dc94' not in '{"region":"...9","P0200"]}'`
+- **canary: the live filter never names P0009 (mutation in live.py: every product listed, no checks)**: `1 failed in 0.59s`
+  `E               assert ('NWCANARY-28c917c5dc94' not in '{"region":"...9","P0200"]}'`
+- **RAG-03 seam: _live binds each item's region (mutation in cli.py: _live binds US)**: `1 failed in 1.17s`
+  `E       AssertionError: assert [('a', 'US', ...', 'shopper')] == [('a', 'UK', ...', 'shopper')]`
+
+- **The `OPTIONAL_CLAIMS` pin** (`test_chk01_criteria.py`, `{"sid", "qf"}`) was changed in `9d103a7`, the first
+  implementation commit, with the `qf` claim. It is not one of the ten.
