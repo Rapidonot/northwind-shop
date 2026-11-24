@@ -1,0 +1,32 @@
+{
+  "correct": 99,
+  "misses": [
+    "QU-080"
+  ],
+  "mode": "replay",
+  "model_ms": [
+    18,
+    18,
+    19,
+    19,
+    20,
+    20,
+    21,
+    21,
+    21,
+    676
+  ],
+  "of": 100,
+  "paths": {
+    "model": 10,
+    "rules": 90
+  },
+  "per_field": {
+    "availability": 100,
+    "colour": 99,
+    "price": 100,
+    "size": 99
+  },
+  "rules_only_correct": 93,
+  "split_correct": 97
+}
