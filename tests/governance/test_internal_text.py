@@ -143,12 +143,120 @@ def test_a_sentence_split_across_a_stream_is_found(tmp_path: Path, key: str) -> 
     assert found_in({SENTENCE}, recorded_text(tmp_path)) == {SENTENCE}
 
 
+NO_ARGUMENT_TOOL = "mcp__northwind-catalog__get_cart"  # the only tool that takes no argument
+
+
+def is_bare_get_cart_call(body: str) -> bool:
+    """Row #16, a stop-5 change the user approved (2026-11-18): a streamed response may hold no text
+    only if it is exactly one `tool_use` block, named `get_cart` (the only tool with no argument),
+    with input `{}` and no input delta that adds anything. Beside it only an empty `thinking` block
+    may appear: its `thinking` text and every `thinking_delta` empty (signature only, as W4
+    recorded it; the user, 2026-11-18). Anything else without text, any other tool, or `get_cart`
+    with any input, is not the exception."""
+    events = [json.loads(line[6:]) for line in body.splitlines() if line.startswith("data: ")]
+    starts = [e["content_block"] for e in events if e["type"] == "content_block_start"]
+    uses = [block for block in starts if block.get("type") == "tool_use"]
+    others = [block for block in starts if block.get("type") not in ("tool_use", "thinking")]
+    if len(uses) != 1 or others:
+        return False
+    thinking = [block.get("thinking", "") for block in starts if block.get("type") == "thinking"]
+    thinking += [
+        e["delta"].get("thinking", "")
+        for e in events
+        if e["type"] == "content_block_delta" and e["delta"].get("type") == "thinking_delta"
+    ]
+    if any(thinking):  # an empty thinking block only (the user, 2026-11-18)
+        return False
+    [use] = uses
+    deltas = [
+        e["delta"].get("partial_json", "")
+        for e in events
+        if e["type"] == "content_block_delta" and e["delta"].get("type") == "input_json_delta"
+    ]
+    return use.get("name") == NO_ARGUMENT_TOOL and use.get("input") == {} and not "".join(deltas)
+
+
 def test_every_streamed_recording_gives_its_answer_to_the_scan() -> None:
-    """Without this control, a scan that lost a streamed answer would still find nothing."""
+    """Without this control, a scan that lost a streamed answer would still find nothing. The one
+    exception is a bare `get_cart` call, which has no answer to lose (`is_bare_get_cart_call`)."""
     cassettes = [json.loads(path.read_text()) for path in (REPO / "cassettes").rglob("*.json")]
     streamed = [cassette for cassette in cassettes if cassette["kind"] == "sse"]
     assert streamed, "no streamed recording to read"
-    assert all(streamed_text(cassette["body"]) for cassette in streamed)
+    assert all(
+        streamed_text(cassette["body"]) or is_bare_get_cart_call(cassette["body"])
+        for cassette in streamed
+    )
+
+
+def _stream(*blocks: tuple[dict[str, Any], list[dict[str, Any]]]) -> str:
+    """A minimal streamed body: each block's start, then its deltas."""
+    events: list[dict[str, Any]] = [{"type": "message_start", "message": {}}]
+    for index, (block, deltas) in enumerate(blocks):
+        events.append({"type": "content_block_start", "index": index, "content_block": block})
+        events += [{"type": "content_block_delta", "index": index, "delta": d} for d in deltas]
+        events.append({"type": "content_block_stop", "index": index})
+    events.append({"type": "message_stop"})
+    return "".join(f"event: {e['type']}\ndata: {json.dumps(e)}\n\n" for e in events)
+
+
+THINKING = ({"type": "thinking", "thinking": ""}, [{"type": "thinking_delta", "thinking": ""}])
+
+
+def _use(name: str, partial: str = "") -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    block = {"type": "tool_use", "id": "toolu_1", "name": name, "input": {}}
+    return block, [{"type": "input_json_delta", "partial_json": partial}]
+
+
+def _passes(body: str) -> bool:
+    return bool(streamed_text(body)) or is_bare_get_cart_call(body)
+
+
+def test_a_bare_get_cart_call_passes_the_control() -> None:
+    assert _passes(_stream(_use(NO_ARGUMENT_TOOL)))
+    assert _passes(_stream(THINKING, _use(NO_ARGUMENT_TOOL)))  # as recorded in W4
+
+
+def test_a_text_bearing_response_with_its_text_removed_still_fails() -> None:
+    """Failing-first (1): take a real recorded answer, remove its text: the control catches it."""
+    bodies = [
+        json.loads(path.read_text())["body"]
+        for path in sorted((REPO / "cassettes/assistant-smoke").glob("*.json"))
+    ]
+    body = next(b for b in bodies if '"text_delta"' in b)
+    assert _passes(body)
+    stripped = re.sub(r'("type":\s*"text_delta",\s*"text":\s*)"(?:[^"\\]|\\.)*"', r'\1""', body)
+    assert stripped != body and not streamed_text(stripped)
+    assert not _passes(stripped)
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        _stream(_use("mcp__northwind-catalog__get_variant")),  # another tool, with no input
+        _stream(_use("mcp__northwind-rag__retrieve_context")),
+        _stream(_use(NO_ARGUMENT_TOOL), _use(NO_ARGUMENT_TOOL)),  # two calls
+        _stream(({"type": "text", "text": ""}, []), _use(NO_ARGUMENT_TOOL)),  # an empty text block
+        _stream(),  # nothing at all
+    ],
+)
+def test_any_other_response_without_text_still_fails(body: str) -> None:
+    """Failing-first (2): only the bare get_cart call is excepted from the control."""
+    assert not streamed_text(body)
+    assert not _passes(body)
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        _stream(_use("mcp__northwind-catalog__get_variant", '{"variant_id": "P0001-BLK-REG-M"}')),
+        _stream(_use(NO_ARGUMENT_TOOL, '{"note": "x"}')),  # get_cart with input
+    ],
+)
+def test_a_call_with_input_is_never_the_exception(body: str) -> None:
+    """Failing-first (2), with input: the exception does not apply. Such a call passes the control
+    only because the scan reads its input, as before row #16."""
+    assert not is_bare_get_cart_call(body)
+    assert streamed_text(body)
 
 
 def test_a_sentence_escaped_for_the_prompt_is_found(tmp_path: Path) -> None:
@@ -176,3 +284,24 @@ def test_only_the_asked_visibility_counts() -> None:
 
 def test_a_string_that_only_looks_like_json_is_kept() -> None:
     assert list(strings({"a": "{not json"})) == ["{not json"]
+
+
+@pytest.mark.parametrize(
+    "thinking",
+    [
+        ({"type": "thinking", "thinking": "Let me check the cart."}, []),
+        ({"type": "thinking", "thinking": ""}, [{"type": "thinking_delta", "thinking": "Hmm."}]),
+    ],
+)
+def test_a_thinking_block_with_text_is_never_the_exception(
+    thinking: tuple[dict[str, Any], list[dict[str, Any]]],
+) -> None:
+    """The user, 2026-11-18: beside a bare get_cart call, only an empty thinking block is allowed.
+    One with any text is never the exception, so it passes the control only if the scan has text
+    to read: text in a `thinking_delta` is read (`STREAMED_KEYS`); text only in the block's start
+    event is not, and that response fails the control."""
+    body = _stream(thinking, _use(NO_ARGUMENT_TOOL))
+    assert not is_bare_get_cart_call(body)
+    assert _passes(body) == bool(streamed_text(body))
+    if not thinking[1]:  # text only in the start event: the scan reads nothing, so it fails
+        assert not _passes(body)

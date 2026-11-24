@@ -1,0 +1,128 @@
+"""The shopper's session (row #16, CHK-01; decision 0019).
+
+An anonymous session, enough to key a cart on, until accounts exist (FOUND-3, SA-04). A pure ASGI
+middleware on the session paths reads the `nw_session` cookie. If its signature checks, the request
+carries that session id; if not (absent, malformed, forged or signed with another key), it gets a
+new one, and the response sets the cookie. The id goes into the MCP token (`sid`), never into a
+prompt, a tool argument, a tool result or a log, so no random value reaches the model's input.
+
+- The id is 128 random bits as 32 lowercase hex characters (`secrets.token_hex`).
+- The cookie is `<id>.<mac>`, where the mac is HMAC-SHA256 over the id, under a key derived from
+  `NORTHWIND_MCP_TOKEN_KEY` with the label `northwind-session-v1`, so no new secret is needed. One
+  key for two purposes is accepted for the lab under the per-purpose-keys open item (#10 L7, #10b
+  L3).
+- It is `HttpOnly`, `SameSite=Strict` and `Path=/api`. It has no `Secure` flag, because the lab
+  serves plain HTTP on localhost.
+- Only `SESSION_PATHS` get a session, so the health check needs no key.
+- Without the key, a request gets no session, which fails closed: the cart tools refuse
+  (`session_required`) and GET /api/cart answers 503. The key is read again on the next request.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import hmac
+import logging
+import re
+import secrets
+from collections.abc import Callable
+from http.cookies import CookieError, SimpleCookie
+from typing import Any
+
+from northwind_common.mcp_gate import ASGIApp, Message, Receive, Scope, Send
+from northwind_common.mcp_token import TokenKeyError, signing_key
+
+log = logging.getLogger(__name__)
+
+COOKIE = "nw_session"
+STATE_KEY = "northwind_session"
+SESSION_PATHS = ("/api/chat", "/api/cart")
+LABEL = b"northwind-session-v1"
+_ID = re.compile(r"[0-9a-f]{32}", re.ASCII)
+_MAC = re.compile(r"[0-9a-f]{64}", re.ASCII)
+
+
+def session_key(token_key: bytes) -> bytes:
+    """The cookie key, derived from the MCP token key with a fixed label."""
+    return hmac.new(token_key, LABEL, hashlib.sha256).digest()
+
+
+def _mac(key: bytes, session: str) -> str:
+    return hmac.new(key, session.encode("ascii"), hashlib.sha256).hexdigest()
+
+
+def sign(key: bytes, session: str) -> str:
+    return f"{session}.{_mac(key, session)}"
+
+
+def verified(key: bytes, value: str) -> str | None:
+    """The session id in a cookie value, if its signature checks; else None."""
+    session, _, mac = value.partition(".")
+    if not _ID.fullmatch(session) or not _MAC.fullmatch(mac):
+        return None
+    return session if hmac.compare_digest(_mac(key, session), mac) else None
+
+
+def _cookie_value(scope: Scope) -> str:
+    for name, value in scope.get("headers") or ():
+        if bytes(name) != b"cookie":
+            continue
+        try:
+            jar: SimpleCookie = SimpleCookie(bytes(value).decode("latin-1"))
+        except CookieError:
+            continue
+        morsel = jar.get(COOKIE)
+        if morsel is not None:
+            return morsel.value
+    return ""
+
+
+def set_cookie_header(key: bytes, session: str) -> tuple[bytes, bytes]:
+    value = f"{COOKIE}={sign(key, session)}; HttpOnly; SameSite=Strict; Path=/api"
+    return (b"set-cookie", value.encode("ascii"))
+
+
+def session_middleware(app: ASGIApp, key: Callable[[], bytes] | None = None) -> ASGIApp:
+    """Binds a session to every HTTP request on `SESSION_PATHS` (module docstring). `key` defaults
+    to the derived cookie key, read from the environment on each request (an HMAC; nothing cached,
+    so a changed key never leaves a stale one in use)."""
+
+    def current_key() -> bytes:
+        return key() if key is not None else session_key(signing_key())
+
+    async def middleware(scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http" or scope.get("path") not in SESSION_PATHS:
+            await app(scope, receive, send)
+            return
+        try:
+            cookie_key = current_key()
+        except TokenKeyError:
+            log.error("session unavailable: no key")
+            await app(scope, receive, send)
+            return
+        session = verified(cookie_key, _cookie_value(scope))
+        issue = session is None
+        if session is None:
+            session = secrets.token_hex(16)
+        state: dict[str, Any] = dict(scope.get("state") or {})
+        state[STATE_KEY] = session
+
+        async def send_with_cookie(message: Message) -> None:
+            if issue and message["type"] == "http.response.start":
+                headers = [*message.get("headers", []), set_cookie_header(cookie_key, session)]
+                message = {**message, "headers": headers}
+            await send(message)
+
+        await app({**scope, "state": state}, receive, send_with_cookie)
+
+    return middleware
+
+
+class SessionMiddleware:
+    """`session_middleware` as a class, for `FastAPI.add_middleware`."""
+
+    def __init__(self, app: ASGIApp, key: Callable[[], bytes] | None = None) -> None:
+        self._inner = session_middleware(app, key)
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        await self._inner(scope, receive, send)

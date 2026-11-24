@@ -1,0 +1,1047 @@
+cd /Users/rapido/Projects/northwind-shop && uv run pytest tests/ship -q -p no:cacheprovider  # HEAD 47e08f7
+........................................................................ [  8%]
+........................................................................ [ 17%]
+........................................................................ [ 25%]
+........................................................................ [ 34%]
+........................................................................ [ 42%]
+........................................................................ [ 51%]
+........................................................................ [ 60%]
+........................................................................ [ 68%]
+........................................................................ [ 77%]
+........................................................................ [ 85%]
+........................................................................ [ 94%]
+.....................FFFFFFFFFFFFFFFFFFFFFFFFFFF                         [100%]
+=================================== FAILURES ===================================
+_____ test_checks_that_appear_after_the_pr_opens_do_not_refuse_as_pending ______
+
+rig = Rig(root=PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-96/test_checks_that_appear_after_0'), origin=Posix...it sha\n', final_state='MERGED', merge_rc=0, user_login='me', events=None, events_after=None, flags=set(), open_prs=[])
+
+    def test_checks_that_appear_after_the_pr_opens_do_not_refuse_as_pending(rig: Rig) -> None:
+        """The bug itself: nothing on the first call, then every check passes."""
+        settings(rig, "30")
+        rig.checks_empty_calls = 1
+>       assert_merged(rig, rig.ship())
+
+tests/ship/test_ship_checks_wait.py:75: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+rig = Rig(root=PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-96/test_checks_that_appear_after_0'), origin=Posix...it sha\n', final_state='MERGED', merge_rc=0, user_login='me', events=None, events_after=None, flags=set(), open_prs=[])
+done = Ran(args=['make', '-s', 'ship', 'PR=7', 'SHA=a3f4749bfc45c82aeb3f301884dad0970082f9a5', 'RUNNER_DIR=/private/tmp/claud... PR #7:\ndocs/x.md\nFAKE-WATCH-OUTPUT\nship: refused: job CI/python is missing\nmake: *** [ship] Error 1\n", stderr='')
+
+    def assert_merged(rig: Rig, done: subprocess.CompletedProcess[str]) -> None:
+        out = done.stdout + done.stderr
+>       assert done.returncode == 0, out
+               ^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: make: error: couldn't create cache file '/var/folders/67/_rk1v_bs6mb1czj4dc_1jfq00000gp/T/xcrun_db-hha2YFwd' (errno=Operation not permitted)
+E       ship: files changed by PR #7:
+E       docs/x.md
+E       FAKE-WATCH-OUTPUT
+E       ship: refused: job CI/python is missing
+E       make: *** [ship] Error 1
+
+tests/ship/test_ship.py:589: AssertionError
+_________ test_polls_until_the_checks_appear_then_watches_then_merges __________
+
+rig = Rig(root=PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-96/test_polls_until_the_checks_ap0'), origin=Posix...it sha\n', final_state='MERGED', merge_rc=0, user_login='me', events=None, events_after=None, flags=set(), open_prs=[])
+
+    def test_polls_until_the_checks_appear_then_watches_then_merges(rig: Rig) -> None:
+        settings(rig, "30")
+        rig.checks_empty_calls = 2
+        done = rig.ship()
+>       assert_merged(rig, done)
+
+tests/ship/test_ship_checks_wait.py:85: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+rig = Rig(root=PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-96/test_polls_until_the_checks_ap0'), origin=Posix...it sha\n', final_state='MERGED', merge_rc=0, user_login='me', events=None, events_after=None, flags=set(), open_prs=[])
+done = Ran(args=['make', '-s', 'ship', 'PR=7', 'SHA=31b750ceefbf51fcd68332d881a7891918875437', 'RUNNER_DIR=/private/tmp/claud... PR #7:\ndocs/x.md\nFAKE-WATCH-OUTPUT\nship: refused: job CI/python is missing\nmake: *** [ship] Error 1\n", stderr='')
+
+    def assert_merged(rig: Rig, done: subprocess.CompletedProcess[str]) -> None:
+        out = done.stdout + done.stderr
+>       assert done.returncode == 0, out
+               ^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: make: error: couldn't create cache file '/var/folders/67/_rk1v_bs6mb1czj4dc_1jfq00000gp/T/xcrun_db-fC6h5qIF' (errno=Operation not permitted)
+E       ship: files changed by PR #7:
+E       docs/x.md
+E       FAKE-WATCH-OUTPUT
+E       ship: refused: job CI/python is missing
+E       make: *** [ship] Error 1
+
+tests/ship/test_ship.py:589: AssertionError
+___________________ test_the_poll_asks_for_name_and_workflow ___________________
+
+rig = Rig(root=PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-96/test_the_poll_asks_for_name_an0'), origin=Posix...it sha\n', final_state='MERGED', merge_rc=0, user_login='me', events=None, events_after=None, flags=set(), open_prs=[])
+
+    def test_the_poll_asks_for_name_and_workflow(rig: Rig) -> None:
+        settings(rig, "30")
+        rig.checks_empty_calls = 1
+>       assert_merged(rig, rig.ship())
+
+tests/ship/test_ship_checks_wait.py:97: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+rig = Rig(root=PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-96/test_the_poll_asks_for_name_an0'), origin=Posix...it sha\n', final_state='MERGED', merge_rc=0, user_login='me', events=None, events_after=None, flags=set(), open_prs=[])
+done = Ran(args=['make', '-s', 'ship', 'PR=7', 'SHA=7fce2088f8e3e3b0c88759ea1f5149379c00e186', 'RUNNER_DIR=/private/tmp/claud... PR #7:\ndocs/x.md\nFAKE-WATCH-OUTPUT\nship: refused: job CI/python is missing\nmake: *** [ship] Error 1\n", stderr='')
+
+    def assert_merged(rig: Rig, done: subprocess.CompletedProcess[str]) -> None:
+        out = done.stdout + done.stderr
+>       assert done.returncode == 0, out
+               ^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: make: error: couldn't create cache file '/var/folders/67/_rk1v_bs6mb1czj4dc_1jfq00000gp/T/xcrun_db-uz1eGVBn' (errno=Operation not permitted)
+E       ship: files changed by PR #7:
+E       docs/x.md
+E       FAKE-WATCH-OUTPUT
+E       ship: refused: job CI/python is missing
+E       make: *** [ship] Error 1
+
+tests/ship/test_ship.py:589: AssertionError
+______ test_a_required_job_that_never_appears_is_refused_at_the_deadline _______
+
+rig = Rig(root=PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-96/test_a_required_job_that_never0'), origin=Posix...it sha\n', final_state='MERGED', merge_rc=0, user_login='me', events=None, events_after=None, flags=set(), open_prs=[])
+
+    def test_a_required_job_that_never_appears_is_refused_at_the_deadline(rig: Rig) -> None:
+        settings(rig, "2")
+        rig.checks = [c for c in checks() if c["name"] != "eval-gate"]
+        done = rig.ship()
+        assert_refused(rig, done, "CI/eval-gate")
+>       assert "not started" in (done.stdout + done.stderr).lower()
+E       assert 'not started' in "make: error: couldn't create cache file '/var/folders/67/_rk1v_bs6mb1czj4dc_1jfq00000gp/t/xcrun_db-hi6hsukd' (errno=o...hanged by pr #7:\ndocs/x.md\nfake-watch-output\nship: refused: job ci/eval-gate is missing\nmake: *** [ship] error 1\n"
+E        +  where "make: error: couldn't create cache file '/var/folders/67/_rk1v_bs6mb1czj4dc_1jfq00000gp/t/xcrun_db-hi6hsukd' (errno=o...hanged by pr #7:\ndocs/x.md\nfake-watch-output\nship: refused: job ci/eval-gate is missing\nmake: *** [ship] error 1\n" = <built-in method lower of str object at 0x109e552f0>()
+E        +    where <built-in method lower of str object at 0x109e552f0> = ("make: error: couldn't create cache file '/var/folders/67/_rk1v_bs6mb1czj4dc_1jfq00000gp/T/xcrun_db-hI6hSUkD' (errno=O...hanged by PR #7:\ndocs/x.md\nFAKE-WATCH-OUTPUT\nship: refused: job CI/eval-gate is missing\nmake: *** [ship] Error 1\n" + '').lower
+E        +      where "make: error: couldn't create cache file '/var/folders/67/_rk1v_bs6mb1czj4dc_1jfq00000gp/T/xcrun_db-hI6hSUkD' (errno=O...hanged by PR #7:\ndocs/x.md\nFAKE-WATCH-OUTPUT\nship: refused: job CI/eval-gate is missing\nmake: *** [ship] Error 1\n" = Ran(args=['make', '-s', 'ship', 'PR=7', 'SHA=f623bba792197c25a96a2a1ae858665db95bec1e', 'RUNNER_DIR=/private/tmp/claud... #7:\ndocs/x.md\nFAKE-WATCH-OUTPUT\nship: refused: job CI/eval-gate is missing\nmake: *** [ship] Error 1\n", stderr='').stdout
+E        +      and   '' = Ran(args=['make', '-s', 'ship', 'PR=7', 'SHA=f623bba792197c25a96a2a1ae858665db95bec1e', 'RUNNER_DIR=/private/tmp/claud... #7:\ndocs/x.md\nFAKE-WATCH-OUTPUT\nship: refused: job CI/eval-gate is missing\nmake: *** [ship] Error 1\n", stderr='').stderr
+
+tests/ship/test_ship_checks_wait.py:109: AssertionError
+_______________________ test_every_missing_job_is_named ________________________
+
+rig = Rig(root=PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-96/test_every_missing_job_is_name0'), origin=Posix...it sha\n', final_state='MERGED', merge_rc=0, user_login='me', events=None, events_after=None, flags=set(), open_prs=[])
+
+    def test_every_missing_job_is_named(rig: Rig) -> None:
+        settings(rig, "1")
+        rig.checks = [c for c in checks() if c["name"] not in ("e2e", "baseline-label")]
+        done = rig.ship()
+        assert_refused(rig, done, "CI/e2e")
+>       assert "Guard/baseline-label" in done.stdout + done.stderr
+E       assert 'Guard/baseline-label' in ("make: error: couldn't create cache file '/var/folders/67/_rk1v_bs6mb1czj4dc_1jfq00000gp/T/xcrun_db-NDm7v9LN' (errno=O...iles changed by PR #7:\ndocs/x.md\nFAKE-WATCH-OUTPUT\nship: refused: job CI/e2e is missing\nmake: *** [ship] Error 1\n" + '')
+E        +  where "make: error: couldn't create cache file '/var/folders/67/_rk1v_bs6mb1czj4dc_1jfq00000gp/T/xcrun_db-NDm7v9LN' (errno=O...iles changed by PR #7:\ndocs/x.md\nFAKE-WATCH-OUTPUT\nship: refused: job CI/e2e is missing\nmake: *** [ship] Error 1\n" = Ran(args=['make', '-s', 'ship', 'PR=7', 'SHA=71e2cf6c6b7d04315d7c461a16834075ee71c5b9', 'RUNNER_DIR=/private/tmp/claud... by PR #7:\ndocs/x.md\nFAKE-WATCH-OUTPUT\nship: refused: job CI/e2e is missing\nmake: *** [ship] Error 1\n", stderr='').stdout
+E        +  and   '' = Ran(args=['make', '-s', 'ship', 'PR=7', 'SHA=71e2cf6c6b7d04315d7c461a16834075ee71c5b9', 'RUNNER_DIR=/private/tmp/claud... by PR #7:\ndocs/x.md\nFAKE-WATCH-OUTPUT\nship: refused: job CI/e2e is missing\nmake: *** [ship] Error 1\n", stderr='').stderr
+
+tests/ship/test_ship_checks_wait.py:120: AssertionError
+_________ test_no_checks_at_all_is_refused_and_says_ci_has_not_started _________
+
+rig = Rig(root=PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-96/test_no_checks_at_all_is_refus0'), origin=Posix...it sha\n', final_state='MERGED', merge_rc=0, user_login='me', events=None, events_after=None, flags=set(), open_prs=[])
+
+    def test_no_checks_at_all_is_refused_and_says_ci_has_not_started(rig: Rig) -> None:
+        settings(rig, "1")
+        rig.checks_empty_calls = 1000
+        done = rig.ship()
+        assert_refused(rig, done, "CI/python")
+>       assert "not started" in (done.stdout + done.stderr).lower()
+E       assert 'not started' in "make: error: couldn't create cache file '/var/folders/67/_rk1v_bs6mb1czj4dc_1jfq00000gp/t/xcrun_db-xo7kyfdm' (errno=o...s changed by pr #7:\ndocs/x.md\nfake-watch-output\nship: refused: job ci/python is missing\nmake: *** [ship] error 1\n"
+E        +  where "make: error: couldn't create cache file '/var/folders/67/_rk1v_bs6mb1czj4dc_1jfq00000gp/t/xcrun_db-xo7kyfdm' (errno=o...s changed by pr #7:\ndocs/x.md\nfake-watch-output\nship: refused: job ci/python is missing\nmake: *** [ship] error 1\n" = <built-in method lower of str object at 0x109e55570>()
+E        +    where <built-in method lower of str object at 0x109e55570> = ("make: error: couldn't create cache file '/var/folders/67/_rk1v_bs6mb1czj4dc_1jfq00000gp/T/xcrun_db-xo7kyFdM' (errno=O...s changed by PR #7:\ndocs/x.md\nFAKE-WATCH-OUTPUT\nship: refused: job CI/python is missing\nmake: *** [ship] Error 1\n" + '').lower
+E        +      where "make: error: couldn't create cache file '/var/folders/67/_rk1v_bs6mb1czj4dc_1jfq00000gp/T/xcrun_db-xo7kyFdM' (errno=O...s changed by PR #7:\ndocs/x.md\nFAKE-WATCH-OUTPUT\nship: refused: job CI/python is missing\nmake: *** [ship] Error 1\n" = Ran(args=['make', '-s', 'ship', 'PR=7', 'SHA=866495186a0fc913afbbe05f109d2bd81f384382', 'RUNNER_DIR=/private/tmp/claud... PR #7:\ndocs/x.md\nFAKE-WATCH-OUTPUT\nship: refused: job CI/python is missing\nmake: *** [ship] Error 1\n", stderr='').stdout
+E        +      and   '' = Ran(args=['make', '-s', 'ship', 'PR=7', 'SHA=866495186a0fc913afbbe05f109d2bd81f384382', 'RUNNER_DIR=/private/tmp/claud... PR #7:\ndocs/x.md\nFAKE-WATCH-OUTPUT\nship: refused: job CI/python is missing\nmake: *** [ship] Error 1\n", stderr='').stderr
+
+tests/ship/test_ship_checks_wait.py:128: AssertionError
+_______ test_checks_present_on_the_first_poll_poll_once_and_do_not_sleep _______
+
+rig = Rig(root=PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-96/test_checks_present_on_the_fir0'), origin=Posix...it sha\n', final_state='MERGED', merge_rc=0, user_login='me', events=None, events_after=None, flags=set(), open_prs=[])
+
+    def test_checks_present_on_the_first_poll_poll_once_and_do_not_sleep(rig: Rig) -> None:
+        settings(rig, "30", "5")
+        sleep = rig.root / "bin" / "sleep"
+        sleep.write_text(FAKE_SLEEP)
+        sleep.chmod(0o755)
+        assert_merged(rig, rig.ship())
+        before, _ = poll_calls(rig)
+>       assert len(before) == 1, rig.gh_calls()
+E       AssertionError: ['--version', 'pr checks --help', 'pr merge --help', 'pr view 7 --json state,baseRefName,isDraft,isCrossRepository,hea...7 --watch --interval 30', 'pr checks 7 --json name,bucket,workflow --jq .[] | [.workflow, .name, .bucket] | @tsv', ...]
+E       assert 0 == 1
+E        +  where 0 = len([])
+
+tests/ship/test_ship_checks_wait.py:139: AssertionError
+_______ test_after_the_wait_the_watch_and_the_bucket_read_are_unchanged ________
+
+rig = Rig(root=PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-96/test_after_the_wait_the_watch_0'), origin=Posix...it sha\n', final_state='MERGED', merge_rc=0, user_login='me', events=None, events_after=None, flags=set(), open_prs=[])
+
+    def test_after_the_wait_the_watch_and_the_bucket_read_are_unchanged(rig: Rig) -> None:
+        settings(rig, "30")
+        rig.checks_empty_calls = 1
+        rig.checks = checks(python="fail")
+        assert_refused(rig, rig.ship(), "python")
+        before, after = poll_calls(rig)
+>       assert before and after, rig.gh_calls()  # the poll, then the bucket read after --watch
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: ['--version', 'pr checks --help', 'pr merge --help', 'pr view 7 --json state,baseRefName,isDraft,isCrossRepository,hea...ecks 7 --watch --interval 30', 'pr checks 7 --json name,bucket,workflow --jq .[] | [.workflow, .name, .bucket] | @tsv']
+E       assert ([])
+
+tests/ship/test_ship_checks_wait.py:150: AssertionError
+_____ test_a_wait_that_is_not_digits_is_refused_before_any_checks_call[1m] _____
+
+rig = Rig(root=PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-96/test_a_wait_that_is_not_digits0'), origin=Posix...it sha\n', final_state='MERGED', merge_rc=0, user_login='me', events=None, events_after=None, flags=set(), open_prs=[])
+value = '1m'
+
+    @pytest.mark.parametrize("value", BAD)
+    def test_a_wait_that_is_not_digits_is_refused_before_any_checks_call(rig: Rig, value: str) -> None:
+        # "" is chosen as not digits: a set-but-empty value refuses (it is not silently the default).
+        settings(rig, value)
+        done = rig.ship()
+>       assert_refused(rig, done, "SHIP_CHECKS_WAIT")
+
+tests/ship/test_ship_checks_wait.py:164: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+rig = Rig(root=PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-96/test_a_wait_that_is_not_digits0'), origin=Posix...it sha\n', final_state='MERGED', merge_rc=0, user_login='me', events=None, events_after=None, flags=set(), open_prs=[])
+done = Ran(args=['make', '-s', 'ship', 'PR=7', 'SHA=569b9e73793ab99c9ece0012dc6b703281e601eb', 'RUNNER_DIR=/private/tmp/claud...dating 32bf811..29965c3\nFast-forward\n docs/x.md | 2 +-\n 1 file changed, 1 insertion(+), 1 deletion(-)\n", stderr='')
+reason = 'SHIP_CHECKS_WAIT'
+
+    def assert_refused(
+        rig: Rig, done: subprocess.CompletedProcess[str], reason: str | None = None
+    ) -> None:
+        out = done.stdout + done.stderr
+>       assert done.returncode != 0, out
+               ^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: make: error: couldn't create cache file '/var/folders/67/_rk1v_bs6mb1czj4dc_1jfq00000gp/T/xcrun_db-GjgquIPA' (errno=Operation not permitted)
+E       ship: files changed by PR #7:
+E       docs/x.md
+E       FAKE-WATCH-OUTPUT
+E       ship: full diff of the paths that load with the key, run with your login, or need a label:
+E       ship: PROGRESS.md and COVERAGE.md since the reviewed commit:
+E       ship: control surface changed by PR #7, read these before answering:
+E       (none)
+E       Merge PR #7 at 569b9e73793ab99c9ece0012dc6b703281e601eb? [y/N] FAKE-MERGE-OUTPUT
+E       ship: PR #7 merged
+E       From /private/tmp/claude-502/pytest-of-rapido/pytest-96/test_a_wait_that_is_not_digits0/origin
+E        * [new branch]      main       -> refs/runner/incoming
+E       29965c3 merge
+E       569b9e7 change
+E        docs/x.md | 2 +-
+E        1 file changed, 1 insertion(+), 1 deletion(-)
+E       Updating 32bf811..29965c3
+E       Fast-forward
+E        docs/x.md | 2 +-
+E        1 file changed, 1 insertion(+), 1 deletion(-)
+
+tests/ship/test_ship.py:579: AssertionError
+_____ test_a_wait_that_is_not_digits_is_refused_before_any_checks_call[-1] _____
+
+rig = Rig(root=PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-96/test_a_wait_that_is_not_digits1'), origin=Posix...it sha\n', final_state='MERGED', merge_rc=0, user_login='me', events=None, events_after=None, flags=set(), open_prs=[])
+value = '-1'
+
+    @pytest.mark.parametrize("value", BAD)
+    def test_a_wait_that_is_not_digits_is_refused_before_any_checks_call(rig: Rig, value: str) -> None:
+        # "" is chosen as not digits: a set-but-empty value refuses (it is not silently the default).
+        settings(rig, value)
+        done = rig.ship()
+>       assert_refused(rig, done, "SHIP_CHECKS_WAIT")
+
+tests/ship/test_ship_checks_wait.py:164: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+rig = Rig(root=PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-96/test_a_wait_that_is_not_digits1'), origin=Posix...it sha\n', final_state='MERGED', merge_rc=0, user_login='me', events=None, events_after=None, flags=set(), open_prs=[])
+done = Ran(args=['make', '-s', 'ship', 'PR=7', 'SHA=e66995407910d459d794b091c39325b9680a3f8d', 'RUNNER_DIR=/private/tmp/claud...dating c324d8a..48e601d\nFast-forward\n docs/x.md | 2 +-\n 1 file changed, 1 insertion(+), 1 deletion(-)\n", stderr='')
+reason = 'SHIP_CHECKS_WAIT'
+
+    def assert_refused(
+        rig: Rig, done: subprocess.CompletedProcess[str], reason: str | None = None
+    ) -> None:
+        out = done.stdout + done.stderr
+>       assert done.returncode != 0, out
+               ^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: make: error: couldn't create cache file '/var/folders/67/_rk1v_bs6mb1czj4dc_1jfq00000gp/T/xcrun_db-Rr0Ycgkk' (errno=Operation not permitted)
+E       ship: files changed by PR #7:
+E       docs/x.md
+E       FAKE-WATCH-OUTPUT
+E       ship: full diff of the paths that load with the key, run with your login, or need a label:
+E       ship: PROGRESS.md and COVERAGE.md since the reviewed commit:
+E       ship: control surface changed by PR #7, read these before answering:
+E       (none)
+E       Merge PR #7 at e66995407910d459d794b091c39325b9680a3f8d? [y/N] FAKE-MERGE-OUTPUT
+E       ship: PR #7 merged
+E       From /private/tmp/claude-502/pytest-of-rapido/pytest-96/test_a_wait_that_is_not_digits1/origin
+E        * [new branch]      main       -> refs/runner/incoming
+E       48e601d merge
+E       e669954 change
+E        docs/x.md | 2 +-
+E        1 file changed, 1 insertion(+), 1 deletion(-)
+E       Updating c324d8a..48e601d
+E       Fast-forward
+E        docs/x.md | 2 +-
+E        1 file changed, 1 insertion(+), 1 deletion(-)
+
+tests/ship/test_ship.py:579: AssertionError
+______ test_a_wait_that_is_not_digits_is_refused_before_any_checks_call[] ______
+
+rig = Rig(root=PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-96/test_a_wait_that_is_not_digits2'), origin=Posix...it sha\n', final_state='MERGED', merge_rc=0, user_login='me', events=None, events_after=None, flags=set(), open_prs=[])
+value = ''
+
+    @pytest.mark.parametrize("value", BAD)
+    def test_a_wait_that_is_not_digits_is_refused_before_any_checks_call(rig: Rig, value: str) -> None:
+        # "" is chosen as not digits: a set-but-empty value refuses (it is not silently the default).
+        settings(rig, value)
+        done = rig.ship()
+>       assert_refused(rig, done, "SHIP_CHECKS_WAIT")
+
+tests/ship/test_ship_checks_wait.py:164: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+rig = Rig(root=PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-96/test_a_wait_that_is_not_digits2'), origin=Posix...it sha\n', final_state='MERGED', merge_rc=0, user_login='me', events=None, events_after=None, flags=set(), open_prs=[])
+done = Ran(args=['make', '-s', 'ship', 'PR=7', 'SHA=b9ce50f90d97769c27054cc6a194c97eeddfbb47', 'RUNNER_DIR=/private/tmp/claud...dating 94d3fce..dde90c8\nFast-forward\n docs/x.md | 2 +-\n 1 file changed, 1 insertion(+), 1 deletion(-)\n", stderr='')
+reason = 'SHIP_CHECKS_WAIT'
+
+    def assert_refused(
+        rig: Rig, done: subprocess.CompletedProcess[str], reason: str | None = None
+    ) -> None:
+        out = done.stdout + done.stderr
+>       assert done.returncode != 0, out
+               ^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: make: error: couldn't create cache file '/var/folders/67/_rk1v_bs6mb1czj4dc_1jfq00000gp/T/xcrun_db-r1jvRLSU' (errno=Operation not permitted)
+E       ship: files changed by PR #7:
+E       docs/x.md
+E       FAKE-WATCH-OUTPUT
+E       ship: full diff of the paths that load with the key, run with your login, or need a label:
+E       ship: PROGRESS.md and COVERAGE.md since the reviewed commit:
+E       ship: control surface changed by PR #7, read these before answering:
+E       (none)
+E       Merge PR #7 at b9ce50f90d97769c27054cc6a194c97eeddfbb47? [y/N] FAKE-MERGE-OUTPUT
+E       ship: PR #7 merged
+E       From /private/tmp/claude-502/pytest-of-rapido/pytest-96/test_a_wait_that_is_not_digits2/origin
+E        * [new branch]      main       -> refs/runner/incoming
+E       dde90c8 merge
+E       b9ce50f change
+E        docs/x.md | 2 +-
+E        1 file changed, 1 insertion(+), 1 deletion(-)
+E       Updating 94d3fce..dde90c8
+E       Fast-forward
+E        docs/x.md | 2 +-
+E        1 file changed, 1 insertion(+), 1 deletion(-)
+
+tests/ship/test_ship.py:579: AssertionError
+____ test_a_wait_that_is_not_digits_is_refused_before_any_checks_call[10;x] ____
+
+rig = Rig(root=PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-96/test_a_wait_that_is_not_digits3'), origin=Posix...it sha\n', final_state='MERGED', merge_rc=0, user_login='me', events=None, events_after=None, flags=set(), open_prs=[])
+value = '10;x'
+
+    @pytest.mark.parametrize("value", BAD)
+    def test_a_wait_that_is_not_digits_is_refused_before_any_checks_call(rig: Rig, value: str) -> None:
+        # "" is chosen as not digits: a set-but-empty value refuses (it is not silently the default).
+        settings(rig, value)
+        done = rig.ship()
+>       assert_refused(rig, done, "SHIP_CHECKS_WAIT")
+
+tests/ship/test_ship_checks_wait.py:164: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+rig = Rig(root=PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-96/test_a_wait_that_is_not_digits3'), origin=Posix...it sha\n', final_state='MERGED', merge_rc=0, user_login='me', events=None, events_after=None, flags=set(), open_prs=[])
+done = Ran(args=['make', '-s', 'ship', 'PR=7', 'SHA=20fdf3df9aafafe8eacb0a98204ab6692b139fd5', 'RUNNER_DIR=/private/tmp/claud...dating 8eab399..7400e2a\nFast-forward\n docs/x.md | 2 +-\n 1 file changed, 1 insertion(+), 1 deletion(-)\n", stderr='')
+reason = 'SHIP_CHECKS_WAIT'
+
+    def assert_refused(
+        rig: Rig, done: subprocess.CompletedProcess[str], reason: str | None = None
+    ) -> None:
+        out = done.stdout + done.stderr
+>       assert done.returncode != 0, out
+               ^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: make: error: couldn't create cache file '/var/folders/67/_rk1v_bs6mb1czj4dc_1jfq00000gp/T/xcrun_db-pDwjTjrA' (errno=Operation not permitted)
+E       ship: files changed by PR #7:
+E       docs/x.md
+E       FAKE-WATCH-OUTPUT
+E       ship: full diff of the paths that load with the key, run with your login, or need a label:
+E       ship: PROGRESS.md and COVERAGE.md since the reviewed commit:
+E       ship: control surface changed by PR #7, read these before answering:
+E       (none)
+E       Merge PR #7 at 20fdf3df9aafafe8eacb0a98204ab6692b139fd5? [y/N] FAKE-MERGE-OUTPUT
+E       ship: PR #7 merged
+E       From /private/tmp/claude-502/pytest-of-rapido/pytest-96/test_a_wait_that_is_not_digits3/origin
+E        * [new branch]      main       -> refs/runner/incoming
+E       7400e2a merge
+E       20fdf3d change
+E        docs/x.md | 2 +-
+E        1 file changed, 1 insertion(+), 1 deletion(-)
+E       Updating 8eab399..7400e2a
+E       Fast-forward
+E        docs/x.md | 2 +-
+E        1 file changed, 1 insertion(+), 1 deletion(-)
+
+tests/ship/test_ship.py:579: AssertionError
+____ test_a_wait_that_is_not_digits_is_refused_before_any_checks_call[1.5] _____
+
+rig = Rig(root=PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-96/test_a_wait_that_is_not_digits4'), origin=Posix...it sha\n', final_state='MERGED', merge_rc=0, user_login='me', events=None, events_after=None, flags=set(), open_prs=[])
+value = '1.5'
+
+    @pytest.mark.parametrize("value", BAD)
+    def test_a_wait_that_is_not_digits_is_refused_before_any_checks_call(rig: Rig, value: str) -> None:
+        # "" is chosen as not digits: a set-but-empty value refuses (it is not silently the default).
+        settings(rig, value)
+        done = rig.ship()
+>       assert_refused(rig, done, "SHIP_CHECKS_WAIT")
+
+tests/ship/test_ship_checks_wait.py:164: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+rig = Rig(root=PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-96/test_a_wait_that_is_not_digits4'), origin=Posix...it sha\n', final_state='MERGED', merge_rc=0, user_login='me', events=None, events_after=None, flags=set(), open_prs=[])
+done = Ran(args=['make', '-s', 'ship', 'PR=7', 'SHA=d580d495314fce840b3aae4a1aeacf8af16e99ef', 'RUNNER_DIR=/private/tmp/claud...dating 5a66440..e84b1d9\nFast-forward\n docs/x.md | 2 +-\n 1 file changed, 1 insertion(+), 1 deletion(-)\n", stderr='')
+reason = 'SHIP_CHECKS_WAIT'
+
+    def assert_refused(
+        rig: Rig, done: subprocess.CompletedProcess[str], reason: str | None = None
+    ) -> None:
+        out = done.stdout + done.stderr
+>       assert done.returncode != 0, out
+               ^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: make: error: couldn't create cache file '/var/folders/67/_rk1v_bs6mb1czj4dc_1jfq00000gp/T/xcrun_db-egxFj27L' (errno=Operation not permitted)
+E       ship: files changed by PR #7:
+E       docs/x.md
+E       FAKE-WATCH-OUTPUT
+E       ship: full diff of the paths that load with the key, run with your login, or need a label:
+E       ship: PROGRESS.md and COVERAGE.md since the reviewed commit:
+E       ship: control surface changed by PR #7, read these before answering:
+E       (none)
+E       Merge PR #7 at d580d495314fce840b3aae4a1aeacf8af16e99ef? [y/N] FAKE-MERGE-OUTPUT
+E       ship: PR #7 merged
+E       From /private/tmp/claude-502/pytest-of-rapido/pytest-96/test_a_wait_that_is_not_digits4/origin
+E        * [new branch]      main       -> refs/runner/incoming
+E       e84b1d9 merge
+E       d580d49 change
+E        docs/x.md | 2 +-
+E        1 file changed, 1 insertion(+), 1 deletion(-)
+E       Updating 5a66440..e84b1d9
+E       Fast-forward
+E        docs/x.md | 2 +-
+E        1 file changed, 1 insertion(+), 1 deletion(-)
+
+tests/ship/test_ship.py:579: AssertionError
+_____ test_a_wait_that_is_not_digits_is_refused_before_any_checks_call[ 5] _____
+
+rig = Rig(root=PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-96/test_a_wait_that_is_not_digits5'), origin=Posix...it sha\n', final_state='MERGED', merge_rc=0, user_login='me', events=None, events_after=None, flags=set(), open_prs=[])
+value = ' 5'
+
+    @pytest.mark.parametrize("value", BAD)
+    def test_a_wait_that_is_not_digits_is_refused_before_any_checks_call(rig: Rig, value: str) -> None:
+        # "" is chosen as not digits: a set-but-empty value refuses (it is not silently the default).
+        settings(rig, value)
+        done = rig.ship()
+>       assert_refused(rig, done, "SHIP_CHECKS_WAIT")
+
+tests/ship/test_ship_checks_wait.py:164: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+rig = Rig(root=PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-96/test_a_wait_that_is_not_digits5'), origin=Posix...it sha\n', final_state='MERGED', merge_rc=0, user_login='me', events=None, events_after=None, flags=set(), open_prs=[])
+done = Ran(args=['make', '-s', 'ship', 'PR=7', 'SHA=4a0883b0f4990810b8575933591fea85f6bd078f', 'RUNNER_DIR=/private/tmp/claud...dating 87ee554..38aa48b\nFast-forward\n docs/x.md | 2 +-\n 1 file changed, 1 insertion(+), 1 deletion(-)\n", stderr='')
+reason = 'SHIP_CHECKS_WAIT'
+
+    def assert_refused(
+        rig: Rig, done: subprocess.CompletedProcess[str], reason: str | None = None
+    ) -> None:
+        out = done.stdout + done.stderr
+>       assert done.returncode != 0, out
+               ^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: make: error: couldn't create cache file '/var/folders/67/_rk1v_bs6mb1czj4dc_1jfq00000gp/T/xcrun_db-kkSRcsUj' (errno=Operation not permitted)
+E       ship: files changed by PR #7:
+E       docs/x.md
+E       FAKE-WATCH-OUTPUT
+E       ship: full diff of the paths that load with the key, run with your login, or need a label:
+E       ship: PROGRESS.md and COVERAGE.md since the reviewed commit:
+E       ship: control surface changed by PR #7, read these before answering:
+E       (none)
+E       Merge PR #7 at 4a0883b0f4990810b8575933591fea85f6bd078f? [y/N] FAKE-MERGE-OUTPUT
+E       ship: PR #7 merged
+E       From /private/tmp/claude-502/pytest-of-rapido/pytest-96/test_a_wait_that_is_not_digits5/origin
+E        * [new branch]      main       -> refs/runner/incoming
+E       38aa48b merge
+E       4a0883b change
+E        docs/x.md | 2 +-
+E        1 file changed, 1 insertion(+), 1 deletion(-)
+E       Updating 87ee554..38aa48b
+E       Fast-forward
+E        docs/x.md | 2 +-
+E        1 file changed, 1 insertion(+), 1 deletion(-)
+
+tests/ship/test_ship.py:579: AssertionError
+____ test_a_wait_that_is_not_digits_is_refused_before_any_checks_call[0x10] ____
+
+rig = Rig(root=PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-96/test_a_wait_that_is_not_digits6'), origin=Posix...it sha\n', final_state='MERGED', merge_rc=0, user_login='me', events=None, events_after=None, flags=set(), open_prs=[])
+value = '0x10'
+
+    @pytest.mark.parametrize("value", BAD)
+    def test_a_wait_that_is_not_digits_is_refused_before_any_checks_call(rig: Rig, value: str) -> None:
+        # "" is chosen as not digits: a set-but-empty value refuses (it is not silently the default).
+        settings(rig, value)
+        done = rig.ship()
+>       assert_refused(rig, done, "SHIP_CHECKS_WAIT")
+
+tests/ship/test_ship_checks_wait.py:164: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+rig = Rig(root=PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-96/test_a_wait_that_is_not_digits6'), origin=Posix...it sha\n', final_state='MERGED', merge_rc=0, user_login='me', events=None, events_after=None, flags=set(), open_prs=[])
+done = Ran(args=['make', '-s', 'ship', 'PR=7', 'SHA=cd42cb1d72359fac9583528f9267670077c9307d', 'RUNNER_DIR=/private/tmp/claud...dating 48b4198..efc7078\nFast-forward\n docs/x.md | 2 +-\n 1 file changed, 1 insertion(+), 1 deletion(-)\n", stderr='')
+reason = 'SHIP_CHECKS_WAIT'
+
+    def assert_refused(
+        rig: Rig, done: subprocess.CompletedProcess[str], reason: str | None = None
+    ) -> None:
+        out = done.stdout + done.stderr
+>       assert done.returncode != 0, out
+               ^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: make: error: couldn't create cache file '/var/folders/67/_rk1v_bs6mb1czj4dc_1jfq00000gp/T/xcrun_db-JKBjZ1Xm' (errno=Operation not permitted)
+E       ship: files changed by PR #7:
+E       docs/x.md
+E       FAKE-WATCH-OUTPUT
+E       ship: full diff of the paths that load with the key, run with your login, or need a label:
+E       ship: PROGRESS.md and COVERAGE.md since the reviewed commit:
+E       ship: control surface changed by PR #7, read these before answering:
+E       (none)
+E       Merge PR #7 at cd42cb1d72359fac9583528f9267670077c9307d? [y/N] FAKE-MERGE-OUTPUT
+E       ship: PR #7 merged
+E       From /private/tmp/claude-502/pytest-of-rapido/pytest-96/test_a_wait_that_is_not_digits6/origin
+E        * [new branch]      main       -> refs/runner/incoming
+E       efc7078 merge
+E       cd42cb1 change
+E        docs/x.md | 2 +-
+E        1 file changed, 1 insertion(+), 1 deletion(-)
+E       Updating 48b4198..efc7078
+E       Fast-forward
+E        docs/x.md | 2 +-
+E        1 file changed, 1 insertion(+), 1 deletion(-)
+
+tests/ship/test_ship.py:579: AssertionError
+__ test_a_wait_that_is_not_digits_is_refused_before_any_checks_call[$(true)] ___
+
+rig = Rig(root=PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-96/test_a_wait_that_is_not_digits7'), origin=Posix...it sha\n', final_state='MERGED', merge_rc=0, user_login='me', events=None, events_after=None, flags=set(), open_prs=[])
+value = '$(true)'
+
+    @pytest.mark.parametrize("value", BAD)
+    def test_a_wait_that_is_not_digits_is_refused_before_any_checks_call(rig: Rig, value: str) -> None:
+        # "" is chosen as not digits: a set-but-empty value refuses (it is not silently the default).
+        settings(rig, value)
+        done = rig.ship()
+>       assert_refused(rig, done, "SHIP_CHECKS_WAIT")
+
+tests/ship/test_ship_checks_wait.py:164: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+rig = Rig(root=PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-96/test_a_wait_that_is_not_digits7'), origin=Posix...it sha\n', final_state='MERGED', merge_rc=0, user_login='me', events=None, events_after=None, flags=set(), open_prs=[])
+done = Ran(args=['make', '-s', 'ship', 'PR=7', 'SHA=6c15a5c9d74812e2628b8844d3a2021a8acebe16', 'RUNNER_DIR=/private/tmp/claud...dating 5f4f7fc..f4dd8d6\nFast-forward\n docs/x.md | 2 +-\n 1 file changed, 1 insertion(+), 1 deletion(-)\n", stderr='')
+reason = 'SHIP_CHECKS_WAIT'
+
+    def assert_refused(
+        rig: Rig, done: subprocess.CompletedProcess[str], reason: str | None = None
+    ) -> None:
+        out = done.stdout + done.stderr
+>       assert done.returncode != 0, out
+               ^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: make: error: couldn't create cache file '/var/folders/67/_rk1v_bs6mb1czj4dc_1jfq00000gp/T/xcrun_db-ino3GUH6' (errno=Operation not permitted)
+E       ship: files changed by PR #7:
+E       docs/x.md
+E       FAKE-WATCH-OUTPUT
+E       ship: full diff of the paths that load with the key, run with your login, or need a label:
+E       ship: PROGRESS.md and COVERAGE.md since the reviewed commit:
+E       ship: control surface changed by PR #7, read these before answering:
+E       (none)
+E       Merge PR #7 at 6c15a5c9d74812e2628b8844d3a2021a8acebe16? [y/N] FAKE-MERGE-OUTPUT
+E       ship: PR #7 merged
+E       From /private/tmp/claude-502/pytest-of-rapido/pytest-96/test_a_wait_that_is_not_digits7/origin
+E        * [new branch]      main       -> refs/runner/incoming
+E       f4dd8d6 merge
+E       6c15a5c change
+E        docs/x.md | 2 +-
+E        1 file changed, 1 insertion(+), 1 deletion(-)
+E       Updating 5f4f7fc..f4dd8d6
+E       Fast-forward
+E        docs/x.md | 2 +-
+E        1 file changed, 1 insertion(+), 1 deletion(-)
+
+tests/ship/test_ship.py:579: AssertionError
+_____ test_a_poll_that_is_not_digits_is_refused_before_any_checks_call[1m] _____
+
+rig = Rig(root=PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-96/test_a_poll_that_is_not_digits0'), origin=Posix...it sha\n', final_state='MERGED', merge_rc=0, user_login='me', events=None, events_after=None, flags=set(), open_prs=[])
+value = '1m'
+
+    @pytest.mark.parametrize("value", BAD)
+    def test_a_poll_that_is_not_digits_is_refused_before_any_checks_call(rig: Rig, value: str) -> None:
+        settings(rig, "30", value)
+        done = rig.ship()
+>       assert_refused(rig, done, "SHIP_CHECKS_POLL")
+
+tests/ship/test_ship_checks_wait.py:172: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+rig = Rig(root=PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-96/test_a_poll_that_is_not_digits0'), origin=Posix...it sha\n', final_state='MERGED', merge_rc=0, user_login='me', events=None, events_after=None, flags=set(), open_prs=[])
+done = Ran(args=['make', '-s', 'ship', 'PR=7', 'SHA=20f59f9e33bda2899a7950e897d1308e38596435', 'RUNNER_DIR=/private/tmp/claud...dating 6e5772c..8ce6878\nFast-forward\n docs/x.md | 2 +-\n 1 file changed, 1 insertion(+), 1 deletion(-)\n", stderr='')
+reason = 'SHIP_CHECKS_POLL'
+
+    def assert_refused(
+        rig: Rig, done: subprocess.CompletedProcess[str], reason: str | None = None
+    ) -> None:
+        out = done.stdout + done.stderr
+>       assert done.returncode != 0, out
+               ^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: make: error: couldn't create cache file '/var/folders/67/_rk1v_bs6mb1czj4dc_1jfq00000gp/T/xcrun_db-WzKcKtuW' (errno=Operation not permitted)
+E       ship: files changed by PR #7:
+E       docs/x.md
+E       FAKE-WATCH-OUTPUT
+E       ship: full diff of the paths that load with the key, run with your login, or need a label:
+E       ship: PROGRESS.md and COVERAGE.md since the reviewed commit:
+E       ship: control surface changed by PR #7, read these before answering:
+E       (none)
+E       Merge PR #7 at 20f59f9e33bda2899a7950e897d1308e38596435? [y/N] FAKE-MERGE-OUTPUT
+E       ship: PR #7 merged
+E       From /private/tmp/claude-502/pytest-of-rapido/pytest-96/test_a_poll_that_is_not_digits0/origin
+E        * [new branch]      main       -> refs/runner/incoming
+E       8ce6878 merge
+E       20f59f9 change
+E        docs/x.md | 2 +-
+E        1 file changed, 1 insertion(+), 1 deletion(-)
+E       Updating 6e5772c..8ce6878
+E       Fast-forward
+E        docs/x.md | 2 +-
+E        1 file changed, 1 insertion(+), 1 deletion(-)
+
+tests/ship/test_ship.py:579: AssertionError
+_____ test_a_poll_that_is_not_digits_is_refused_before_any_checks_call[-1] _____
+
+rig = Rig(root=PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-96/test_a_poll_that_is_not_digits1'), origin=Posix...it sha\n', final_state='MERGED', merge_rc=0, user_login='me', events=None, events_after=None, flags=set(), open_prs=[])
+value = '-1'
+
+    @pytest.mark.parametrize("value", BAD)
+    def test_a_poll_that_is_not_digits_is_refused_before_any_checks_call(rig: Rig, value: str) -> None:
+        settings(rig, "30", value)
+        done = rig.ship()
+>       assert_refused(rig, done, "SHIP_CHECKS_POLL")
+
+tests/ship/test_ship_checks_wait.py:172: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+rig = Rig(root=PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-96/test_a_poll_that_is_not_digits1'), origin=Posix...it sha\n', final_state='MERGED', merge_rc=0, user_login='me', events=None, events_after=None, flags=set(), open_prs=[])
+done = Ran(args=['make', '-s', 'ship', 'PR=7', 'SHA=dcd25b2df2336c3fbd64de5e749a41189f1f0079', 'RUNNER_DIR=/private/tmp/claud...dating 2f324d7..8e325f0\nFast-forward\n docs/x.md | 2 +-\n 1 file changed, 1 insertion(+), 1 deletion(-)\n", stderr='')
+reason = 'SHIP_CHECKS_POLL'
+
+    def assert_refused(
+        rig: Rig, done: subprocess.CompletedProcess[str], reason: str | None = None
+    ) -> None:
+        out = done.stdout + done.stderr
+>       assert done.returncode != 0, out
+               ^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: make: error: couldn't create cache file '/var/folders/67/_rk1v_bs6mb1czj4dc_1jfq00000gp/T/xcrun_db-TROLTu8W' (errno=Operation not permitted)
+E       ship: files changed by PR #7:
+E       docs/x.md
+E       FAKE-WATCH-OUTPUT
+E       ship: full diff of the paths that load with the key, run with your login, or need a label:
+E       ship: PROGRESS.md and COVERAGE.md since the reviewed commit:
+E       ship: control surface changed by PR #7, read these before answering:
+E       (none)
+E       Merge PR #7 at dcd25b2df2336c3fbd64de5e749a41189f1f0079? [y/N] FAKE-MERGE-OUTPUT
+E       ship: PR #7 merged
+E       From /private/tmp/claude-502/pytest-of-rapido/pytest-96/test_a_poll_that_is_not_digits1/origin
+E        * [new branch]      main       -> refs/runner/incoming
+E       8e325f0 merge
+E       dcd25b2 change
+E        docs/x.md | 2 +-
+E        1 file changed, 1 insertion(+), 1 deletion(-)
+E       Updating 2f324d7..8e325f0
+E       Fast-forward
+E        docs/x.md | 2 +-
+E        1 file changed, 1 insertion(+), 1 deletion(-)
+
+tests/ship/test_ship.py:579: AssertionError
+______ test_a_poll_that_is_not_digits_is_refused_before_any_checks_call[] ______
+
+rig = Rig(root=PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-96/test_a_poll_that_is_not_digits2'), origin=Posix...it sha\n', final_state='MERGED', merge_rc=0, user_login='me', events=None, events_after=None, flags=set(), open_prs=[])
+value = ''
+
+    @pytest.mark.parametrize("value", BAD)
+    def test_a_poll_that_is_not_digits_is_refused_before_any_checks_call(rig: Rig, value: str) -> None:
+        settings(rig, "30", value)
+        done = rig.ship()
+>       assert_refused(rig, done, "SHIP_CHECKS_POLL")
+
+tests/ship/test_ship_checks_wait.py:172: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+rig = Rig(root=PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-96/test_a_poll_that_is_not_digits2'), origin=Posix...it sha\n', final_state='MERGED', merge_rc=0, user_login='me', events=None, events_after=None, flags=set(), open_prs=[])
+done = Ran(args=['make', '-s', 'ship', 'PR=7', 'SHA=2d589813fba946b97ad68cc1e95d9e34ccb59ee6', 'RUNNER_DIR=/private/tmp/claud...dating 9d9d8a8..12aa669\nFast-forward\n docs/x.md | 2 +-\n 1 file changed, 1 insertion(+), 1 deletion(-)\n", stderr='')
+reason = 'SHIP_CHECKS_POLL'
+
+    def assert_refused(
+        rig: Rig, done: subprocess.CompletedProcess[str], reason: str | None = None
+    ) -> None:
+        out = done.stdout + done.stderr
+>       assert done.returncode != 0, out
+               ^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: make: error: couldn't create cache file '/var/folders/67/_rk1v_bs6mb1czj4dc_1jfq00000gp/T/xcrun_db-yoqo7dp0' (errno=Operation not permitted)
+E       ship: files changed by PR #7:
+E       docs/x.md
+E       FAKE-WATCH-OUTPUT
+E       ship: full diff of the paths that load with the key, run with your login, or need a label:
+E       ship: PROGRESS.md and COVERAGE.md since the reviewed commit:
+E       ship: control surface changed by PR #7, read these before answering:
+E       (none)
+E       Merge PR #7 at 2d589813fba946b97ad68cc1e95d9e34ccb59ee6? [y/N] FAKE-MERGE-OUTPUT
+E       ship: PR #7 merged
+E       From /private/tmp/claude-502/pytest-of-rapido/pytest-96/test_a_poll_that_is_not_digits2/origin
+E        * [new branch]      main       -> refs/runner/incoming
+E       12aa669 merge
+E       2d58981 change
+E        docs/x.md | 2 +-
+E        1 file changed, 1 insertion(+), 1 deletion(-)
+E       Updating 9d9d8a8..12aa669
+E       Fast-forward
+E        docs/x.md | 2 +-
+E        1 file changed, 1 insertion(+), 1 deletion(-)
+
+tests/ship/test_ship.py:579: AssertionError
+____ test_a_poll_that_is_not_digits_is_refused_before_any_checks_call[10;x] ____
+
+rig = Rig(root=PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-96/test_a_poll_that_is_not_digits3'), origin=Posix...it sha\n', final_state='MERGED', merge_rc=0, user_login='me', events=None, events_after=None, flags=set(), open_prs=[])
+value = '10;x'
+
+    @pytest.mark.parametrize("value", BAD)
+    def test_a_poll_that_is_not_digits_is_refused_before_any_checks_call(rig: Rig, value: str) -> None:
+        settings(rig, "30", value)
+        done = rig.ship()
+>       assert_refused(rig, done, "SHIP_CHECKS_POLL")
+
+tests/ship/test_ship_checks_wait.py:172: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+rig = Rig(root=PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-96/test_a_poll_that_is_not_digits3'), origin=Posix...it sha\n', final_state='MERGED', merge_rc=0, user_login='me', events=None, events_after=None, flags=set(), open_prs=[])
+done = Ran(args=['make', '-s', 'ship', 'PR=7', 'SHA=cde9459137bfc0e301c2e31f82fc93662225b884', 'RUNNER_DIR=/private/tmp/claud...dating c4405d6..1259951\nFast-forward\n docs/x.md | 2 +-\n 1 file changed, 1 insertion(+), 1 deletion(-)\n", stderr='')
+reason = 'SHIP_CHECKS_POLL'
+
+    def assert_refused(
+        rig: Rig, done: subprocess.CompletedProcess[str], reason: str | None = None
+    ) -> None:
+        out = done.stdout + done.stderr
+>       assert done.returncode != 0, out
+               ^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: make: error: couldn't create cache file '/var/folders/67/_rk1v_bs6mb1czj4dc_1jfq00000gp/T/xcrun_db-Dg8Hmlvd' (errno=Operation not permitted)
+E       ship: files changed by PR #7:
+E       docs/x.md
+E       FAKE-WATCH-OUTPUT
+E       ship: full diff of the paths that load with the key, run with your login, or need a label:
+E       ship: PROGRESS.md and COVERAGE.md since the reviewed commit:
+E       ship: control surface changed by PR #7, read these before answering:
+E       (none)
+E       Merge PR #7 at cde9459137bfc0e301c2e31f82fc93662225b884? [y/N] FAKE-MERGE-OUTPUT
+E       ship: PR #7 merged
+E       From /private/tmp/claude-502/pytest-of-rapido/pytest-96/test_a_poll_that_is_not_digits3/origin
+E        * [new branch]      main       -> refs/runner/incoming
+E       1259951 merge
+E       cde9459 change
+E        docs/x.md | 2 +-
+E        1 file changed, 1 insertion(+), 1 deletion(-)
+E       Updating c4405d6..1259951
+E       Fast-forward
+E        docs/x.md | 2 +-
+E        1 file changed, 1 insertion(+), 1 deletion(-)
+
+tests/ship/test_ship.py:579: AssertionError
+____ test_a_poll_that_is_not_digits_is_refused_before_any_checks_call[1.5] _____
+
+rig = Rig(root=PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-96/test_a_poll_that_is_not_digits4'), origin=Posix...it sha\n', final_state='MERGED', merge_rc=0, user_login='me', events=None, events_after=None, flags=set(), open_prs=[])
+value = '1.5'
+
+    @pytest.mark.parametrize("value", BAD)
+    def test_a_poll_that_is_not_digits_is_refused_before_any_checks_call(rig: Rig, value: str) -> None:
+        settings(rig, "30", value)
+        done = rig.ship()
+>       assert_refused(rig, done, "SHIP_CHECKS_POLL")
+
+tests/ship/test_ship_checks_wait.py:172: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+rig = Rig(root=PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-96/test_a_poll_that_is_not_digits4'), origin=Posix...it sha\n', final_state='MERGED', merge_rc=0, user_login='me', events=None, events_after=None, flags=set(), open_prs=[])
+done = Ran(args=['make', '-s', 'ship', 'PR=7', 'SHA=f4d1a86578d6b34a2804af40cb65424411c9c38e', 'RUNNER_DIR=/private/tmp/claud...dating 6649094..d1756d8\nFast-forward\n docs/x.md | 2 +-\n 1 file changed, 1 insertion(+), 1 deletion(-)\n", stderr='')
+reason = 'SHIP_CHECKS_POLL'
+
+    def assert_refused(
+        rig: Rig, done: subprocess.CompletedProcess[str], reason: str | None = None
+    ) -> None:
+        out = done.stdout + done.stderr
+>       assert done.returncode != 0, out
+               ^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: make: error: couldn't create cache file '/var/folders/67/_rk1v_bs6mb1czj4dc_1jfq00000gp/T/xcrun_db-pszYR8xW' (errno=Operation not permitted)
+E       ship: files changed by PR #7:
+E       docs/x.md
+E       FAKE-WATCH-OUTPUT
+E       ship: full diff of the paths that load with the key, run with your login, or need a label:
+E       ship: PROGRESS.md and COVERAGE.md since the reviewed commit:
+E       ship: control surface changed by PR #7, read these before answering:
+E       (none)
+E       Merge PR #7 at f4d1a86578d6b34a2804af40cb65424411c9c38e? [y/N] FAKE-MERGE-OUTPUT
+E       ship: PR #7 merged
+E       From /private/tmp/claude-502/pytest-of-rapido/pytest-96/test_a_poll_that_is_not_digits4/origin
+E        * [new branch]      main       -> refs/runner/incoming
+E       d1756d8 merge
+E       f4d1a86 change
+E        docs/x.md | 2 +-
+E        1 file changed, 1 insertion(+), 1 deletion(-)
+E       Updating 6649094..d1756d8
+E       Fast-forward
+E        docs/x.md | 2 +-
+E        1 file changed, 1 insertion(+), 1 deletion(-)
+
+tests/ship/test_ship.py:579: AssertionError
+_____ test_a_poll_that_is_not_digits_is_refused_before_any_checks_call[ 5] _____
+
+rig = Rig(root=PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-96/test_a_poll_that_is_not_digits5'), origin=Posix...it sha\n', final_state='MERGED', merge_rc=0, user_login='me', events=None, events_after=None, flags=set(), open_prs=[])
+value = ' 5'
+
+    @pytest.mark.parametrize("value", BAD)
+    def test_a_poll_that_is_not_digits_is_refused_before_any_checks_call(rig: Rig, value: str) -> None:
+        settings(rig, "30", value)
+        done = rig.ship()
+>       assert_refused(rig, done, "SHIP_CHECKS_POLL")
+
+tests/ship/test_ship_checks_wait.py:172: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+rig = Rig(root=PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-96/test_a_poll_that_is_not_digits5'), origin=Posix...it sha\n', final_state='MERGED', merge_rc=0, user_login='me', events=None, events_after=None, flags=set(), open_prs=[])
+done = Ran(args=['make', '-s', 'ship', 'PR=7', 'SHA=d7cf62b9d97acdf3d0d10b9ffe6d56142702a348', 'RUNNER_DIR=/private/tmp/claud...dating 7d7b593..3eb64e1\nFast-forward\n docs/x.md | 2 +-\n 1 file changed, 1 insertion(+), 1 deletion(-)\n", stderr='')
+reason = 'SHIP_CHECKS_POLL'
+
+    def assert_refused(
+        rig: Rig, done: subprocess.CompletedProcess[str], reason: str | None = None
+    ) -> None:
+        out = done.stdout + done.stderr
+>       assert done.returncode != 0, out
+               ^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: make: error: couldn't create cache file '/var/folders/67/_rk1v_bs6mb1czj4dc_1jfq00000gp/T/xcrun_db-U82dwSgK' (errno=Operation not permitted)
+E       ship: files changed by PR #7:
+E       docs/x.md
+E       FAKE-WATCH-OUTPUT
+E       ship: full diff of the paths that load with the key, run with your login, or need a label:
+E       ship: PROGRESS.md and COVERAGE.md since the reviewed commit:
+E       ship: control surface changed by PR #7, read these before answering:
+E       (none)
+E       Merge PR #7 at d7cf62b9d97acdf3d0d10b9ffe6d56142702a348? [y/N] FAKE-MERGE-OUTPUT
+E       ship: PR #7 merged
+E       From /private/tmp/claude-502/pytest-of-rapido/pytest-96/test_a_poll_that_is_not_digits5/origin
+E        * [new branch]      main       -> refs/runner/incoming
+E       3eb64e1 merge
+E       d7cf62b change
+E        docs/x.md | 2 +-
+E        1 file changed, 1 insertion(+), 1 deletion(-)
+E       Updating 7d7b593..3eb64e1
+E       Fast-forward
+E        docs/x.md | 2 +-
+E        1 file changed, 1 insertion(+), 1 deletion(-)
+
+tests/ship/test_ship.py:579: AssertionError
+____ test_a_poll_that_is_not_digits_is_refused_before_any_checks_call[0x10] ____
+
+rig = Rig(root=PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-96/test_a_poll_that_is_not_digits6'), origin=Posix...it sha\n', final_state='MERGED', merge_rc=0, user_login='me', events=None, events_after=None, flags=set(), open_prs=[])
+value = '0x10'
+
+    @pytest.mark.parametrize("value", BAD)
+    def test_a_poll_that_is_not_digits_is_refused_before_any_checks_call(rig: Rig, value: str) -> None:
+        settings(rig, "30", value)
+        done = rig.ship()
+>       assert_refused(rig, done, "SHIP_CHECKS_POLL")
+
+tests/ship/test_ship_checks_wait.py:172: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+rig = Rig(root=PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-96/test_a_poll_that_is_not_digits6'), origin=Posix...it sha\n', final_state='MERGED', merge_rc=0, user_login='me', events=None, events_after=None, flags=set(), open_prs=[])
+done = Ran(args=['make', '-s', 'ship', 'PR=7', 'SHA=8d4e0974ee6aa090a471347659967040f82d176a', 'RUNNER_DIR=/private/tmp/claud...dating 147e13a..28c2c2d\nFast-forward\n docs/x.md | 2 +-\n 1 file changed, 1 insertion(+), 1 deletion(-)\n", stderr='')
+reason = 'SHIP_CHECKS_POLL'
+
+    def assert_refused(
+        rig: Rig, done: subprocess.CompletedProcess[str], reason: str | None = None
+    ) -> None:
+        out = done.stdout + done.stderr
+>       assert done.returncode != 0, out
+               ^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: make: error: couldn't create cache file '/var/folders/67/_rk1v_bs6mb1czj4dc_1jfq00000gp/T/xcrun_db-o2pN3DEl' (errno=Operation not permitted)
+E       ship: files changed by PR #7:
+E       docs/x.md
+E       FAKE-WATCH-OUTPUT
+E       ship: full diff of the paths that load with the key, run with your login, or need a label:
+E       ship: PROGRESS.md and COVERAGE.md since the reviewed commit:
+E       ship: control surface changed by PR #7, read these before answering:
+E       (none)
+E       Merge PR #7 at 8d4e0974ee6aa090a471347659967040f82d176a? [y/N] FAKE-MERGE-OUTPUT
+E       ship: PR #7 merged
+E       From /private/tmp/claude-502/pytest-of-rapido/pytest-96/test_a_poll_that_is_not_digits6/origin
+E        * [new branch]      main       -> refs/runner/incoming
+E       28c2c2d merge
+E       8d4e097 change
+E        docs/x.md | 2 +-
+E        1 file changed, 1 insertion(+), 1 deletion(-)
+E       Updating 147e13a..28c2c2d
+E       Fast-forward
+E        docs/x.md | 2 +-
+E        1 file changed, 1 insertion(+), 1 deletion(-)
+
+tests/ship/test_ship.py:579: AssertionError
+__ test_a_poll_that_is_not_digits_is_refused_before_any_checks_call[$(true)] ___
+
+rig = Rig(root=PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-96/test_a_poll_that_is_not_digits7'), origin=Posix...it sha\n', final_state='MERGED', merge_rc=0, user_login='me', events=None, events_after=None, flags=set(), open_prs=[])
+value = '$(true)'
+
+    @pytest.mark.parametrize("value", BAD)
+    def test_a_poll_that_is_not_digits_is_refused_before_any_checks_call(rig: Rig, value: str) -> None:
+        settings(rig, "30", value)
+        done = rig.ship()
+>       assert_refused(rig, done, "SHIP_CHECKS_POLL")
+
+tests/ship/test_ship_checks_wait.py:172: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+rig = Rig(root=PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-96/test_a_poll_that_is_not_digits7'), origin=Posix...it sha\n', final_state='MERGED', merge_rc=0, user_login='me', events=None, events_after=None, flags=set(), open_prs=[])
+done = Ran(args=['make', '-s', 'ship', 'PR=7', 'SHA=f42260acafbd4e17cbdb97812c837480f350528d', 'RUNNER_DIR=/private/tmp/claud...dating 558a767..84fa9e0\nFast-forward\n docs/x.md | 2 +-\n 1 file changed, 1 insertion(+), 1 deletion(-)\n", stderr='')
+reason = 'SHIP_CHECKS_POLL'
+
+    def assert_refused(
+        rig: Rig, done: subprocess.CompletedProcess[str], reason: str | None = None
+    ) -> None:
+        out = done.stdout + done.stderr
+>       assert done.returncode != 0, out
+               ^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: make: error: couldn't create cache file '/var/folders/67/_rk1v_bs6mb1czj4dc_1jfq00000gp/T/xcrun_db-QQ3ROl4r' (errno=Operation not permitted)
+E       ship: files changed by PR #7:
+E       docs/x.md
+E       FAKE-WATCH-OUTPUT
+E       ship: full diff of the paths that load with the key, run with your login, or need a label:
+E       ship: PROGRESS.md and COVERAGE.md since the reviewed commit:
+E       ship: control surface changed by PR #7, read these before answering:
+E       (none)
+E       Merge PR #7 at f42260acafbd4e17cbdb97812c837480f350528d? [y/N] FAKE-MERGE-OUTPUT
+E       ship: PR #7 merged
+E       From /private/tmp/claude-502/pytest-of-rapido/pytest-96/test_a_poll_that_is_not_digits7/origin
+E        * [new branch]      main       -> refs/runner/incoming
+E       84fa9e0 merge
+E       f42260a change
+E        docs/x.md | 2 +-
+E        1 file changed, 1 insertion(+), 1 deletion(-)
+E       Updating 558a767..84fa9e0
+E       Fast-forward
+E        docs/x.md | 2 +-
+E        1 file changed, 1 insertion(+), 1 deletion(-)
+
+tests/ship/test_ship.py:579: AssertionError
+_________________ test_a_wait_above_the_cap_is_treated_as_600 __________________
+
+rig = Rig(root=PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-96/test_a_wait_above_the_cap_is_t0'), origin=Posix...it sha\n', final_state='MERGED', merge_rc=0, user_login='me', events=None, events_after=None, flags=set(), open_prs=[])
+
+    def test_a_wait_above_the_cap_is_treated_as_600(rig: Rig) -> None:
+        """Observed through the sleep: both settings absurd, so the first sleep is the capped value.
+    
+        A real 600 s deadline cannot run inside the 180 s timeout. `sleep` is faked: it logs its
+        argument and, on its second call, makes the checks appear, so the run finishes at once.
+        """
+        settings(rig, "99999", "99999")
+        sleep = rig.root / "bin" / "sleep"
+        sleep.write_text(FAKE_SLEEP)
+        sleep.chmod(0o755)
+        rig.checks_empty_calls = 1000
+>       assert_merged(rig, rig.ship())
+
+tests/ship/test_ship_checks_wait.py:187: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+rig = Rig(root=PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-96/test_a_wait_above_the_cap_is_t0'), origin=Posix...it sha\n', final_state='MERGED', merge_rc=0, user_login='me', events=None, events_after=None, flags=set(), open_prs=[])
+done = Ran(args=['make', '-s', 'ship', 'PR=7', 'SHA=e61165314786af92940227dc033c7ce76a668cb4', 'RUNNER_DIR=/private/tmp/claud... PR #7:\ndocs/x.md\nFAKE-WATCH-OUTPUT\nship: refused: job CI/python is missing\nmake: *** [ship] Error 1\n", stderr='')
+
+    def assert_merged(rig: Rig, done: subprocess.CompletedProcess[str]) -> None:
+        out = done.stdout + done.stderr
+>       assert done.returncode == 0, out
+               ^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: make: error: couldn't create cache file '/var/folders/67/_rk1v_bs6mb1czj4dc_1jfq00000gp/T/xcrun_db-DdRXISkI' (errno=Operation not permitted)
+E       ship: files changed by PR #7:
+E       docs/x.md
+E       FAKE-WATCH-OUTPUT
+E       ship: refused: job CI/python is missing
+E       make: *** [ship] Error 1
+
+tests/ship/test_ship.py:589: AssertionError
+________________ test_a_poll_above_the_wait_is_cut_to_the_wait _________________
+
+rig = Rig(root=PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-96/test_a_poll_above_the_wait_is_0'), origin=Posix...it sha\n', final_state='MERGED', merge_rc=0, user_login='me', events=None, events_after=None, flags=set(), open_prs=[])
+
+    def test_a_poll_above_the_wait_is_cut_to_the_wait(rig: Rig) -> None:
+        settings(rig, "7", "500")
+        sleep = rig.root / "bin" / "sleep"
+        sleep.write_text(FAKE_SLEEP)
+        sleep.chmod(0o755)
+        rig.checks_empty_calls = 1000
+>       assert_merged(rig, rig.ship())
+
+tests/ship/test_ship_checks_wait.py:199: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+rig = Rig(root=PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-96/test_a_poll_above_the_wait_is_0'), origin=Posix...it sha\n', final_state='MERGED', merge_rc=0, user_login='me', events=None, events_after=None, flags=set(), open_prs=[])
+done = Ran(args=['make', '-s', 'ship', 'PR=7', 'SHA=7e6e79cf431c674245c06194fe08739a70bde947', 'RUNNER_DIR=/private/tmp/claud... PR #7:\ndocs/x.md\nFAKE-WATCH-OUTPUT\nship: refused: job CI/python is missing\nmake: *** [ship] Error 1\n", stderr='')
+
+    def assert_merged(rig: Rig, done: subprocess.CompletedProcess[str]) -> None:
+        out = done.stdout + done.stderr
+>       assert done.returncode == 0, out
+               ^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: make: error: couldn't create cache file '/var/folders/67/_rk1v_bs6mb1czj4dc_1jfq00000gp/T/xcrun_db-Z4SLYhHZ' (errno=Operation not permitted)
+E       ship: files changed by PR #7:
+E       docs/x.md
+E       FAKE-WATCH-OUTPUT
+E       ship: refused: job CI/python is missing
+E       make: *** [ship] Error 1
+
+tests/ship/test_ship.py:589: AssertionError
+___________________ test_a_zero_poll_is_raised_to_one_second ___________________
+
+rig = Rig(root=PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-96/test_a_zero_poll_is_raised_to_0'), origin=Posix...it sha\n', final_state='MERGED', merge_rc=0, user_login='me', events=None, events_after=None, flags=set(), open_prs=[])
+
+    def test_a_zero_poll_is_raised_to_one_second(rig: Rig) -> None:
+        settings(rig, "30", "0")
+        sleep = rig.root / "bin" / "sleep"
+        sleep.write_text(FAKE_SLEEP)
+        sleep.chmod(0o755)
+        rig.checks_empty_calls = 1000
+>       assert_merged(rig, rig.ship())
+
+tests/ship/test_ship_checks_wait.py:210: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+rig = Rig(root=PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-96/test_a_zero_poll_is_raised_to_0'), origin=Posix...it sha\n', final_state='MERGED', merge_rc=0, user_login='me', events=None, events_after=None, flags=set(), open_prs=[])
+done = Ran(args=['make', '-s', 'ship', 'PR=7', 'SHA=df5f31e34e59348d78a08938aec841ae8f7d197a', 'RUNNER_DIR=/private/tmp/claud... PR #7:\ndocs/x.md\nFAKE-WATCH-OUTPUT\nship: refused: job CI/python is missing\nmake: *** [ship] Error 1\n", stderr='')
+
+    def assert_merged(rig: Rig, done: subprocess.CompletedProcess[str]) -> None:
+        out = done.stdout + done.stderr
+>       assert done.returncode == 0, out
+               ^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: make: error: couldn't create cache file '/var/folders/67/_rk1v_bs6mb1czj4dc_1jfq00000gp/T/xcrun_db-agaoFkrS' (errno=Operation not permitted)
+E       ship: files changed by PR #7:
+E       docs/x.md
+E       FAKE-WATCH-OUTPUT
+E       ship: refused: job CI/python is missing
+E       make: *** [ship] Error 1
+
+tests/ship/test_ship.py:589: AssertionError
+=========================== short test summary info ============================
+FAILED tests/ship/test_ship_checks_wait.py::test_checks_that_appear_after_the_pr_opens_do_not_refuse_as_pending
+FAILED tests/ship/test_ship_checks_wait.py::test_polls_until_the_checks_appear_then_watches_then_merges
+FAILED tests/ship/test_ship_checks_wait.py::test_the_poll_asks_for_name_and_workflow
+FAILED tests/ship/test_ship_checks_wait.py::test_a_required_job_that_never_appears_is_refused_at_the_deadline
+FAILED tests/ship/test_ship_checks_wait.py::test_every_missing_job_is_named
+FAILED tests/ship/test_ship_checks_wait.py::test_no_checks_at_all_is_refused_and_says_ci_has_not_started
+FAILED tests/ship/test_ship_checks_wait.py::test_checks_present_on_the_first_poll_poll_once_and_do_not_sleep
+FAILED tests/ship/test_ship_checks_wait.py::test_after_the_wait_the_watch_and_the_bucket_read_are_unchanged
+FAILED tests/ship/test_ship_checks_wait.py::test_a_wait_that_is_not_digits_is_refused_before_any_checks_call[1m]
+FAILED tests/ship/test_ship_checks_wait.py::test_a_wait_that_is_not_digits_is_refused_before_any_checks_call[-1]
+FAILED tests/ship/test_ship_checks_wait.py::test_a_wait_that_is_not_digits_is_refused_before_any_checks_call[]
+FAILED tests/ship/test_ship_checks_wait.py::test_a_wait_that_is_not_digits_is_refused_before_any_checks_call[10;x]
+FAILED tests/ship/test_ship_checks_wait.py::test_a_wait_that_is_not_digits_is_refused_before_any_checks_call[1.5]
+FAILED tests/ship/test_ship_checks_wait.py::test_a_wait_that_is_not_digits_is_refused_before_any_checks_call[ 5]
+FAILED tests/ship/test_ship_checks_wait.py::test_a_wait_that_is_not_digits_is_refused_before_any_checks_call[0x10]
+FAILED tests/ship/test_ship_checks_wait.py::test_a_wait_that_is_not_digits_is_refused_before_any_checks_call[$(true)]
+FAILED tests/ship/test_ship_checks_wait.py::test_a_poll_that_is_not_digits_is_refused_before_any_checks_call[1m]
+FAILED tests/ship/test_ship_checks_wait.py::test_a_poll_that_is_not_digits_is_refused_before_any_checks_call[-1]
+FAILED tests/ship/test_ship_checks_wait.py::test_a_poll_that_is_not_digits_is_refused_before_any_checks_call[]
+FAILED tests/ship/test_ship_checks_wait.py::test_a_poll_that_is_not_digits_is_refused_before_any_checks_call[10;x]
+FAILED tests/ship/test_ship_checks_wait.py::test_a_poll_that_is_not_digits_is_refused_before_any_checks_call[1.5]
+FAILED tests/ship/test_ship_checks_wait.py::test_a_poll_that_is_not_digits_is_refused_before_any_checks_call[ 5]
+FAILED tests/ship/test_ship_checks_wait.py::test_a_poll_that_is_not_digits_is_refused_before_any_checks_call[0x10]
+FAILED tests/ship/test_ship_checks_wait.py::test_a_poll_that_is_not_digits_is_refused_before_any_checks_call[$(true)]
+FAILED tests/ship/test_ship_checks_wait.py::test_a_wait_above_the_cap_is_treated_as_600
+FAILED tests/ship/test_ship_checks_wait.py::test_a_poll_above_the_wait_is_cut_to_the_wait
+FAILED tests/ship/test_ship_checks_wait.py::test_a_zero_poll_is_raised_to_one_second
+27 failed, 813 passed in 2393.43s (0:39:53)

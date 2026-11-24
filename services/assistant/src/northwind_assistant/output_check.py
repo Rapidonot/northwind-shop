@@ -52,7 +52,11 @@ FIXED_SENTENCES: Mapping[str, str] = {
     "money": "I can only give a price from the live price check.",
 }
 CLASSES = tuple(FIXED_SENTENCES)
-COUNTED = (*CLASSES, "marker")
+# Row #16 (RAG-08, plan addendum 8, the user's wording): a class whose sentence is dropped with
+# nothing in its place. Its class is decided at the sentence's end: a blocking match of another
+# class in the same sentence wins, and that class's fixed sentence is shown and counted instead.
+DROPPED_CLASSES = ("offer",)
+COUNTED = (*CLASSES, *DROPPED_CLASSES, "marker")
 
 # Cyrillic and Greek letters that look like Latin ones. NFKC leaves these alone (RAG-11 open item).
 _CONFUSABLES = str.maketrans(
@@ -307,6 +311,16 @@ _RANGE = (
     r"a\s{1,3}range\s{1,3}of\b)"
 )
 
+# Row #16 (plan addendum 8): the pieces of an offer. Frames: "I/we can, could, may or would",
+# "want/like me to", "shall, should, can or may I".
+_OFFER_VERB = rf"(?:look{_S}up|check|give)"
+_OFFER_OBJECT = r"[^.!?\n]{0,26}?\b(?:prices?|stock|availability)\b"
+_OFFER_FRAMES = (
+    rf"\b(?:i|we){_S}(?:can|could|may|would)",
+    rf"\b(?:want|like){_S}me{_S}to",
+    rf"\b(?:shall|should|can|may){_S}i",
+)
+
 # Fixed with the row #13 plan before any recording; a change after one is stop 7 (decision 0015).
 # Row #12 extends them, approved with its plan (decision 0015 §7 and its #12 amendment).
 PATTERNS: tuple[Pattern, ...] = (
@@ -448,6 +462,13 @@ PATTERNS: tuple[Pattern, ...] = (
     _p("promotion", rf"\bmembers?[\s-]{{1,3}}only{_S}(?:rates?|prices?|pricing|deals?|offers?)\b"),
     _p("promotion", rf"\bmember{_S}(?:rates?|deals?|offers?|savings?|exclusives?)\b"),
     _p("promotion", rf"\bloyalty{_S}(?:prices?|pricing|rates?|discounts?|rewards?|points?)\b"),
+    #  8. Row #16 (RAG-08, hard rule 5 / D8; plan addendum 8, approved by the user with this
+    #    pattern change): an unprompted offer to look up, check or give a price, stock or
+    #    availability. Strictly the user's verbs and nouns; "will"/"'ll" are out, so the preamble
+    #    "I'll check the price." before a tool call stays (the user's decision 1). Past tense
+    #    ("checked") and "only" between the modal and the verb (the fixed sentences) do not match.
+    #    The noun may come at most 26 characters after the verb, so each pattern fits `L`.
+    *(_p("offer", rf"{frame}{_S}{_OFFER_VERB}\b{_OFFER_OBJECT}") for frame in _OFFER_FRAMES),
 )
 # A public document that says returns are free, in any of these words, lets the terms above pass:
 # the US policy says "prepaid return label" and answers say "the prepaid label".
@@ -463,6 +484,7 @@ TRIGGER = re.compile(
     r"payment|confirm|process|appl|placed|issued|stock|sold|issue_|hour|day|week|month|year|"
     r"\$|£|€|avail|currently|still|loyal|usd|gbp|eur|aud|cad|price|cost|pound|grand|thousand|"
     r"million|few|handful|several|plenty|lots|loads|many|some|tons|limited|"
+    r"look|give|check|want|like|shall|should|"
     rf"code|\d|\bi['’\s]|\bwe['’\s]|\[|\+|\(|\b(?:{_SPELLED_WORDS}|hundred|dozen|night|out|only|low|half|clearance)\b"
 )
 # A duration is a policy term only in a sentence that holds one of these stems (the user's list,
@@ -783,6 +805,7 @@ class OutputCheck:
     _dropping: Match | None = None
     _lead: str = ""
     _drop_from: int = 0  # where the dropping state's boundary search goes on from
+    _skip_space: bool = False  # a sentence was dropped: whitespace after it is not sent (row #16)
     _shown: str = ""
     _undecided: int | None = None  # a duration whose sentence has not shown yet if it is policy
     _scan: tuple[int, int, int] = (0, 0, 0)  # (from, scanned to, sentence start): a cache
@@ -827,12 +850,22 @@ class OutputCheck:
             if self._word_start is not None and self._word_start >= self._consumed:
                 self._cut(self._word_start, len(self._raw))
             out = self._advance(final=True)
+        self._count_pending()
         self._clear()
         return [*out, None]
 
     def abort(self) -> None:
         """A failed turn: held text is discarded (fail closed)."""
+        self._count_pending()
         self._clear(keep_shown=True)
+
+    def _count_pending(self) -> None:
+        """A dropped class is counted when its sentence ends; one still open when the text is
+        thrown away is counted here, so the evidence is whole (row #16, security review L4)."""
+        if self._dropping is not None and self._dropping.cls in DROPPED_CLASSES:
+            end = len(self._raw)
+            self.counts[self._blocking_class(self._consumed, end) or self._dropping.cls] += 1
+            self._dropping = None
 
     # -- positions and views ----------------------------------------------------------------
 
@@ -840,6 +873,7 @@ class OutputCheck:
         self._raw, self._deltas, self._consumed, self._plain_since = "", [], 0, 0
         self._scan = (0, 0, 0)
         self._dropping, self._lead, self._drop_from = None, "", 0
+        self._skip_space = False
         self._folds, self._exacts, self._vlen, self._visible = [], [], [0], []
         self._headings, self._line_start = [], 0
         self._matched_to = self._words_to = self._markers_to = 0
@@ -1029,6 +1063,41 @@ class OutputCheck:
             return stock_vouched(span, self.live, _negated(view.text, start))
 
         raise ValueError(f"unknown exemption: {pattern.exempt}")  # fail closed on a new kind
+
+    def _blocking_class(self, start: int, end: int) -> str | None:
+        """The class of the earliest blocking match in raw [start, end), dropped classes left out,
+        or None (row #16). Checked as `_first_match` checks: the same exemptions, policy gate,
+        unparsed durations and links, over a sentence that is whole."""
+        marked = self._view(start, end)
+        plain = self._view(start, end, plain=True)
+        best: tuple[int, str] | None = None
+        for pattern in PATTERNS:
+            if pattern.cls in DROPPED_CLASSES:
+                continue
+            view = plain if pattern.cls in PLAIN_CLASSES else marked
+            haystack = view.exact if pattern.exact else view.text
+            for found in pattern.regex.finditer(haystack):
+                lo, hi = view.raw_span(found.start(), found.end(), exact=pattern.exact)
+                if pattern.exempt == "duration":
+                    stems = self._policy_context(lo, hi, True)
+                    if not stems or self._vouched(view.text, found):
+                        continue
+                if self._exempt(pattern, view, found, self._raw[lo:hi]):
+                    continue
+                if best is None or lo < best[0]:
+                    best = (lo, pattern.cls)
+                break
+        undecided = self._undecided
+        unparsed = self._unparsed_duration(marked, True)
+        self._undecided = undecided  # this look ahead decides nothing for `_safe_end`
+        if unparsed is not None and (best is None or unparsed.start < best[0]):
+            best = (unparsed.start, unparsed.cls)
+        for word in _WORD.finditer(self._raw, start, end):
+            if word_is_link(word.group()):
+                if best is None or word.start() < best[0]:
+                    best = (word.start(), "link")
+                break
+        return None if best is None else best[1]
 
     def _vouched(self, text: str, match: re.Match[str]) -> bool:
         """A policy duration passes if a public, non-internal document returned this turn states
@@ -1353,8 +1422,17 @@ class OutputCheck:
                 end = len(self._raw) if boundary is None else boundary.start()
                 if boundary is not None and self._raw[boundary.start()] != "\n":
                     end = boundary.end()
-                fixed = FIXED_SENTENCES[self._dropping.cls]
-                if _repeats(self._shown, fixed):
+                cls = self._dropping.cls
+                if cls in DROPPED_CLASSES:
+                    # Decided now that the sentence is whole (row #16): another class's blocking
+                    # match in it wins; otherwise the sentence goes with nothing in its place.
+                    cls = self._blocking_class(self._consumed, end) or cls
+                    self.counts[cls] += 1
+                fixed = FIXED_SENTENCES.get(cls)
+                if fixed is None:
+                    # Nothing in its place, and no doubled whitespace where it was.
+                    self._skip_space = not self._shown or self._shown[-1:].isspace()
+                elif _repeats(self._shown, fixed):
                     # The same fixed sentence is already the last thing on screen, the model's own
                     # copy or a replacement: say it once (row #12, EV-090). Still counted.
                     while (
@@ -1370,11 +1448,21 @@ class OutputCheck:
                 self._consumed = self._plain_since = end
                 self._dropping, self._lead = None, ""
                 self._matched_to = self._words_to = end
+            if self._skip_space:
+                gap = self._consumed
+                while gap < len(self._raw) and self._raw[gap] in " \t":
+                    gap += 1
+                if gap < len(self._raw) or final:
+                    self._skip_space = False  # the next text has come, or none will
+                self._consumed = self._plain_since = gap
+                self._matched_to = max(self._matched_to, gap)
+                self._words_to = max(self._words_to, gap)
             match = self._first_match(final)
             if match is None:
                 out += self._release_to(self._safe_end(final))
                 return out
-            self.counts[match.cls] += 1
+            if match.cls not in DROPPED_CLASSES:
+                self.counts[match.cls] += 1  # a dropped class is counted when its sentence ends
             start = self._sentence_start(match.start)
             bullet = _BULLET.match(self._raw, start)
             self._lead = bullet.group() if bullet else ""

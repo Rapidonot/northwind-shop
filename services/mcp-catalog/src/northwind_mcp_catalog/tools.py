@@ -1,7 +1,8 @@
-"""The five catalog tools (CC-10, row #10b; PRD §7; hard rules 1, 2, 7, 10).
+"""The five catalog tools (CC-10, row #10b; PRD §7; hard rules 1, 2, 7, 10), and the registry that
+also holds the four cart tools (row #16, CHK-01: `northwind_mcp_catalog.cart`).
 
-All five are read-only. The caller comes only from the token: the audience decides what is visible,
-and the region decides price and stock. No schema takes a caller key.
+All five catalog tools are read-only. The caller comes only from the token: the audience decides
+what is visible, and the region decides price and stock. No schema takes a caller key.
 
 **Visibility (hard rule 7, RAG-11).** A shopper sees only `public` records. A variant is visible
 only when its product is too. For a shopper, an internal product or variant gets exactly the result
@@ -401,7 +402,7 @@ _HANDLERS = {
     GET_PRICE: get_price,
 }
 
-TOOLS: Mapping[str, ToolSpec] = {
+READ_TOOLS: Mapping[str, ToolSpec] = {
     name: ToolSpec(
         tool=t.Tool(
             name=name,
@@ -413,3 +414,9 @@ TOOLS: Mapping[str, ToolSpec] = {
     )
     for name, handler in _HANDLERS.items()
 }
+
+# Row #16 (CHK-01): the cart tools, on this server beside the live store whose stock they check
+# (decision 0019). Imported last: `cart` uses the checks above.
+from northwind_mcp_catalog.cart import CART_SPECS  # noqa: E402
+
+TOOLS: Mapping[str, ToolSpec] = {**READ_TOOLS, **CART_SPECS}

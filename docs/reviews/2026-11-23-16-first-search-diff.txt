@@ -1,0 +1,44 @@
+Row #16, after the main merge 23cda81 (12c, #32, 12b): every suite's first searches, recorded vs now on v3
+(no LLM, no spend). 2026-11-23.
+
+Index, read-only check first, on the scratch database (DATABASE_URL=…/northwind_16 on make's command line;
+the probe printed northwind_16). 12b had already loaded v3 into it (PR #46 body):
+  index_version 3a89123f2aaf586f, data_version 3, 2,355 chunks, dataset_sha256 962455508374…dbe79a43 =
+  data/fixtures/manifest.json.
+  `make ingest DATABASE_URL=…/northwind_16`: 0 inserted, 0 updated, 0 deleted, 2,355 unchanged, 0 embedded.
+  The same check after the ingest: unchanged.
+  `make embed-cache CHECK=1 DATABASE_URL=…/northwind_16`: 2,355 chunks and 340 queries, 0 problems.
+
+Method (script: the session scratchpad's first_search_diff.py, read-only database session):
+  - assistant-smoke, assistant-redteam: the first user message of each recorded request, rebuilt through
+    the production path (search_sources -> McpRagSearcher -> mcp-rag -> user_prompt) over the index in
+    northwind_16 (CallerIndex, frozen vectors); red-team messages are the items' raw queries. Every
+    recorded later retrieve_context call was re-run with its own query and region and compared with its
+    recorded tool_result text. A move is any byte of difference.
+  - Red-team recordings are split by surface: branch (this row's W2, cart writes offered) and main
+    (#32's W5, 10 cassettes, recorded on v3 without the cart tools).
+  - eval-answers: each recorded answerer first message against the item's saved context
+    (SavedFirstIndex over evals/contexts/dense-only.jsonl), as the answerer serves it.
+  - assistant-cart: not run. Its first search is a fixed retriever over data/fixtures/products.jsonl,
+    which v3 did not change (v3 changed reviews.jsonl, the answer key and the manifest), and it records
+    no retrieve_context call.
+  - a2a-05-partner: not run. It skips as stale against the assistant (#15), and its replay serves each
+    fixture's recorded context, not the index.
+
+Result:
+  assistant-smoke        first 14 same, 0 moved; no later searches
+  assistant-redteam      branch: first 20 same, 8 moved: RT-001, RT-002, RT-016 (US), RT-020, RT-021 (EU),
+                         RT-022, RT-023 (CA), RT-024 (US), exactly #32's predicted set
+                         (docs/reviews/2026-11-17-32-judged-plan.md §3).
+                         Later: RT-006 'Corvane Ascent Pro Shell' same, RT-008 'P0009-BLK-REG-M' same,
+                         RT-020 same, RT-024 moved (RT-024 is already in the moved set).
+                         main: the same 8 items' first searches 8 same (recorded on v3), later 2 same.
+  eval-answers           308 recordings same; 10 differ: EV-051, 052, 053, 059, 060, 078, 084, 093, 094,
+                         102. These are the v2 recordings of #32's changed items among EV-001 to 102; main's
+                         v3 recordings of the same items are among the 308 that match. W5 re-records all 308.
+  Frozen-vector misses: 6 (the later queries, embedded live by the local model; each result compared equal
+  or moved as listed).
+
+So the moves are exactly the 8 red-team items. Smoke and cart are not re-recorded. W-R (assistant-redteam)
+records those 8 on v3; then the unread cassettes (this row's 10 for those items and main's 10) are deleted
+by the hit log, and the suite replays again.

@@ -41,6 +41,23 @@ else
 	shift 2
 fi
 
+# Row #16 (the user, under decision 0021): how long `check_jobs` waits for CI to start. DEV-1 removed
+# the branch push trigger, so a PR's checks appear only after it is opened, and `--watch` returns at
+# once while there are none ("check python is pending", PR #48). The settings can only shorten the
+# wait, which then refuses sooner (fail closed): whole seconds, the wait at most 600, checked first.
+CHECKS_WAIT_MAX=600
+checks_wait=${SHIP_CHECKS_WAIT-$CHECKS_WAIT_MAX}
+checks_poll=${SHIP_CHECKS_POLL-15}
+if ((!labels_only)); then
+	[[ "$checks_wait" =~ ^[0-9]{1,6}$ ]] || refuse "SHIP_CHECKS_WAIT must be whole seconds"
+	[[ "$checks_poll" =~ ^[0-9]{1,6}$ ]] || refuse "SHIP_CHECKS_POLL must be whole seconds"
+	checks_wait=$((10#$checks_wait))
+	checks_poll=$((10#$checks_poll))
+	if ((checks_wait > CHECKS_WAIT_MAX)); then checks_wait=$CHECKS_WAIT_MAX; fi
+	if ((checks_poll > checks_wait)); then checks_poll=$checks_wait; fi
+	if ((checks_poll < 1)); then checks_poll=1; fi
+fi
+
 work=$(mktemp -d "${TMPDIR:-/tmp}/ship.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 
@@ -210,8 +227,31 @@ accepts_failure() {
 	has_label gate-change
 }
 
+# Until every required job has a check on the PR's head, or the deadline. A failed call counts as no
+# checks yet: the deadline still bounds it, and the bucket read after `--watch` decides the rest.
+wait_for_checks() {
+	local deadline=$((SECONDS + checks_wait)) missing job wf name seen
+	while :; do
+		gh pr checks "$pr" --json name,workflow --jq '.[] | [.workflow, .name] | @tsv' \
+			>"$work/present" 2>/dev/null || : >"$work/present"
+		missing=""
+		for job in $REQUIRED_JOBS; do
+			seen=0
+			while IFS=$'\t' read -r wf name; do
+				if [[ "$wf/$name" == "$job" ]]; then seen=1; fi
+			done <"$work/present"
+			((seen)) || missing="$missing $job"
+		done
+		if [[ -z "$missing" ]]; then return 0; fi
+		((SECONDS < deadline)) ||
+			refuse "no check yet for$missing after ${checks_wait}s: CI has not started on this PR's head"
+		sleep "$checks_poll"
+	done
+}
+
 check_jobs() {
 	local job wf name bucket seen
+	wait_for_checks
 	gh pr checks "$pr" --watch --interval 30 2>&1 | cat -v || true
 	gh pr checks "$pr" --json name,bucket,workflow --jq '.[] | [.workflow, .name, .bucket] | @tsv' \
 		>"$work/checks" || refuse "gh pr checks failed"

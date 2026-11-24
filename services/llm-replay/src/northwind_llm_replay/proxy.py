@@ -62,6 +62,7 @@ from northwind_llm_replay.pricing import (
     worst_case_usd,
 )
 from northwind_llm_replay.scrub import match_key, request_hash, scrub
+from northwind_llm_replay.tool_order import reordered_request
 
 MODES = ("replay", "record", "live")
 DEFAULT_UPSTREAM = "https://api.anthropic.com"
@@ -335,6 +336,12 @@ class Proxy:
             body: Any = json.loads(raw) if raw else None
         except json.JSONDecodeError:
             body = None
+        # Row #16 (decision 0001's amendment): parallel tools' results in `tool_use` order, not in
+        # the order they finished. From here on every step sees these bytes: scrub, key, log, the
+        # runner gate, the ledger's reservation, the leak scan and the upstream request.
+        reordered = reordered_request(raw, body)
+        if reordered is not None:
+            raw, body = reordered
         # One scrub for the match key and the log, so the log can never hold what a cassette drops
         # (HARDEN-1, M2). If it fails, the request is refused and logged with a placeholder only.
         try:
@@ -437,7 +444,7 @@ class Proxy:
                 self._log(entry)
                 return self._replay(hit)
             if self.cfg.mode == "replay":
-                diff = self.store.miss_diff(key)
+                diff = self.store.miss_diff(key, test_id)
                 entry["outcome"] = "miss"
                 self._log(entry)
                 self.state.misses.append(

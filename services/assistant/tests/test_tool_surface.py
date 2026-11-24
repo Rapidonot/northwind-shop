@@ -38,12 +38,24 @@ GOLDEN = [
 ]
 # Row #12 (RAG-09; the user's approval under stop 5, 2026-11-14): with mcp-catalog attached, as the
 # gateway and the evals always run, the CLI sends these six, re-frozen from the W1 recording at this
-# head. `GOLDEN` above stays the surface with no catalog.
+# head. `GOLDEN` above stays the surface with no catalog. Row #16 (CHK-01; an exact-set update
+# approved with its plan): the four cart tools join, captured from a scripted turn at this head;
+# the five catalog entries are unchanged. The recordings match again once W1 and W2 re-record.
 ATTACHED = [
+    (
+        "mcp__northwind-catalog__add_to_cart",
+        "01c9788335c07b97f2a3dfd955afab39a3765cf565bfa29b9cf16374871033dd",
+        "e39556514bafb877fd6a8d86132d65dce77f1853994dd2dc07acd5a48cf9eb34",
+    ),
     (
         "mcp__northwind-catalog__check_stock",
         "3ca59182b19f7184392e7fd2cff24101e07c61d68ce31739fc3d2e5cf95de671",
         "4ed0912153ead4e8018c78cd2e31495c25f1774aae0e754ee54b883691bc3d58",
+    ),
+    (
+        "mcp__northwind-catalog__get_cart",
+        "575691aab0d302feb4302763a6bd30057b78234320b59d5054b0fd08e4b38755",
+        "d746974fa9afd5e951f76f9af38954b0ad7f436f2120dc974da65e5ee39f856f",
     ),
     (
         "mcp__northwind-catalog__get_price",
@@ -61,9 +73,19 @@ ATTACHED = [
         "4ed0912153ead4e8018c78cd2e31495c25f1774aae0e754ee54b883691bc3d58",
     ),
     (
+        "mcp__northwind-catalog__remove_from_cart",
+        "9f98750f9bd3e6ec1b5ec314dd1f5347e67bf94553e7918a817660f94f988802",
+        "2a0b6bf5fece06fcd1be53ee63ac0451a9b72089102cde92b2894a9978b0bea3",
+    ),
+    (
         "mcp__northwind-catalog__search_products",
         "11adb9122eefcc30023f1763c9ec5e52686aa3fdd1ae52d683274a1823e8746b",
         "c24ea675aba27bae5482a38385e8ca12fb2381fe4aadd6f5ad4a01bbe8018788",
+    ),
+    (
+        "mcp__northwind-catalog__set_cart_quantity",
+        "03280ddad3276ee8cb718a71a8f5e4bb1a9e165cdd666f570b0b0d964cb559a9",
+        "aeeadcc2cdc1c1da0dbb87497309d9a2c0672092f75184f871f9792445660ae5",
     ),
     *GOLDEN,
 ]

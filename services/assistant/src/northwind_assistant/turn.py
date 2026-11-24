@@ -108,7 +108,8 @@ def assistant_options(
 ) -> Any:
     """mcp-rag over HTTP with this turn's token, `retrieve_context` its one tool; and, given
     `catalog` (URL, token), mcp-catalog with its five read-only tools (row #12, RAG-09; PRD §7,
-    NFR-01). Each server gets its own token, which the other refuses. The CLI gets the tokens, never
+    NFR-01) and, from row #16 (CHK-01), its four cart tools, which act on the session in the
+    token. Each server gets its own token, which the other refuses. The CLI gets the tokens, never
     the key."""
     servers: dict[str, Any] = {SERVER_NAME: {"type": "http", "url": url, "headers": bearer(token)}}
     allowed = [ALLOWED_TOOL]
@@ -148,7 +149,21 @@ def _result_text(block: ToolResultBlock) -> str:
     return "".join(str(part.get("text", "")) for part in content or [] if isinstance(part, dict))
 
 
-_LIVE_TOOLS = frozenset({catalog_tool.PRICE_TOOL, catalog_tool.STOCK_TOOL})
+# Row #16: the cart tools' results carry live prices and stock too (`record_live`).
+_LIVE_TOOLS = frozenset(
+    {catalog_tool.PRICE_TOOL, catalog_tool.STOCK_TOOL, *catalog_tool.CART_TOOL_NAMES}
+)
+
+
+def _blocks_text(block: ToolResultBlock) -> str:
+    """A live tool's result, its text blocks joined as `catalog_tool.labelled_result` reads them:
+    one block is unchanged; a cart refusal's envelope and label stay apart (row #16)."""
+    content = block.content
+    if isinstance(content, str):
+        return content
+    return catalog_tool.BLOCK_SEPARATOR.join(
+        str(part.get("text", "")) for part in content or [] if isinstance(part, dict)
+    )
 
 
 def _note_tool_results(
@@ -165,7 +180,7 @@ def _note_tool_results(
             record(state, is_error=bool(block.is_error), text=_result_text(block))
         elif live and block.tool_use_id in live:
             tool = live[block.tool_use_id]
-            record_live(state, tool, is_error=bool(block.is_error), text=_result_text(block))
+            record_live(state, tool, is_error=bool(block.is_error), text=_blocks_text(block))
 
 
 def _result_error(result: ResultMessage) -> ErrorCode | None:

@@ -13,7 +13,7 @@ import os
 import psycopg
 import uvicorn
 
-from northwind_common.localenv import mcp_rag_port
+from northwind_common.localenv import announce_database, mcp_rag_port
 from northwind_common.mcp_token import signing_key
 from northwind_mcp_rag.retrieve import TOOLS
 from northwind_mcp_rag.server import Backend, RagServer
@@ -32,6 +32,8 @@ def embedder() -> Embedder:
 
 
 def main() -> None:
+    # Row #16: which database the index is read from, by name only (the scratch-database proof).
+    announce_database("mcp-rag", os.environ.get("DATABASE_URL", DEFAULT_DATABASE_URL))
     server = RagServer(Backend(_connect, embedder()), key=signing_key(), tools=TOOLS)
     uvicorn.run(server.app(), host="127.0.0.1", port=mcp_rag_port(), workers=1, log_level="warning")
 

@@ -42,7 +42,12 @@ READ_ONLY_TOOLS = frozenset(
         "get_price",
     }
 )
-CALLER_KEYS = {"audience", "region", "agent", "aud", "visibility", "turn"}
+# Row #16 (CHK-01): PRD §7's "cart tools". `get_cart` reads; the three writes change only the
+# caller's own cart. They are the only shopper-facing tools that are not read-only. Exact sets.
+CART_READ_TOOLS = frozenset({"get_cart"})
+CART_WRITE_TOOLS = frozenset({"add_to_cart", "remove_from_cart", "set_cart_quantity"})
+SHOPPER_TOOLS = READ_ONLY_TOOLS | CART_READ_TOOLS | CART_WRITE_TOOLS
+CALLER_KEYS = {"audience", "region", "agent", "aud", "visibility", "turn", "sid", "session_id"}
 
 
 def _unreachable() -> Any:
@@ -103,15 +108,20 @@ def test_tools_list_is_within_the_agents_scope_and_read_only(server: str, agent:
     names = {tool.name for tool in listed}
     # Exactly the agent's scope among what the server has: nothing missing, nothing extra.
     assert names == allowed_tools(agent, server) & set(SERVERS[server][1])
-    assert names <= READ_ONLY_TOOLS
-    assert all(tool.annotations and tool.annotations.read_only_hint for tool in listed)
+    assert names <= SHOPPER_TOOLS
+    for tool in listed:  # read-only, except exactly the cart writes (row #16)
+        assert tool.annotations is not None
+        assert tool.annotations.read_only_hint is (tool.name not in CART_WRITE_TOOLS)
 
 
 @pytest.mark.req("NFR-01")
 @pytest.mark.parametrize("server", sorted(SERVERS))
 def test_no_scope_grants_a_tool_outside_prd_sevens_read_only_set(server: str) -> None:
     granted = {name for row in AGENT_TOOLS.values() for name in row.get(server, frozenset())}
-    assert granted <= READ_ONLY_TOOLS
+    assert granted <= SHOPPER_TOOLS
+    # Row #16: only the assistant may write a cart; the portal's agent only reads it.
+    writers = {a for a, row in AGENT_TOOLS.items() if CART_WRITE_TOOLS & row.get(server, set())}
+    assert writers <= {"shopper-assistant"}
 
 
 @pytest.mark.parametrize(("server", "name"), TOOL_CASES)
@@ -197,16 +207,23 @@ def test_the_catalog_listing_is_within_the_five_read_only_tools(agent: str) -> N
     with running(SERVERS[CATALOG][0]()) as url:
         listed = run(go(url))
     names = {tool.name for tool in listed}
-    assert names <= FIVE_CATALOG_TOOLS
+    cart = CART_READ_TOOLS | CART_WRITE_TOOLS
+    assert names <= FIVE_CATALOG_TOOLS | cart
     assert not {"set_price", "set_stock"} & names
-    assert all(tool.annotations and tool.annotations.read_only_hint for tool in listed)
+    for tool in listed:  # read-only, except exactly the cart writes (row #16)
+        assert tool.annotations is not None
+        assert tool.annotations.read_only_hint is (tool.name not in CART_WRITE_TOOLS)
     if agent == "shopper-assistant":
-        assert names == FIVE_CATALOG_TOOLS
+        assert names == FIVE_CATALOG_TOOLS | cart
+    if agent == "shopper-portal":
+        assert names == CART_READ_TOOLS
 
 
 def test_the_catalog_registry_is_exactly_the_five_read_only_tools() -> None:
-    assert set(CATALOG_TOOLS) == FIVE_CATALOG_TOOLS
-    assert allowed_tools("shopper-assistant", CATALOG) == FIVE_CATALOG_TOOLS
+    cart = CART_READ_TOOLS | CART_WRITE_TOOLS  # row #16
+    assert set(CATALOG_TOOLS) == FIVE_CATALOG_TOOLS | cart
+    assert allowed_tools("shopper-assistant", CATALOG) == FIVE_CATALOG_TOOLS | cart
+    assert allowed_tools("shopper-portal", CATALOG) == CART_READ_TOOLS
     assert allowed_tools("catalog-subagent", CATALOG) == frozenset()
 
 

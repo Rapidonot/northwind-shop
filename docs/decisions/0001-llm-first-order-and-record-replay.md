@@ -108,6 +108,24 @@ The build uses parallel git worktrees, so local LLM state is shared or derived, 
 - **Dev proxy port:** per worktree, `LLM_PROXY_PORT` (default derived from the worktree path),
   never a fixed port. Tests use random ports.
 
+## Amendment: tool results in `tool_use` order (row #16, the user, 2026-11-23)
+
+The proxy now rewrites one thing in a model request: the order of `tool_result` blocks.
+- **Why.** The Claude CLI runs read-only tools in parallel and appends their results in the order they finish,
+  so the same turn could produce two request bodies, and a replay could miss on timing (EV-165 in the W5
+  rescore, and #12's flaky smoke test). Evidence: `docs/reviews/2026-11-23-16-tool-order-probe.txt`. No
+  assistant-side lever fixed it without changing a control or a contract.
+- **What the proxy does.** Straight after it parses a body, it puts each user message's tool results into the
+  order of the preceding assistant message's `tool_use` blocks, in the slots tool results already hold
+  (`northwind_llm_replay.tool_order`).
+  - If that changed anything, the re-serialized bytes are what every later step sees: scrub, match key, log,
+    the runner gate's checks, the ledger's worst-case reservation, the leak scan and the upstream request.
+  - Otherwise the original bytes are used untouched.
+- **Effect on recordings.** Recordings made in `tool_use` order keep their keys, and a test holds that every
+  committed cassette is in that order. The one recording that was not (EV-165 seq 1) is re-recorded in #16's W6.
+- **Miss reports.** `miss_diff` compares a miss with the same test's cassettes first, so it is reported in
+  seconds rather than minutes.
+
 ## Open items
 
 None.

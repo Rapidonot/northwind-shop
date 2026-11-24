@@ -1,0 +1,38 @@
+uv run pytest services/assistant/tests/test_rag08_offer_drop.py -q -p no:cacheprovider 2>&1 | tail -30  @ 47e08f7
+FAILED services/assistant/tests/test_rag08_offer_drop.py::test_an_offer_sentence_is_dropped_from_the_middle_with_no_doubled_whitespace[If you'd like, tell me the colour and size you want and I can check live stock and price.]
+FAILED services/assistant/tests/test_rag08_offer_drop.py::test_an_offer_sentence_is_dropped_from_the_middle_with_no_doubled_whitespace[Tell me which one you like, plus the colour and size, and I can check price and stock.]
+FAILED services/assistant/tests/test_rag08_offer_drop.py::test_an_offer_sentence_is_dropped_from_the_middle_with_no_doubled_whitespace[Tell me which colour you want and I can check the price and stock for you.]
+FAILED services/assistant/tests/test_rag08_offer_drop.py::test_an_offer_sentence_alone_leaves_nothing
+FAILED services/assistant/tests/test_rag08_offer_drop.py::test_an_offer_whose_only_other_match_is_live_backed_is_still_dropped
+FAILED services/assistant/tests/test_rag08_offer_drop.py::test_a_blocked_class_in_one_sentence_leaves_a_later_offer_to_be_dropped
+FAILED services/assistant/tests/test_rag08_offer_drop.py::test_a_stand_alone_disclosure_survives_a_following_offer
+FAILED services/assistant/tests/test_rag08_offer_drop.py::test_an_offer_split_across_deltas_shows_what_check_text_shows[I can look up the live price of the Halvardine Home Wren Bath Towel.-1]
+FAILED services/assistant/tests/test_rag08_offer_drop.py::test_an_offer_split_across_deltas_shows_what_check_text_shows[I can look up the live price of the Halvardine Home Wren Bath Towel.-2]
+FAILED services/assistant/tests/test_rag08_offer_drop.py::test_an_offer_split_across_deltas_shows_what_check_text_shows[I can look up the live price of the Halvardine Home Wren Bath Towel.-3]
+FAILED services/assistant/tests/test_rag08_offer_drop.py::test_an_offer_split_across_deltas_shows_what_check_text_shows[I can look up the live price of the Halvardine Home Wren Bath Towel.-5]
+FAILED services/assistant/tests/test_rag08_offer_drop.py::test_an_offer_split_across_deltas_shows_what_check_text_shows[I can look up the live price of the Halvardine Home Wren Bath Towel.-7]
+FAILED services/assistant/tests/test_rag08_offer_drop.py::test_an_offer_split_across_deltas_shows_what_check_text_shows[I can look up the live price of the Halvardine Home Wren Bath Towel.-11]
+FAILED services/assistant/tests/test_rag08_offer_drop.py::test_an_offer_split_across_deltas_shows_what_check_text_shows[Tell me which one you like and I can check the price and stock.-1]
+FAILED services/assistant/tests/test_rag08_offer_drop.py::test_an_offer_split_across_deltas_shows_what_check_text_shows[Tell me which one you like and I can check the price and stock.-2]
+FAILED services/assistant/tests/test_rag08_offer_drop.py::test_an_offer_split_across_deltas_shows_what_check_text_shows[Tell me which one you like and I can check the price and stock.-3]
+FAILED services/assistant/tests/test_rag08_offer_drop.py::test_an_offer_split_across_deltas_shows_what_check_text_shows[Tell me which one you like and I can check the price and stock.-5]
+FAILED services/assistant/tests/test_rag08_offer_drop.py::test_an_offer_split_across_deltas_shows_what_check_text_shows[Tell me which one you like and I can check the price and stock.-7]
+FAILED services/assistant/tests/test_rag08_offer_drop.py::test_an_offer_split_across_deltas_shows_what_check_text_shows[Tell me which one you like and I can check the price and stock.-11]
+FAILED services/assistant/tests/test_rag08_offer_drop.py::test_an_offer_split_across_deltas_shows_what_check_text_shows[Want me to check stock?-1]
+FAILED services/assistant/tests/test_rag08_offer_drop.py::test_an_offer_split_across_deltas_shows_what_check_text_shows[Want me to check stock?-2]
+FAILED services/assistant/tests/test_rag08_offer_drop.py::test_an_offer_split_across_deltas_shows_what_check_text_shows[Want me to check stock?-3]
+FAILED services/assistant/tests/test_rag08_offer_drop.py::test_an_offer_split_across_deltas_shows_what_check_text_shows[Want me to check stock?-5]
+FAILED services/assistant/tests/test_rag08_offer_drop.py::test_an_offer_split_across_deltas_shows_what_check_text_shows[Want me to check stock?-7]
+FAILED services/assistant/tests/test_rag08_offer_drop.py::test_an_offer_split_across_deltas_shows_what_check_text_shows[Want me to check stock?-11]
+FAILED services/assistant/tests/test_rag08_offer_drop.py::test_an_offer_split_mid_word_and_mid_phrase
+FAILED services/assistant/tests/test_rag08_offer_drop.py::test_an_offer_sentence_is_never_released_while_undecided
+FAILED services/assistant/tests/test_rag08_offer_drop.py::test_a_partly_released_offer_gets_a_reset_and_the_screen_lacks_it
+FAILED services/assistant/tests/test_rag08_offer_drop.py::test_offer_patterns_exist_and_none_is_wider_than_l
+70 failed, 18 passed in 1.07s
+
+After the implementation (2026-11-23): one test's input changed, its assertions unchanged.
+test_a_partly_released_offer_gets_a_reset_and_the_screen_lacks_it: with the first input, BEFORE's "[" trigger
+held the next L characters, so no word of the offer was released and the Reset path never ran (test-writer's
+ambiguity 4). The new input has a trigger-free prefix longer than L, so it reaches the Reset path. The first
+input is kept as test_an_offer_held_from_an_earlier_trigger_never_reaches_the_screen (result only).
+Advisor: not a weakening (not stop 5).

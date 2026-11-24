@@ -2,10 +2,15 @@ import { render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 
+// Row #16: the chat panel also reads /api/cart on mount, so the stub answers the health check only
+// and gives the cart its own failure. The assertions are unchanged.
 function mockFetch(response: Response | Error) {
   vi.stubGlobal(
     "fetch",
-    vi.fn(() => (response instanceof Error ? Promise.reject(response) : Promise.resolve(response))),
+    vi.fn((url: string) => {
+      if (url !== "/api/healthz") return Promise.resolve(new Response("", { status: 503 }));
+      return response instanceof Error ? Promise.reject(response) : Promise.resolve(response);
+    }),
   );
 }
 
