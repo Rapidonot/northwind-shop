@@ -11,3 +11,29 @@ E   ImportError: cannot import name 'system_text' from 'northwind_llm_replay.scr
 # The same tests at the row's working tree
 .............................................                            [100%]
 45 passed in 25.66s
+
+# Review-fix failing-first (advisor finding 1), at head ff9a416
+- M1 orders_check refuses an intent of another order (fix reverted in northwind_backend/agents/orders_check.py): 1 failed in 2.34s -> fails as it should
+  at head: 1 passed in 1.94s
+- M1/N6 aggregate takes a foreign payment out (fix reverted in northwind_backend/orchestrator/aggregate.py): 1 failed in 0.46s -> fails as it should
+  at head: 1 passed in 0.42s
+- M2 the planner's run failures travel with a good plan (fix reverted in northwind_backend/orchestrator/run.py): 1 failed in 1.83s -> fails as it should
+  at head: 1 passed in 1.93s
+- M3 every ID in the request must be covered (fix reverted in northwind_backend/orchestrator/plan.py): 1 failed in 0.48s -> fails as it should
+  at head: 1 passed in 0.43s
+- N1 one canonical text (NFKC, Cf removed) for checks and model (fix reverted in northwind_backend/orchestrator/plan.py): 5 failed in 0.48s -> fails as it should
+  at head: 5 passed in 0.42s
+- L2/N7 the length limit holds on what the model reads (fix reverted in northwind_backend/orchestrator/plan.py): 2 failed in 0.54s -> fails as it should
+  at head: 2 passed in 0.43s
+- hard rule 6 the request is escaped inside its block (fix reverted in northwind_backend/orchestrator/plan.py): 1 failed in 0.44s -> fails as it should
+  at head: 1 passed in 0.41s
+- L1/R5 a cancelled subagent run writes its agent.run outcome (fix reverted in northwind_backend/agents/runtime.py): 2 failed in 7.31s -> fails as it should
+  at head: 2 passed in 6.95s
+- N4 a cancel from outside closes the task and run attempts (fix reverted in northwind_backend/orchestrator/run.py): 1 failed in 3.72s -> fails as it should
+  at head: 1 passed in 3.68s
+
+# The two files the first log left out, against origin/main 4379687 source (git archive on PYTHONPATH)
+E   ModuleNotFoundError: No module named 'northwind_backend.agents.returns_track'
+E   ModuleNotFoundError: No module named 'northwind_backend.orchestrator'
+2 errors in 0.45s
+(the script: one exact source swap per case, run serially; the cases and swaps are listed in its output)
