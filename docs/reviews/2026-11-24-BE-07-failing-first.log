@@ -101,3 +101,19 @@ All checks passed!
 559 files already formatted
 Success: no issues found in 353 source files
 (pnpm lint and typecheck not run: no TypeScript or package file changed in this row)
+
+# Bundled by decision 0021 rule 6 (the advisor and the user, 2026-11-24, after the merge of origin/main 6e46b8a as 9f44b28):
+# BE-01's flaky test services/backend/tests/orchestrator/test_be01_scripted.py::test_the_two_subagents_overlap_in_time
+Before: it failed on GitHub under xdist in PR #51 with 'assert 2 < ((5 - 1) - 3)': it inferred overlap from the order
+requests arrived in, which timing decides.
+After: a test-only ScriptedLLM subclass (HeldFirstReplies, in the test module; services/llm-replay unchanged) holds each
+subagent's first reply until both subagents' first requests have arrived (60 s hold, under the 180 s deadline; on
+timeout it releases and records the marker in timed_out, which fails the test).
+Mutant (working tree only): run_concerns in orchestrator/run.py made sequential (one await per concern, no TaskGroup):
+>       assert llm.timed_out == []
+E       AssertionError: assert ['You are the...ers subagent'] == []
+1 failed in 62.80s (0:01:02)
+(run.py restored with git checkout; git diff on services/backend/src empty). The new test fails when the subagents don't
+run together.
+Fixed test, 20 separate serial runs (uv run pytest -p no:randomly -q <test id>): passed 20 of 20, each about 3 s.
+Under xdist: uv run pytest -n 4 -q services/backend/tests: 890 passed in 57.32s.

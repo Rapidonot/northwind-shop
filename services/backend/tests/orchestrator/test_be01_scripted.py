@@ -5,11 +5,14 @@ model answers each by the system prompt it sees, so the subagents can run at the
 
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
 from typing import Any
 
 import pytest
+from starlette.requests import Request
+from starlette.responses import Response
 
 from northwind_backend.agents.orders_check import FRAUD_TOOL_NAME, PAYMENT_TOOL_NAME
 from northwind_backend.agents.returns_track import TRACK_TOOL_NAME
@@ -79,18 +82,58 @@ def test_a_three_concern_request_is_split_run_in_parallel_and_answered_as_one(
     assert "refund_request for order" in result.answer and "escalate_to_care" in result.answer
 
 
+class HeldFirstReplies(ScriptedLLM):
+    """Holds each subagent's first reply until both subagents' first requests have arrived.
+
+    If both arrive, both subagents were waiting on the model at the same moment, which a sequential
+    run can't do, whatever order the requests come in. If one doesn't arrive within `HOLD_SECONDS`
+    (well under the orchestrator's 180 s deadline), the hold is released so the run can finish,
+    and the marker is recorded in `timed_out`, which fails the test."""
+
+    HOLD_SECONDS = 60.0
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.events: list[tuple[str, str]] = []
+        self.timed_out: list[str] = []
+        self._arrived: set[str] = set()
+
+    async def _handle(self, request: Request) -> Response:
+        body = await request.json() if await request.body() else {}
+        text = system_text(body)
+        marker = next((m for m in (ORDERS, RETURNS) if m in text), None)
+        if marker is not None and marker not in self._arrived:
+            # The server's event loop runs every handler, so this set needs no lock.
+            self._arrived.add(marker)
+            self.events.append(("arrived", marker))
+            loop = asyncio.get_running_loop()
+            deadline = loop.time() + self.HOLD_SECONDS
+            while self._arrived != {ORDERS, RETURNS}:
+                if loop.time() > deadline:
+                    self.timed_out.append(marker)
+                    break
+                await asyncio.sleep(0.01)
+            self.events.append(("released", marker))
+        return await super()._handle(request)
+
+
 def test_the_two_subagents_overlap_in_time(tmp_path: Path) -> None:
-    """Both subagents' first model calls arrive before either's last: they ran together."""
+    """Both subagents' first model calls are in flight at the same moment: they ran together.
+
+    Deterministic: the scripted model holds each first reply until the other subagent's first
+    request has arrived, so the test no longer depends on request arrival order or timing."""
     world = World.make()
-    with ScriptedLLM() as llm:
+    llm = HeldFirstReplies()
+    with llm:
         script_planner(llm, full_plan(world))
         script_orders(llm, world)
         script_returns(llm, world)
         result = run(world, world.request(), llm, tmp_path)
-        order = [m for r in llm.requests for m in (ORDERS, RETURNS) if m in system_text(r["body"])]
+    assert llm.timed_out == []
     assert result.status is RunStatus.COMPLETE
-    assert order.index(RETURNS) < len(order) - 1 - order[::-1].index(ORDERS)
-    assert order.index(ORDERS) < len(order) - 1 - order[::-1].index(RETURNS)
+    arrivals = [m for kind, m in llm.events[:2] if kind == "arrived"]
+    assert sorted(arrivals) == sorted([ORDERS, RETURNS])  # both arrived before either released
+    assert [kind for kind, _ in llm.events] == ["arrived", "arrived", "released", "released"]
 
 
 def test_each_agent_gets_only_its_own_tools(tmp_path: Path) -> None:
