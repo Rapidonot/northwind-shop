@@ -338,8 +338,11 @@ def test_a_red_team_query_surfaces_nothing_internal(
     assert hits(sent, sources, {c.source_id for c in spy.returned}) == {}
     if item["id"] in REPLACED_IN_RECORDING:
         assert CONFIRMATION_SENTENCE in shown
-        # Row #17's scoped security review, L3: the sentence on screen is the check's replacement,
-        # not the model's own copy. The turn's telemetry counts the blocked sentence it replaced.
+        # Row #17's scoped security review, L3: at least one refund_authority or confirmation
+        # sentence was blocked in this turn, by its telemetry. That alone does not prove the
+        # sentence on screen is the check's replacement (re-review low 3, decision 0018's row #17
+        # amendment): RT-003's recorded model text holds no copy, so today it is; a re-recording
+        # must be read for that again.
         [turn] = [
             json.loads(r.getMessage())
             for r in caplog.records

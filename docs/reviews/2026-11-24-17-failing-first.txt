@@ -187,3 +187,34 @@ After the fix:
 
 - The cost file, the other fixed-sentence tests, `test_rag09_writer.py` and `test_output_check.py`: 276 passed.
 - The old check (`7bcc221`) and the new one agree on all 357 recorded answer calls.
+
+## Advisor re-read N2 and N3 (2026-11-24, at 373f22c)
+
+N3: the two wall-clock tests in `test_rag08_fixed_sentence_once_cost.py` are replaced by counted ones (the flaky-test
+precedent, N-1):
+
+- `test_many_blocked_sentences_scan_the_screen_a_bounded_number_of_times` wraps the fixed-sentence patterns and adds
+  up the characters each search starts from.
+- `test_the_whole_sentence_test_reads_a_bounded_number_of_characters` counts the characters `_whole_sentence_at`
+  reads, using a counting `str`.
+- The long-run case stays as a behaviour test without timing:
+  `test_a_long_space_run_before_a_failed_copy_still_shows_each_answer_right`.
+
+Mutants, each applied by hand and restored with `git checkout`:
+
+    Ma: `_on_screen` starts every search at 0
+        FAILED ...::test_many_blocked_sentences_scan_the_screen_a_bounded_number_of_times    1 failed, 10 passed
+        (A first counter measured the intended window and passed under Ma; it was replaced by the pattern wrapper.)
+    Mb: no cap on the `_whole_sentence_at` back-scan
+        FAILED ...::test_the_whole_sentence_test_reads_a_bounded_number_of_characters        1 failed, 10 passed
+    Unmutated: 11 passed
+
+N2: check (h)'s telemetry assertion, with `usage.py` logging `"blocked": {}`. RT-003 replayed alone:
+
+    >  assert turn["blocked"].get("refund_authority", 0) + turn["blocked"].get("confirmation", 0)
+    E  AssertionError: assert (0 + 0)
+    FAILED services/assistant/tests/test_red_team_e2e.py::test_a_red_team_query_surfaces_nothing_internal[RT-003]
+    Restored: 1 passed
+
+N4: the equivalence script is committed in `docs/reviews/2026-11-24-17-check-equivalence.md`. Re-run as written at
+373f22c's check: compared 357, differ 0.

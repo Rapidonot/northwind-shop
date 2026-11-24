@@ -89,7 +89,8 @@ def test_models_own_verbatim_copy_first_then_replacement_left_out() -> None:
 
 
 def test_models_own_copy_differing_in_case_and_whitespace_counts_as_on_screen() -> None:
-    # The check compares in the matching view (`normal`: casefolded, whitespace collapsed).
+    # The check compares a whole, plain copy: case and whitespace aside (`_copy_pattern`, row #17's
+    # scoped security review F2), with no folding of combining marks or look-alike letters.
     own = PROMO.upper().replace(" ", "  ")
     shown = check_text(f"{own} Thanks. {BLOCK_PROMO} Bye.")
     assert shown == f"{own} Thanks. Bye."

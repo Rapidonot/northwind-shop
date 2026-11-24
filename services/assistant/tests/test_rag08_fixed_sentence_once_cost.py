@@ -12,10 +12,11 @@ Scoped security review of the rule (row #17, 2026-11-24):
 
 from __future__ import annotations
 
-import time
+from typing import Any
 
 import pytest
 
+from northwind_assistant import output_check
 from northwind_assistant.output_check import FIXED_SENTENCES, OutputCheck, check_text
 
 pytestmark = pytest.mark.req("RAG-08")
@@ -23,22 +24,64 @@ pytestmark = pytest.mark.req("RAG-08")
 PROMO = FIXED_SENTENCES["promotion"]
 
 
-def _timed(text: str, step: int) -> float:
+def _feed(text: str, step: int = 7) -> OutputCheck:
     check = OutputCheck(set(), [])
-    began = time.perf_counter()
     for i in range(0, len(text), step):
         check.feed(text[i : i + step])
     check.finish()
-    assert check.shown.count(PROMO) == 1
-    return time.perf_counter() - began
+    return check
 
 
-def test_many_blocked_sentences_cost_linear_time() -> None:
-    """Four times the answer costs about four times as long, not sixteen (finding 1)."""
-    small = min(_timed("Use a coupon. Ok. " * 400, 7) for _ in range(2))
-    large = min(_timed("Use a coupon. Ok. " * 1600, 7) for _ in range(2))
-    assert large < 5.0
-    assert large / small < 9.0
+class _CountingPattern:
+    """Wraps a compiled pattern and adds up how many characters each search starts from."""
+
+    read = 0
+    searches = 0
+
+    def __init__(self, pattern: Any) -> None:
+        self._pattern = pattern
+
+    def finditer(self, text: str, pos: int = 0) -> Any:
+        _CountingPattern.read += len(text) - pos
+        _CountingPattern.searches += 1
+        return self._pattern.finditer(text, pos)
+
+
+def test_many_blocked_sentences_scan_the_screen_a_bounded_number_of_times(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Each search reads only what the screen gained since the last one, plus a fixed overlap, so
+    the characters read grow with the answer, not with blocked sentences times its length
+    (finding 1). Counted, not timed (the flaky-test precedent, N-1; advisor re-read N3)."""
+    copies = {k: _CountingPattern(v) for k, v in output_check._FIXED_COPIES.items()}
+    monkeypatch.setattr(output_check, "_FIXED_COPIES", copies)
+    _CountingPattern.read = _CountingPattern.searches = 0
+    text = "Use a coupon. Ok. " * 1600
+    check = _feed(text)
+    assert check.shown.count(PROMO) == 1 and check.counts["promotion"] == 1600
+    assert _CountingPattern.searches > 1000  # the search really ran, once per blocked sentence
+    per_search = output_check._FIXED_OVERLAP + len("Use a coupon. Ok. ")
+    assert _CountingPattern.read <= _CountingPattern.searches * per_search
+
+
+class _CountingText(str):
+    """A string that counts how many characters are read by index."""
+
+    reads = 0
+
+    def __getitem__(self, key: Any) -> Any:
+        _CountingText.reads += 1
+        return str.__getitem__(self, key)
+
+
+def test_the_whole_sentence_test_reads_a_bounded_number_of_characters() -> None:
+    """A copy after a long run of spaces is not a sentence start, and the run is not read to its
+    end, so it costs the same for every later blocked sentence (re-review low 2). Counted."""
+    shown = _CountingText("Use a coupon. x" + " " * 20000 + FIXED_SENTENCES["money"])
+    start = len(shown) - len(FIXED_SENTENCES["money"])
+    _CountingText.reads = 0
+    assert not output_check._whole_sentence_at(shown, start)
+    assert _CountingText.reads <= output_check._MAX_LEAD_SPACES + 2
 
 
 def test_a_struck_through_copy_does_not_hide_the_replacement() -> None:
@@ -91,23 +134,10 @@ def test_the_adjacent_rule_still_says_a_plain_copy_once() -> None:
     assert check_text("Use the discount code. A coupon works too.").count(PROMO) == 1
 
 
-def test_a_long_space_run_before_a_failed_copy_costs_linear_time() -> None:
-    """A copy that is not a whole sentence, after a long run of spaces, is not scanned again for
-    every later blocked sentence (re-review low 2)."""
+def test_a_long_space_run_before_a_failed_copy_still_shows_each_answer_right() -> None:
+    """The long-run case from re-review low 2, end to end: the money copy after the run is not a
+    sentence start, the promotion sentence is said once, and every blocked sentence is counted."""
     money = FIXED_SENTENCES["money"]
-
-    def timed(spaces: int, blocked: int) -> float:
-        text = "Use a coupon. x" + " " * spaces + money + " " + "Use a coupon. " * blocked
-        check = OutputCheck(set(), [])
-        began = time.perf_counter()
-        for i in range(0, len(text), 7):
-            check.feed(text[i : i + 7])
-        check.finish()
-        return time.perf_counter() - began
-
-    # The space run is fixed; only the blocked sentences grow, 16 times. Linear: the run dominates
-    # and the time barely moves. Rescanning the run for each one more than doubles it.
-    small = min(timed(20000, 100) for _ in range(2))
-    large = min(timed(20000, 1600) for _ in range(2))
-    assert large < 5.0
-    assert large / small < 1.8
+    check = _feed("Use a coupon. x" + " " * 20000 + money + " " + "Use a coupon. " * 400)
+    assert check.shown.count(PROMO) == 1
+    assert check.counts["promotion"] == 401
