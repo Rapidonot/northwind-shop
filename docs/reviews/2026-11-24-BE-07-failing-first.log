@@ -1,0 +1,59 @@
+# BE-07 failing-first, on origin/main 7296c04 source (only the new test files added), 2026-11-24T07:13:31Z
+## uv run pytest -p no:xdist -q services/backend/tests/care/test_be07_units.py
+    from northwind_backend.agents.care import (
+E   ModuleNotFoundError: No module named 'northwind_backend.agents.care'
+=========================== short test summary info ============================
+ERROR services/backend/tests/care/test_be07_units.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in 0.09s
+## uv run pytest -p no:xdist -q services/backend/tests/care/test_be07_criteria.py
+    from northwind_backend.agents import care
+E   ImportError: cannot import name 'care' from 'northwind_backend.agents' (/Users/rapido/Projects/northwind-shop-b/services/backend/src/northwind_backend/agents/__init__.py)
+=========================== short test summary info ============================
+ERROR services/backend/tests/care/test_be07_criteria.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in 0.11s
+
+# After the implementation (serial, one file at a time)
+test_be07_units.py: 48 passed. test_be07_criteria.py: 17 passed (16, plus the demo test added after the CLI).
+
+# test-writer (services/backend/tests/care/test_be07_writer.py), as the test-writer agent reported its run
+Against the code before its findings were fixed: 8 failed, 67 passed.
+- 7 x test_a_money_figure_in_other_spellings_is_refused: fullwidth $ sign, fullwidth USD, "999 US dollars",
+  "40 US$", "40 CA$", "1,299.00", "1.299,00" (hard rule 2; fixed: NFKC, prefixed signs, thousands separators,
+  words between number and currency word)
+- test_a_card_number_split_over_two_turns_is_not_reassembled_for_the_model (hard rule 1; fixed: adjacent turns
+  screened together, and screening before the 2,000-character cut)
+After the fixes, run by the session: test_be07_writer.py 75 passed; test_be07_units.py 48 passed;
+test_be07_criteria.py 17 passed.
+
+# Security review pass 1 fixes (M1, L1, L2, L3, L5, L6): new tests run before the fixes
+(only the constant MAX_RAW_TURN_CHARS added first, so the file collects; no behaviour change)
+FAILED services/backend/tests/care/test_be07_units.py::test_m1_a_card_number_split_around_another_turn_is_withheld
+FAILED services/backend/tests/care/test_be07_units.py::test_m1_a_card_number_split_over_three_turns_with_text_between_is_withheld
+FAILED services/backend/tests/care/test_be07_units.py::test_m1_a_security_code_split_around_another_turn_is_withheld
+FAILED services/backend/tests/care/test_be07_units.py::test_l1_the_queue_refuses_a_card_number_split_by_a_newline
+FAILED services/backend/tests/care/test_be07_units.py::test_l2_more_money_spellings_are_refused[They were charged USD: 999 on the card.]
+FAILED services/backend/tests/care/test_be07_units.py::test_l2_more_money_spellings_are_refused[They saw 999 in USD on the statement.]
+FAILED services/backend/tests/care/test_be07_units.py::test_l2_more_money_spellings_are_refused[It was a 999-dollar charge.]
+FAILED services/backend/tests/care/test_be07_units.py::test_l2_more_money_spellings_are_refused[They saw 999 MXN on the statement.]
+FAILED services/backend/tests/care/test_be07_units.py::test_l2_more_money_spellings_are_refused[The bank showed SEK 450.]
+FAILED services/backend/tests/care/test_be07_units.py::test_l3_any_web_address_is_refused[Process it at northwind-refunds.top today.]
+FAILED services/backend/tests/care/test_be07_units.py::test_l3_any_web_address_is_refused[They point to pay.ru/claim for a refund.]
+FAILED services/backend/tests/care/test_be07_units.py::test_l3_any_web_address_is_refused[They were told to visit 192.168.10.20 for help.]
+FAILED services/backend/tests/care/test_be07_units.py::test_l3_any_web_address_is_refused[Use refunds.example.museum to claim.]
+FAILED services/backend/tests/care/test_be07_units.py::test_l5_a_very_long_turn_is_refused_before_screening
+14 failed, 53 passed in 0.48s
+test_be07_criteria.py::test_l6_a_payment_in_another_currency_is_flagged_not_folded: FAILED before the fix
+Kept passing before and after (no-regression checks): test_m1_ordinary_numbers_across_turns_are_kept, test_l3_abbreviations_and_dates_are_not_web_addresses (3 cases)
+After the fixes: test_be07_units.py 67 passed; test_be07_writer.py 75 passed; test_be07_criteria.py 18 passed
+
+# Re-review (pass 2) lows N5, N6, N7: new tests run before the fixes
+FAILED services/backend/tests/care/test_be07_units.py::test_n5_a_turn_whose_nfkc_form_is_too_long_is_refused
+FAILED services/backend/tests/care/test_be07_units.py::test_n6_the_queue_refuses_card_data_split_across_fields
+FAILED services/backend/tests/care/test_be07_units.py::test_n7_ideographic_dots_and_non_ascii_domains_are_refused[Process it at northwind-refunds\u3002top today.]
+FAILED services/backend/tests/care/test_be07_units.py::test_n7_ideographic_dots_and_non_ascii_domains_are_refused[They point to pay.\u0440\u0444 for a refund.]
+4 failed, 67 deselected in 0.47s
+Note: the N6 test failed first in a wrong shape (fragments too far apart for any join); it was rewritten to adjacent fields before the fix, and the rewritten version was not run before the fix.
+After the fixes: test_be07_units.py 71 passed; test_be07_writer.py 75 passed; test_be07_criteria.py 18 passed
+N1 (medium, unsafe) and N2 (medium) are open, waiting on the user: no test for them is committed yet.
