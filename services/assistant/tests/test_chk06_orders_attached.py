@@ -47,7 +47,7 @@ pytestmark = pytest.mark.req("CHK-06")
 
 SESSION = "d" * 32
 ANON = Caller(region="US", session=SESSION)
-SIGNED_IN = Caller(region="US", session=SESSION, shopper_id="S0031")
+SIGNED_IN = Caller(region="US", session=SESSION, shopper_id="S0188")
 SOURCE = RetrievedChunk("c1", "document", "POL-001", None, "Orders ship within 2 business days.")
 GET_ORDER = order_tool.GET_ORDER_TOOL
 
@@ -158,7 +158,7 @@ def test_a_signed_in_turn_offers_get_order_and_the_order_section(
     assert names == sorted({ALLOWED_TOOL, *catalog_tool.ALLOWED_TOOLS, GET_ORDER})
     system = _system(request)
     assert ORDERS_RULES in system and system.endswith("The shopper is in the US region.")
-    assert "S0031" not in json.dumps(request["body"])  # the shopper ID never reaches the model
+    assert "S0188" not in json.dumps(request["body"])  # the shopper ID never reaches the model
 
 
 def test_each_server_gets_its_own_token_and_only_the_orders_one_names_the_shopper(
@@ -178,7 +178,7 @@ def test_each_server_gets_its_own_token_and_only_the_orders_one_names_the_shoppe
     )
     assert set(options.mcp_servers) == {RAG_SERVER, CATALOG_SERVER, ORDERS_SERVER}
     assert options.allowed_tools == [ALLOWED_TOOL, *catalog_tool.ALLOWED_TOOLS, GET_ORDER]
-    assert verify_for(orders_token, key=KEY, server=ORDERS_SERVER).shp == "S0031"
+    assert verify_for(orders_token, key=KEY, server=ORDERS_SERVER).shp == "S0188"
     for token, server in ((rag_token, RAG_SERVER), (catalog_token, CATALOG_SERVER)):
         payload = json.loads(base64.urlsafe_b64decode(token.split(".")[1] + "=="))
         assert "shp" not in payload
@@ -189,29 +189,27 @@ def test_each_server_gets_its_own_token_and_only_the_orders_one_names_the_shoppe
     assert KEY.decode() not in json.dumps(options.mcp_servers)
 
 
-def test_a_get_order_result_reaches_the_model_as_labelled_data_and_vouches_its_order(
+def test_a_get_order_result_reaches_the_model_as_labelled_data(
     tmp_path: Path, orders_url: str
 ) -> None:
     with ScriptedLLM() as llm:
-        llm.reply_tool_use(GET_ORDER, {"order_id": "O000064"}, tool_id="toolu_o")
-        llm.reply_stream("O000064: your order was placed on 16 October and was delivered.")
-        events = ask("Where is O000064?", SIGNED_IN, runtime_for(llm, tmp_path), orders_url)
+        llm.reply_tool_use(GET_ORDER, {"order_id": "O000800"}, tool_id="toolu_o")
+        llm.reply_stream("O000800 was delivered on 26 October.")
+        events = ask("Where is O000800?", SIGNED_IN, runtime_for(llm, tmp_path), orders_url)
     [text] = tool_results(llm.requests[1])
     assert text.startswith('<order_data tool="get_order">\n') and text.endswith("\n</order_data>")
-    assert order_tool.order_status(text, False) == ("O000064", "delivered")
-    shown = text_of(events)
-    assert "your order was placed" in shown and CONFIRMATION_SENTENCE not in shown
+    labelled = order_tool.unlabel(text)
+    assert labelled is not None and labelled[1]["status"] == "delivered"
+    assert text_of(events) == "O000800 was delivered on 26 October."
 
 
 def test_an_order_on_hold_is_never_called_confirmed(tmp_path: Path, orders_url: str) -> None:
     with ScriptedLLM() as llm:
-        llm.reply_tool_use(GET_ORDER, {"order_id": "O000113"}, tool_id="toolu_o")
-        llm.reply_stream("O000113: your order has been confirmed.")
-        events = ask("Is O000113 confirmed?", SIGNED_IN, runtime_for(llm, tmp_path), orders_url)
-    assert order_tool.order_status(tool_results(llm.requests[1])[0], False) == (
-        "O000113",
-        "on_hold",
-    )
+        llm.reply_tool_use(GET_ORDER, {"order_id": "O000418"}, tool_id="toolu_o")
+        llm.reply_stream("O000418: your order has been confirmed.")
+        events = ask("Is O000418 confirmed?", SIGNED_IN, runtime_for(llm, tmp_path), orders_url)
+    labelled = order_tool.unlabel(tool_results(llm.requests[1])[0])
+    assert labelled is not None and labelled[1]["status"] == "on_hold"
     shown = text_of(events)
     assert CONFIRMATION_SENTENCE in shown and "has been confirmed" not in shown
 
@@ -226,3 +224,26 @@ def test_another_shoppers_order_reaches_the_model_only_as_not_found(
     [text] = tool_results(llm.requests[1])
     body = json.loads(text)
     assert body["code"] == "not_found" and "S0103" not in text and "tok_" not in text
+
+
+# The user's decision on N1-R, option (B): no order exemption in the output check. "Your order has
+# been confirmed" stays blocked on a signed-in turn, even for an order `get_order` returned as
+# delivered; the assistant gives the status in the result's own words with the order number.
+@pytest.mark.parametrize(
+    "claim",
+    [
+        "O000800: your order has been confirmed.",
+        "O000800: your order was placed on 20 October.",
+        "O000800: order confirmed, and it was delivered.",
+    ],
+)
+def test_b_a_confirmed_or_placed_claim_stays_blocked_on_a_signed_in_turn(
+    tmp_path: Path, orders_url: str, claim: str
+) -> None:
+    with ScriptedLLM() as llm:
+        llm.reply_tool_use(GET_ORDER, {"order_id": "O000800"}, tool_id="toolu_o")
+        llm.reply_stream(claim)
+        events = ask("Where is O000800?", SIGNED_IN, runtime_for(llm, tmp_path), orders_url)
+    shown = text_of(events)
+    assert CONFIRMATION_SENTENCE in shown
+    assert claim.split(":", 1)[1].strip() not in shown

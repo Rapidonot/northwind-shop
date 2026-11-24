@@ -169,14 +169,8 @@ def _result_text(block: ToolResultBlock) -> str:
 
 
 # Row #16: the cart tools' results carry live prices and stock too (`record_live`).
-# Row #27: `get_order`'s result carries the order's live status, which the output check reads.
 _LIVE_TOOLS = frozenset(
-    {
-        catalog_tool.PRICE_TOOL,
-        catalog_tool.STOCK_TOOL,
-        *catalog_tool.CART_TOOL_NAMES,
-        order_tool.GET_ORDER_TOOL,
-    }
+    {catalog_tool.PRICE_TOOL, catalog_tool.STOCK_TOOL, *catalog_tool.CART_TOOL_NAMES}
 )
 
 

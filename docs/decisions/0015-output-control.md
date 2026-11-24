@@ -405,33 +405,18 @@ The changed shown answers are re-judged in W6. Tests: `services/assistant/tests/
 
 `REPLACED_IN_RECORDING` is now `{"RT-003"}`. See decision 0018, "Row #17 amendment".
 
-## Row #27 amendment (2026-11-24): an order's own status (CHK-06, decision 0023)
+## Row #27 note (2026-11-24): no order exemption (CHK-06, decision 0023)
 
-- **Confirmation class, order subject only.** A signed-in turn can read an order's status with `get_order`.
-  - "Your order was placed / has been confirmed" (the first confirmation pattern, with an `order` subject and the
-    participle `placed` or `confirmed` only) and "order confirmed" pass under three conditions:
-    - the claim's own subject is bound to an order ID written directly before it. The whole sentence up to the
-      claim may hold only an optional bullet, an optional fixed lead-in ("for", "re", "about", "your", "the",
-      "order"), the ID, a separator and one of "your", "the" or "this" (for example "O000064: your order was
-      placed"). A sentence whose start is out of view fails closed;
-    - that order, and every other order named earlier in the same sentence within `L` characters, is one this
-      turn's `get_order` returned with a confirmed status (`order_tool.CONFIRMED_STATUSES`: `confirmed` through
-      `delivered`);
-    - IDs are found over the whole text, so an ID cut by the window's edge still counts.
-
-    The status is read from the tool result (`LiveValues.orders`), never from text. Security review pass 1 tightened
-    this rule: M1 (binding), L1 (participles) and L2 (window edge). Its scoped re-review's N1 then limited the
-    lead-in. See `docs/reviews/2026-11-24-27-security-review.raw.md` and `…-security-rereview.raw.md`.
-  - Anything else stays blocked:
-    - an unnamed order, or one not bound to the claim ("O000064 arrived, and your other order was placed", "Unlike
-      O000064, your order has been confirmed");
-    - "approved", "processed", "authorised", "applied" or "issued", even for a vouched order;
-    - an order named only after the claim, or in another sentence;
-    - an order on hold, still processing, or not read this turn;
-    - a payment, refund, discount or code subject;
-    - "I've / we have confirmed";
-    - refund authority.
-- **Anonymous turns are unchanged.** With no order read, `LiveValues.orders` is empty and every match is decided as
-  before. #12's and #13's tests pass unchanged.
-- **Evals.** `live_order` joins `LIVE_EXEMPTIONS`, so `live_backed` counts a vouched order sentence as tool-backed,
-  not sourced. The eval answerer is never signed in, so no eval answer changes.
+- **The check is unchanged by row #27.** `output_check.py` is byte for byte main's.
+- **What was tried.** Row #27 first added an exemption letting "your order was placed / has been confirmed" through
+  for an order this turn's `get_order` returned as confirmed. Three security passes kept finding ways to bind the
+  claim to a different order than the one named: M1, then N1, then N1-R (an abbreviation's dot or a newline taken
+  for a sentence start). See `docs/reviews/2026-11-24-27-security-review.raw.md`, `…-security-rereview.raw.md` and
+  `…-security-rereview-2.raw.md`.
+- **The user's decision (N1-R, option B).** No exemption, so the confirmation class blocks those claims on every
+  turn, signed in or not.
+- **What the assistant does instead.** `ORDERS_RULES` tells it to give an order's status in the `get_order`
+  result's own words with the order number (for example "O000800 was delivered on 26 October"). That phrasing
+  carries no confirmation claim.
+- **The cost.** If the model still writes "your order was placed", the shopper sees `CONFIRMATION_SENTENCE`. That
+  fails closed.

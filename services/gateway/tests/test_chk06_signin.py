@@ -41,7 +41,7 @@ pytestmark = [pytest.mark.req("CHK-06"), pytest.mark.req("NFR-01")]
 KEY = catalog_testing.KEY
 SESSION = "e" * 32
 PATH = "/api/session/shopper"
-OTHER_KEY_SIGNED = sign_shopper(session_key(b"x" * 40), SESSION, "S0031")
+OTHER_KEY_SIGNED = sign_shopper(session_key(b"x" * 40), SESSION, "S0188")
 
 
 class Spy:
@@ -89,7 +89,7 @@ def signed_in_header(session: str = SESSION, shopper: str = DEMO_SHOPPER) -> str
 def test_the_demo_shopper_and_region_are_on_file() -> None:
     rows = [json.loads(line) for line in (DATA / "shoppers.jsonl").read_text().splitlines() if line]
     on_file = {row["shopper_id"]: row["region"] for row in rows}
-    assert DEMO_SHOPPERS == {DEMO_SHOPPER: on_file[DEMO_SHOPPER]} == {"S0031": "US"}
+    assert DEMO_SHOPPERS == {DEMO_SHOPPER: on_file[DEMO_SHOPPER]} == {"S0188": "US"}
 
 
 def test_with_the_flag_off_sign_in_is_the_same_404_as_no_route(
@@ -126,7 +126,7 @@ def test_sign_in_binds_the_demo_shopper_to_the_session(
     assert value == sign_shopper(session_key(KEY), SESSION, DEMO_SHOPPER)  # the body was ignored
     client.get("/api/cart", headers={"cookie": f"{session_cookie()}; {SHOPPER_COOKIE}={value}"})
     caller = spy.callers[-1]
-    assert (caller.shopper_id, caller.region, caller.session) == ("S0031", "US", SESSION)
+    assert (caller.shopper_id, caller.region, caller.session) == ("S0188", "US", SESSION)
 
 
 def test_a_new_visitor_signing_in_gets_both_cookies_bound_together(
@@ -138,7 +138,7 @@ def test_a_new_visitor_signing_in_gets_both_cookies_bound_together(
     session = next(c for c in cookies if c.startswith(f"{COOKIE}=")).split("=", 1)[1].split(".")[0]
     [shopper] = shopper_cookies(response)
     assert shopper.split(";")[0].split("=", 1)[1] == sign_shopper(
-        session_key(KEY), session, "S0031"
+        session_key(KEY), session, "S0188"
     )
 
 
@@ -146,8 +146,8 @@ def test_a_new_visitor_signing_in_gets_both_cookies_bound_together(
     "header",
     [
         session_cookie(),  # never signed in
-        f"{session_cookie()}; {SHOPPER_COOKIE}=S0031",  # no mac
-        f"{session_cookie()}; {SHOPPER_COOKIE}=S0031.{'0' * 64}",  # a forged mac
+        f"{session_cookie()}; {SHOPPER_COOKIE}=S0188",  # no mac
+        f"{session_cookie()}; {SHOPPER_COOKIE}=S0188.{'0' * 64}",  # a forged mac
         signed_in_header(session="f" * 32).replace(session_cookie("f" * 32), session_cookie()),
         f"{session_cookie()}; {SHOPPER_COOKIE}={OTHER_KEY_SIGNED}",  # another key
         signed_in_header(shopper="S0103"),  # signed, but not a demo shopper
@@ -166,7 +166,7 @@ def test_turning_the_flag_off_signs_everyone_out(spy: Spy, monkeypatch: pytest.M
     monkeypatch.setenv(DEMO_SIGNIN_ENV, "1")
     client = TestClient(app)
     client.get("/api/cart", headers={"cookie": signed_in_header()})
-    assert spy.callers[-1].shopper_id == "S0031"
+    assert spy.callers[-1].shopper_id == "S0188"
     monkeypatch.delenv(DEMO_SIGNIN_ENV)
     client.get("/api/cart", headers={"cookie": signed_in_header()})
     assert spy.callers[-1].shopper_id is None
@@ -175,7 +175,7 @@ def test_turning_the_flag_off_signs_everyone_out(spy: Spy, monkeypatch: pytest.M
 def test_a_reissued_session_drops_the_sign_in(spy: Spy, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(DEMO_SIGNIN_ENV, "1")
     forged_session = f"{COOKIE}={'a' * 32}.{'0' * 64}"
-    shopper = sign_shopper(session_key(KEY), "a" * 32, "S0031")
+    shopper = sign_shopper(session_key(KEY), "a" * 32, "S0188")
     TestClient(app).get(
         "/api/cart", headers={"cookie": f"{forged_session}; {SHOPPER_COOKIE}={shopper}"}
     )
@@ -211,7 +211,7 @@ def test_a_chat_turn_gets_the_orders_endpoint_and_the_caller_as_signed_in(
     )
     [(caller, orders)] = captured.calls
     assert orders == "orders-endpoint"
-    assert caller.shopper_id == ("S0031" if signed_in else None)
+    assert caller.shopper_id == ("S0188" if signed_in else None)
     assert caller.region == ("US" if signed_in else "EU")
 
 
@@ -243,7 +243,7 @@ def test_with_the_flag_off_a_new_visitor_cannot_tell_the_route_exists(
 def test_two_shopper_cookies_are_no_sign_in(spy: Spy, monkeypatch: pytest.MonkeyPatch) -> None:
     """Security review pass 1, L3: a planted second `nw_shopper` is refused, never picked."""
     monkeypatch.setenv(DEMO_SIGNIN_ENV, "1")
-    good = sign_shopper(session_key(KEY), SESSION, "S0031")
+    good = sign_shopper(session_key(KEY), SESSION, "S0188")
     header = f"{session_cookie()}; {SHOPPER_COOKIE}={good}; {SHOPPER_COOKIE}={good}"
     TestClient(app).get("/api/cart", headers={"cookie": header})
     assert spy.callers[-1].shopper_id is None

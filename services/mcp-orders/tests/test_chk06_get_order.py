@@ -110,12 +110,12 @@ def test_all_1000_orders_match_the_store_and_the_carrier_as_their_owner(book: Or
         assert dict(got) == expected(order_id), order_id
 
 
-def test_the_demo_shoppers_orders_cover_every_state_but_label_created(book: OrderBook) -> None:
-    """S0031 (the user's pick): six of the seven states. `label_created` comes from other shoppers'
-    orders in the tests below; S0188 would cover all seven (an open question for the recording)."""
+def test_the_demo_shoppers_orders_cover_every_state(book: OrderBook) -> None:
+    """S0188 (the user's pick): every state a placed order can be in; `processing` (pending) does
+    not occur in the labelled fixtures."""
     states = {book.view(o, shopper=DEMO, region="US")["status"] for o in DEMO_ORDERS}
-    assert states == STATUSES - {"processing", "label_created"}
-    assert len(DEMO_ORDERS) == 10
+    assert states == STATUSES - {"processing"}
+    assert len(DEMO_ORDERS) == 11
 
 
 def test_over_http_the_owner_gets_each_order_as_the_files_state_it(
@@ -181,7 +181,7 @@ def test_another_shoppers_an_unknown_and_a_malformed_order_get_the_same_bytes(
     bearer, _ = testing.token()
     other = next(o for o, row in ORDERS.items() if row["shopper_id"] != DEMO)
     texts = set()
-    for value in (other, "O999999", "O12", "P0001", "", "x" * 32, "O000064; DROP"):
+    for value in (other, "O999999", "O12", "P0001", "", "x" * 32, "O000800; DROP"):
         is_error, text, body = call(url, bearer, {"order_id": value})
         assert is_error and body["code"] == "not_found" and body["errorCategory"] == "validation"
         texts.add(text)
@@ -194,7 +194,7 @@ def test_a_non_string_order_id_gets_the_same_bytes_too(live: tuple[OrdersServer,
     _, url = live
     bearer, _ = testing.token()
     _, reference, _ = call(url, bearer, {"order_id": "O999999"})
-    for value in (64, None, ["O000064"], {"id": "O000064"}):
+    for value in (64, None, ["O000800"], {"id": "O000800"}):
         _, text, _ = call(url, bearer, {"order_id": value})
         assert text == reference
 
@@ -202,9 +202,9 @@ def test_a_non_string_order_id_gets_the_same_bytes_too(live: tuple[OrdersServer,
 def test_an_order_number_as_a_shopper_types_it_is_forgiven(live: tuple[OrdersServer, str]) -> None:
     _, url = live
     bearer, _ = testing.token()
-    for typed in ("o000064", " #O000064 ", "#o000064"):
+    for typed in ("o000800", " #O000800 ", "#o000800"):
         is_error, _, body = call(url, bearer, {"order_id": typed})
-        assert not is_error and body["order_id"] == "O000064"
+        assert not is_error and body["order_id"] == "O000800"
 
 
 @pytest.mark.req("NFR-01")
@@ -246,7 +246,7 @@ def test_only_the_assistant_is_offered_get_order(live: tuple[OrdersServer, str])
 
     assert asyncio.run(names("shopper-assistant")) == ["get_order"]
     assert asyncio.run(names("shopper-portal")) == []
-    is_error, _, body = call(url, testing.token(agent="shopper-portal")[0], {"order_id": "O000064"})
+    is_error, _, body = call(url, testing.token(agent="shopper-portal")[0], {"order_id": "O000800"})
     assert is_error and body["code"] == "not_allowed"
 
 
@@ -322,10 +322,10 @@ def test_an_order_store_outage_is_transient_not_not_found(live: tuple[OrdersServ
 def test_an_unknown_argument_is_refused(live: tuple[OrdersServer, str]) -> None:
     _, url = live
     bearer, _ = testing.token()
-    for args in ({"order_id": "O000064", "shopper_id": "S0001"}, {"region": "UK"}, {}):
+    for args in ({"order_id": "O000800", "shopper_id": "S0001"}, {"region": "UK"}, {}):
         is_error, _, body = call(url, bearer, args)
         assert is_error and body["code"] in {"unknown_argument", "not_found"}
-    assert call(url, bearer, {"order_id": "O000064", "shopper_id": "S0001"})[2]["code"] == (
+    assert call(url, bearer, {"order_id": "O000800", "shopper_id": "S0001"})[2]["code"] == (
         "unknown_argument"
     )
 
@@ -338,8 +338,8 @@ def test_an_unknown_argument_is_refused(live: tuple[OrdersServer, str]) -> None:
     "args",
     [
         {"order_id": "4242 4242 4242 4242"},
-        {"order_id": "O000064", "note": "4242424242424242"},
-        {"4242424242424242": "O000064"},
+        {"order_id": "O000800", "note": "4242424242424242"},
+        {"4242424242424242": "O000800"},
         {"order_id": "４２４２４２４２４２４２４２４２"},
     ],
 )

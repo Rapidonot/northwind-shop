@@ -32,8 +32,6 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from functools import lru_cache
 
-from northwind_common.order_tool import CONFIRMED_STATUSES
-
 L = 64
 ALLOWED_EMAIL = "care@northwind.example"
 
@@ -350,15 +348,15 @@ PATTERNS: tuple[Pattern, ...] = (
     # 3. Order or payment state, said as done.
     _p(
         "confirmation",
-        rf"\b(?P<subj>{_SUBJECT})(?:{_S}(?P<cop>is|has{_S}(?:{_ADVERB_WORD}{_S})?been|was)|['’]s{_S}been){_S}{_ADVERB}"
-        r"(?P<verb>confirmed|processed|approved|authori[sz]ed|applied|placed|issued)\b",
+        rf"\b{_SUBJECT}(?:{_S}(?P<cop>is|has{_S}(?:{_ADVERB_WORD}{_S})?been|was)|['’]s{_S}been){_S}{_ADVERB}"
+        r"(?:confirmed|processed|approved|authori[sz]ed|applied|placed|issued)\b",
         "conditional",
     ),
     _p(
         "confirmation",
         rf"\bi(?:['’]ve|{_S}have){_S}(?:confirmed|processed|applied|placed|issued|authori[sz]ed)\b",
     ),
-    _p("confirmation", rf"\border{_S}confirmed\b", "live_order"),
+    _p("confirmation", rf"\border{_S}confirmed\b"),
     _p("confirmation", rf"\bwe(?:['’]ve|{_S}have){_S}(?:processed|placed|confirmed|issued)\b"),
     # 4. Payload subjects: refund authority (passes only as a public policy's own words) and stock.
     _p("refund_authority", rf"\bauthori[sz]\w{{0,6}}{_GAP}{_WORDS}refunds?\b", "policy_span"),
@@ -559,64 +557,16 @@ class Source:
         return self.source_type == "document" and self.source_id.startswith("POL-")
 
 
-_ORDER_ID = re.compile(r"(?<![^\W_])o\d{6}(?![^\W_])")  # the casefolded view of `O000064`
-_SENTENCE_BREAK = re.compile(r"[.!?](?=\s)|\n")
-# Row #27, security review pass 1 (M1) and its scoped re-review (N1): the named order must be the
-# claim's own subject. The whole sentence before the claim must be: an optional bullet, an
-# optional fixed lead-in ("for", "re", "about", "your", "the", "order"), the ID, an optional
-# separator and one optional determiner. So "O000064: your order was placed" binds, and
-# "Unlike O000064, your order", "Besides O000064 your order" and "O000064 arrived, and your other
-# order" do not.
-_BOUND = re.compile(
-    r"\s*(?:[-*•]\s{1,3})?(?:(?:for|re:?|about)\s{1,3})?(?:(?:your|the)\s{1,3})?"
-    r"(?:order\s{1,3})?(?P<id>o\d{6})\s{0,3}[:,\-–—]?\s{0,3}(?:(?:your|the|this)\s{1,3})?"
-)
-# L1: only these participles may be vouched; "approved", "processed" and the rest stay blocked.
-VOUCHED_VERBS = frozenset({"placed", "confirmed"})
-
-
-def order_vouched(text: str, start: int, live: LiveValues) -> bool:
-    """Row #27 (CHK-06; decision 0015's row #27 amendment): an order called confirmed or placed
-    passes only when the claim's own subject is named by an order ID written directly before it,
-    and every order named earlier in the same sentence, within `L` characters, is one this turn's
-    `get_order` returned with a confirmed status (`order_tool.CONFIRMED_STATUSES`). "Directly
-    before" means the sentence up to the claim is only that ID with an optional bullet, fixed
-    lead-in, separator and determiner (`_BOUND`). An unnamed or unbound order, another sentence's
-    order, or an order on hold, still processing or not read stays blocked: the model cannot vouch
-    for one in text. IDs are found over the whole text, so one cut by the window's edge still
-    counts (security review pass 1, L2)."""
-    if not live.orders:
-        return False
-    low = max(0, start - L)
-    breaks = list(_SENTENCE_BREAK.finditer(text, low, start))
-    if not breaks and low > 0:
-        return False  # the sentence starts out of view: what leads into the ID is unknown (N1)
-    cut = breaks[-1].end() if breaks else low
-    bound = _BOUND.fullmatch(text, cut, start)
-    if bound is None:
-        return False
-    named = {
-        m.group().upper() for m in _ORDER_ID.finditer(text) if m.end() > cut and m.start() < start
-    }
-    named.add(bound["id"].upper())
-    return all(live.orders.get(o) in CONFIRMED_STATUSES for o in named)
-
-
 @dataclass
 class LiveValues:
     """Price and stock values the catalog tools returned this turn (row #12, RAG-09; hard rule 2).
 
     Filled only from successful `get_price` and `check_stock` results for the shopper's own region
     (`tools.record_live`), never from text: the model cannot write one. The check reads it live, as
-    it reads `seen`. `stock` keeps the last reading per variant.
-
-    `orders` (row #27, CHK-06): each order's status from this turn's `get_order` successes for the
-    signed-in shopper (`order_tool.order_status`), the last reading per order. Empty on every
-    anonymous turn, so the check is unchanged there."""
+    it reads `seen`. `stock` keeps the last reading per variant."""
 
     prices: set[tuple[Decimal, str]] = field(default_factory=set)
     stock: dict[str, int] = field(default_factory=dict)
-    orders: dict[str, str] = field(default_factory=dict)
 
 
 _DOLLARS = frozenset({"USD", "CAD", "AUD"})
@@ -1081,17 +1031,7 @@ class OutputCheck:
         if pattern.exempt == "conditional":
             copula = re.sub(r"\s+", " ", found.groupdict().get("cop") or "")
             introduced = _CONDITIONAL.search(view.text[max(0, start - 40) : start])
-            if bool(introduced) and copula in PRESENT_COPULAS:
-                return True
-            # Row #27: "your order was placed" about an order this turn's `get_order` returned.
-            groups = found.groupdict()
-            return (
-                groups.get("subj") == "order"
-                and groups.get("verb") in VOUCHED_VERBS
-                and order_vouched(view.text, start, self.live)
-            )
-        if pattern.exempt == "live_order":
-            return order_vouched(view.text, start, self.live)
+            return bool(introduced) and copula in PRESENT_COPULAS
         if pattern.exempt == "duration":
             return False  # decided in `_first_match`: the policy-word gate, then `_vouched`
         span = re.sub(r"\s+", " ", view.text[start:end])
@@ -1638,9 +1578,7 @@ def hits(
     return {cls: n for cls, n in check.counts.items() if cls != "marker"}
 
 
-LIVE_EXEMPTIONS = frozenset(
-    {"live_price", "live_stock", "pounds", "bare_price", "qualified", "live_order"}
-)
+LIVE_EXEMPTIONS = frozenset({"live_price", "live_stock", "pounds", "bare_price", "qualified"})
 
 
 def live_backed(text: str, live: LiveValues) -> int:

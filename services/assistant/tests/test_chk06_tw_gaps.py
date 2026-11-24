@@ -57,7 +57,7 @@ def test_the_order_section_forbids_what_the_assistant_may_not_do() -> None:
 
 
 def _options(tmp_path: Path, *, orders: tuple[str, str] | None, signed: bool = False) -> Any:
-    caller = Caller(region="US", session="d" * 32, shopper_id="S0031" if signed else None)
+    caller = Caller(region="US", session="d" * 32, shopper_id="S0188" if signed else None)
     return assistant_options(
         caller,
         "http://127.0.0.1:1/mcp",
@@ -96,55 +96,47 @@ def test_get_order_is_the_assistants_alone_in_the_scopes() -> None:
     assert AGENT_TOOLS["shopper-assistant"][ORDERS_SERVER] == frozenset({"get_order"})
 
 
-# ---- the output check, streamed ----------------------------------------------------------------
+# ---- the output check, streamed (the user's N1-R option B: no order exemption) ---------------
 
-LIVE = LiveValues(orders={"O000064": "delivered", "O000113": "on_hold"})
-OK = "O000064: your order was placed on 16 October and was delivered on 22 October."
-NOT_OK = "O000113: your order was placed on 16 October."  # on hold
+PLACED = "O000800: your order was placed on 20 October and was delivered on 26 October."
+CONFIRMED = "O000418: your order has been confirmed."
 
 
-def _streamed(text: str, size: int, live: LiveValues) -> OutputCheck:
-    check = OutputCheck(set(), [], live=live)
+def _streamed(text: str, size: int) -> OutputCheck:
+    check = OutputCheck(set(), [], live=LiveValues())
     for i in range(0, len(text), size):
         check.feed(text[i : i + size])
     check.finish()
     return check
 
 
+@pytest.mark.parametrize("text", [PLACED, CONFIRMED])
 @pytest.mark.parametrize("size", [1, 2, 3, 5, 7, 11])
-def test_a_vouched_sentence_survives_any_delta_split(size: int) -> None:
-    check = _streamed(OK, size, LIVE)
-    assert check.counts.get("confirmation", 0) == 0
-    assert check.shown == OK
-
-
-@pytest.mark.parametrize("size", [1, 2, 3, 5, 7, 11])
-def test_an_unvouched_sentence_is_blocked_whatever_the_delta_split(size: int) -> None:
-    check = _streamed(NOT_OK, size, LIVE)
+def test_an_order_claim_is_blocked_whatever_the_delta_split(text: str, size: int) -> None:
+    check = _streamed(text, size)
     assert check.counts.get("confirmation", 0) == 1
-    assert "was placed" not in check.shown
+    assert "your order" not in check.shown
 
 
-@pytest.mark.parametrize("cut", range(1, len(OK)))
-def test_every_single_split_point_of_a_vouched_sentence_gives_the_whole_text(cut: int) -> None:
-    check = OutputCheck(set(), [], live=LIVE)
-    check.feed(OK[:cut])
-    check.feed(OK[cut:])
-    check.finish()
-    assert check.counts.get("confirmation", 0) == 0 and check.shown == OK
-
-
-@pytest.mark.parametrize("cut", range(1, len(NOT_OK)))
-def test_every_single_split_point_of_an_unvouched_sentence_is_blocked(cut: int) -> None:
-    check = OutputCheck(set(), [], live=LIVE)
-    check.feed(NOT_OK[:cut])
-    check.feed(NOT_OK[cut:])
-    check.finish()
-    assert check.counts.get("confirmation", 0) == 1 and "was placed" not in check.shown
+@pytest.mark.parametrize("text", [PLACED, CONFIRMED])
+def test_every_single_split_point_of_an_order_claim_is_blocked(text: str) -> None:
+    for cut in range(1, len(text)):
+        check = OutputCheck(set(), [], live=LiveValues())
+        check.feed(text[:cut])
+        check.feed(text[cut:])
+        check.finish()
+        assert check.counts.get("confirmation", 0) == 1, cut
+        assert "your order" not in check.shown, cut
 
 
 def test_streamed_and_whole_text_agree() -> None:
-    for text in (OK, NOT_OK):
-        assert hits(text, live=LIVE).get("confirmation", 0) == _streamed(text, 4, LIVE).counts.get(
-            "confirmation", 0
-        )
+    for text in (PLACED, CONFIRMED):
+        assert hits(text).get("confirmation", 0) == _streamed(text, 4).counts.get("confirmation", 0)
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["O000800 was delivered on 26 October.", "O000418 is on hold: a person is looking at it."],
+)
+def test_the_status_in_the_results_own_words_passes(text: str) -> None:
+    assert hits(text).get("confirmation", 0) == 0

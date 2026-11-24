@@ -14,7 +14,7 @@ import pytest
 from northwind_backend.fakes.orders import DATA
 from northwind_common.errors import ToolError
 from northwind_common.mcp_token import ORDERS_SERVER, TTL_SECONDS, TokenError, verify_for
-from northwind_common.order_tool import label, order_status, unlabel
+from northwind_common.order_tool import label, unlabel
 from northwind_mcp_orders import testing
 from northwind_mcp_orders.server import OrdersServer
 
@@ -50,18 +50,18 @@ def live() -> Iterator[tuple[OrdersServer, str]]:
 @pytest.mark.parametrize(
     "typed",
     [
-        "Ｏ００００６４",  # fullwidth O000064
+        "Ｏ０００８００",  # fullwidth O000800
         "O００００６４",  # fullwidth digits only
         "Ｏ000064",  # fullwidth O only
-        "O000064​",  # zero-width space
-        "​O000064",
-        "##O000064",  # only one hash is forgiven
-        "# # O000064",
+        "O000800​",  # zero-width space
+        "​O000800",
+        "##O000800",  # only one hash is forgiven
+        "# # O000800",
         "O 000064",
-        "O000064O000064",
-        "O0000640",
+        "O000800O000800",
+        "O0008000",
         "O00006",
-        "O000064\x00",
+        "O000800\x00",
         "O٠٠٠٠٦٤",  # Arabic-Indic digits
     ],
 )
@@ -81,9 +81,9 @@ def test_surrounding_whitespace_of_any_kind_is_forgiven_but_nothing_else(
 ) -> None:
     _, url = live
     bearer, _ = testing.token()
-    for typed in ("O000064\n", "\tO000064 ", "  #  o000064  "):
+    for typed in ("O000800\n", "\tO000800 ", "  #  o000800  "):
         is_error, _, body = call(url, bearer, {"order_id": typed})
-        assert not is_error and body["order_id"] == "O000064", repr(typed)
+        assert not is_error and body["order_id"] == "O000800", repr(typed)
 
 
 # ---- hostile values in the store ---------------------------------------------------------------
@@ -106,11 +106,11 @@ def test_a_hostile_scan_date_cannot_close_or_forge_the_label(
     assert labelled is not None and labelled[0] == "get_order"
     assert labelled[1]["tracking"]["scans"][-1]["on"] == hostile
     assert labelled[1]["status"] == "in_transit"  # the injected text did not change it
-    assert order_status(text, False) == (order, "in_transit")
+    assert labelled[1]["order_id"] == order
 
 
 def test_label_escapes_angle_brackets_and_ampersands_in_any_value() -> None:
-    text = label("get_order", {"order_id": "O000064", "status": "confirmed", "x": "<&>‹"})
+    text = label("get_order", {"order_id": "O000800", "status": "confirmed", "x": "<&>‹"})
     inner = text.split("\n", 1)[1].rsplit("\n", 1)[0]
     assert "<" not in inner and ">" not in inner and "&" not in inner
     assert unlabel(text) is not None

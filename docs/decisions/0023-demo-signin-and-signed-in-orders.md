@@ -13,8 +13,10 @@ but no shopper, so "own orders" had no meaning. Accounts (SA-04) are not built.
 
 1. **A demo sign-in behind a flag, with one fixed synthetic shopper (D1).**
    - `POST /api/session/shopper` takes no body. With `NORTHWIND_DEMO_SIGNIN=1` (set by `make dev`, the tests and,
-     when a signed-in journey exists, e2e), it binds **S0031** (US, from `data/backend/shoppers.jsonl`) to the
+     when a signed-in journey exists, e2e), it binds **S0188** (US, from `data/backend/shoppers.jsonl`) to the
      caller's session. With the flag unset, or any other value, it is the same 404 as a path that does not exist.
+   - The user switched the shopper from S0031, which has no `label_created` order, so the demo shows all seven
+     states.
    - The binding is a second cookie, `nw_shopper=<shopper>.<mac>`. It is `HttpOnly; SameSite=Strict; Path=/api`.
      The mac is HMAC-SHA256 under the session cookie's derived key, over `northwind-shopper-v1`, the session ID and
      the shopper ID. It is valid only with the session it was issued for, and only while the flag is on: a new
@@ -38,19 +40,18 @@ but no shopper, so "own orders" had no meaning. Accounts (SA-04) are not built.
    - An anonymous turn's request is unchanged, byte for byte, as the replay proxy hashes it. The four regions'
      anonymous prompt hashes are pinned to main's. So no existing cassette suite is re-recorded.
 5. **The answerer identity change is handled at $0.**
-   - The eval answerer's ID hashes `prompt.py`, so its prompt part changes even though no eval request does.
+   - The eval answerer's ID hashes `prompt.py`, so its prompt part changes even though no eval request does. Its
+     check part (`output_check.py`) does not change.
    - The baseline moves by `make eval-rescore` (replay, $0) and the user's promote, which runs with `CHECK=1`
      first. Before the promote, every score must equal main's baseline exactly, and the answerer ID must be the only
      identity that changed; anything else is a stop.
    - The PR carries the user's `baseline-change` label.
    - A side effect, stated: per decision 0017, `eval-integrity` then lets refinements change. This row changes none.
-6. **The output check (decision 0015, row #27 amendment).**
-   - "Your order was placed/confirmed" and "order confirmed" pass only when the claim's subject is bound to an
-     order ID written directly before it, at the sentence's start ("O000064: your order …"), and that order and every order named earlier
-     in the sentence (within 64 characters) is one this turn's `get_order` returned with a confirmed status
-     (`confirmed` through `delivered`). Only "placed" and "confirmed" are vouched.
-   - Refund authority, "I've confirmed …" and a payment subject stay blocked always.
-   - With no order read this turn, the check is unchanged.
+6. **No output-check exemption (decision 0015's row #27 note; the user's N1-R option B).**
+   - "Your order was placed / has been confirmed" stays blocked on every turn, signed in or not. `output_check.py` is
+     main's.
+   - The assistant gives the status in the result's own words with the order number (`ORDERS_RULES`).
+   - An exemption bound to the named order was tried and dropped after three security passes.
 
 ## Consequences
 

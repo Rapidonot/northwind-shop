@@ -13,9 +13,10 @@ The JSON is ASCII, its strings NFKC-normalised first, and `<`, `>` and `&` are e
 can close the tag or open another one (#10b security review L6). Errors are not labelled: they are
 the fixed structured envelope, which holds no free text.
 
-`STATUSES` are the shopper-facing statuses `get_order` can return; `CONFIRMED_STATUSES` the ones of
-an order the store has confirmed, which the output check lets the assistant call confirmed or placed
-when this turn's `get_order` returned one for that order (decision 0015's row #27 amendment).
+`STATUSES` are the shopper-facing statuses `get_order` can return, split into the store's
+unconfirmed and confirmed ones. Nothing reads a status back for the output check: by the user's
+decision (row #27, N1-R option B) there is no order exemption there, so "your order has been
+confirmed" stays blocked and the assistant states the status in the result's own words.
 """
 
 from __future__ import annotations
@@ -100,20 +101,3 @@ def unlabel(text: str) -> tuple[str, Any] | None:
         return found["tool"], json.loads(found["body"])
     except ValueError:
         return None
-
-
-def order_status(text: str, is_error: bool) -> tuple[str, str] | None:
-    """(order ID, status) from a `get_order` success, or None for anything else: an error, text
-    that is not exactly one label, a malformed ID or an unknown status. The output check is vouched
-    only by this (hard rule 2)."""
-    if is_error:
-        return None
-    labelled = unlabel(text)
-    if labelled is None or labelled[0] != GET_ORDER or not isinstance(labelled[1], dict):
-        return None
-    order_id, status = labelled[1].get("order_id"), labelled[1].get("status")
-    if not isinstance(order_id, str) or not ORDER_ID.fullmatch(order_id):
-        return None
-    if not isinstance(status, str) or status not in STATUSES:
-        return None
-    return order_id, status

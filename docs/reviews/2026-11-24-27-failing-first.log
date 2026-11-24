@@ -123,3 +123,19 @@ $ uv run pytest -p no:cacheprovider -q services/assistant/tests/test_chk06_order
 11 passed in 8.71s
 $ uv run pytest -p no:cacheprovider -q services/gateway/tests/test_chk06_signin.py
 26 passed in 0.67s
+
+## 2026-11-24T15:23:20Z the user's N1-R option (B): test only, at 72aef0b's code (the exemption still in)
+$ uv run pytest -p no:cacheprovider -q services/assistant/tests/test_chk06_orders_attached.py -k test_b_
+FAILED services/assistant/tests/test_chk06_orders_attached.py::test_b_a_confirmed_or_placed_claim_stays_blocked_on_a_signed_in_turn[O000064: your order has been confirmed.]
+FAILED services/assistant/tests/test_chk06_orders_attached.py::test_b_a_confirmed_or_placed_claim_stays_blocked_on_a_signed_in_turn[O000064: your order was placed on 16 October.]
+FAILED services/assistant/tests/test_chk06_orders_attached.py::test_b_a_confirmed_or_placed_claim_stays_blocked_on_a_signed_in_turn[O000064: order confirmed, and it was delivered.]
+3 failed, 11 deselected in 5.09s
+## 2026-11-24T15:24:22Z after option (B): output_check.py == origin/main, order-status recording removed, ORDERS_RULES line added
+$ uv run pytest -p no:cacheprovider -q services/assistant/tests/test_chk06_orders_attached.py
+14 passed in 13.32s
+$ uv run pytest -p no:cacheprovider -q services/assistant/tests/test_chk06_tw_gaps.py
+29 passed in 0.69s
+$ uv run pytest -p no:cacheprovider -q services/common/tests/test_chk06_shopper_claim.py
+28 passed in 0.09s
+$ uv run pytest -p no:cacheprovider -q services/mcp-orders/tests/test_chk06_tw_edges.py
+22 passed in 4.50s

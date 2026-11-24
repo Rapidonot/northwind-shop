@@ -131,32 +131,18 @@ def test_a_result_is_labelled_escaped_data_and_reads_back() -> None:
     text = order_tool.label("get_order", value)
     assert text.count("</order_data>") == 1 and "<b>" not in text and "&" not in text.split("\n")[1]
     assert order_tool.unlabel(text) == ("get_order", value)
-    assert order_tool.order_status(text, False) == ("O000064", "delivered")
 
 
 GOOD = '<order_data tool="get_order">\n{"order_id":"O000064","status":"delivered"}\n</order_data>'
 
 
 @pytest.mark.parametrize(
-    ("text", "is_error"),
-    [
-        (order_tool.label("get_order", {"order_id": "O000064", "status": "delivered"}), True),
-        (order_tool.label("get_order", {"order_id": "O64", "status": "delivered"}), False),
-        (order_tool.label("get_order", {"order_id": "O000064", "status": "refunded"}), False),
-        (order_tool.label("get_order", ["O000064", "delivered"]), False),
-        ('{"isError": true}', True),
-        (
-            GOOD + " x",
-            False,
-        ),
-        (
-            GOOD.replace("order_data", "catalog_data"),
-            False,
-        ),
-    ],
+    "text",
+    [GOOD + " x", "x" + GOOD, GOOD + "\n" + GOOD, GOOD.replace("order_data", "catalog_data")],
 )
-def test_only_a_well_formed_success_yields_a_status(text: str, is_error: bool) -> None:
-    assert order_tool.order_status(text, is_error) is None
+def test_only_exactly_one_order_label_unlabels(text: str) -> None:
+    assert order_tool.unlabel(GOOD) == ("get_order", {"order_id": "O000064", "status": "delivered"})
+    assert order_tool.unlabel(text) is None
 
 
 def test_the_statuses_split_into_confirmed_and_not() -> None:

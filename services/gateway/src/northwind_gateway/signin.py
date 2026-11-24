@@ -23,9 +23,11 @@ from northwind_gateway.session import (
 router = APIRouter()
 
 # The one demo shopper (the user's D1) and the region on file for them in
-# data/backend/shoppers.jsonl (a test checks it). Their ten orders: O000005, O000064, O000113,
-# O000257, O000331, O000392, O000587, O000638, O000784 and O000874.
-DEMO_SHOPPER = "S0031"
+# data/backend/shoppers.jsonl (a test checks it). S0188 (the user's pick after S0031, which has no
+# `label_created` order) has eleven orders, one or more in each of the seven states:
+# delivered O000800; out for delivery O000898; in transit O000928; picked up O000267, O000466,
+# O000807, O000875; label created O000406, O000870; confirmed, not shipped O000517; on hold O000418.
+DEMO_SHOPPER = "S0188"
 DEMO_SHOPPERS = {DEMO_SHOPPER: "US"}
 
 UNAVAILABLE = {

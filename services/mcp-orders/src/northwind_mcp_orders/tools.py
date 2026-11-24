@@ -83,7 +83,7 @@ DESCRIPTION = (
     "in_transit, out_for_delivery or delivered), its lines, and the carrier's tracking scans. "
     "Always use this for order status, tracking or dates; never answer them from memory or "
     "retrieved text. It needs the order number: if the shopper has not given one, ask for it. "
-    'Example: {"order_id": "O000064"}.'
+    'Example: {"order_id": "O000800"}.'
 )
 
 SCHEMA: dict[str, Any] = {
@@ -91,7 +91,7 @@ SCHEMA: dict[str, Any] = {
     "properties": {
         "order_id": {
             "type": "string",
-            "description": "The order number the shopper gave, e.g. O000064.",
+            "description": "The order number the shopper gave, e.g. O000800.",
             "maxLength": MAX_ID_CHARS,
         }
     },

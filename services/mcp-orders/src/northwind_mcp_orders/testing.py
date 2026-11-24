@@ -23,7 +23,7 @@ from northwind_mcp_orders.server import OrdersServer
 from northwind_mcp_orders.tools import TOOLS
 
 KEY = b"o" * 40
-DEMO_SHOPPER = "S0031"
+DEMO_SHOPPER = "S0188"
 
 
 def free_port() -> int:
