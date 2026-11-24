@@ -256,8 +256,10 @@ class Understander:
         if cached is not None:
             return Understood(cached, "cache", took())
         request = build_request(message, region, self.vocab, self.model)
-        quiet_client_logs()  # the SDK's DEBUG logs hold the request body (security review L6)
         client = self._client_for(base_url)
+        # After the client is built: importing `anthropic` can raise its logger to DEBUG, and its
+        # DEBUG lines hold the request body (security review L6; re-review N1).
+        quiet_client_logs()
         call = asyncio.to_thread(client.messages.create, **request)
         try:
             response = await (asyncio.wait_for(call, self.deadline) if self.live else call)

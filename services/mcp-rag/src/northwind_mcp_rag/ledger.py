@@ -35,6 +35,7 @@ class SearchLedger:
                 del self._used[key]
             used, held = self._used.get(turn, (0, exp))
             if used >= self._max:
+                self._used[turn] = (used, max(exp, held))  # re-review N2: a refusal extends it too
                 return False
             # Row #11 (security review L1): one turn can have two tokens (the planned first search's
             # and the CLI's) with different expiries; keep the later, so the count outlives both.

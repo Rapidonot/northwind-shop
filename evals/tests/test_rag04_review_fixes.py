@@ -129,3 +129,36 @@ def test_the_sdk_logger_is_held_quiet() -> None:
 def test_live_mode_makes_no_sdk_retries() -> None:
     assert Understander(live=True)._client_for("http://127.0.0.1:9").max_retries == 0
     assert Understander(live=False)._client_for("http://127.0.0.1:9").max_retries == 2
+
+
+def test_the_sdk_logger_is_quiet_when_the_request_is_sent() -> None:
+    """Re-review N1: building the client may import `anthropic`, which can set its logger to DEBUG;
+    the logger is held quiet after that, when the request goes out."""
+    from types import SimpleNamespace
+
+    from northwind_assistant.understand import MARKER  # noqa: F401 - the module under test
+
+    levels: list[int] = []
+
+    class Client:
+        def __init__(self) -> None:
+            logging.getLogger("anthropic").setLevel(logging.DEBUG)  # what the import can do
+            self.messages = self
+
+        def create(self, **_: Any) -> Any:
+            levels.append(logging.getLogger("anthropic").level)
+            return SimpleNamespace(stop_reason="end_turn", model="m", usage=None, content=[])
+
+    understand = Understander(live=False, client_for=lambda _: Client())
+    asyncio.run(understand.plan(MULTI, "US", "http://unused"))
+    assert levels == [logging.WARNING]
+
+
+def test_a_refused_take_extends_the_cap_entry() -> None:
+    now = [1000.0]
+    ledger = SearchLedger(clock=lambda: now[0])
+    for _ in range(3):
+        assert asyncio.run(ledger.take("t", 1050))  # the CLI's token uses the cap
+    assert not asyncio.run(ledger.take("t", 1100))  # a later-expiring token is refused...
+    now[0] = 1060.0
+    assert not asyncio.run(ledger.take("t", 1100))  # ...and stays refused after the first expiry
