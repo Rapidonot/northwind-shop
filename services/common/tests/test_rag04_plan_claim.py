@@ -62,7 +62,8 @@ def test_the_plan_token_keeps_the_turns_id() -> None:
     assert claims.turn == turn == verify_for(token, key=KEY, server=RAG_SERVER).turn
 
 
-@pytest.mark.parametrize("turn", ["", "not-a-uuid", str(uuid.uuid1()), 5])
+# A fixed version-1 UUID: a generated one would differ per xdist worker (make ci collection).
+@pytest.mark.parametrize("turn", ["", "not-a-uuid", "c232ab00-9414-11ec-b3c8-9f6bdeced846", 5])
 def test_a_bad_turn_is_refused(turn: Any) -> None:
     with pytest.raises(ValueError):
         minted(turn=turn)
