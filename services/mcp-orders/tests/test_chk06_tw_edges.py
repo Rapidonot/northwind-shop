@@ -51,18 +51,18 @@ def live() -> Iterator[tuple[OrdersServer, str]]:
     "typed",
     [
         "Ｏ０００８００",  # fullwidth O000800
-        "O００００６４",  # fullwidth digits only
-        "Ｏ000064",  # fullwidth O only
+        "O０００８００",  # fullwidth digits only
+        "Ｏ000800",  # fullwidth O only
         "O000800​",  # zero-width space
         "​O000800",
         "##O000800",  # only one hash is forgiven
         "# # O000800",
-        "O 000064",
+        "O 000800",
         "O000800O000800",
         "O0008000",
         "O00006",
         "O000800\x00",
-        "O٠٠٠٠٦٤",  # Arabic-Indic digits
+        "O٠٠٠٨٠٠",  # Arabic-Indic digits
     ],
 )
 def test_lookalike_and_malformed_order_numbers_get_the_unknown_orders_bytes(

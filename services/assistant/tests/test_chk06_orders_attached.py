@@ -244,6 +244,10 @@ def test_b_a_confirmed_or_placed_claim_stays_blocked_on_a_signed_in_turn(
         llm.reply_tool_use(GET_ORDER, {"order_id": "O000800"}, tool_id="toolu_o")
         llm.reply_stream(claim)
         events = ask("Where is O000800?", SIGNED_IN, runtime_for(llm, tmp_path), orders_url)
+    # The tool really returned the order as delivered: the claim is blocked for being a claim, not
+    # because the lookup failed (scoped re-review of option B, L2).
+    labelled = order_tool.unlabel(tool_results(llm.requests[1])[0])
+    assert labelled is not None and labelled[1]["status"] == "delivered"
     shown = text_of(events)
     assert CONFIRMATION_SENTENCE in shown
     assert claim.split(":", 1)[1].strip() not in shown

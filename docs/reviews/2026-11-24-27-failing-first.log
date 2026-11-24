@@ -139,3 +139,11 @@ $ uv run pytest -p no:cacheprovider -q services/common/tests/test_chk06_shopper_
 28 passed in 0.09s
 $ uv run pytest -p no:cacheprovider -q services/mcp-orders/tests/test_chk06_tw_edges.py
 22 passed in 4.50s
+# note (scoped re-review of option B, L2): the failing run above used S0031's O000064 (the demo shopper at 72aef0b); the committed test uses S0188's O000800 and now also asserts get_order returned it as delivered, so it cannot pass for a failed lookup.
+## 2026-11-24T15:41:52Z after the option-B re-review's L1/L2 (tests) and L3 (threat model Open + Owners line)
+$ uv run pytest -p no:cacheprovider -q tests/governance/test_owners.py
+50 passed in 0.07s
+$ uv run pytest -p no:cacheprovider -q tests/governance/test_citations.py
+37 passed in 0.21s
+$ uv run pytest -p no:cacheprovider -q tests/governance/test_data_flow.py
+28 passed in 0.06s
