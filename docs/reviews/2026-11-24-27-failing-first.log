@@ -101,3 +101,25 @@ $ uv run pytest -p no:cacheprovider -q services/gateway/tests/test_cart_session.
 20 passed in 1.07s
 $ uv run pytest -p no:cacheprovider -q services/gateway/tests/test_chk01_gateway_criteria.py
 22 passed, 1 warning in 1.03s
+## 2026-11-24T15:06:26Z scoped re-review N1, N2: tests only, at 30f2e54's code
+$ uv run pytest -p no:cacheprovider -q services/assistant/tests/test_chk06_output_check.py
+FAILED services/assistant/tests/test_chk06_output_check.py::test_n1_an_id_ending_a_lead_in_clause_does_not_bind[Unlike O000064, your order has been confirmed but not yet shipped.]
+FAILED services/assistant/tests/test_chk06_output_check.py::test_n1_an_id_ending_a_lead_in_clause_does_not_bind[Besides O000064, your order was placed.]
+FAILED services/assistant/tests/test_chk06_output_check.py::test_n1_an_id_ending_a_lead_in_clause_does_not_bind[As with O000064, the order was placed.]
+FAILED services/assistant/tests/test_chk06_output_check.py::test_n1_an_id_ending_a_lead_in_clause_does_not_bind[Apart from O000064 your order has been confirmed.]
+FAILED services/assistant/tests/test_chk06_output_check.py::test_n1_an_id_ending_a_lead_in_clause_does_not_bind[Like O000064, your order was placed on time.]
+5 failed, 39 passed in 0.13s
+$ uv run pytest -p no:cacheprovider -q services/gateway/tests/test_chk06_signin.py
+FAILED services/gateway/tests/test_chk06_signin.py::test_n2_with_the_flag_off_no_method_tells_the_route_exists[HEAD]
+FAILED services/gateway/tests/test_chk06_signin.py::test_n2_with_the_flag_off_no_method_tells_the_route_exists[OPTIONS]
+FAILED services/gateway/tests/test_chk06_signin.py::test_n2_with_the_flag_off_no_method_tells_the_route_exists[TRACE]
+3 failed, 23 passed in 0.69s
+## 2026-11-24T15:06:47Z after the N1/N2 fixes (_BOUND fullmatch over the sentence, fail closed with no sentence start in view; flag-off 404 from the middleware)
+$ uv run pytest -p no:cacheprovider -q services/assistant/tests/test_chk06_output_check.py
+44 passed in 0.11s
+$ uv run pytest -p no:cacheprovider -q services/assistant/tests/test_chk06_tw_gaps.py
+145 passed in 0.61s
+$ uv run pytest -p no:cacheprovider -q services/assistant/tests/test_chk06_orders_attached.py
+11 passed in 8.71s
+$ uv run pytest -p no:cacheprovider -q services/gateway/tests/test_chk06_signin.py
+26 passed in 0.67s

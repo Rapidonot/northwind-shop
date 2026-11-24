@@ -151,7 +151,16 @@ def session_middleware(app: ASGIApp, key: Callable[[], bytes] | None = None) -> 
             await app(scope, receive, send)
             return
         if scope.get("path") == SIGNIN_PATH and not demo_signin_enabled():
-            await app(scope, receive, send)  # row #27: no session, so the 404 sets no cookie either
+            # Row #27: the flag is off, so for every method this is a missing path's 404, with no
+            # session cookie and no `Allow` header (scoped re-review N2).
+            await send(
+                {
+                    "type": "http.response.start",
+                    "status": 404,
+                    "headers": [(b"content-type", b"application/json"), (b"content-length", b"22")],
+                }
+            )
+            await send({"type": "http.response.body", "body": b'{"detail":"Not Found"}'})
             return
         try:
             cookie_key = current_key()

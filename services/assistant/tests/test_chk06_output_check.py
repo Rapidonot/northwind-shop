@@ -117,3 +117,34 @@ def test_l2_an_order_cut_by_the_windows_left_edge_still_counts(cut: int) -> None
     start = text.index("order was placed")
     assert text.index("O000113") == start - 64 - cut
     assert hits(text, live=BOTH_READ).get("confirmation", 0) == 1, text
+
+
+# ---- scoped re-review (docs/reviews/2026-11-24-27-security-rereview.raw.md), N1 ------------------
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Unlike O000064, your order has been confirmed but not yet shipped.",
+        "Besides O000064, your order was placed.",
+        "As with O000064, the order was placed.",
+        "Apart from O000064 your order has been confirmed.",
+        "Like O000064, your order was placed on time.",
+        "You asked about O000113 and O000064, your order was placed.",
+    ],
+)
+def test_n1_an_id_ending_a_lead_in_clause_does_not_bind(text: str) -> None:
+    assert hits(text, live=BOTH_READ).get("confirmation", 0) == 1
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "O000064: your order was placed on 16 October.",
+        "- O000064: your order was placed on 16 October.",
+        "Your order O000064: the order was placed on 16 October.",
+        "Thanks. For your order O000064, the order was placed on 16 October.",
+    ],
+)
+def test_n1_a_sentence_that_starts_with_its_order_still_binds(text: str) -> None:
+    assert hits(text, live=BOTH_READ).get("confirmation", 0) == 0

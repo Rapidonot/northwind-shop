@@ -46,7 +46,7 @@ but no shopper, so "own orders" had no meaning. Accounts (SA-04) are not built.
    - A side effect, stated: per decision 0017, `eval-integrity` then lets refinements change. This row changes none.
 6. **The output check (decision 0015, row #27 amendment).**
    - "Your order was placed/confirmed" and "order confirmed" pass only when the claim's subject is bound to an
-     order ID written directly before it ("O000064: your order …"), and that order and every order named earlier
+     order ID written directly before it, at the sentence's start ("O000064: your order …"), and that order and every order named earlier
      in the sentence (within 64 characters) is one this turn's `get_order` returned with a confirmed status
      (`confirmed` through `delivered`). Only "placed" and "confirmed" are vouched.
    - Refund authority, "I've confirmed …" and a payment subject stay blocked always.

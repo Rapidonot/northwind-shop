@@ -247,3 +247,16 @@ def test_two_shopper_cookies_are_no_sign_in(spy: Spy, monkeypatch: pytest.Monkey
     header = f"{session_cookie()}; {SHOPPER_COOKIE}={good}; {SHOPPER_COOKIE}={good}"
     TestClient(app).get("/api/cart", headers={"cookie": header})
     assert spy.callers[-1].shopper_id is None
+
+
+@pytest.mark.parametrize("method", ["HEAD", "OPTIONS", "TRACE"])
+def test_n2_with_the_flag_off_no_method_tells_the_route_exists(
+    spy: Spy, monkeypatch: pytest.MonkeyPatch, method: str
+) -> None:
+    """Scoped re-review N2: HEAD and OPTIONS too get the missing path's answer."""
+    monkeypatch.delenv(DEMO_SIGNIN_ENV, raising=False)
+    client = TestClient(app)
+    here = client.request(method, PATH)
+    missing = client.request(method, "/api/session/nobody")
+    assert here.status_code == missing.status_code
+    assert "allow" not in here.headers and here.headers.get_list("set-cookie") == []

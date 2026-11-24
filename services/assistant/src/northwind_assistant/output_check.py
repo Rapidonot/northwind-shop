@@ -561,11 +561,15 @@ class Source:
 
 _ORDER_ID = re.compile(r"(?<![^\W_])o\d{6}(?![^\W_])")  # the casefolded view of `O000064`
 _SENTENCE_BREAK = re.compile(r"[.!?](?=\s)|\n")
-# Row #27, security review pass 1 (M1): the named order must be the claim's own subject, written
-# directly before it ("O000064: your order", "order O000064 - the order"), with nothing between them
-# but a separator and one determiner. "O000064 …, and your other order was placed" does not bind.
+# Row #27, security review pass 1 (M1) and its scoped re-review (N1): the named order must be the
+# claim's own subject. The whole sentence before the claim must be: an optional bullet, an
+# optional fixed lead-in ("for", "re", "about", "your", "the", "order"), the ID, an optional
+# separator and one optional determiner. So "O000064: your order was placed" binds, and
+# "Unlike O000064, your order", "Besides O000064 your order" and "O000064 arrived, and your other
+# order" do not.
 _BOUND = re.compile(
-    r"(?<![^\W_])(?P<id>o\d{6})\s{0,3}[:,\-–—]?\s{0,3}(?:(?:your|the|this)\s{1,3})?$"
+    r"\s*(?:[-*•]\s{1,3})?(?:(?:for|re:?|about)\s{1,3})?(?:(?:your|the)\s{1,3})?"
+    r"(?:order\s{1,3})?(?P<id>o\d{6})\s{0,3}[:,\-–—]?\s{0,3}(?:(?:your|the|this)\s{1,3})?"
 )
 # L1: only these participles may be vouched; "approved", "processed" and the rest stay blocked.
 VOUCHED_VERBS = frozenset({"placed", "confirmed"})
@@ -575,16 +579,20 @@ def order_vouched(text: str, start: int, live: LiveValues) -> bool:
     """Row #27 (CHK-06; decision 0015's row #27 amendment): an order called confirmed or placed
     passes only when the claim's own subject is named by an order ID written directly before it,
     and every order named earlier in the same sentence, within `L` characters, is one this turn's
-    `get_order` returned with a confirmed status (`order_tool.CONFIRMED_STATUSES`). An unnamed or
-    unbound order, another sentence's order, or an order on hold, still processing or not read
-    stays blocked: the model cannot vouch for one in text. IDs are found over the whole text, so
-    one cut by the window's edge still counts (security review pass 1, L2)."""
+    `get_order` returned with a confirmed status (`order_tool.CONFIRMED_STATUSES`). "Directly
+    before" means the sentence up to the claim is only that ID with an optional bullet, fixed
+    lead-in, separator and determiner (`_BOUND`). An unnamed or unbound order, another sentence's
+    order, or an order on hold, still processing or not read stays blocked: the model cannot vouch
+    for one in text. IDs are found over the whole text, so one cut by the window's edge still
+    counts (security review pass 1, L2)."""
     if not live.orders:
         return False
     low = max(0, start - L)
     breaks = list(_SENTENCE_BREAK.finditer(text, low, start))
+    if not breaks and low > 0:
+        return False  # the sentence starts out of view: what leads into the ID is unknown (N1)
     cut = breaks[-1].end() if breaks else low
-    bound = _BOUND.search(text[cut:start])
+    bound = _BOUND.fullmatch(text, cut, start)
     if bound is None:
         return False
     named = {
