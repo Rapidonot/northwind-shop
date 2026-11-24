@@ -735,7 +735,18 @@ _PART_KEYS = frozenset(
 )
 _PLAN_KEYS = frozenset({"parts"})
 _DECIMAL = re.compile(r"\d{1,7}(?:\.\d{1,2})?", re.ASCII)
-_LONG_DIGITS = re.compile(r"(?:\d[ \-]?){12,}")  # anything card-shaped (hard rule 1)
+# Anything card-shaped (hard rule 1), screened here without `northwind_common`, which this package
+# must not depend on: 12 or more digits whatever separates them, or a card word. A search part never
+# needs either; the assistant also applies `northwind_common.cards` (row #11, test-writer finding 3).
+_CARD_WORDS = re.compile(
+    r"\b(?:c\s*v\s*v2?|c\s*v\s*c2?|cvn|cid|csc|security\s+code|card\s+(?:code|number|no)|"
+    r"expiry|expiration|exp\.?\s+date)\b",
+    re.IGNORECASE,
+)
+
+
+def card_shaped(text: str) -> bool:
+    return sum(ch.isdigit() for ch in text) >= 12 or bool(_CARD_WORDS.search(text))
 
 
 def _strings(value: Any) -> list[str] | None:
@@ -767,7 +778,7 @@ def _checked_part(raw: Any, region: str, vocab: Vocabulary) -> Part | None:
         or not text.strip()
         or len(text) > MAX_PART_CHARS
         or "\x00" in text
-        or _LONG_DIGITS.search(text)
+        or card_shaped(text)
     ):
         return None
     colours, sizes = _strings(raw["colours"]), _strings(raw["sizes"])

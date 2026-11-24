@@ -37,6 +37,7 @@ import uuid
 from dataclasses import dataclass
 from typing import Any
 
+from northwind_common.cards import contains_card_data
 from northwind_common.tool_scopes import AGENT_AUDIENCE, Audience
 
 KEY_ENV = "NORTHWIND_MCP_TOKEN_KEY"
@@ -130,6 +131,7 @@ def plan_ok(plan: Any) -> bool:
             and text.strip()
             and len(text) <= PLAN_MAX_TEXT
             and "\x00" not in text
+            and not contains_card_data(text)  # hard rule 1: never in a token (finding 2)
         ):
             return False
         for key in ("c", "s"):

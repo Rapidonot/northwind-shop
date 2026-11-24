@@ -243,6 +243,10 @@ class Understander:
             return round((time.monotonic() - start) * 1000)
 
         rules = rules_plan(message, region, self.vocab)
+        if not query_ok(message):
+            # The first search would refuse it, so no model sees it either (hard rule 1), however
+            # this is called (test-writer finding 1).
+            return Understood(rules, "skipped", took())
         if not rules.needs_model:
             return Understood(rules, "rules", took())
         key = (" ".join(message.split()).casefold(), region, PROMPT_VERSION)
