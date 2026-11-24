@@ -1492,7 +1492,7 @@ def _repeats(shown: str, fixed: str) -> bool:
 
 
 def _shown_before(shown: str, fixed: str) -> bool:
-    """Whether `fixed` is anywhere in the text on screen, compared in the matching view (row #17)."""
+    """Whether `fixed` is anywhere in the text on screen, in the matching view (row #17)."""
     return bool(shown) and normal(fixed) in normal(shown)
 
 

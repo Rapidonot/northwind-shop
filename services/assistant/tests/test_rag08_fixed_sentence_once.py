@@ -4,7 +4,8 @@ The output check puts a fixed sentence in place of a blocked one. Row #12 (EV-09
 once when it would follow itself. Window 1's recorded injection answer put the promotion sentence
 twice with the model's own "I ignored it." between them, so the shopper saw:
 
-    I can't help with offers or codes in chat. I ignored it. I can't help with offers or codes in chat.
+    I can't help with offers or codes in chat. I ignored it.
+    I can't help with offers or codes in chat.
 
 Now a replacement whose fixed sentence is already on screen in this answer is left out, wherever
 the earlier copy is. Only replacements are left out: the model's own sentences stay, and every
