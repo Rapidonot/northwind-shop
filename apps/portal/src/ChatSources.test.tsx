@@ -128,4 +128,52 @@ describe("[SA-02] source links and product cards", () => {
     expect(within(sources).getByText("FAQ-019")).toBeInTheDocument();
     expect(sources).toHaveTextContent("Returns (United States)");
   });
+
+  // Security review L1 (row #17): items inside `sources` are checked too, so a malformed card can
+  // neither crash the chat (which would take the AI disclosure with it) nor make a card.
+  it.each([
+    ["a null item", [null]],
+    ["a number", [3]],
+    ["a numeric id", [{ id: 1, type: "product", title: "X" }]],
+    ["an object title", [{ ...RUG, title: {} }]],
+  ])("drops %s in sources, keeps the answer and the AI disclosure", async (_name, sources) => {
+    respond(
+      frame("token", { text: "A flatweave rug [P0178]." }),
+      frame("citations", { source_ids: ["P0178"], sources }),
+      frame("done", {}),
+    );
+    ask("Tell me about the rug");
+    expect(await within(screen.getByTestId("answer")).findByRole("link")).toHaveTextContent(
+      "[P0178]",
+    );
+    expect(screen.getByText(/chatting with an AI assistant/)).toBeInTheDocument();
+    expect(screen.queryByRole("article")).toBeNull();
+  });
+
+  it("keeps a card's string fields and drops any other", () => {
+    const { events } = parseFrames(
+      frame("citations", {
+        source_ids: ["P0178"],
+        sources: [{ id: "P0178", type: "product", title: "Rug", brand: 7, department: null }],
+      }),
+    );
+    expect(events).toEqual([
+      { type: "citations", sourceIds: ["P0178"], sources: [{ id: "P0178", type: "product", title: "Rug" }] },
+    ]);
+  });
+
+  // Security review note (row #17): a group marker keeps its own spacing; links change no text.
+  it("leaves a group marker's text exactly as streamed", async () => {
+    respond(
+      frame("token", { text: "Warm [P0178,R01080] and flat [P0178 ,  P9999]." }),
+      frame("citations", { source_ids: ["P0178", "R01080"], sources: [RUG, REVIEW] }),
+      frame("done", {}),
+    );
+    ask("Is it warm?");
+    const answer = screen.getByTestId("answer");
+    await within(answer).findAllByRole("link");
+    expect(answer.textContent).toBe("Warm [P0178,R01080] and flat [P0178 ,  P9999].");
+    const hrefs = within(answer).getAllByRole("link").map((link) => link.getAttribute("href"));
+    expect(hrefs).toEqual(["#source-P0178", "#source-R01080", "#source-P0178"]);
+  });
 });

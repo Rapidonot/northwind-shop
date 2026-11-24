@@ -26,6 +26,22 @@ export type ChatEvent =
 
 const GENERIC_REFUSAL = "That message could not be accepted.";
 
+const CARD_TEXT = ["title", "brand", "department"] as const;
+
+/** A card is kept only with a string `id` and `type`; of the rest, only string fields are copied
+ * (row #17, security review L1), so a malformed item can neither crash the chat nor make a card. */
+function toCard(item: unknown): SourceCard[] {
+  if (typeof item !== "object" || item === null) return [];
+  const raw = item as Record<string, unknown>;
+  if (typeof raw.id !== "string" || typeof raw.type !== "string") return [];
+  const card: SourceCard = { id: raw.id, type: raw.type };
+  for (const key of CARD_TEXT) {
+    const value = raw[key];
+    if (typeof value === "string") card[key] = value;
+  }
+  return [card];
+}
+
 function toEvent(name: string, data: string): ChatEvent | null {
   const body = JSON.parse(data) as Record<string, unknown>;
   switch (name) {
@@ -37,7 +53,7 @@ function toEvent(name: string, data: string): ChatEvent | null {
       return {
         type: "citations",
         sourceIds: body.source_ids as string[],
-        sources: Array.isArray(body.sources) ? (body.sources as SourceCard[]) : [],
+        sources: Array.isArray(body.sources) ? body.sources.flatMap(toCard) : [],
       };
     case "error":
       return { type: "error", code: body.code as ErrorCode };

@@ -46,17 +46,17 @@ function linked(answer: string, cited: ReadonlySet<string>): ReactNode[] {
         </a>,
       );
     } else {
-      // "[P0011, R00002]": each cited ID in the group is its own link.
+      // "[P0011, R00002]": each cited ID in the group is its own link; the commas and spaces are
+      // kept exactly as streamed, so links change no text.
       out.push("[");
-      ids.forEach((id, n) => {
-        if (n > 0) out.push(", ");
+      (match[1] ?? "").split(/(\s*,\s*)/).forEach((part, n) => {
         out.push(
-          cited.has(id) ? (
-            <a key={`${start}-${id}`} href={`#${anchor(id)}`}>
-              {id}
+          n % 2 === 0 && cited.has(part.trim()) ? (
+            <a key={`${start}-${n}`} href={`#${anchor(part.trim())}`}>
+              {part}
             </a>
           ) : (
-            id
+            part
           ),
         );
       });

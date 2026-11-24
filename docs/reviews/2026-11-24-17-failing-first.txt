@@ -52,3 +52,28 @@ FAILED services/assistant/tests/test_chk01_cart.py::test_no_recorded_cart_answer
   `AssertionError: expected <article …(1)>…(3)</article> to be null` (`<article aria-label="Larchpell Rug">` with
   `<a href="#source-P0178">`, an anchor the Sources list never has). Fixed in `Chat.tsx`: cards are kept only for IDs
   in `source_ids`. After the fix: Vitest 9 files, 98 passed; the two pytest files 15 passed; `make lint` clean.
+
+## Security review (one pass, at `2925a7f`; raw: `docs/reviews/2026-11-24-17-security-review.raw.md`)
+No critical, high or medium. Triage (decision 0021):
+- **L1 (low, real bug in the row's files): fixed.** A malformed item inside `sources` (`[null]`, a non-string title)
+  crashed Chat and took the AI disclosure with it. `chatStream.ts` now keeps an item only with a string `id` and
+  `type` and copies only string fields. Failing first (`vitest run src/ChatSources.test.tsx`, before the fix):
+       × drops a null item in sources, keeps the answer and the AI disclosure 1006ms
+       × drops an object title in sources, keeps the answer and the AI disclosure 1006ms
+       × keeps a card's string fields and drops any other 3ms
+       × leaves a group marker's text exactly as streamed 10ms
+  ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+        Tests  4 failed | 8 passed (12)
+  (the number and numeric-id cases passed already: the cited-ID filter drops them.) After: 9 files, 104 passed.
+- **L2 (low, hardening, no failure confirmed): PR body only.** Card fields don't go through the output check; they rely
+  on RAG-09's ingest scan, which the reviewer judged sound.
+- **Note, group marker text (a real bug in the row's files): fixed.** `[P0178,P9999]` re-rendered as
+  `[P0178, P9999]`; the commas and spaces are now kept exactly as streamed (the last test in the log above), and a
+  cited ID with spaces around it in a group still links.
+- **Note, documents get a title:** by design (`TRUSTED_SOURCE_TYPES`); the PR body says so.
+- No medium or higher was fixed, so there is no scoped re-review. `prompt.py` did not change: the prompt hash stays
+  `95d4b694`.
+
+## Serial run after the review fixes (no xdist, replay)
+- `make lint`: clean. pytest (services/assistant, services/gateway, tests/governance): 1 failed, 1517 passed, 109 deselected.
+  The one failure is the window-2 test. Vitest: 9 files, 104 passed.
