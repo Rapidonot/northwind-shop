@@ -50,7 +50,7 @@ WARNING  northwind_assistant.understand:understand.py:263 query understanding fa
 ## After the fact (the advisor's full review, finding H1)
 
 Each fix's pinning tests were run against the pre-fix file (`git show <rev>:<path>`) or a one-line mutation, then the
-file was restored from HEAD. The runner is `/tmp/…/ff_runner.py`.
+file was restored from HEAD. The runner, with the final cases, is committed at `docs/reviews/2026-11-24-11-ff-runner.py.txt`. The authoritative output is in the last section, "Final run of the committed runner".
 
 - **Two weak first attempts** were replaced by the lines at the end of the list:
   - The L4 swap failed only at import, so a mutation of `_around` replaces it.
@@ -125,10 +125,62 @@ E            +  where True = names_catalog_product('Tell me about the Corvane As
 - **M2 red team: RT-010/011 part texts are frozen queries (mutation: drop the red-team line)** (mutation): `1 failed in 1.79s`
   `E       AssertionError: assert {'EU parcel c...t and timing'} <= {'A review sa... price?', ...}`
 
-- **The runner is committed for reproduction:** `docs/reviews/2026-11-24-11-ff-runner.py.txt`. Run it from the
-  repo root with `uv run python`, on a clean tree; it restores every file from HEAD.
+- **The runner, as first committed, still held the superseded cases** (the advisor's last re-read). It now holds the
+  final ones; see the next section.
 - **A session edit of a `test-writer` test (its L3):**
   - In `test_rag04_post_review_tw.py`, the session changed `assert len(new) == 5` to `<= 5`, so the check still
     holds once this row merges and `origin/main` already holds the keys.
   - The property `new <= wanted` (every new key is a frozen query's key) is unchanged.
   - The test never failed; this is not a relaxation made after a failure.
+
+## Final run of the committed runner (authoritative; the advisor's last re-read, L2)
+
+- **The runner:** `docs/reviews/2026-11-24-11-ff-runner.py.txt`, with the final 19 cases. Each case gives the exact
+  file at a revision, or the exact old and new text of the mutation, and its test IDs.
+- **The cases:**
+  - the four replacements (L4 `_around`; L4 size check; M2 red team; the cache in every mode);
+  - the user's items 3 and 4, and the deadline mutation;
+  - H2-L1.
+- **The run:** from the repo root, `uv run python <copy of the runner>`, on a clean tree (it asserts clean before and
+  after and restores every file from HEAD), 2026-11-24 at `f4c6686`. Output:
+
+- **security M1: planner stops on non-replayed paths** (evals/src/northwind_evals/query_plans.py@6d86bb3): `5 failed in 1.70s`
+  `E       Failed: DID NOT RAISE SystemExit`
+- **security L1: cap keeps the later expiry** (services/mcp-rag/src/northwind_mcp_rag/ledger.py@6d86bb3): `1 failed in 0.47s`
+  `E       assert not True`
+- **security L2+L3: card text in c/s items; turn with a trailing newline** (services/common/src/northwind_common/mcp_token.py@6d86bb3): `3 failed in 0.46s`
+  `E       AssertionError: assert not True`
+- **security L4: around bounds in range (mutation: _around returns them unclamped)** (mutation in services/rag/src/northwind_rag/query.py): `2 failed in 0.47s`
+  `E       assert (0, 0) == None`
+- **security L4: the eval falls back like the gateway when the token cannot hold the plan (mutation: no size check)** (mutation in evals/src/northwind_evals/query_plans.py): `1 failed in 0.49s`
+  `E       AssertionError: assert [('éééééééééé..., 'P0136'})))] == [('something'...oducts=None))]`
+- **security L6: the SDK logger is quiet** (services/assistant/src/northwind_assistant/rag_client.py@6d86bb3): `1 failed in 0.46s`
+  `E       AssertionError: assert 'anthropic' in ('mcp.client', 'mcp.shared', 'httpx', 'httpcore', 'httpx2', 'httpcore2')`
+- **security L7: no SDK retries in live mode** (services/assistant/src/northwind_assistant/understand.py@6d86bb3): `1 failed in 1.20s`
+  `E       AssertionError: assert 2 == 0`
+- **re-review N1: quiet after the client is built** (services/assistant/src/northwind_assistant/understand.py@330f379): `1 failed in 0.46s`
+  `E       assert [10] == [30]`
+- **re-review N2: a refusal extends the cap entry** (services/mcp-rag/src/northwind_mcp_rag/ledger.py@330f379): `1 failed in 0.44s`
+  `E       AssertionError: assert not True`
+- **test-writer F1+F2: card text never to Haiku or a token on its own** (services/assistant/src/northwind_assistant/understand.py@dd4de87, services/common/src/northwind_common/mcp_token.py@dd4de87): `2 failed in 0.57s`
+  `E       AssertionError: assert ['multi_part-...ewlines', ...] == []`
+- **test-writer F3: validate_plan refuses card text in any form** (services/rag/src/northwind_rag/query.py@dd4de87): `1 failed in 0.10s`
+  `E       AssertionError: assert ['dotted', 's... 'cvv_spaced'] == []`
+- **M2: eval part texts are frozen queries** (evals/src/northwind_evals/cli.py@bfe9ca8): `1 failed in 1.64s`
+  `E       AssertionError: assert {'alpaca-blen...nce question'} <= {'A review sa... price?', ...}`
+- **M2 red team: RT-010/011 part texts are frozen queries (mutation: drop the red-team line)** (mutation in evals/src/northwind_evals/cli.py): `1 failed in 1.83s`
+  `E       AssertionError: assert {'EU parcel c...t and timing'} <= {'A review sa... price?', ...}`
+- **named product, gateway path** (services/assistant/src/northwind_assistant/understand.py@b4a3521^): `4 failed in 0.45s`
+  `E       AssertionError: assert {'parts': [{'c': ['Glacier Blue'], 's': ['4XL']}]} is None`
+- **named product, eval path** (evals/src/northwind_evals/query_plans.py@b4a3521^): `4 failed in 0.56s`
+  `E       AssertionError: assert [('Is the Cor...oducts=None))] == [('Is the Cor...oducts=None))]`
+- **user's item 3: the cache is live-mode only (mutation: cache read and write in every mode)** (mutation in services/assistant/src/northwind_assistant/understand.py): `1 failed in 0.52s`
+  `E           assert 1 == 3`
+- **decision 0022: the deadline is live-mode only (mutation: deadline in every mode)** (mutation in services/assistant/src/northwind_assistant/understand.py): `1 failed in 1.13s`
+  `E       AssertionError: assert ('timeout' == 'model'`
+- **user's item 4: the model is not told the filter (mutation: name it in the prompt)** (mutation in services/assistant/src/northwind_assistant/turn.py): `1 failed in 1.80s`
+  `E           assert 'price_max' not in '[{"role": "... "medium"}}]'`
+- **security H2-L1: an internal product's name is not a key (mutation: keys from every product)** (mutation in services/rag/src/northwind_rag/query.py): `1 failed in 0.46s`
+  `E           AssertionError: assert not True`
+
+- **Result:** all 19 cases fail as they should. The earlier lists above are kept as the history.

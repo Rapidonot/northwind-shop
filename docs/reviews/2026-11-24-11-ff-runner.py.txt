@@ -1,4 +1,4 @@
-"""Row #11: failing-first evidence after the fact. Each case swaps in the pre-fix file (git show
+"""Row #11: failing-first evidence after the fact (final cases, after the advisor's re-reads). Each case swaps in the pre-fix file (git show
 <rev>:<path>) or applies a one-line mutation, runs the pinning tests, records the result, and
 restores the file from HEAD. The tree must be clean before and after."""
 import os, subprocess, sys
@@ -13,8 +13,8 @@ CASES = [
  ("security M1: planner stops on non-replayed paths", [(QP,'6d86bb3')], None, [f"{R}::test_the_planner_stops_on_any_plan_not_from_a_replayed_reply"]),
  ("security L1: cap keeps the later expiry", [('services/mcp-rag/src/northwind_mcp_rag/ledger.py','6d86bb3')], None, [f"{R}::test_the_cap_entry_keeps_the_later_expiry"]),
  ("security L2+L3: card text in c/s items; turn with a trailing newline", [('services/common/src/northwind_common/mcp_token.py','6d86bb3')], None, [f"{R}::test_card_text_in_a_colour_or_size_item_is_refused", f"{R}::test_a_turn_with_a_trailing_newline_is_refused"]),
- ("security L4: around bounds in range", [('services/rag/src/northwind_rag/query.py','6d86bb3')], None, [f"{R}::test_around_bounds_stay_in_range"]),
- ("security L4: the eval scores the gateway's fallbacks", [(QP,'6d86bb3')], None, [f"{R}::test_a_plan_the_token_cannot_hold_is_scored_as_the_plain_search", f"{R}::test_a_plain_plan_is_the_plain_search"]),
+ ("security L4: around bounds in range (mutation: _around returns them unclamped)", [], [('services/rag/src/northwind_rag/query.py', "    return (low if low > 0 else None), (min(high, MAX_MINOR) if high > 0 else None)", "    return low, high")], [f"{R}::test_around_bounds_stay_in_range"]),
+ ("security L4: the eval falls back like the gateway when the token cannot hold the plan (mutation: no size check)", [], [(QP, "    except ValueError:\n        return [(message, SearchFilter())]  # `mint_planned` falls back the same way", "    except ValueError:\n        pass")], [f"{R}::test_a_plan_the_token_cannot_hold_is_scored_as_the_plain_search"]),
  ("security L6: the SDK logger is quiet", [('services/assistant/src/northwind_assistant/rag_client.py','6d86bb3')], None, [f"{R}::test_the_sdk_logger_is_held_quiet"]),
  ("security L7: no SDK retries in live mode", [(UN,'6d86bb3')], None, [f"{R}::test_live_mode_makes_no_sdk_retries"]),
  ("re-review N1: quiet after the client is built", [(UN,'330f379')], None, [f"{R}::test_the_sdk_logger_is_quiet_when_the_request_is_sent"]),
@@ -22,12 +22,13 @@ CASES = [
  ("test-writer F1+F2: card text never to Haiku or a token on its own", [(UN,'dd4de87'),('services/common/src/northwind_common/mcp_token.py','dd4de87')], None, [f"{CD}::test_the_planner_on_its_own_never_sends_card_text_to_haiku", f"{CD}::test_mint_planned_on_its_own_never_mints_card_text"]),
  ("test-writer F3: validate_plan refuses card text in any form", [('services/rag/src/northwind_rag/query.py','dd4de87')], None, [f"{VP}::test_a_part_with_card_text_in_any_form_is_never_in_a_validated_plan"]),
  ("M2: eval part texts are frozen queries", [('evals/src/northwind_evals/cli.py','bfe9ca8')], None, [f"{R}::test_the_planned_part_texts_are_frozen_queries"]),
- ("M2 red team: RT-010/011 part texts are frozen queries", [('evals/src/northwind_evals/cli.py','ce9f4c5'),(QP,'ce9f4c5')], None, [f"{R}::test_the_red_teams_planned_part_texts_are_frozen_queries"]),
+ ("M2 red team: RT-010/011 part texts are frozen queries (mutation: drop the red-team line)", [], [('evals/src/northwind_evals/cli.py', '    texts += part_texts(red_plans, suite="assistant-redteam")\n', '')], [f"{R}::test_the_red_teams_planned_part_texts_are_frozen_queries"]),
  ("named product, gateway path", [(UN,'b4a3521^')], None, [f"{N}::test_the_gateway_runs_the_plain_search_for_a_named_product"]),
  ("named product, eval path", [(QP,'b4a3521^')], None, [f"{N}::test_the_eval_runs_the_plain_search_for_a_named_product"]),
- ("user's item 3: the cache is live-mode only (mutation: cache in every mode)", [], (UN, "        if not self.live:\n            return None  # record and replay read every cassette\n", ""), [f"{T}::test_the_cache_is_live_mode_only"]),
- ("decision 0022: the deadline is live-mode only (mutation: deadline in every mode)", [], (UN, "await (asyncio.wait_for(call, self.deadline) if self.live else call)", "await asyncio.wait_for(call, self.deadline)"), [f"{T}::test_the_deadline_applies_in_live_mode_only"]),
- ("user's item 4: the model is not told the filter (mutation: name it in the prompt)", [], ('services/assistant/src/northwind_assistant/turn.py', "run_turn(user_prompt(message, found)", "run_turn(user_prompt(message + ' [filter price_max]', found)"), [f"{T}::test_the_model_is_not_told_the_filter_and_the_check_is_the_fallback"]),
+ ("user's item 3: the cache is live-mode only (mutation: cache read and write in every mode)", [], [(UN, "        if not self.live:\n            return None  # record and replay read every cassette\n", ""), (UN, "        if not self.live:\n            return\n        self._cache[key] = plan", "        self._cache[key] = plan")], [f"{T}::test_the_cache_is_live_mode_only"]),
+ ("decision 0022: the deadline is live-mode only (mutation: deadline in every mode)", [], [(UN, "await (asyncio.wait_for(call, self.deadline) if self.live else call)", "await asyncio.wait_for(call, self.deadline)")], [f"{T}::test_the_deadline_applies_in_live_mode_only"]),
+ ("user's item 4: the model is not told the filter (mutation: name it in the prompt)", [], [('services/assistant/src/northwind_assistant/turn.py', "run_turn(user_prompt(message, found)", "run_turn(user_prompt(message + ' [filter price_max]', found)")], [f"{T}::test_the_model_is_not_told_the_filter_and_the_check_is_the_fallback"]),
+ ("security H2-L1: an internal product's name is not a key (mutation: keys from every product)", [], [('services/rag/src/northwind_rag/query.py', "        if product.get(\"visibility\") != \"public\":\n            continue\n", "")], [f"{N}::test_an_internal_products_name_is_not_a_key"]),
 ]
 def git(*a): return subprocess.run(['git',*a],capture_output=True,text=True)
 assert not git('status','--porcelain').stdout.strip(), 'tree not clean'
@@ -37,15 +38,15 @@ for label, swaps, mutation, tests in CASES:
     for p,rev in swaps:
         r=git('show',f'{rev}:{p}'); assert r.returncode==0, (p,rev,r.stderr)
         open(p,'w').write(r.stdout)
-    if mutation:
-        p,old,new=mutation; s=open(p).read(); assert old in s, (label, old); open(p,'w').write(s.replace(old,new,1)); paths.append(p)
+    for p,old,new in (mutation or []):
+        s=open(p).read(); assert old in s, (label, old); open(p,'w').write(s.replace(old,new,1)); paths.append(p)
     env=dict(os.environ, LLM_MODE='replay')
     r=subprocess.run(['uv','run','pytest','-q','-p','no:xdist',*tests],capture_output=True,text=True,env=env,timeout=900)
     lines=r.stdout.splitlines()
     summary=lines[-1] if lines else r.stderr[-200:]
     first_e=next((l for l in lines if l.startswith('E ')), '')
     git('checkout','HEAD','--',*paths)
-    src=', '.join(f'{p}@{rev}' for p,rev in swaps) or f'mutation in {mutation[0]}'
+    src=', '.join(f'{p}@{rev}' for p,rev in swaps) or 'mutation in ' + ', '.join(sorted({m[0] for m in mutation}))
     out.append(f"- **{label}** ({src}): `{summary}`" + (f"\n  `{first_e[:220]}`" if first_e else ''))
     print(out[-1], flush=True)
 assert not git('status','--porcelain').stdout.strip(), 'tree not clean after'
