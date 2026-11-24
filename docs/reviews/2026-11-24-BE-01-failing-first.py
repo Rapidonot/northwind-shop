@@ -4,8 +4,9 @@
 
 For each fix: copy services/backend/src to a scratch dir, revert that one fix there (an exact string
 swap, which must match once), and run that fix's tests with the copy first on PYTHONPATH. Every case
-must fail. Then the same tests run once at the head, where they must pass. It also runs the three
-test files the first log left out against origin/main's source.
+must fail. Then the same tests run once at the head, where they must pass. Optional arguments pick
+cases whose name contains them. The collection run of the left-out test files against origin/main's
+source is a separate command, saved with its output in the failing-first log.
 """
 
 from __future__ import annotations
@@ -90,9 +91,16 @@ CASES: list[tuple[str, str, str, str, list[str]]] = [
         ],
     ),
     (
-        "N4 a cancel from outside closes the task and run attempts",
+        "N4 a cancel from outside closes the run attempt (orchestrator.run)",
         "northwind_backend/orchestrator/run.py",
         '_close_cancelled(audit, action_id, "orchestrator.run", run_inputs)',
+        "pass",
+        [RF + "test_a_cancel_from_outside_closes_every_open_attempt"],
+    ),
+    (
+        "N4 a cancel from outside closes the task attempts (orchestrator.task)",
+        "northwind_backend/orchestrator/run.py",
+        '_close_cancelled(audit, action_id, "orchestrator.task", inputs, labels)',
         "pass",
         [RF + "test_a_cancel_from_outside_closes_every_open_attempt"],
     ),
@@ -120,7 +128,8 @@ def main() -> int:
     print(f"\n# Review-fix failing-first (advisor finding 1), at head {head.stdout.strip()}")
     bad = 0
     with tempfile.TemporaryDirectory(dir=os.environ.get("TMPDIR")) as tmp:
-        for name, rel, old, new, nodes in CASES:
+        picked = [c for c in CASES if not sys.argv[1:] or any(a in c[0] for a in sys.argv[1:])]
+        for name, rel, old, new, nodes in picked:
             copy = Path(tmp) / "src"
             if copy.exists():
                 shutil.rmtree(copy)

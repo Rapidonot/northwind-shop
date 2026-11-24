@@ -37,3 +37,21 @@ E   ModuleNotFoundError: No module named 'northwind_backend.agents.returns_track
 E   ModuleNotFoundError: No module named 'northwind_backend.orchestrator'
 2 errors in 0.45s
 (the script: one exact source swap per case, run serially; the cases and swaps are listed in its output)
+
+# Advisor re-read finding A: the 10th case (N4, orchestrator.task), run alone
+$ uv run python docs/reviews/2026-11-24-BE-01-failing-first.py orchestrator.task
+
+# Review-fix failing-first (advisor finding 1), at head 96fd5db
+- N4 a cancel from outside closes the task attempts (orchestrator.task) (fix reverted in northwind_backend/orchestrator/run.py): 1 failed in 4.05s -> fails as it should
+  at head: 1 passed in 3.99s
+
+# Advisor re-read finding D: collection of the left-out test files against origin/main 4379687 source (<base> = git archive 4379687 services/backend/src services/llm-replay/src)
+# test_be01_recorded.py is a replay test of the same new modules; it is included here too.
+$ PYTHONPATH=<base>/services/backend/src:<base>/services/llm-replay/src uv run pytest services/backend/tests/orchestrator/test_be01_criteria.py services/backend/tests/orchestrator/test_be01_review_fixes.py services/backend/tests/orchestrator/test_be01_recorded.py -q -p no:cacheprovider
+__ ERROR collecting services/backend/tests/orchestrator/test_be01_criteria.py __
+E   ModuleNotFoundError: No module named 'northwind_backend.agents.returns_track'
+_ ERROR collecting services/backend/tests/orchestrator/test_be01_review_fixes.py _
+E   ModuleNotFoundError: No module named 'northwind_backend.orchestrator'
+__ ERROR collecting services/backend/tests/orchestrator/test_be01_recorded.py __
+E   ModuleNotFoundError: No module named 'northwind_backend.orchestrator'
+3 errors in 0.45s
