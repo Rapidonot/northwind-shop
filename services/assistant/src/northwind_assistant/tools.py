@@ -26,7 +26,7 @@ from typing import Any, Protocol
 
 from northwind_assistant.output_check import LiveValues, Source
 from northwind_assistant.rag_client import SearchResult
-from northwind_common import catalog_tool
+from northwind_common import catalog_tool, order_tool
 from northwind_common.cards import contains_card_data
 from northwind_common.errors import ENVELOPE_KEYS
 from northwind_common.rag_tool import (
@@ -150,6 +150,12 @@ def record_live(state: ToolState, tool: str, *, is_error: bool, text: str) -> No
     behind our own refusal envelope (`catalog_tool.labelled_result`)."""
     if tool in catalog_tool.CART_TOOL_NAMES:
         _record_cart(state, tool, is_error=is_error, text=text)
+        return
+    if tool == order_tool.GET_ORDER_TOOL:
+        # Row #27 (CHK-06): the order's status, from a well-formed success only.
+        found = order_tool.order_status(text, is_error)
+        if found is not None:
+            state.live.orders[found[0]] = found[1]
         return
     if is_error or state.region is None:
         return

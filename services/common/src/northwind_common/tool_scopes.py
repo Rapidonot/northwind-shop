@@ -11,6 +11,10 @@ Row #16 (CHK-01, decision 0019): the cart tools live on northwind-catalog, besid
 whose stock they check, but in their own set. The assistant gets them (PRD §7 "cart tools"); the
 portal's own agent, `shopper-portal`, gets `get_cart` only, to show the cart in the chat panel; the
 catalog subagent gets none. No cart tool places an order.
+
+Row #27 (CHK-06, decision 0023): northwind-orders and its one read tool, `get_order`, for the
+assistant only (PRD §7: "get_order (own orders)"). The server answers only for the signed-in
+shopper in the token (`shp`), so a session with no sign-in gets no order. No other agent has it.
 """
 
 from __future__ import annotations
@@ -38,11 +42,16 @@ GET_CART = "get_cart"
 CART_WRITE_TOOLS = frozenset({"add_to_cart", "remove_from_cart", "set_cart_quantity"})
 CART_TOOLS = frozenset({GET_CART, *CART_WRITE_TOOLS})
 
+# Row #27 (CHK-06). One read of the signed-in shopper's own order; no write, no list.
+GET_ORDER = "get_order"
+ORDER_TOOLS = frozenset({GET_ORDER})
+
 AGENT_TOOLS: Mapping[str, Mapping[str, frozenset[str]]] = {
     "shopper-assistant": {
         "northwind-rag": frozenset({"retrieve_context"}),
         # PRD §7, decision D1 at #10b; attached at #12 (RAG-09).
         "northwind-catalog": CATALOG_READ_TOOLS | CART_TOOLS,  # cart: row #16
+        "northwind-orders": ORDER_TOOLS,  # row #27 (CHK-06), attached only when signed in
     },
     "shopper-portal": {"northwind-rag": frozenset(), "northwind-catalog": frozenset({GET_CART})},
     # PRD §7 gives it catalog writes, not reads, and no write tool exists yet.

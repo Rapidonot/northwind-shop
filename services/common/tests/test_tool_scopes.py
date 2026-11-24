@@ -28,6 +28,8 @@ def test_the_assistant_gets_exactly_retrieve_context_and_no_resource() -> None:
                 "set_cart_quantity",
             }
         ),
+        # Row #27 (CHK-06): `get_order` (own orders), as PRD §7 lists it. Still exact.
+        "northwind-orders": frozenset({"get_order"}),
     }
     assert tool_scopes.allowed_resources("shopper-assistant", "northwind-rag") == frozenset()
     assert tool_scopes.AGENT_AUDIENCE["shopper-assistant"] == "shopper"
@@ -41,7 +43,7 @@ def test_no_agent_has_a_tool_its_prd_row_forbids() -> None:
 
 def test_an_unknown_agent_or_server_gets_nothing() -> None:
     assert tool_scopes.allowed_tools("refund-bot", "northwind-rag") == frozenset()
-    assert tool_scopes.allowed_tools("shopper-assistant", "northwind-orders") == frozenset()
+    assert tool_scopes.allowed_tools("shopper-assistant", "northwind-unknown") == frozenset()
     assert tool_scopes.allowed_resources("nobody", "northwind-rag") == frozenset()
 
 
@@ -58,3 +60,20 @@ def test_only_staff_may_read_the_index_manifest() -> None:
         if "northwind-rag://index/manifest" in tool_scopes.allowed_resources(agent, "northwind-rag")
     }
     assert readers and all(tool_scopes.AGENT_AUDIENCE[a] == "staff" for a in readers)
+
+
+@pytest.mark.req("CHK-06")
+def test_get_order_is_the_assistants_alone() -> None:
+    """Row #27: no other agent has `get_order` or any northwind-orders tool, and no agent has an
+    order write: no list, refund, cancel or return tool exists on the server."""
+    holders = {
+        agent
+        for agent in tool_scopes.agents()
+        if tool_scopes.allowed_tools(agent, "northwind-orders")
+    }
+    assert holders == {"shopper-assistant"}
+    assert tool_scopes.ORDER_TOOLS == frozenset({"get_order"})
+    for agent in tool_scopes.agents():
+        for server, tools in tool_scopes.AGENT_TOOLS[agent].items():
+            if server != "northwind-orders":
+                assert "get_order" not in tools

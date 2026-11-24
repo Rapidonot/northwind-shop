@@ -404,3 +404,23 @@ The changed shown answers are re-judged in W6. Tests: `services/assistant/tests/
 ## Row #17 note (2026-11-24)
 
 `REPLACED_IN_RECORDING` is now `{"RT-003"}`. See decision 0018, "Row #17 amendment".
+
+## Row #27 amendment (2026-11-24): an order's own status (CHK-06, decision 0023)
+
+- **Confirmation class, order subject only.** A signed-in turn can read an order's status with `get_order`.
+  - "Your order was placed / has been confirmed" (the first confirmation pattern, with an `order` subject) and
+    "order confirmed" pass when the same sentence, before the claim and within `L` characters, names one or more
+    orders, and every one of them is an order this turn's `get_order` returned with a confirmed status
+    (`order_tool.CONFIRMED_STATUSES`: `confirmed` through `delivered`). The status is read from the tool result
+    (`LiveValues.orders`), never from text.
+  - Anything else stays blocked:
+    - an unnamed order;
+    - an order named only after the claim, or in another sentence;
+    - an order on hold, still processing, or not read this turn;
+    - a payment, refund, discount or code subject;
+    - "I've / we have confirmed";
+    - refund authority.
+- **Anonymous turns are unchanged.** With no order read, `LiveValues.orders` is empty and every match is decided as
+  before. #12's and #13's tests pass unchanged.
+- **Evals.** `live_order` joins `LIVE_EXEMPTIONS`, so `live_backed` counts a vouched order sentence as tool-backed,
+  not sourced. The eval answerer is never signed in, so no eval answer changes.

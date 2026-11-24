@@ -89,8 +89,9 @@ def test_the_gateway_has_no_route_that_places_an_order_or_writes_a_cart() -> Non
     assert set(schema["/api/cart"]) == {"get"}
 
 
-def test_the_session_paths_are_the_chat_and_the_cart_only() -> None:
-    assert set(SESSION_PATHS) == {"/api/chat", "/api/cart"}
+def test_the_session_paths_are_the_chat_the_cart_and_the_sign_in() -> None:
+    # Row #27 (CHK-06): the demo sign-in binds its shopper to the session. Still exact.
+    assert set(SESSION_PATHS) == {"/api/chat", "/api/cart", "/api/session/shopper"}
 
 
 # ---- who is asking comes from the server, never from the request ----

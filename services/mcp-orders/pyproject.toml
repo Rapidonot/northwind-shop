@@ -1,0 +1,19 @@
+[project]
+name = "northwind-mcp-orders"
+version = "0.0.0"
+description = "northwind-orders MCP server: the signed-in shopper's own order status and tracking (CHK-06, row #27)"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "mcp>=2.3,<3",
+    "northwind-backend",
+    "northwind-common",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[tool.uv.sources]
+northwind-backend = { workspace = true }
+northwind-common = { workspace = true }
+
+[build-system]
+requires = ["uv_build>=0.12,<0.13"]
+build-backend = "uv_build"

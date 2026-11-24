@@ -10,6 +10,11 @@ the token, which the CLI only forwards as a header. Servers take audience and re
 never from tool arguments, and accept only a token minted for themselves (`verify_for`; #10b, CC-10
 security review L4), so a token for one server is refused by every other one that shares the key.
 
+Row #27 (CHK-06, decision 0023): a shopper token for northwind-orders may also carry `shp`, the
+signed-in shopper's ID, which the demo sign-in binds to the session. It is minted only for that one
+server (`mint(shopper=…)` refuses any other), so no other server ever sees it, and the ID never
+reaches the model: like `sid`, it rides in the token, which the CLI only forwards as a header.
+
 Format: `v1.<base64url JSON claims>.<base64url HMAC-SHA256>`, signed with the key in
 `NORTHWIND_MCP_TOKEN_KEY`. The key comes only from the environment, is never logged, and never
 reaches the CLI: the CLI holds only the token. Every failure is the same `TokenError`, with no
@@ -39,14 +44,17 @@ MAX_TTL_SECONDS = 120
 VERSION = "v1"
 CLAIMS = frozenset({"aud", "region", "agent", "srv", "turn", "exp"})
 # Row #16: present only on a token minted with a session (`mint(session=…)`).
-OPTIONAL_CLAIMS = frozenset({"sid"})
+# Row #27: `shp`, only on a northwind-orders token minted with a shopper (`mint(shopper=…)`).
+OPTIONAL_CLAIMS = frozenset({"sid", "shp"})
 RAG_SERVER = "northwind-rag"
 CATALOG_SERVER = "northwind-catalog"
-SERVERS = frozenset({RAG_SERVER, CATALOG_SERVER})
+ORDERS_SERVER = "northwind-orders"  # row #27 (CHK-06)
+SERVERS = frozenset({RAG_SERVER, CATALOG_SERVER, ORDERS_SERVER})
 _UUID4 = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
 _B64 = re.compile(r"^[A-Za-z0-9_-]+$")
 _REGION = re.compile(r"^[A-Z]{2,3}$")
 SESSION_ID = re.compile(r"[0-9a-f]{32}", re.ASCII)  # fullmatch: no trailing "\n"
+SHOPPER_ID = re.compile(r"S\d{4}", re.ASCII)  # fullmatch; the synthetic shoppers' IDs
 
 
 class TokenError(Exception):
@@ -69,6 +77,7 @@ class Claims:
     exp: int
     srv: str
     sid: str | None = None  # row #16: the gateway's session, which the cart is keyed on
+    shp: str | None = None  # row #27: the signed-in shopper, on a northwind-orders token only
 
 
 def signing_key(environ: dict[str, str] | None = None) -> bytes:
@@ -105,6 +114,7 @@ def mint(
     server: str,
     ttl: int = TTL_SECONDS,
     session: str | None = None,
+    shopper: str | None = None,
 ) -> tuple[str, Claims]:
     """A fresh token and its claims, for one server. The turn id is new each time.
 
@@ -122,6 +132,8 @@ def mint(
         audience != "shopper" or not isinstance(session, str) or not SESSION_ID.fullmatch(session)
     ):
         raise ValueError("a session is 32 lowercase hex characters, on a shopper token only")
+    if shopper is not None and not _shopper_ok(audience, server, shopper):
+        raise ValueError("a shopper is an S-number, on a northwind-orders shopper token only")
     claims = Claims(
         aud=audience,
         region=region,
@@ -130,6 +142,7 @@ def mint(
         exp=int(now if now is not None else time.time()) + ttl,
         srv=server,
         sid=session,
+        shp=shopper,
     )
     body: dict[str, Any] = {
         "aud": claims.aud,
@@ -141,16 +154,27 @@ def mint(
     }
     if session is not None:
         body["sid"] = session
+    if shopper is not None:
+        body["shp"] = shopper
     payload = _b64(json.dumps(body, sort_keys=True, separators=(",", ":")).encode("utf-8"))
     return f"{VERSION}.{payload}.{_sign(key, payload)}", claims
 
 
+def _shopper_ok(aud: Any, srv: Any, shp: Any) -> bool:
+    """`shp` (row #27): a shopper ID, on a shopper token for northwind-orders, nothing else."""
+    return (
+        aud == "shopper"
+        and srv == ORDERS_SERVER
+        and isinstance(shp, str)
+        and SHOPPER_ID.fullmatch(shp) is not None
+    )
+
+
 def _claims(body: Any, now: float) -> Claims:
-    if not isinstance(body, dict) or not (
-        set(body) == CLAIMS or set(body) == CLAIMS | OPTIONAL_CLAIMS
-    ):
+    if not isinstance(body, dict) or not (CLAIMS <= set(body) <= CLAIMS | OPTIONAL_CLAIMS):
         raise TokenError
     sid = body.get("sid")
+    shp = body.get("shp")
     aud, region, agent, srv, turn, exp = (
         body[k] for k in ("aud", "region", "agent", "srv", "turn", "exp")
     )
@@ -171,9 +195,12 @@ def _claims(body: Any, now: float) -> Claims:
             "sid" in body
             and not (aud == "shopper" and isinstance(sid, str) and SESSION_ID.fullmatch(sid))
         )
+        or ("shp" in body and not _shopper_ok(aud, srv, shp))
     ):
         raise TokenError
-    return Claims(aud=aud, region=region, agent=agent, turn=turn, exp=exp, srv=srv, sid=sid)
+    return Claims(
+        aud=aud, region=region, agent=agent, turn=turn, exp=exp, srv=srv, sid=sid, shp=shp
+    )
 
 
 def _verify(token: object, *, key: bytes, now: float | None = None) -> Claims:

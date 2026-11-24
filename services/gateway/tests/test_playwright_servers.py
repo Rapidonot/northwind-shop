@@ -17,12 +17,16 @@ pytestmark = pytest.mark.req("CHK-01")
 CONFIG = (Path(__file__).resolve().parents[3] / "apps/portal/playwright.config.ts").read_text()
 
 
-def test_the_gateway_attaches_exactly_mcp_rag_and_mcp_catalog() -> None:
+def test_the_gateway_attaches_exactly_mcp_rag_mcp_catalog_and_mcp_orders() -> None:
     # A new server here must also be started in playwright.config.ts: this pin fails first.
-    assert {f.name for f in dataclasses.fields(ChatServices)} == {"rag", "runtime", "catalog"}
+    # Row #27 (CHK-06): mcp-orders joins, for signed-in turns. Still exact.
+    fields = {f.name for f in dataclasses.fields(ChatServices)}
+    assert fields == {"rag", "runtime", "catalog", "orders"}
 
 
-@pytest.mark.parametrize("module", ["northwind_mcp_rag.app", "northwind_mcp_catalog.app"])
+@pytest.mark.parametrize(
+    "module", ["northwind_mcp_rag.app", "northwind_mcp_catalog.app", "northwind_mcp_orders.app"]
+)
 def test_playwright_starts_each_attached_server(module: str) -> None:
     assert f"uv run python -m {module}" in CONFIG
 
@@ -31,7 +35,8 @@ def test_the_gateway_is_told_where_both_servers_are() -> None:
     block = CONFIG.split("northwind_gateway.app:app", 1)[1].split("}", 1)[0]
     [gateway_env] = re.findall(r"env: \{([^\n]*)", block)
     assert "...ragEnv" in gateway_env and "...catalogEnv" in gateway_env
-    assert "MCP_RAG_URL" in CONFIG and "MCP_CATALOG_URL" in CONFIG
+    assert "...ordersEnv" in gateway_env  # row #27
+    assert "MCP_RAG_URL" in CONFIG and "MCP_CATALOG_URL" in CONFIG and "MCP_ORDERS_URL" in CONFIG
 
 
 def test_playwright_never_sets_the_database_itself() -> None:

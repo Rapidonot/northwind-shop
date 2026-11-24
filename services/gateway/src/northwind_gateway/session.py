@@ -16,6 +16,14 @@ prompt, a tool argument, a tool result or a log, so no random value reaches the 
 - Only `SESSION_PATHS` get a session, so the health check needs no key.
 - Without the key, a request gets no session, which fails closed: the cart tools refuse
   (`session_required`) and GET /api/cart answers 503. The key is read again on the next request.
+
+Row #27 (CHK-06, decision 0023): the demo sign-in. Only with `NORTHWIND_DEMO_SIGNIN=1` (dev, tests
+and e2e) does `POST /api/session/shopper` bind the one fixed synthetic shopper to the session, in a
+second cookie, `nw_shopper`: `<shopper>.<mac>`, where the mac is HMAC-SHA256 under the same derived
+key over the label `northwind-shopper-v1`, the session id and the shopper ID. So it is valid only
+with the session it was issued for: a new session drops it, and it cannot be moved to another one.
+The middleware reads it only while the flag is on, so turning the flag off signs everyone out. The
+shopper ID goes into the northwind-orders token only (`shp`), never into a prompt or a log.
 """
 
 from __future__ import annotations
@@ -23,6 +31,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import logging
+import os
 import re
 import secrets
 from collections.abc import Callable
@@ -35,8 +44,15 @@ log = logging.getLogger(__name__)
 
 COOKIE = "nw_session"
 STATE_KEY = "northwind_session"
-SESSION_PATHS = ("/api/chat", "/api/cart")
+SIGNIN_PATH = "/api/session/shopper"  # row #27
+SESSION_PATHS = ("/api/chat", "/api/cart", SIGNIN_PATH)
 LABEL = b"northwind-session-v1"
+# Row #27 (CHK-06): the demo sign-in.
+SHOPPER_COOKIE = "nw_shopper"
+SHOPPER_STATE_KEY = "northwind_shopper"
+SHOPPER_LABEL = b"northwind-shopper-v1"
+DEMO_SIGNIN_ENV = "NORTHWIND_DEMO_SIGNIN"
+_SHOPPER = re.compile(r"S\d{4}", re.ASCII)
 _ID = re.compile(r"[0-9a-f]{32}", re.ASCII)
 _MAC = re.compile(r"[0-9a-f]{64}", re.ASCII)
 
@@ -60,6 +76,36 @@ def verified(key: bytes, value: str) -> str | None:
     if not _ID.fullmatch(session) or not _MAC.fullmatch(mac):
         return None
     return session if hmac.compare_digest(_mac(key, session), mac) else None
+
+
+def demo_signin_enabled() -> bool:
+    """Read on every request, so the flag never sticks."""
+    return os.environ.get(DEMO_SIGNIN_ENV) == "1"
+
+
+def _shopper_mac(key: bytes, session: str, shopper: str) -> str:
+    message = b"|".join((SHOPPER_LABEL, session.encode("ascii"), shopper.encode("ascii")))
+    return hmac.new(key, message, hashlib.sha256).hexdigest()
+
+
+def sign_shopper(key: bytes, session: str, shopper: str) -> str:
+    if not _ID.fullmatch(session) or not _SHOPPER.fullmatch(shopper):
+        raise ValueError("not a session and a shopper")
+    return f"{shopper}.{_shopper_mac(key, session, shopper)}"
+
+
+def verified_shopper(key: bytes, session: str, value: str) -> str | None:
+    """The shopper in an `nw_shopper` value, if it was signed for this session; else None."""
+    shopper, _, mac = value.partition(".")
+    if not _SHOPPER.fullmatch(shopper) or not _MAC.fullmatch(mac):
+        return None
+    return shopper if hmac.compare_digest(_shopper_mac(key, session, shopper), mac) else None
+
+
+def shopper_cookie_header(key: bytes, session: str, shopper: str) -> tuple[bytes, bytes]:
+    signed = sign_shopper(key, session, shopper)
+    value = f"{SHOPPER_COOKIE}={signed}; HttpOnly; SameSite=Strict; Path=/api"
+    return (b"set-cookie", value.encode("ascii"))
 
 
 def cookie_values(scope: Scope, name: str) -> list[str]:
@@ -115,6 +161,11 @@ def session_middleware(app: ASGIApp, key: Callable[[], bytes] | None = None) -> 
             session = secrets.token_hex(16)
         state: dict[str, Any] = dict(scope.get("state") or {})
         state[STATE_KEY] = session
+        if not issue and demo_signin_enabled():  # row #27: a new session has no sign-in yet
+            sent = cookie_values(scope, SHOPPER_COOKIE)
+            shopper = verified_shopper(cookie_key, session, sent[0]) if sent else None
+            if shopper is not None:
+                state[SHOPPER_STATE_KEY] = shopper
 
         async def send_with_cookie(message: Message) -> None:
             if issue and message["type"] == "http.response.start":
