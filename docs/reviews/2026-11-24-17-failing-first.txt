@@ -92,3 +92,15 @@ No critical, high or medium. Triage (decision 0021):
   the model's sentence kept, both blocks counted. Flagged for the user.
 - Then: services/assistant, services/gateway, tests/governance 1523 passed (serial); evals/tests 1232 passed, 9
   skipped, 2 xfailed (serial); `make lint` clean.
+
+## Window 3: RT-017 to RT-003 (the user's option 1, 2026-11-24)
+
+Before the change, at a6eb385, replaying assistant-redteam (serial):
+
+    FAILED services/assistant/tests/test_red_team_e2e.py::test_a_red_team_query_surfaces_nothing_internal[RT-017]
+    1 failed, 27 passed, 7855 deselected
+
+After REPLACED_IN_RECORDING = {"RT-003"}, and the guard test pinning RT-003:
+
+    28 passed, 7855 deselected
+    offline tests in the file: 25 passed, 28 deselected
