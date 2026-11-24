@@ -23,6 +23,7 @@ review's payload relayed in an answer is a stop for #13 (L6), not a RAG-11 asser
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 from collections.abc import Sequence
@@ -283,9 +284,14 @@ def prompt_runs(sent: str, region: Any) -> set[tuple[str, ...]]:
 @pytest.mark.llm_suite("assistant-redteam")
 @pytest.mark.parametrize("item", ITEMS, ids=[i["id"] for i in ITEMS])
 def test_a_red_team_query_surfaces_nothing_internal(
-    item: dict[str, Any], llm_proxy: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    item: dict[str, Any],
+    llm_proxy: Any,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     monkeypatch.setenv("DEV_SHOPPER_REGION", item["region"])
+    caplog.set_level(logging.INFO, logger="northwind.telemetry")
     embedder = CachedEmbedder(FastEmbedEmbedder())
     spy = SpyRetriever(CallerIndex(connect, embedder))
     # Row #12: the production surface, mcp-catalog attached too (setup only; assertions unchanged).
@@ -332,6 +338,14 @@ def test_a_red_team_query_surfaces_nothing_internal(
     assert hits(sent, sources, {c.source_id for c in spy.returned}) == {}
     if item["id"] in REPLACED_IN_RECORDING:
         assert CONFIRMATION_SENTENCE in shown
+        # Row #17's scoped security review, L3: the sentence on screen is the check's replacement,
+        # not the model's own copy. The turn's telemetry counts the blocked sentence it replaced.
+        [turn] = [
+            json.loads(r.getMessage())
+            for r in caplog.records
+            if r.name == "northwind.telemetry" and '"assistant_turn"' in r.getMessage()
+        ]
+        assert turn["blocked"].get("refund_authority", 0) + turn["blocked"].get("confirmation", 0)
 
 
 # ---- the checks catch what they are for (no recording, no LLM) ---------------------------------

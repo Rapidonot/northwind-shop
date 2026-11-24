@@ -807,6 +807,10 @@ class OutputCheck:
     _drop_from: int = 0  # where the dropping state's boundary search goes on from
     _skip_space: bool = False  # a sentence was dropped: whitespace after it is not sent (row #16)
     _shown: str = ""
+    # Row #17, scoped security review F1/F2: where each fixed sentence's first whole, plain copy
+    # ends in `_shown`, and how far `_shown` has been searched for one (searched as it grows).
+    _fixed_at: dict[str, int] = field(default_factory=dict)
+    _fixed_to: int = 0
     _undecided: int | None = None  # a duration whose sentence has not shown yet if it is policy
     _scan: tuple[int, int, int] = (0, 0, 0)  # (from, scanned to, sentence start): a cache
     _folds: list[str] = field(default_factory=list)  # casefolded view of each raw character
@@ -880,6 +884,7 @@ class OutputCheck:
         self._ws_start = self._word_start = None
         if not keep_shown:
             self._shown = ""
+            self._fixed_at, self._fixed_to = {}, 0
 
     def _index(self, start: int) -> None:
         """Fold raw[start:], already appended, and track the trailing word and whitespace."""
@@ -1409,6 +1414,21 @@ class OutputCheck:
             self._deltas.pop(0)
         return out
 
+    def _on_screen(self, fixed: str) -> bool:
+        """Whether a whole, plain copy of `fixed` is on screen in this answer (row #17, the user's
+        item 3). The screen is searched once as it grows, from a little before where the last
+        search ended, so many blocked sentences cost linear time (scoped security review, F1)."""
+        start = max(0, self._fixed_to - _FIXED_OVERLAP)
+        for sentence, pattern in _FIXED_COPIES.items():
+            if sentence in self._fixed_at:
+                continue
+            for found in pattern.finditer(self._shown, start):
+                if _whole_sentence_at(self._shown, found.start()):
+                    self._fixed_at[sentence] = found.end()
+                    break
+        self._fixed_to = len(self._shown)
+        return fixed in self._fixed_at
+
     def _advance(self, final: bool) -> list[str | None]:
         out: list[str | None] = []
         while True:
@@ -1441,7 +1461,7 @@ class OutputCheck:
                         and self._shown[-1:].isspace()
                     ):
                         end += 1
-                elif _shown_before(self._shown, fixed):
+                elif self._on_screen(fixed):
                     # Row #17 (the user's item 3): the same fixed sentence is already on screen in
                     # this answer, with other text since, so this replacement is left out as a
                     # dropped sentence is, keeping the first. Still counted; the model's own
@@ -1450,6 +1470,7 @@ class OutputCheck:
                 else:
                     sentence = self._lead + fixed
                     self._shown += sentence
+                    self._fixed_at.setdefault(fixed, len(self._shown))
                     out.append(sentence)
                 self._consumed = self._plain_since = end
                 self._dropping, self._lead = None, ""
@@ -1478,6 +1499,8 @@ class OutputCheck:
                 # Part of the sentence was sent: take it back, and send again what passed.
                 keep = len(self._shown) - (self._consumed - start)
                 self._shown = self._shown[:keep]
+                self._fixed_at = {k: at for k, at in self._fixed_at.items() if at <= keep}
+                self._fixed_to = min(self._fixed_to, keep)
                 out.append(None)
                 if self._shown:
                     out.append(self._shown)
@@ -1491,9 +1514,30 @@ def _repeats(shown: str, fixed: str) -> bool:
     return bool(tail) and normal(tail).endswith(normal(fixed))
 
 
-def _shown_before(shown: str, fixed: str) -> bool:
-    """Whether `fixed` is anywhere in the text on screen, in the matching view (row #17)."""
-    return bool(shown) and normal(fixed) in normal(shown)
+def _copy_pattern(sentence: str) -> re.Pattern[str]:
+    """A copy of a fixed sentence as written on screen: case and whitespace aside, and either
+    apostrophe, but no folding of combining marks or look-alike letters (row #17, scoped security
+    review F2: a struck-through copy reads as its opposite, so it is not a copy)."""
+    words = [re.escape(word).replace("'", "['\u2019]") for word in sentence.split()]
+    return re.compile(r"\s+".join(words) + r"(?=\s|$)", re.IGNORECASE)
+
+
+_FIXED_COPIES = {sentence: _copy_pattern(sentence) for sentence in set(FIXED_SENTENCES.values())}
+# How far back a search starts before the last one ended, so a copy split across two searches is
+# found; a copy with more whitespace than this is missed, which only shows the replacement again.
+_FIXED_OVERLAP = 2 * max(len(sentence) for sentence in _FIXED_COPIES) + 16
+_SENTENCE_LEAD = frozenset(".!?:\n-*\u2022")
+
+
+def _whole_sentence_at(shown: str, start: int) -> bool:
+    """Whether a copy at `start` begins a sentence: the answer's start, or whitespace after a
+    sentence end, a colon or a bullet. A copy inside a quote or a sentence does not count (F2)."""
+    if start and not shown[start - 1].isspace():
+        return False
+    before = start
+    while before and shown[before - 1] in " \t":
+        before -= 1
+    return not before or shown[before - 1] in _SENTENCE_LEAD
 
 
 def check_text(

@@ -145,3 +145,31 @@ M3. `linked()` in `Chat.tsx` links every marker, cited or not.
 Hard rule 2 (no price or stock field) has no code path to mutate: neither `SourceCard` nor the gateway's `_card`
 has such a field. It is pinned by `test_sa02_source_cards.py::test_a_card_has_no_price_or_stock_field`, which checks the exact field
 set, and by the exact citations dict in `test_sa02_citation_cards.py`.
+
+## Scoped security review F1 (Medium) and F2 (Low): the fixed-sentence-once search (2026-11-24, at 7bcc221)
+
+`test_rag08_fixed_sentence_once_cost.py`, before the fix (serial):
+
+    E  assert (4.349383916996885 / 0.0694195420073811) < 9.0     # 1,600 vs 400 blocked sentences: 63x, quadratic
+    FAILED ...::test_many_blocked_sentences_cost_linear_time
+    FAILED ...::test_a_struck_through_copy_does_not_hide_the_replacement      (assert 0 == 1)
+    FAILED ...::test_a_quoted_copy_does_not_hide_the_replacement
+    FAILED ...::test_a_copy_inside_a_sentence_does_not_hide_the_replacement   (assert 1 == 2)
+    4 failed, 3 passed
+
+Separate timing of "Use a coupon. Ok. " x 800 (14,400 characters, 7-character deltas):
+
+| Version | Time |
+|---|---|
+| Check before item 3 (`41d14ef`) | 0.16 s |
+| Item 3's check (`7bcc221`) | 1.17 s |
+
+After the fix: the cost file, `test_rag08_fixed_sentence_once.py`, `_edges.py` and `test_rag09_writer.py` gave
+116 passed.
+
+Every recorded answer call with text, in `eval-answers`, `assistant-smoke`, `assistant-cart` and `assistant-redteam`,
+was run through the old check (`7bcc221`) and the new one. All 357 match: shown text and counts are identical in
+every one (`$TMPDIR/equiv.py`).
+
+L3, check (h) for an item in `REPLACED_IN_RECORDING` also requires a blocked `refund_authority` or `confirmation`
+count in the turn's telemetry. With it, the red-team replay is 28 passed.
