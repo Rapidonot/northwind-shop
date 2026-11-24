@@ -163,6 +163,19 @@ FOUND-2 spike gate (proxy path), parallel-worktree layout for LLM state (decisio
 ## Open items
 
 - **Low items, and Medium items owned by hardening, are won't-do by decision 0021 unless revived by name.**
+- **D8 remainder, from row #17's window 4 (2026-11-24, the advisor's decision); owner: the next prompt row (SA-04 + SA-03), which re-records anyway.**
+  - **The count:** after #17's prompt and check, #32's method counts **10 model-made site/policy claims, 7 unasked**,
+    on the promoted baseline (`prompt-95d4b694:check-74c8ba9d`). Before #17 it was 26 and 23. The target is at most 5
+    (`docs/reviews/2026-11-24-17-d8.md`, "After").
+  - **Offers to give a price or stock that the offer-drop rule does not catch:** EV-034 (asked), EV-035, EV-039 and
+    EV-100 (asked).
+  - **Offers to check stock or help with the cart:** EV-221 ("can check stock or add items to the cart") and EV-297
+    ("can help with questions about Northwind products, returns, or your cart").
+  - **Other claims:**
+    - EV-039: "Northwind has three organic cotton shirts".
+    - EV-241 and EV-242: sales tax is not included in the displayed or listed price.
+  - **Not model-made:** the other 10 claims are the check's own fixed sentences.
+  - **Uncertain attribution:** EV-293 ("Orders can't be placed in chat.").
 - Medium, from #16 W5 rescore (2026-11-23); **fixed in #16** (2026-11-23, decision 0001's amendment: the proxy puts tool results in `tool_use` order; `services/llm-replay/tests/test_tool_result_order.py`, end to end `test_the_model_sees_the_same_second_request_whichever_tool_finishes_first`; W6 re-recorded EV-165). ~~Owner #16: parallel tool calls return their results in completion order, so a replay can send the same tool_results in another order than the recording and miss (EV-165: `retrieve_context` and `search_products`, seen in the batch replay, not alone). Recorded out of `tool_use` order: one (EV-165 seq 1). In order but exposed: eval-answers 12 more requests (EV-029, 030, 205, 213, 217, 245), smoke 2, backend-audit 6; red-team, cart and a2a-05 none. A miss then runs `miss_diff` (difflib, `autojunk=False`, over every cassette in the suite) for minutes, so the rescore and `make ci`'s eval-gate look hung. Cause measured (`docs/reviews/2026-11-23-16-tool-order-probe.txt`): the CLI runs read-only tools in parallel and appends results as they finish. It also explains #12's flaky `test_a_price_changed_while_the_catalog_runs_is_the_one_quoted` (item below), which closes once the fix lands and a same-server reverse-order test passes.~~
 - Low, from #16 W4 (2026-11-18); owner hardening: the recorded model builds idempotency keys from the arguments (`addP0001BLKREGM01`, `setqtyP0001BLKREGM2a`) rather than at random, although the key's description asks for random keys. Harmless while keys are scoped to the turn (decision 0019, option A); it would matter if keys ever lived longer.
 - From #16 W3 (2026-11-17); owner: the A2A-05 surface decision (Window B), before RECORD-ALL (flagged in #18's row): A2A-05's partner turns run on mcp-rag only (`run_partner_turn` passes no `CatalogEndpoint`), but the assistant's prompt describes cart tools. In #16's W3 attempt, `order-01-breakwater` answered: "I can't place orders in chat, so I can't order the Corvane Breakwater Shell for you here. It comes in Slate, size M, relaxed fit [P0003-SLT-REL-M].\n\nI can add it to your cart if you'd like. Checkout would have to be done separately." The cart offer is false on that surface. A2A-05 must choose the partner surface (attach mcp-catalog and the cart tools, or a partner prompt without the cart lines) before RECORD-ALL re-records `a2a-05-partner`. Until then the suite is stale and skips (#15's `assistant_id` stale skip); its 9 cassettes and fixtures are unchanged, by the user's decision (option C).
