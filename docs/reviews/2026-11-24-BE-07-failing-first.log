@@ -85,3 +85,19 @@ FAILED services/backend/tests/care/test_be07_units.py::test_f1_ordinary_numbers_
 11 failed, 1 passed, 87 deselected in 0.51s
 (the combining-mark and parenthesized cases were first written too weak or with lost escapes; rewritten, then run before the fix as above)
 After the fix: test_be07_units.py 99 passed; test_be07_writer.py 73 passed; test_be07_criteria.py 20 passed; test_be08_views.py 26 passed
+
+# advisor-reviewer at 1be987a (docs/reviews/2026-11-24-BE-07-advisor-review.raw.md): F-A, F-C, F-D evidence, working tree only, head unchanged
+F-A: the 'or holds_card_data(asdict(case))' line removed from fakes/cases.py, then test_be07_units.py run serially:
+FAILED services/backend/tests/care/test_be07_units.py::test_n6_the_queue_refuses_card_data_split_across_fields
+1 failed, 98 passed in 0.48s
+(the line put back; git diff on the file empty). The committed N6 test fails without its fix.
+F-C: the NFKC normalisation in check_summary reverted, then test_be07_writer.py run serially:
+FAILED services/backend/tests/care/test_be07_writer.py::test_a_money_figure_in_other_spellings_is_refused[They say they were charged \uff04999 twice.]
+FAILED services/backend/tests/care/test_be07_writer.py::test_a_money_figure_in_other_spellings_is_refused[They were billed \uff35\uff33\uff24 999 for the order.]
+2 failed, 71 passed in 37.09s
+(restored; git diff empty). The fullwidth money cases fail without the fix: test-writer's report confirmed for that fix by the session's own run.
+F-D: at 1be987a, uv run ruff check / ruff format --check / mypy services data evals:
+All checks passed!
+559 files already formatted
+Success: no issues found in 353 source files
+(pnpm lint and typecheck not run: no TypeScript or package file changed in this row)

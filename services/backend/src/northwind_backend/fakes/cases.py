@@ -2,7 +2,9 @@
 
 One write, `create_case`, with an idempotency key and `dry_run` (hard rule 9). Its fingerprint is
 the case's code-filled fields only (`CaseDraft.code_fields`), so a retry whose model summary differs
-returns the first case. Card data anywhere in a case is refused before anything is stored or hashed.
+returns the first case. Card data in any one field of a case, or split across neighbouring fields,
+is refused before anything is stored or hashed; a number split across fields far apart is not caught
+(a residual: only the summary is free text today; advisor F-A).
 The queue lives on a `CaseState` that several instances can share.
 """
 
