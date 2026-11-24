@@ -218,3 +218,16 @@ N2: check (h)'s telemetry assertion, with `usage.py` logging `"blocked": {}`. RT
 
 N4: the equivalence script is committed in `docs/reviews/2026-11-24-17-check-equivalence.md`. Re-run as written at
 373f22c's check: compared 357, differ 0.
+
+## make ci at b045114: two failures (2026-11-24)
+
+    FAILED services/llm-replay/tests/test_tool_result_order.py::test_five_parallel_prices_finishing_in_reverse_are_forwarded_in_tool_use_order
+    FAILED tests/governance/test_citations.py::test_every_cited_path_exists[data-flow.md]
+    2 failed, 6927 passed, 9 skipped, 24 xfailed
+
+- **The order test:** 3 of 3 serial runs failed (`assert [] == ['toolu_p0', …]`).
+  - The bodies sorted by name, by message count: `[(4, ['toolu_p0'…'toolu_p4']), (2, [])]`. So `[-1]` was the first
+    request.
+  - With main's `prompt.py` swapped in, the test passes.
+  - Fixed by sorting by message count (approved by the user): 61 passed.
+- **The citation test:** fixed in `2e2f83b`. The governance tests then gave 203 passed.
