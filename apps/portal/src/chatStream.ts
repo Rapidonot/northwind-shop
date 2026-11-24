@@ -6,10 +6,20 @@ export type ErrorCode =
   | "replay_miss"
   | "internal";
 
+/** A cited source, as the gateway describes it (row #17, SA-02). Title, brand and department come
+ * only from trusted sources; a review has its ID and type only. There is no price or stock field. */
+export type SourceCard = {
+  id: string;
+  type: string;
+  title?: string;
+  brand?: string;
+  department?: string;
+};
+
 export type ChatEvent =
   | { type: "token"; text: string }
   | { type: "reset" }
-  | { type: "citations"; sourceIds: string[] }
+  | { type: "citations"; sourceIds: string[]; sources: SourceCard[] }
   | { type: "error"; code: ErrorCode }
   | { type: "refused"; message: string }
   | { type: "done" };
@@ -24,7 +34,11 @@ function toEvent(name: string, data: string): ChatEvent | null {
     case "reset":
       return { type: "reset" };
     case "citations":
-      return { type: "citations", sourceIds: body.source_ids as string[] };
+      return {
+        type: "citations",
+        sourceIds: body.source_ids as string[],
+        sources: Array.isArray(body.sources) ? (body.sources as SourceCard[]) : [],
+      };
     case "error":
       return { type: "error", code: body.code as ErrorCode };
     case "done":

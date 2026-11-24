@@ -29,6 +29,7 @@ CARD = "4242" * 4
 MARKER = "PLANTED-MARKER-9c1e"
 FIXED_CODES = {"retrieval_failed", "model_unavailable", "replay_miss", "internal"}
 SOURCE = RetrievedChunk("c1", "document", "FAQ-001", "faq", "Wash cold.")
+FAQ_CARD = {"id": "FAQ-001", "type": "document", "title": "Wash cold."}  # row #17, SA-02
 
 
 class FakeRetriever:
@@ -77,7 +78,7 @@ def test_an_answer_streams_as_ordered_events(stack: Stack) -> None:
     assert events(response.text) == [
         ("token", {"text": "Wash it "}),
         ("token", {"text": "cold [FAQ-001]."}),
-        ("citations", {"source_ids": ["FAQ-001"]}),
+        ("citations", {"source_ids": ["FAQ-001"], "sources": [FAQ_CARD]}),  # row #17
         ("done", {}),
     ]
 
@@ -184,7 +185,7 @@ def test_the_turn_cap_gives_the_shopper_a_reply_not_an_error(stack: Stack) -> No
     response = stack.client.post("/api/chat", json={"message": "hi"})
     assert events(response.text) == [
         ("token", {"text": INSUFFICIENT_EVIDENCE}),
-        ("citations", {"source_ids": []}),
+        ("citations", {"source_ids": [], "sources": []}),
         ("done", {}),
     ]
 
@@ -258,4 +259,4 @@ def test_a_model_that_never_answers_gets_no_error_event_and_done_follows(stack: 
     assert names[-3:] == ["token", "citations", "done"]
     assert names[-4] == "reset"  # the streamed "Let me check" is dropped first
     assert parsed[-3] == ("token", {"text": INSUFFICIENT_EVIDENCE})
-    assert parsed[-2] == ("citations", {"source_ids": []})
+    assert parsed[-2] == ("citations", {"source_ids": [], "sources": []})

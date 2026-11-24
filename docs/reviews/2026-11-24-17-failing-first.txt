@@ -1,0 +1,46 @@
+# Row #17 failing-first log, before any implementation (base 4379687; tests only, 2026-11-24)
+
+## test_sa02_source_cards.py
+=========================== short test summary info ============================
+ERROR services/assistant/tests/test_sa02_source_cards.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in 0.10s
+
+## test_sa02_citation_cards.py, test_nfr13_first_token.py, the four CHK-01 tests
+ERROR    northwind_gateway.session:session.py:100 session unavailable: no key
+ERROR    northwind_gateway.session:session.py:100 session unavailable: no key
+FAILED services/gateway/tests/test_sa02_citation_cards.py::test_the_citations_event_carries_a_card_per_cited_source
+FAILED services/gateway/tests/test_sa02_citation_cards.py::test_an_uncited_source_gets_no_card
+FAILED services/assistant/tests/test_chk01_cart.py::test_the_prompt_states_the_cart_rules_and_no_unprompted_capability
+FAILED services/assistant/tests/test_chk01_cart.py::test_asked_for_the_cart_total_the_answer_says_it_cannot_and_reaches_the_shopper_intact
+FAILED services/assistant/tests/test_chk01_cart.py::test_no_recorded_cart_answer_points_at_the_cart_panel_or_the_screen
+5 failed, 7 passed in 13.26s
+
+## apps/portal: vitest run src/ChatSources.test.tsx
+     × reads the cards from the citations event, and none when an older gateway sends none 5ms
+     × links every cited marker to a source entry that exists 1076ms
+     × leaves a marker the gateway did not cite as plain text 1010ms
+     × shows a cited product as an inline card with its name, brand, department and source link 1010ms
+     × shows a review as a source entry with no product card and no review text 14ms
+     × names each source's type and title in the Sources list 10ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  6 failed (6)
+
+## Notes
+- Passed before implementation, by design (7): the 6 NFR-13 tests measure the gateway's existing streaming and the
+  harness itself (no behaviour change in this row), and `test_the_answer_text_reader_sees_a_recorded_panel_mention`
+  is the reader's own honest-test.
+- `test_no_recorded_cart_answer_points_at_the_cart_panel_or_the_screen` keeps failing after implementation until
+  window 2 (`assistant-cart`) records with the row #17 prompt.
+- The two "session unavailable: no key" lines are the gateway's existing log in tests without a session key.
+
+## After implementation (same working tree as the first commit; serial, no xdist, replay)
+- `make lint`: ruff, ruff format --check (524 files), mypy (331 files), eslint, tsc: all clean.
+- `make check`'s test plan (`tools/changed_tests.py`: portal, services/assistant, services/gateway, tests/governance),
+  run serially because `make check` pins `-n auto`:
+  - pytest: 1 failed, 1502 passed, 109 deselected. The one failure is
+    `test_no_recorded_cart_answer_points_at_the_cart_panel_or_the_screen` (waits for window 2).
+  - Vitest: 8 files, 76 passed (70 before + 6 new).
+- `evals/tests` (serial, for the answerer_id change): 1143 passed, 9 skipped, 2 xfailed.
+- Existing assertions extended (not loosened) for the new `sources` field on the `citations` event: `test_chat.py`
+  (3), `test_chat_edges.py` (1), `test_rag08_stream.py` (1). The CHK-01 prompt test now pins the new wording.

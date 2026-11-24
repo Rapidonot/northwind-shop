@@ -1,6 +1,6 @@
-import { type FormEvent, useState } from "react";
+import { type FormEvent, type ReactNode, useState } from "react";
 import { AiDisclosure } from "./AiDisclosure";
-import { type ChatEvent, type ErrorCode, sendMessage } from "./chatStream";
+import { type ChatEvent, type ErrorCode, type SourceCard, sendMessage } from "./chatStream";
 
 const ERROR_TEXT: Record<ErrorCode, string> = {
   retrieval_failed: "Search isn't available right now, so I can't answer that.",
@@ -13,9 +13,76 @@ function errorText(code: ErrorCode): string {
   return Object.hasOwn(ERROR_TEXT, code) ? ERROR_TEXT[code] : ERROR_TEXT.internal;
 }
 
-type Turn = { answer: string; sources: string[]; notice: string | null };
+type Turn = { answer: string; sources: string[]; cards: SourceCard[]; notice: string | null };
 
-const EMPTY: Turn = { answer: "", sources: [], notice: null };
+const EMPTY: Turn = { answer: "", sources: [], cards: [], notice: null };
+
+// Row #17 (SA-02): "every product claim shows a source link". The prompt and the output check put
+// an [ID] marker on every product claim; each ID the gateway cited becomes a link to its entry in
+// the Sources list. An ID it did not cite stays plain text. Links change no text.
+const MARKER = /\[([^[\]]+)\]/g;
+const PRODUCT_TYPES: ReadonlySet<string> = new Set(["product", "variant"]);
+const TYPE_LABEL: Record<string, string> = {
+  product: "Product",
+  variant: "Product option",
+  document: "Guide or policy",
+  review: "Shopper review",
+};
+
+const anchor = (id: string) => `source-${id}`;
+
+function linked(answer: string, cited: ReadonlySet<string>): ReactNode[] {
+  const out: ReactNode[] = [];
+  let last = 0;
+  for (const match of answer.matchAll(MARKER)) {
+    const start = match.index;
+    const ids = (match[1] ?? "").split(",").map((id) => id.trim());
+    if (!ids.some((id) => cited.has(id))) continue;
+    out.push(answer.slice(last, start));
+    if (ids.length === 1) {
+      out.push(
+        <a key={start} href={`#${anchor(ids[0] ?? "")}`}>
+          {match[0]}
+        </a>,
+      );
+    } else {
+      // "[P0011, R00002]": each cited ID in the group is its own link.
+      out.push("[");
+      ids.forEach((id, n) => {
+        if (n > 0) out.push(", ");
+        out.push(
+          cited.has(id) ? (
+            <a key={`${start}-${id}`} href={`#${anchor(id)}`}>
+              {id}
+            </a>
+          ) : (
+            id
+          ),
+        );
+      });
+      out.push("]");
+    }
+    last = start + match[0].length;
+  }
+  out.push(answer.slice(last));
+  return out;
+}
+
+function ProductCard({ card }: { card: SourceCard }) {
+  const detail = [card.brand, card.department].filter(Boolean).join(" · ");
+  return (
+    <article aria-label={card.title}>
+      <strong>{card.title}</strong>
+      {detail && <span> {detail}</span>} <a href={`#${anchor(card.id)}`}>Source {card.id}</a>
+    </article>
+  );
+}
+
+function sourceLabel(card: SourceCard | undefined): string | null {
+  if (!card) return null;
+  const type = Object.hasOwn(TYPE_LABEL, card.type) ? TYPE_LABEL[card.type] : "Source";
+  return card.title && card.type !== "review" ? `${type}: ${card.title}` : (type ?? null);
+}
 
 function apply(turn: Turn, event: ChatEvent): Turn {
   switch (event.type) {
@@ -24,7 +91,7 @@ function apply(turn: Turn, event: ChatEvent): Turn {
     case "reset":
       return { ...turn, answer: "" };
     case "citations":
-      return { ...turn, sources: event.sourceIds };
+      return { ...turn, sources: event.sourceIds, cards: event.sources };
     case "error":
       return { ...turn, notice: errorText(event.code) };
     case "refused":
@@ -57,6 +124,9 @@ export function Chat({ onTurnEnd }: { onTurnEnd?: () => void } = {}) {
     }
   }
 
+  const cards = new Map(turn.cards.map((card) => [card.id, card]));
+  const products = turn.cards.filter((card) => PRODUCT_TYPES.has(card.type) && card.title);
+
   return (
     <section aria-label="Chat">
       <AiDisclosure />
@@ -72,14 +142,27 @@ export function Chat({ onTurnEnd }: { onTurnEnd?: () => void } = {}) {
         </button>
       </form>
       <p data-testid="answer" aria-live="polite">
-        {turn.answer}
+        {linked(turn.answer, new Set(turn.sources))}
       </p>
       {turn.notice && <p role="alert">{turn.notice}</p>}
+      {products.length > 0 && (
+        <div aria-label="Products">
+          {products.map((card) => (
+            <ProductCard key={card.id} card={card} />
+          ))}
+        </div>
+      )}
       {turn.sources.length > 0 && (
         <ul aria-label="Sources">
-          {turn.sources.map((sourceId) => (
-            <li key={sourceId}>{sourceId}</li>
-          ))}
+          {turn.sources.map((sourceId) => {
+            const label = sourceLabel(cards.get(sourceId));
+            return (
+              <li key={sourceId} id={anchor(sourceId)}>
+                <span>{sourceId}</span>
+                {label && <span> {label}</span>}
+              </li>
+            );
+          })}
         </ul>
       )}
     </section>

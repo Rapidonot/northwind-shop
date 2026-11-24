@@ -95,6 +95,15 @@ def test_a_product_question_streams_and_cites_a_source(
         events = ask(QUESTIONS["product"], tmp_path)
     assert sum(isinstance(event, TextDelta) for event in events) >= 2
     assert isinstance(events[-1], Citations) and events[-1].source_ids
+    # Row #17 (SA-02): every cited source has a card, built from the real index's text. A cited
+    # product shows its name, brand and department; a review shows no text of its own.
+    citations = events[-1]
+    assert [card.source_id for card in citations.sources] == list(citations.source_ids)
+    for card in citations.sources:
+        if card.source_type == "product":
+            assert card.title and card.brand and card.department, card
+        if card.source_type == "review":
+            assert (card.title, card.brand, card.department) == (None, None, None)
     recorded = [
         cassette
         for path in (REPO / "cassettes/assistant-smoke").glob("*.json")
