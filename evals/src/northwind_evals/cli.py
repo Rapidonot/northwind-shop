@@ -727,12 +727,12 @@ def _frozen_queries(items: Sequence[EvalItem]) -> list[str]:
     portal = json.loads(SMOKE_QUESTIONS.read_text(encoding="utf-8"))
     traps = json.loads(CONTRADICTIONS.read_text(encoding="utf-8"))
     red_items = [json.loads(line) for line in RED_TEAM.read_text("utf-8").splitlines()]
-    red_team = [item["query"] for item in red_items]
+    red_team = [red["query"] for red in red_items]
     texts = [item.query for item in items] + list(portal.values()) + [t["question"] for t in traps]
     texts += red_team
     texts += part_texts([(item.query, item.region) for item in items])
     # The red team's routed messages: their plans are in the suite that records them (row #11 W3).
-    red_plans = [(item["query"], item["region"]) for item in red_items]
+    red_plans = [(red["query"], red["region"]) for red in red_items]
     texts += part_texts(red_plans, suite="assistant-redteam")
     return list(dict.fromkeys(texts))
 

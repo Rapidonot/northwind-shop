@@ -21,7 +21,7 @@ from mcp.client.streamable_http import streamable_http_client
 from mcp.shared._httpx_utils import MCP_DEFAULT_SSE_READ_TIMEOUT, MCP_DEFAULT_TIMEOUT
 
 from northwind_assistant.caller import Caller
-from northwind_common.mcp_token import RAG_SERVER, bearer, mint
+from northwind_common.mcp_token import RAG_SERVER, bearer, mint, verify_for
 from northwind_common.rag_tool import TOOL_NAME
 
 AGENT = "shopper-assistant"
@@ -53,19 +53,21 @@ class RagEndpoint:
 
     def mint(self, caller: Caller) -> str:
         """A fresh token for one turn of this caller."""
-        return self.mint_turn(caller)[0]
-
-    def mint_turn(self, caller: Caller) -> tuple[str, str]:
-        """A fresh token for one turn of this caller, and the turn's id (row #11: the planned first
-        search's token keeps it, so RAG-10's cap counts that search)."""
-        token, claims = mint(
+        token, _ = mint(
             audience=caller.audience,
             region=caller.region,
             agent=AGENT,
             key=self.key,
             server=RAG_SERVER,
         )
-        return token, claims.turn
+        return token
+
+    def mint_turn(self, caller: Caller) -> tuple[str, str]:
+        """A fresh token for one turn of this caller, and the turn's id (row #11: the planned first
+        search's token keeps it, so RAG-10's cap counts that search). Minted through `mint`, the
+        one place a turn's token is made, so anything that wraps `mint` sees it."""
+        token = self.mint(caller)
+        return token, verify_for(token, key=self.key, server=RAG_SERVER).turn
 
 
 @dataclass(frozen=True)

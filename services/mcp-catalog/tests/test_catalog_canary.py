@@ -96,6 +96,8 @@ def arguments() -> list[tuple[str, dict[str, Any]]]:
         )
     )
     calls.append(("get_cart", {}))
+    # Row #11: the live filter too (refused to this agent; `shopper-query` is checked below).
+    calls.append(("eligible_products", {"price_max": 1_000_000}))
     return calls
 
 
@@ -118,3 +120,24 @@ def test_the_canary_title_and_id_are_in_no_response_byte(url: str) -> None:
                 assert needle not in raw, (region, name, args)
             if name == "add_to_cart" and args.get("variant_id") == OUT_OF_STOCK:
                 assert "out_of_stock" in raw  # the alternatives scan really ran
+
+
+def test_the_live_filter_never_names_the_canary_or_its_product(url: str) -> None:
+    """Row #11 (RAG-04): `eligible_products` as `shopper-query`, its one agent, with the widest
+    bounds and with stock: never P0009, never the canary title, in any region."""
+
+    async def go(region: str) -> list[str]:
+        out: list[str] = []
+        async with connect(url, token("shopper-query", region)[0]) as client:
+            for args in ({"price_max": 1_000_000}, {"in_stock": True}, {}):
+                result = await client.call_tool("eligible_products", args)
+                assert not result.is_error
+                out.extend(getattr(block, "text", "") for block in result.content)
+        return out
+
+    found = 0
+    for region in ("US", "CA", "UK", "EU"):
+        for text in asyncio.run(go(region)):
+            assert CANARY not in text and "P0009" not in text
+            found += len(json.loads(text)["products"])
+    assert found  # a positive control: the filter does return products here

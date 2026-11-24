@@ -419,7 +419,7 @@ READ_TOOLS: Mapping[str, ToolSpec] = {
 # ---- row #11 (RAG-04): the server's own live filter, never offered to a model -------------------
 
 ELIGIBLE_PRODUCTS = "eligible_products"
-MAX_MINOR_UNITS = 1_000_000  # northwind_rag.query.MAX_MINOR
+MAX_MINOR_UNITS = 1_000_000  # the query plan's own price range (row #11, MAX_MINOR)
 
 
 def _bound(args: Mapping[str, Any], key: str) -> int | None:
@@ -470,7 +470,9 @@ QUERY_TOOLS: Mapping[str, ToolSpec] = {
             name=ELIGIBLE_PRODUCTS,
             description=(
                 "Product IDs whose live price in the caller's region is within the bounds (minor "
-                "units) and, with in_stock, that have stock. IDs only."
+                "units) and, with in_stock, that have stock. IDs only, never a price or a count. "
+                "Do not use it to quote a price or stock level: it is the server's own search "
+                'filter, never offered to a model. Example: {"price_max": 5000, "in_stock": true}.'
             ),
             input_schema=_schema(
                 {
