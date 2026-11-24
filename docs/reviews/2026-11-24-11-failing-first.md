@@ -21,3 +21,7 @@ WARNING  northwind_assistant.understand:understand.py:263 query understanding fa
 
 ## Not failing-first, said plainly
 - test_rag04_plan_claim.py and test_rag04_turn_qu.py were written after the code they test (mcp_token claim; the turn wiring). Both pass; the security pass and test-writer cover them.
+
+## Named-product exception (after W5, the user's and advisor's go)
+- `evals/tests/test_rag04_named_product.py` written first. Before the change it failed at collection:
+  `ImportError: names_catalog_product`, 1 error. After `b4a3521`: 16 passed.
