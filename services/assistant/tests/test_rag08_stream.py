@@ -235,7 +235,8 @@ def test_no_token_event_carries_the_payload_and_telemetry_counts_blocks_without_
     for needle in ("save20", "has been confirmed", "northwind-deals", "promo code"):
         assert needle not in tokens
     assert "reset" in [kind for kind, _ in events]
-    assert ("citations", {"source_ids": ["FAQ-001"]}) in events
+    card = {"id": "FAQ-001", "type": "document", "title": "Wash cold."}  # row #17
+    assert ("citations", {"source_ids": ["FAQ-001"], "sources": [card]}) in events
     assert [kind for kind, _ in events].count("citations") == 1
     lines = [r.getMessage() for r in caplog.records if r.name == TELEMETRY_LOGGER]
     assert len(lines) == 1

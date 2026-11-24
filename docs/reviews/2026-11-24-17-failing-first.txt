@@ -1,0 +1,233 @@
+# Row #17 failing-first log, before any implementation (base 4379687; tests only, 2026-11-24)
+
+## test_sa02_source_cards.py
+=========================== short test summary info ============================
+ERROR services/assistant/tests/test_sa02_source_cards.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in 0.10s
+
+## test_sa02_citation_cards.py, test_nfr13_first_token.py, the four CHK-01 tests
+ERROR    northwind_gateway.session:session.py:100 session unavailable: no key
+ERROR    northwind_gateway.session:session.py:100 session unavailable: no key
+FAILED services/gateway/tests/test_sa02_citation_cards.py::test_the_citations_event_carries_a_card_per_cited_source
+FAILED services/gateway/tests/test_sa02_citation_cards.py::test_an_uncited_source_gets_no_card
+FAILED services/assistant/tests/test_chk01_cart.py::test_the_prompt_states_the_cart_rules_and_no_unprompted_capability
+FAILED services/assistant/tests/test_chk01_cart.py::test_asked_for_the_cart_total_the_answer_says_it_cannot_and_reaches_the_shopper_intact
+FAILED services/assistant/tests/test_chk01_cart.py::test_no_recorded_cart_answer_points_at_the_cart_panel_or_the_screen
+5 failed, 7 passed in 13.26s
+
+## apps/portal: vitest run src/ChatSources.test.tsx
+     × reads the cards from the citations event, and none when an older gateway sends none 5ms
+     × links every cited marker to a source entry that exists 1076ms
+     × leaves a marker the gateway did not cite as plain text 1010ms
+     × shows a cited product as an inline card with its name, brand, department and source link 1010ms
+     × shows a review as a source entry with no product card and no review text 14ms
+     × names each source's type and title in the Sources list 10ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  6 failed (6)
+
+## Notes
+- Passed before implementation, by design (7): the 6 NFR-13 tests measure the gateway's existing streaming and the
+  harness itself (no behaviour change in this row), and `test_the_answer_text_reader_sees_a_recorded_panel_mention`
+  is the reader's own honest-test.
+- `test_no_recorded_cart_answer_points_at_the_cart_panel_or_the_screen` keeps failing after implementation until
+  window 2 (`assistant-cart`) records with the row #17 prompt.
+- The two "session unavailable: no key" lines are the gateway's existing log in tests without a session key.
+
+## After implementation (same working tree as the first commit; serial, no xdist, replay)
+- `make lint`: ruff, ruff format --check (524 files), mypy (331 files), eslint, tsc: all clean.
+- `make check`'s test plan (`tools/changed_tests.py`: portal, services/assistant, services/gateway, tests/governance),
+  run serially because `make check` pins `-n auto`:
+  - pytest: 1 failed, 1502 passed, 109 deselected. The one failure is
+    `test_no_recorded_cart_answer_points_at_the_cart_panel_or_the_screen` (waits for window 2).
+  - Vitest: 8 files, 76 passed (70 before + 6 new).
+- `evals/tests` (serial, for the answerer_id change): 1143 passed, 9 skipped, 2 xfailed.
+- Existing assertions extended (not loosened) for the new `sources` field on the `citations` event: `test_chat.py`
+  (3), `test_chat_edges.py` (1), `test_rag08_stream.py` (1). The CHK-01 prompt test now pins the new wording.
+
+## test-writer (2026-11-24): 37 tests in 3 files, and one bug
+- `services/assistant/tests/test_sa02_source_card_edges.py` (12), `services/gateway/tests/test_sa02_citation_card_edges.py`
+  (3), `apps/portal/src/ChatSourcesEdges.test.tsx` (22).
+- **Bug, failing first:** "makes no card and no link for a sources entry whose ID was not cited" failed at `41151c8`:
+  `AssertionError: expected <article …(1)>…(3)</article> to be null` (`<article aria-label="Larchpell Rug">` with
+  `<a href="#source-P0178">`, an anchor the Sources list never has). Fixed in `Chat.tsx`: cards are kept only for IDs
+  in `source_ids`. After the fix: Vitest 9 files, 98 passed; the two pytest files 15 passed; `make lint` clean.
+
+## Security review (one pass, at `2925a7f`; raw: `docs/reviews/2026-11-24-17-security-review.raw.md`)
+No critical, high or medium. Triage (decision 0021):
+- **L1 (low, real bug in the row's files): fixed.** A malformed item inside `sources` (`[null]`, a non-string title)
+  crashed Chat and took the AI disclosure with it. `chatStream.ts` now keeps an item only with a string `id` and
+  `type` and copies only string fields. Failing first (`vitest run src/ChatSources.test.tsx`, before the fix):
+       × drops a null item in sources, keeps the answer and the AI disclosure 1006ms
+       × drops an object title in sources, keeps the answer and the AI disclosure 1006ms
+       × keeps a card's string fields and drops any other 3ms
+       × leaves a group marker's text exactly as streamed 10ms
+  ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+        Tests  4 failed | 8 passed (12)
+  (the number and numeric-id cases passed already: the cited-ID filter drops them.) After: 9 files, 104 passed.
+- **L2 (low, hardening, no failure confirmed): PR body only.** Card fields don't go through the output check; they rely
+  on RAG-09's ingest scan, which the reviewer judged sound.
+- **Note, group marker text (a real bug in the row's files): fixed.** `[P0178,P9999]` re-rendered as
+  `[P0178, P9999]`; the commas and spaces are now kept exactly as streamed (the last test in the log above), and a
+  cited ID with spaces around it in a group still links.
+- **Note, documents get a title:** by design (`TRUSTED_SOURCE_TYPES`); the PR body says so.
+- No medium or higher was fixed, so there is no scoped re-review. `prompt.py` did not change: the prompt hash stays
+  `95d4b694`.
+
+## Serial run after the review fixes (no xdist, replay)
+- `make lint`: clean. pytest (services/assistant, services/gateway, tests/governance): 1 failed, 1517 passed, 109 deselected.
+  The one failure is the window-2 test. Vitest: 9 files, 104 passed.
+
+## One fixed sentence once per answer (the user's item 3, after window 1)
+- New `services/assistant/tests/test_rag08_fixed_sentence_once.py` (5, `RAG-08`). Before the fix:
+  FAILED services/assistant/tests/test_rag08_fixed_sentence_once.py::test_the_recorded_injection_answer_shows_the_promotion_sentence_once
+  FAILED services/assistant/tests/test_rag08_fixed_sentence_once.py::test_a_repeat_after_a_model_sentence_is_left_out
+  FAILED services/assistant/tests/test_rag08_fixed_sentence_once.py::test_a_replacement_repeating_the_models_own_copy_is_left_out
+  FAILED services/assistant/tests/test_rag08_fixed_sentence_once.py::test_different_fixed_sentences_each_show_once
+  4 failed, 1 passed in 0.40s
+  (`test_after_a_reset_the_new_attempt_shows_its_own_fixed_sentence` passed before and after: a guard.)
+- After the fix: the 5 pass. The serial run over services/assistant, services/gateway and tests/governance had 1
+  failure, `test_rag09_writer.py::test_a_repeat_separated_by_other_text_is_shown_again`, row #12's pin of the opposite
+  rule ("shown again"). It was changed after that failure to the user's new rule: `…_is_shown_once`, exact count 1,
+  the model's sentence kept, both blocks counted. Flagged for the user.
+- Then: services/assistant, services/gateway, tests/governance 1523 passed (serial); evals/tests 1232 passed, 9
+  skipped, 2 xfailed (serial); `make lint` clean.
+
+## Window 3: RT-017 to RT-003 (the user's option 1, 2026-11-24)
+
+Before the change, at a6eb385, replaying assistant-redteam (serial):
+
+    FAILED services/assistant/tests/test_red_team_e2e.py::test_a_red_team_query_surfaces_nothing_internal[RT-017]
+    1 failed, 27 passed, 7855 deselected
+
+After REPLACED_IN_RECORDING = {"RT-003"}, and the guard test pinning RT-003:
+
+    28 passed, 7855 deselected
+    offline tests in the file: 25 passed, 28 deselected
+
+## Mutants on the SA-02 hard-rule pins (advisor finding 3, 2026-11-24, at dca6053)
+
+Each mutant was applied by hand and the file was restored with `git checkout` afterwards. The Python runs were serial
+(`-p no:xdist`) over these files: `test_sa02_source_cards.py`, `test_sa02_source_card_edges.py`,
+`test_sa02_citation_cards.py`, `test_sa02_citation_card_edges.py` and `test_chat.py`. Unmutated: 56 passed.
+
+M1. `_card` ignores `TRUSTED_SOURCE_TYPES`, so a review gets a title, brand and department (hard rule 6).
+
+    FAILED services/assistant/tests/test_sa02_source_cards.py::test_a_review_card_carries_no_text_from_the_review
+    FAILED services/assistant/tests/test_sa02_source_card_edges.py::test_an_unknown_source_type_is_untrusted_and_carries_no_text
+    FAILED services/assistant/tests/test_sa02_source_card_edges.py::test_a_review_with_a_brand_line_still_carries_no_brand
+    FAILED services/gateway/tests/test_sa02_citation_cards.py::test_the_citations_event_carries_a_card_per_cited_source
+    FAILED services/gateway/tests/test_sa02_citation_card_edges.py::test_a_review_card_has_only_id_and_type_even_with_a_brand_line
+    5 failed, 51 passed
+
+M2. `source_cards` drops the cited filter and makes a card for every source of the turn (hard rule 5).
+
+    14 failed, 42 passed, including:
+    test_only_cited_sources_get_a_card_in_citation_order
+    test_a_cited_id_with_no_source_text_gets_no_card
+    test_an_uncited_source_gets_no_card
+    test_a_marker_for_an_unretrieved_id_is_not_cited_and_gets_no_card
+    test_a_review_card_has_only_id_and_type_even_with_a_brand_line
+
+M3. `linked()` in `Chat.tsx` links every marker, cited or not.
+(`corepack pnpm exec vitest run src/ChatSources.test.tsx src/ChatSourcesEdges.test.tsx`)
+
+    × leaves a marker the gateway did not cite as plain text
+    × leaves a group marker's text exactly as streamed
+    × leaves [<img src=x>] as plain text with no link, element or handler
+    × leaves [P0178"><b>x</b>] as plain text with no link, element or handler
+    × leaves [javascript:alert(1)] as plain text with no link, element or handler
+    × links only the cited IDs in a group marker and keeps the text
+    × never links a marker whose ID is not among the cited ones, whatever it looks like
+    × makes no card and no link for a sources entry whose ID was not cited
+    Tests  8 failed | 26 passed (34)
+
+Hard rule 2 (no price or stock field) has no code path to mutate: neither `SourceCard` nor the gateway's `_card`
+has such a field. It is pinned by `test_sa02_source_cards.py::test_a_card_has_no_price_or_stock_field`, which checks the exact field
+set, and by the exact citations dict in `test_sa02_citation_cards.py`.
+
+## Scoped security review F1 (Medium) and F2 (Low): the fixed-sentence-once search (2026-11-24, at 7bcc221)
+
+`test_rag08_fixed_sentence_once_cost.py`, before the fix (serial):
+
+    E  assert (4.349383916996885 / 0.0694195420073811) < 9.0     # 1,600 vs 400 blocked sentences: 63x, quadratic
+    FAILED ...::test_many_blocked_sentences_cost_linear_time
+    FAILED ...::test_a_struck_through_copy_does_not_hide_the_replacement      (assert 0 == 1)
+    FAILED ...::test_a_quoted_copy_does_not_hide_the_replacement
+    FAILED ...::test_a_copy_inside_a_sentence_does_not_hide_the_replacement   (assert 1 == 2)
+    4 failed, 3 passed
+
+Separate timing of "Use a coupon. Ok. " x 800 (14,400 characters, 7-character deltas):
+
+| Version | Time |
+|---|---|
+| Check before item 3 (`41d14ef`) | 0.16 s |
+| Item 3's check (`7bcc221`) | 1.17 s |
+
+After the fix: the cost file, `test_rag08_fixed_sentence_once.py`, `_edges.py` and `test_rag09_writer.py` gave
+116 passed.
+
+Every recorded answer call with text, in `eval-answers`, `assistant-smoke`, `assistant-cart` and `assistant-redteam`,
+was run through the old check (`7bcc221`) and the new one. All 357 match: shown text and counts are identical in
+every one (`$TMPDIR/equiv.py`).
+
+L3, check (h) for an item in `REPLACED_IN_RECORDING` also requires a blocked `refund_authority` or `confirmation`
+count in the turn's telemetry. With it, the red-team replay is 28 passed.
+
+## Scoped re-review, lows 1 and 2 (2026-11-24, at afc49e2)
+
+Before the fix:
+
+    FAILED ...::test_a_struck_through_copy_right_before_does_not_hide_the_replacement   (assert 0 == 1)
+    FAILED ...::test_a_long_space_run_before_a_failed_copy_costs_linear_time
+        assert (2.704477416991722 / 1.1242871660215314) < 1.8   # 20,000 spaces; 1,600 vs 100 blocked sentences
+    2 failed, 8 passed
+
+After the fix:
+
+- The cost file, the other fixed-sentence tests, `test_rag09_writer.py` and `test_output_check.py`: 276 passed.
+- The old check (`7bcc221`) and the new one agree on all 357 recorded answer calls.
+
+## Advisor re-read N2 and N3 (2026-11-24, at 373f22c)
+
+N3: the two wall-clock tests in `test_rag08_fixed_sentence_once_cost.py` are replaced by counted ones (the flaky-test
+precedent, N-1):
+
+- `test_many_blocked_sentences_scan_the_screen_a_bounded_number_of_times` wraps the fixed-sentence patterns and adds
+  up the characters each search starts from.
+- `test_the_whole_sentence_test_reads_a_bounded_number_of_characters` counts the characters `_whole_sentence_at`
+  reads, using a counting `str`.
+- The long-run case stays as a behaviour test without timing:
+  `test_a_long_space_run_before_a_failed_copy_still_shows_each_answer_right`.
+
+Mutants, each applied by hand and restored with `git checkout`:
+
+    Ma: `_on_screen` starts every search at 0
+        FAILED ...::test_many_blocked_sentences_scan_the_screen_a_bounded_number_of_times    1 failed, 10 passed
+        (A first counter measured the intended window and passed under Ma; it was replaced by the pattern wrapper.)
+    Mb: no cap on the `_whole_sentence_at` back-scan
+        FAILED ...::test_the_whole_sentence_test_reads_a_bounded_number_of_characters        1 failed, 10 passed
+    Unmutated: 11 passed
+
+N2: check (h)'s telemetry assertion, with `usage.py` logging `"blocked": {}`. RT-003 replayed alone:
+
+    >  assert turn["blocked"].get("refund_authority", 0) + turn["blocked"].get("confirmation", 0)
+    E  AssertionError: assert (0 + 0)
+    FAILED services/assistant/tests/test_red_team_e2e.py::test_a_red_team_query_surfaces_nothing_internal[RT-003]
+    Restored: 1 passed
+
+N4: the equivalence script is committed in `docs/reviews/2026-11-24-17-check-equivalence.md`. Re-run as written at
+373f22c's check: compared 357, differ 0.
+
+## make ci at b045114: two failures (2026-11-24)
+
+    FAILED services/llm-replay/tests/test_tool_result_order.py::test_five_parallel_prices_finishing_in_reverse_are_forwarded_in_tool_use_order
+    FAILED tests/governance/test_citations.py::test_every_cited_path_exists[data-flow.md]
+    2 failed, 6927 passed, 9 skipped, 24 xfailed
+
+- **The order test:** 3 of 3 serial runs failed (`assert [] == ['toolu_p0', …]`).
+  - The bodies sorted by name, by message count: `[(4, ['toolu_p0'…'toolu_p4']), (2, [])]`. So `[-1]` was the first
+    request.
+  - With main's `prompt.py` swapped in, the test passes.
+  - Fixed by sorting by message count (approved by the user): 61 passed.
+- **The citation test:** fixed in `2e2f83b`. The governance tests then gave 203 passed.

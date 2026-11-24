@@ -6,8 +6,8 @@ could echo a card number: both handlers here return fixed text. Card data is ref
 dependency, before the response starts and before any model call (hard rule 1). `error` events hold
 one code from a closed set, never exception or upstream text.
 
-Events: `token` {text}, then `citations` {source_ids} and `done` {}, or `error` {code}. `reset` {}
-means a model attempt was cut off and retried, so the text so far must be dropped.
+Events: `token` {text}, then `citations` {source_ids, sources} and `done` {}, or `error` {code}.
+`reset` {} means a model attempt was cut off and retried, so the text so far must be dropped.
 """
 
 from __future__ import annotations
@@ -26,6 +26,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from northwind_assistant.caller import Caller
 from northwind_assistant.catalog_client import CatalogEndpoint
 from northwind_assistant.rag_client import RagEndpoint
+from northwind_assistant.source_cards import SourceCard
 from northwind_assistant.turn import Citations, Reset, TextDelta, TurnError, stream_answer
 from northwind_common.cards import contains_card_data
 from northwind_common.llm import AgentRuntime, agent_runtime
@@ -108,13 +109,31 @@ def chat_services() -> ChatServices:
     )
 
 
+def _card(card: SourceCard) -> dict[str, str]:
+    """A source card as the portal reads it (row #17, SA-02): empty fields are left out."""
+    fields = {
+        "id": card.source_id,
+        "type": card.source_type,
+        "title": card.title,
+        "brand": card.brand,
+        "department": card.department,
+    }
+    return {key: value for key, value in fields.items() if value is not None}
+
+
 def _event(event: Any) -> ServerSentEvent:
     if isinstance(event, TextDelta):
         return ServerSentEvent(event="token", data={"text": event.text})
     if isinstance(event, Reset):
         return ServerSentEvent(event="reset", data={})
     if isinstance(event, Citations):
-        return ServerSentEvent(event="citations", data={"source_ids": list(event.source_ids)})
+        return ServerSentEvent(
+            event="citations",
+            data={
+                "source_ids": list(event.source_ids),
+                "sources": [_card(c) for c in event.sources],
+            },
+        )
     return ServerSentEvent(event="error", data={"code": event.code})
 
 

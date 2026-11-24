@@ -14,7 +14,7 @@ from __future__ import annotations
 import logging
 import re
 from collections.abc import AsyncIterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Literal
 
 from claude_agent_sdk import AssistantMessage, ClaudeSDKError, ResultMessage, UserMessage, query
@@ -25,6 +25,7 @@ from northwind_assistant.catalog_client import CatalogEndpoint
 from northwind_assistant.output_check import OutputCheck
 from northwind_assistant.prompt import system_prompt, user_prompt
 from northwind_assistant.rag_client import McpRagSearcher, RagEndpoint
+from northwind_assistant.source_cards import SourceCard, source_cards
 from northwind_assistant.tools import (
     ALLOWED_TOOL,
     SERVER_NAME,
@@ -78,7 +79,11 @@ class Reset:
 
 @dataclass(frozen=True)
 class Citations:
+    """`sources`: a card per cited source for the chat panel (row #17, SA-02). It is not part of
+    equality: which sources are cited is the citation; the cards only describe them."""
+
     source_ids: tuple[str, ...]
+    sources: tuple[SourceCard, ...] = field(default=(), compare=False)
 
 
 @dataclass(frozen=True)
@@ -322,7 +327,8 @@ async def stream_answer(
             elif isinstance(event, Citations):
                 for out in _sent(check.finish()):
                     yield out
-                yield Citations(cited_ids(check.shown, state.seen))
+                cited = cited_ids(check.shown, state.seen)
+                yield Citations(cited, source_cards(cited, state.sources))
             else:
                 check.abort()  # fail closed: held text is never sent after a failure
                 yield event

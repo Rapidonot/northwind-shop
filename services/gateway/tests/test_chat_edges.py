@@ -137,8 +137,9 @@ def test_a_second_request_is_independent_of_the_first(stack: Stack) -> None:
     first = events(stack.client.post("/api/chat", json={"message": "hi"}).text)
     stack.retriever.chunks = []
     second = events(stack.client.post("/api/chat", json={"message": "hi"}).text)
-    assert ("citations", {"source_ids": ["FAQ-001"]}) in first
-    assert ("citations", {"source_ids": []}) in second
+    card = {"id": "FAQ-001", "type": "document", "title": "Wash cold."}  # row #17
+    assert ("citations", {"source_ids": ["FAQ-001"], "sources": [card]}) in first
+    assert ("citations", {"source_ids": [], "sources": []}) in second
 
 
 # --- the request body ------------------------------------------------------------------------
