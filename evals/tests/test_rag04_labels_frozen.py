@@ -1,9 +1,9 @@
 """RAG-04's 100 labelled queries are frozen before any extractor runs on them (row #11).
 
-The labels and the labelling guide (which holds the scoring rule) were committed before the extractor
-existed, and the user reviewed 25 of them. Any change to either file after this pin is a label change,
-which needs the user (plan `docs/reviews/2026-11-24-11-plan.md`, stop 5): update the pin only with
-their answer.
+The labels and the labelling guide (which holds the scoring rule) were committed before the
+extractor existed, and the user reviewed 25 of them. Any change to either file after this pin is a
+label change, which needs the user (plan `docs/reviews/2026-11-24-11-plan.md`, stop 5): update the
+pin only with their answer.
 """
 
 from __future__ import annotations
