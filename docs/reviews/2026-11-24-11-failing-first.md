@@ -112,3 +112,23 @@ E           AssertionError: assert not True
 E            +  where True = names_catalog_product('Tell me about the Corvane Ascent Pro Shell')
   ```
 - After the fix: 17 passed in the file; `make eval-snapshot` leaves all 308 contexts byte-identical.
+
+## The advisor's re-read: two more weak entries, replaced (its L2)
+
+- Two entries above failed only because an API was missing, not on behaviour:
+  - "security L4: the eval scores the gateway's fallbacks", which failed with `AttributeError … shopper_parts`;
+  - "M2 red team", which failed with `TypeError … 'suite'`.
+- Behaviour mutations replace them:
+
+- **security L4: the eval falls back like the gateway when the token cannot hold the plan (mutation: no size check)** (mutation): `1 failed in 0.47s`
+  `E       AssertionError: assert [('éééééééééé..., 'P0064'})))] == [('something'...oducts=None))]`
+- **M2 red team: RT-010/011 part texts are frozen queries (mutation: drop the red-team line)** (mutation): `1 failed in 1.79s`
+  `E       AssertionError: assert {'EU parcel c...t and timing'} <= {'A review sa... price?', ...}`
+
+- **The runner is committed for reproduction:** `docs/reviews/2026-11-24-11-ff-runner.py.txt`. Run it from the
+  repo root with `uv run python`, on a clean tree; it restores every file from HEAD.
+- **A session edit of a `test-writer` test (its L3):**
+  - In `test_rag04_post_review_tw.py`, the session changed `assert len(new) == 5` to `<= 5`, so the check still
+    holds once this row merges and `origin/main` already holds the keys.
+  - The property `new <= wanted` (every new key is a frozen query's key) is unchanged.
+  - The test never failed; this is not a relaxation made after a failure.

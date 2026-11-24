@@ -92,6 +92,8 @@ the evidence that answers it.
 narrowing.
 - **Detection:** in code, against the catalog's own product names (brand and model word, from
   `data/fixtures/products.jsonl`): `northwind_rag.query.names_catalog_product`. Never by Haiku.
+  - Only public products give keys, so an internal product's name is not an existence oracle (security H2-L1, hard
+    rule 7).
 - **Both paths apply it:** the gateway's `plan_claim` and the eval's `shopper_parts`.
 - **Filters are still extracted and reported.** RAG-04's criterion scores extraction, so the 99/100 is unchanged.
 - **A brand alone names no product:** "Tidewick rain jackets in M" still narrows.
