@@ -24,7 +24,7 @@ from northwind_common.mcp_token import RAG_SERVER, mint, product_bitmap
 from northwind_llm_replay.proxy import RunningProxy, encode_test_id
 from northwind_llm_replay.runner import proxy_config
 from northwind_mcp_catalog.live import FixtureCatalog, eligible_products
-from northwind_rag.query import REGION_CURRENCY, QueryPlan, rules_plan
+from northwind_rag.query import REGION_CURRENCY, QueryPlan, names_catalog_product, rules_plan
 from northwind_rag.retrieval import SearchFilter
 
 SUITE = "query-understanding"
@@ -63,8 +63,8 @@ def shopper_parts(plan: QueryPlan, message: str, region: str, store: FixtureCata
     """`search_parts`, then the gateway's own fallbacks (security review L4), so the gate scores the
     search a shopper gets: a plan that narrows nothing is the plain search; a product list outside
     the bitmap drops that part's live filter; a claim the token cannot hold is the plain search."""
-    if plan.is_plain(message):
-        return [(message, SearchFilter())]
+    if plan.is_plain(message) or names_catalog_product(message):
+        return [(message, SearchFilter())]  # the gateway's named-product exception, mirrored
     parts = search_parts(plan, region, store)
     claim_parts: list[dict[str, object]] = []
     kept: Parts = []

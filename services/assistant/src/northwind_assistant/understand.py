@@ -55,6 +55,7 @@ from northwind_rag.query import (
     Filters,
     QueryPlan,
     Vocabulary,
+    names_catalog_product,
     rules_plan,
     validate_plan,
 )
@@ -343,9 +344,10 @@ class LiveFilter:
 async def plan_claim(
     plan: QueryPlan, message: str, caller: Caller, live: LiveFilter | None
 ) -> dict[str, Any] | None:
-    """The `qf` claim for a plan, or None when the plain search is the same (no filter, the raw
-    message, one part)."""
-    if plan.is_plain(message):
+    """The `qf` claim for a plan, or None for the plain search: when the plan is the same (no
+    filter, the raw message, one part), or when the message names a catalog product (decision 0022's
+    named-product exception; the filters are still extracted and reported)."""
+    if plan.is_plain(message) or names_catalog_product(message):
         return None
     parts: list[dict[str, Any]] = []
     for part in plan.parts:

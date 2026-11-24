@@ -653,6 +653,32 @@ def _brands(fixtures_dir: Path = FIXTURES_DIR) -> tuple[str, ...]:
     return tuple(sorted(brands))
 
 
+@lru_cache(maxsize=1)
+def _product_name_pattern(fixtures_dir: Path = FIXTURES_DIR) -> re.Pattern[str]:
+    """Each catalog product as its brand and model word ("Corvane Ridge", "Halvardine Home
+    Orchard"), from the catalog itself (row #11, the named-product exception)."""
+    path = fixtures_dir / "products.jsonl"
+    assert_ingestible(path)
+    keys: set[str] = set()
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        product = json.loads(line)
+        brand, name = str(product["brand"]), str(product["name"])
+        rest = name[len(brand) :].split() if name.startswith(brand) else []
+        if rest:
+            words = [*brand.split(), rest[0]]
+            keys.add(r"\s+".join(re.escape(w) for w in words))
+    return re.compile(rf"\b(?:{'|'.join(sorted(keys))})\b", re.IGNORECASE)
+
+
+def names_catalog_product(text: str) -> bool:
+    """Whether the message names a catalog product (brand and model word), by code, never by a
+    model. Such a message runs the plain first search (decision 0022, the named-product exception):
+    narrowing a named product's variant question drops the variant chunks that answer it."""
+    return bool(_product_name_pattern().search(text))
+
+
 def _names_a_product(text: str) -> bool:
     return any(re.search(rf"\b{re.escape(brand)}\b", text) for brand in _brands())
 

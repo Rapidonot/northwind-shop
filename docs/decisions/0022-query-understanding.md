@@ -74,3 +74,23 @@ before first text".
   the NFR-13 estimate adds it, weighted by the share of messages routed to Haiku.
 - **Rewritten part texts are new search queries.** Their frozen vectors (decision 0012) are added once W1 has
   recorded them.
+
+## Exception: a named product runs the plain first search (the user and the advisor, 2026-11-24, after W5)
+
+W5 (`docs/reviews/2026-11-24-11-w5-eval-answers.md`) found that narrowing a named product's variant question removes
+the evidence that answers it.
+- **Example:** "Is the Corvane Ridge Fleece Jacket in Glacier Blue available in 4XL?"
+- **What happens:** the colour and size filters drop every variant chunk, because each variant has one colour and one
+  size. Reviews fill the top 5.
+- **Effect:** `variant` `behaviour_ok` fell from 0.844 to 0.594. All 13 regressed items name a product. The
+  candidate was not promoted.
+
+**Rule:** a message that names a catalog product runs the plain first search, with no colour, size or live-filter
+narrowing.
+- **Detection:** in code, against the catalog's own product names (brand and model word, from
+  `data/fixtures/products.jsonl`): `northwind_rag.query.names_catalog_product`. Never by Haiku.
+- **Both paths apply it:** the gateway's `plan_claim` and the eval's `shopper_parts`.
+- **Filters are still extracted and reported.** RAG-04's criterion scores extraction, so the 99/100 is unchanged.
+- **A brand alone names no product:** "Tidewick rain jackets in M" still narrows.
+- **Haiku is still called** for a routed message that names a product, because extraction is unchanged. Its plan
+  narrows nothing there.
