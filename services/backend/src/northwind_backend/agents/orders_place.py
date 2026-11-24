@@ -51,6 +51,7 @@ from typing import Any, Literal
 
 from claude_agent_sdk import SdkMcpTool, tool
 
+from northwind_backend.agents.escalation import RECOMMENDED as RECOMMENDED
 from northwind_backend.agents.messages import DOUBTFUL, model_envelope
 from northwind_backend.agents.runtime import RunState, Step, SubagentSpec, run_subagent
 from northwind_backend.audit import AuditContext, AuditWriteError, card_data, outcome_ref
@@ -231,25 +232,6 @@ Reason = Literal[
     "agent_requested",
     "not_finished",
 ]
-RECOMMENDED: dict[str, str] = {
-    "uncertain_write": "read the payment and order state, settle the uncertain action, then finish",
-    "duplicate_in_progress": (
-        "another run holds the payment claim: read the order's intent at the payment port, or the "
-        "order's reconstruction (payment_label), before acting; `payment` is only what was "
-        "last reported"
-    ),
-    "fraud_review": "review the fraud assessment; release or cancel the order",
-    "out_of_stock": "offer a substitute or a back-order, or cancel (BE-04)",
-    "not_sold_here": "correct the order lines or cancel",
-    "address_unresolved": "contact the shopper for a deliverable address",
-    "payment_declined": "ask the shopper for another payment method",
-    "over_order_limit": "approve the amount by hand or ask for a smaller order",
-    "confirmation_problem": "ask the shopper to confirm the order again in the portal",
-    "port_failure": "retry the order later",
-    "agent_requested": "check the order; the agent escalated without a known cause",
-    # Not "rerun": a later run makes no write on an escalated order (security review F1).
-    "not_finished": "read the order and payment state, then finish the order by hand",
-}
 _DECLINES = frozenset({"soft_decline", "hard_decline"})
 _LIMITS = frozenset({"over_order_limit", "no_order_limit"})
 _CONFIRMATION = frozenset(
