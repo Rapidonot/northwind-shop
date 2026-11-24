@@ -29,7 +29,7 @@ Runs of test_the_model_sees_the_same_second_request_whichever_tool_finishes_firs
   where                                                 runs   failed
   control runs (all three new test files, no mutant)       5   2: one named this test, the other's name not captured
   loop 1 (this test alone)                                 6   0
-  loop 2 (both end-to-end tests, under caffeinate)         6   1: run 12, then the loop stopped
+  loop 2 (both end-to-end tests, under caffeinate)         6   1: the loop's 12th test run (both tests counted), then the loop stopped
   loop 3 (this test alone, token-refusal diagnostics)     30   0
   total                                                   47   3, of which 2 are confirmed as this test
 
