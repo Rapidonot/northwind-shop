@@ -1,0 +1,1153 @@
+cd /Users/rapido/Projects/northwind-shop && uv run pytest services/llm-replay/tests/test_tool_result_order.py -q -p no:cacheprovider 2>&1 | tail -40
+HEAD 47e08f7
+FFFFF.F..FFFFFFFFFFFFFFFFFFF...F.F.F...F..FFFFFFFFF                      [100%]
+=================================== FAILURES ===================================
+_ test_two_orders_of_the_same_results_are_one_cassette[first0-second0-record] __
+
+rig = Rig(upstream=<services.llm-replay.tests.test_tool_result_order.RawUpstream object at 0x10b361d60>, tmp=PosixPath('/pri...-rapido/pytest-99/test_two_orders_of_the_same_re0'), ledger=<northwind_llm_replay.ledger.Ledger object at 0x10b2af110>)
+first = ['a', 'b'], second = ['b', 'a'], second_mode = 'record'
+
+    @pytest.mark.parametrize("second_mode", ["record", "replay"])
+    @pytest.mark.parametrize("first,second", [(["a", "b"], ["b", "a"]), (["b", "a"], ["a", "b"])])
+    def test_two_orders_of_the_same_results_are_one_cassette(
+        rig: Rig, first: list[str], second: list[str], second_mode: str
+    ) -> None:
+        with rig.proxy("record") as p:
+            recorded = send(p.url, as_json(conversation(first)))
+        assert recorded.status_code == 200
+        assert len(rig.upstream.raw) == 1 and len(rig.cassettes) == 1
+        with rig.proxy(second_mode) as p:
+            replayed = send(p.url, as_json(conversation(second)))
+            misses = p.proxy.state.misses
+        assert replayed.status_code == 200, replayed.text
+        assert misses == []
+>       assert replayed.content == recorded.content
+E       assert b'{"id":"msg_...t_tokens":5}}' == b'{"id":"msg_...t_tokens":5}}'
+E         
+E         At index 16 diff: b'2' != b'1'
+E         Use -v to get more diff
+
+services/llm-replay/tests/test_tool_result_order.py:264: AssertionError
+_ test_two_orders_of_the_same_results_are_one_cassette[first0-second0-replay] __
+
+rig = Rig(upstream=<services.llm-replay.tests.test_tool_result_order.RawUpstream object at 0x10b2d2a50>, tmp=PosixPath('/pri...-rapido/pytest-99/test_two_orders_of_the_same_re1'), ledger=<northwind_llm_replay.ledger.Ledger object at 0x10b3b1010>)
+first = ['a', 'b'], second = ['b', 'a'], second_mode = 'replay'
+
+    @pytest.mark.parametrize("second_mode", ["record", "replay"])
+    @pytest.mark.parametrize("first,second", [(["a", "b"], ["b", "a"]), (["b", "a"], ["a", "b"])])
+    def test_two_orders_of_the_same_results_are_one_cassette(
+        rig: Rig, first: list[str], second: list[str], second_mode: str
+    ) -> None:
+        with rig.proxy("record") as p:
+            recorded = send(p.url, as_json(conversation(first)))
+        assert recorded.status_code == 200
+        assert len(rig.upstream.raw) == 1 and len(rig.cassettes) == 1
+        with rig.proxy(second_mode) as p:
+            replayed = send(p.url, as_json(conversation(second)))
+            misses = p.proxy.state.misses
+>       assert replayed.status_code == 200, replayed.text
+E       AssertionError: {"type":"error","error":{"type":"invalid_request_error","message":"cassette miss in suite 't' (model input changed; re-record with `make record SUITE=t`)"},"isError":true,"errorCategory":"validation","isRetryable":false,"message":"cassette miss in suite 't' (model input changed; re-record with `make record SUITE=t`)","diff":"--- cassette b4f387b226fe\n+++ request\n@@ -39,13 +39,13 @@\n       {\n         \"content\": [\n           {\n-            \"content\": \"result for a\",\n-            \"tool_use_id\": \"a\",\n+            \"content\": \"result for b\",\n+            \"tool_use_id\": \"b\",\n             \"type\": \"tool_result\"\n           },\n           {\n-            \"content\": \"result for b\",\n-            \"tool_use_id\": \"b\",\n+            \"content\": \"result for a\",\n+            \"tool_use_id\": \"a\",\n             \"type\": \"tool_result\"\n           }\n         ],"}
+E       assert 400 == 200
+E        +  where 400 = <Response [400 Bad Request]>.status_code
+
+services/llm-replay/tests/test_tool_result_order.py:262: AssertionError
+_ test_two_orders_of_the_same_results_are_one_cassette[first1-second1-record] __
+
+rig = Rig(upstream=<services.llm-replay.tests.test_tool_result_order.RawUpstream object at 0x10b415dc0>, tmp=PosixPath('/pri...-rapido/pytest-99/test_two_orders_of_the_same_re2'), ledger=<northwind_llm_replay.ledger.Ledger object at 0x10b414fe0>)
+first = ['b', 'a'], second = ['a', 'b'], second_mode = 'record'
+
+    @pytest.mark.parametrize("second_mode", ["record", "replay"])
+    @pytest.mark.parametrize("first,second", [(["a", "b"], ["b", "a"]), (["b", "a"], ["a", "b"])])
+    def test_two_orders_of_the_same_results_are_one_cassette(
+        rig: Rig, first: list[str], second: list[str], second_mode: str
+    ) -> None:
+        with rig.proxy("record") as p:
+            recorded = send(p.url, as_json(conversation(first)))
+        assert recorded.status_code == 200
+        assert len(rig.upstream.raw) == 1 and len(rig.cassettes) == 1
+        with rig.proxy(second_mode) as p:
+            replayed = send(p.url, as_json(conversation(second)))
+            misses = p.proxy.state.misses
+        assert replayed.status_code == 200, replayed.text
+        assert misses == []
+>       assert replayed.content == recorded.content
+E       assert b'{"id":"msg_...t_tokens":5}}' == b'{"id":"msg_...t_tokens":5}}'
+E         
+E         At index 16 diff: b'2' != b'1'
+E         Use -v to get more diff
+
+services/llm-replay/tests/test_tool_result_order.py:264: AssertionError
+_ test_two_orders_of_the_same_results_are_one_cassette[first1-second1-replay] __
+
+rig = Rig(upstream=<services.llm-replay.tests.test_tool_result_order.RawUpstream object at 0x10b415b20>, tmp=PosixPath('/pri...-rapido/pytest-99/test_two_orders_of_the_same_re3'), ledger=<northwind_llm_replay.ledger.Ledger object at 0x10b8a1d30>)
+first = ['b', 'a'], second = ['a', 'b'], second_mode = 'replay'
+
+    @pytest.mark.parametrize("second_mode", ["record", "replay"])
+    @pytest.mark.parametrize("first,second", [(["a", "b"], ["b", "a"]), (["b", "a"], ["a", "b"])])
+    def test_two_orders_of_the_same_results_are_one_cassette(
+        rig: Rig, first: list[str], second: list[str], second_mode: str
+    ) -> None:
+        with rig.proxy("record") as p:
+            recorded = send(p.url, as_json(conversation(first)))
+        assert recorded.status_code == 200
+        assert len(rig.upstream.raw) == 1 and len(rig.cassettes) == 1
+        with rig.proxy(second_mode) as p:
+            replayed = send(p.url, as_json(conversation(second)))
+            misses = p.proxy.state.misses
+>       assert replayed.status_code == 200, replayed.text
+E       AssertionError: {"type":"error","error":{"type":"invalid_request_error","message":"cassette miss in suite 't' (model input changed; re-record with `make record SUITE=t`)"},"isError":true,"errorCategory":"validation","isRetryable":false,"message":"cassette miss in suite 't' (model input changed; re-record with `make record SUITE=t`)","diff":"--- cassette b4fd8575db49\n+++ request\n@@ -39,13 +39,13 @@\n       {\n         \"content\": [\n           {\n-            \"content\": \"result for b\",\n-            \"tool_use_id\": \"b\",\n+            \"content\": \"result for a\",\n+            \"tool_use_id\": \"a\",\n             \"type\": \"tool_result\"\n           },\n           {\n-            \"content\": \"result for a\",\n-            \"tool_use_id\": \"a\",\n+            \"content\": \"result for b\",\n+            \"tool_use_id\": \"b\",\n             \"type\": \"tool_result\"\n           }\n         ],"}
+E       assert 400 == 200
+E        +  where 400 = <Response [400 Bad Request]>.status_code
+
+services/llm-replay/tests/test_tool_result_order.py:262: AssertionError
+__ test_one_proxy_run_serves_the_other_order_from_the_cassette_it_just_wrote ___
+
+rig = Rig(upstream=<services.llm-replay.tests.test_tool_result_order.RawUpstream object at 0x10b3b3aa0>, tmp=PosixPath('/pri...-rapido/pytest-99/test_one_proxy_run_serves_the_0'), ledger=<northwind_llm_replay.ledger.Ledger object at 0x10b5db530>)
+
+    def test_one_proxy_run_serves_the_other_order_from_the_cassette_it_just_wrote(rig: Rig) -> None:
+        with rig.proxy("record") as p:
+            send(p.url, as_json(conversation(["b", "a"])))
+            again = send(p.url, as_json(conversation(["a", "b"])))
+            outcomes = [c["outcome"] for c in p.proxy.state.calls]
+        assert again.status_code == 200
+>       assert outcomes == ["recorded", "hit"]
+E       AssertionError: assert ['recorded', 'recorded'] == ['recorded', 'hit']
+E         
+E         At index 1 diff: 'recorded' != 'hit'
+E         Use -v to get more diff
+
+services/llm-replay/tests/test_tool_result_order.py:275: AssertionError
+____________ test_reversed_results_are_forwarded_in_tool_use_order _____________
+
+rig = Rig(upstream=<services.llm-replay.tests.test_tool_result_order.RawUpstream object at 0x10b5db9b0>, tmp=PosixPath('/pri...-rapido/pytest-99/test_reversed_results_are_forw0'), ledger=<northwind_llm_replay.ledger.Ledger object at 0x10b5dbf20>)
+
+    def test_reversed_results_are_forwarded_in_tool_use_order(rig: Rig) -> None:
+        reversed_body = conversation(["b", "a"])
+        with rig.proxy("record") as p:
+            assert send(p.url, odd_bytes(reversed_body)).status_code == 200
+        [forwarded] = rig.upstream.raw
+        sent = json.loads(forwarded)
+>       assert result_ids(sent) == ["a", "b"]
+E       AssertionError: assert ['b', 'a'] == ['a', 'b']
+E         
+E         At index 0 diff: 'b' != 'a'
+E         Use -v to get more diff
+
+services/llm-replay/tests/test_tool_result_order.py:297: AssertionError
+_________________ test_the_slots_rule_holds_through_the_proxy __________________
+
+rig = Rig(upstream=<services.llm-replay.tests.test_tool_result_order.RawUpstream object at 0x10b5805f0>, tmp=PosixPath('/pri...-rapido/pytest-99/test_the_slots_rule_holds_thro0'), ledger=<northwind_llm_replay.ledger.Ledger object at 0x10b5bd5e0>)
+
+    def test_the_slots_rule_holds_through_the_proxy(rig: Rig) -> None:
+        body = conversation(["a", "b"])
+        body["messages"][2]["content"] = [
+            text_block("t1"),
+            result("b"),
+            text_block("t2"),
+            result("a"),
+        ]
+        with rig.proxy("record") as p:
+            assert send(p.url, as_json(body)).status_code == 200
+        [forwarded] = rig.upstream.raw
+        content = json.loads(forwarded)["messages"][2]["content"]
+>       assert content == [text_block("t1"), result("a"), text_block("t2"), result("b")]
+E       AssertionError: assert [{'type': 'te...esult for a'}] == [{'type': 'te...esult for b'}]
+E         
+E         At index 1 diff: {'type': 'tool_result', 'tool_use_id': 'b', 'content': 'result for b'} != {'type': 'tool_result', 'tool_use_id': 'a', 'content': 'result for a'}
+E         Use -v to get more diff
+
+services/llm-replay/tests/test_tool_result_order.py:328: AssertionError
+______________ test_the_live_mode_forwards_the_reordered_body_too ______________
+
+rig = Rig(upstream=<services.llm-replay.tests.test_tool_result_order.RawUpstream object at 0x10b582120>, tmp=PosixPath('/pri...-rapido/pytest-99/test_the_live_mode_forwards_th0'), ledger=<northwind_llm_replay.ledger.Ledger object at 0x10b580ce0>)
+
+    def test_the_live_mode_forwards_the_reordered_body_too(rig: Rig) -> None:
+        with rig.proxy("live") as p:
+            assert send(p.url, as_json(conversation(["b", "a"]))).status_code == 200
+>       assert result_ids(json.loads(rig.upstream.raw[0])) == ["a", "b"]
+E       AssertionError: assert ['b', 'a'] == ['a', 'b']
+E         
+E         At index 0 diff: 'b' != 'a'
+E         Use -v to get more diff
+
+services/llm-replay/tests/test_tool_result_order.py:334: AssertionError
+_______________ test_results_fill_the_slots_results_already_hold _______________
+
+    def test_results_fill_the_slots_results_already_hold() -> None:
+        body = conversation()
+        body["messages"][2]["content"] = [
+            text_block("t1"),
+            result("b"),
+            text_block("t2"),
+            result("a"),
+        ]
+>       out = ordered_tool_results(body)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+services/llm-replay/tests/test_tool_result_order.py:354: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+services/llm-replay/tests/test_tool_result_order.py:71: in ordered_tool_results
+    module = importlib.import_module("northwind_llm_replay.tool_order")
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.12/3.12.16/Frameworks/Python.framework/Versions/3.12/lib/python3.12/importlib/__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap>:1387: in _gcd_import
+    ???
+<frozen importlib._bootstrap>:1360: in _find_and_load
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+name = 'northwind_llm_replay.tool_order'
+import_ = <function _gcd_import at 0x10412c0e0>
+
+>   ???
+E   ModuleNotFoundError: No module named 'northwind_llm_replay.tool_order'
+
+<frozen importlib._bootstrap>:1324: ModuleNotFoundError
+________________ test_a_result_for_no_tool_use_keeps_its_place _________________
+
+    def test_a_result_for_no_tool_use_keeps_its_place() -> None:
+        body = conversation(["b", "a"])
+        body["messages"][2]["content"] = [result("b"), result("zz"), result("a")]
+>       out = ordered_tool_results(body)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+services/llm-replay/tests/test_tool_result_order.py:362: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+services/llm-replay/tests/test_tool_result_order.py:71: in ordered_tool_results
+    module = importlib.import_module("northwind_llm_replay.tool_order")
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.12/3.12.16/Frameworks/Python.framework/Versions/3.12/lib/python3.12/importlib/__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap>:1387: in _gcd_import
+    ???
+<frozen importlib._bootstrap>:1360: in _find_and_load
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+name = 'northwind_llm_replay.tool_order'
+import_ = <function _gcd_import at 0x10412c0e0>
+
+>   ???
+E   ModuleNotFoundError: No module named 'northwind_llm_replay.tool_order'
+
+<frozen importlib._bootstrap>:1324: ModuleNotFoundError
+__________ test_a_result_of_an_earlier_turn_is_not_a_slot_of_this_one __________
+
+    def test_a_result_of_an_earlier_turn_is_not_a_slot_of_this_one() -> None:
+        body = conversation(["a", "b"])
+        body["messages"] += [
+            {"role": "assistant", "content": [tool_use("c"), tool_use("d")]},
+            {"role": "user", "content": [result("d"), result("a"), result("c")]},
+        ]
+>       out = ordered_tool_results(body)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+services/llm-replay/tests/test_tool_result_order.py:373: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+services/llm-replay/tests/test_tool_result_order.py:71: in ordered_tool_results
+    module = importlib.import_module("northwind_llm_replay.tool_order")
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.12/3.12.16/Frameworks/Python.framework/Versions/3.12/lib/python3.12/importlib/__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap>:1387: in _gcd_import
+    ???
+<frozen importlib._bootstrap>:1360: in _find_and_load
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+name = 'northwind_llm_replay.tool_order'
+import_ = <function _gcd_import at 0x10412c0e0>
+
+>   ???
+E   ModuleNotFoundError: No module named 'northwind_llm_replay.tool_order'
+
+<frozen importlib._bootstrap>:1324: ModuleNotFoundError
+______ test_each_user_message_follows_its_own_preceding_assistant_message ______
+
+    def test_each_user_message_follows_its_own_preceding_assistant_message() -> None:
+        body = conversation(["b", "a"])
+        body["messages"] += [
+            {"role": "assistant", "content": [tool_use("c"), tool_use("d")]},
+            {"role": "user", "content": [result("d"), result("c")]},
+        ]
+>       out = ordered_tool_results(body)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+services/llm-replay/tests/test_tool_result_order.py:384: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+services/llm-replay/tests/test_tool_result_order.py:71: in ordered_tool_results
+    module = importlib.import_module("northwind_llm_replay.tool_order")
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.12/3.12.16/Frameworks/Python.framework/Versions/3.12/lib/python3.12/importlib/__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap>:1387: in _gcd_import
+    ???
+<frozen importlib._bootstrap>:1360: in _find_and_load
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+name = 'northwind_llm_replay.tool_order'
+import_ = <function _gcd_import at 0x10412c0e0>
+
+>   ???
+E   ModuleNotFoundError: No module named 'northwind_llm_replay.tool_order'
+
+<frozen importlib._bootstrap>:1324: ModuleNotFoundError
+______________________ test_non_result_blocks_never_move _______________________
+
+    def test_non_result_blocks_never_move() -> None:
+        body = conversation()
+        mid = {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": "AA"}}
+        body["messages"][2]["content"] = [result("b"), mid, text_block("note"), result("a")]
+>       out = ordered_tool_results(body)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+services/llm-replay/tests/test_tool_result_order.py:394: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+services/llm-replay/tests/test_tool_result_order.py:71: in ordered_tool_results
+    module = importlib.import_module("northwind_llm_replay.tool_order")
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.12/3.12.16/Frameworks/Python.framework/Versions/3.12/lib/python3.12/importlib/__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap>:1387: in _gcd_import
+    ???
+<frozen importlib._bootstrap>:1360: in _find_and_load
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+name = 'northwind_llm_replay.tool_order'
+import_ = <function _gcd_import at 0x10412c0e0>
+
+>   ???
+E   ModuleNotFoundError: No module named 'northwind_llm_replay.tool_order'
+
+<frozen importlib._bootstrap>:1324: ModuleNotFoundError
+______ test_duplicate_results_for_one_tool_use_keep_their_relative_order _______
+
+    def test_duplicate_results_for_one_tool_use_keep_their_relative_order() -> None:
+        body = conversation()
+        first, second = result("b", "first b"), result("b", "second b")
+        body["messages"][2]["content"] = [first, result("a"), second]
+>       out = ordered_tool_results(body)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+services/llm-replay/tests/test_tool_result_order.py:403: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+services/llm-replay/tests/test_tool_result_order.py:71: in ordered_tool_results
+    module = importlib.import_module("northwind_llm_replay.tool_order")
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.12/3.12.16/Frameworks/Python.framework/Versions/3.12/lib/python3.12/importlib/__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap>:1387: in _gcd_import
+    ???
+<frozen importlib._bootstrap>:1360: in _find_and_load
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+name = 'northwind_llm_replay.tool_order'
+import_ = <function _gcd_import at 0x10412c0e0>
+
+>   ???
+E   ModuleNotFoundError: No module named 'northwind_llm_replay.tool_order'
+
+<frozen importlib._bootstrap>:1324: ModuleNotFoundError
+_______________________ test_an_in_order_body_gives_none _______________________
+
+    def test_an_in_order_body_gives_none() -> None:
+>       assert ordered_tool_results(conversation(["a", "b"])) is None
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+services/llm-replay/tests/test_tool_result_order.py:409: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+services/llm-replay/tests/test_tool_result_order.py:71: in ordered_tool_results
+    module = importlib.import_module("northwind_llm_replay.tool_order")
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.12/3.12.16/Frameworks/Python.framework/Versions/3.12/lib/python3.12/importlib/__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap>:1387: in _gcd_import
+    ???
+<frozen importlib._bootstrap>:1360: in _find_and_load
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+name = 'northwind_llm_replay.tool_order'
+import_ = <function _gcd_import at 0x10412c0e0>
+
+>   ???
+E   ModuleNotFoundError: No module named 'northwind_llm_replay.tool_order'
+
+<frozen importlib._bootstrap>:1324: ModuleNotFoundError
+________________ test_one_result_and_unlisted_results_give_none ________________
+
+    def test_one_result_and_unlisted_results_give_none() -> None:
+>       assert ordered_tool_results(conversation(["b"], uses=["a", "b"])) is None
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+services/llm-replay/tests/test_tool_result_order.py:413: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+services/llm-replay/tests/test_tool_result_order.py:71: in ordered_tool_results
+    module = importlib.import_module("northwind_llm_replay.tool_order")
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.12/3.12.16/Frameworks/Python.framework/Versions/3.12/lib/python3.12/importlib/__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap>:1387: in _gcd_import
+    ???
+<frozen importlib._bootstrap>:1360: in _find_and_load
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+name = 'northwind_llm_replay.tool_order'
+import_ = <function _gcd_import at 0x10412c0e0>
+
+>   ???
+E   ModuleNotFoundError: No module named 'northwind_llm_replay.tool_order'
+
+<frozen importlib._bootstrap>:1324: ModuleNotFoundError
+_______________ test_a_string_content_user_message_is_untouched ________________
+
+    def test_a_string_content_user_message_is_untouched() -> None:
+        body = conversation(["b", "a"])
+        body["messages"][2]["content"] = "b then a, as text"
+>       assert ordered_tool_results(body) is None
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+services/llm-replay/tests/test_tool_result_order.py:420: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+services/llm-replay/tests/test_tool_result_order.py:71: in ordered_tool_results
+    module = importlib.import_module("northwind_llm_replay.tool_order")
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.12/3.12.16/Frameworks/Python.framework/Versions/3.12/lib/python3.12/importlib/__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap>:1387: in _gcd_import
+    ???
+<frozen importlib._bootstrap>:1360: in _find_and_load
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+name = 'northwind_llm_replay.tool_order'
+import_ = <function _gcd_import at 0x10412c0e0>
+
+>   ???
+E   ModuleNotFoundError: No module named 'northwind_llm_replay.tool_order'
+
+<frozen importlib._bootstrap>:1324: ModuleNotFoundError
+_______________ test_a_body_with_no_messages_is_untouched[body0] _______________
+
+body = {'model': 'claude-haiku-5-5', 'max_tokens': 1}
+
+    @pytest.mark.parametrize(
+        "body",
+        [
+            {"model": MODEL, "max_tokens": 1},
+            {"model": MODEL, "messages": []},
+            {"model": MODEL, "messages": "not a list"},
+            [1, 2, 3],
+            "text",
+            None,
+        ],
+    )
+    def test_a_body_with_no_messages_is_untouched(body: Any) -> None:
+>       assert ordered_tool_results(body) is None
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+services/llm-replay/tests/test_tool_result_order.py:435: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+services/llm-replay/tests/test_tool_result_order.py:71: in ordered_tool_results
+    module = importlib.import_module("northwind_llm_replay.tool_order")
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.12/3.12.16/Frameworks/Python.framework/Versions/3.12/lib/python3.12/importlib/__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap>:1387: in _gcd_import
+    ???
+<frozen importlib._bootstrap>:1360: in _find_and_load
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+name = 'northwind_llm_replay.tool_order'
+import_ = <function _gcd_import at 0x10412c0e0>
+
+>   ???
+E   ModuleNotFoundError: No module named 'northwind_llm_replay.tool_order'
+
+<frozen importlib._bootstrap>:1324: ModuleNotFoundError
+_______________ test_a_body_with_no_messages_is_untouched[body1] _______________
+
+body = {'model': 'claude-haiku-5-5', 'messages': []}
+
+    @pytest.mark.parametrize(
+        "body",
+        [
+            {"model": MODEL, "max_tokens": 1},
+            {"model": MODEL, "messages": []},
+            {"model": MODEL, "messages": "not a list"},
+            [1, 2, 3],
+            "text",
+            None,
+        ],
+    )
+    def test_a_body_with_no_messages_is_untouched(body: Any) -> None:
+>       assert ordered_tool_results(body) is None
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+services/llm-replay/tests/test_tool_result_order.py:435: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+services/llm-replay/tests/test_tool_result_order.py:71: in ordered_tool_results
+    module = importlib.import_module("northwind_llm_replay.tool_order")
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.12/3.12.16/Frameworks/Python.framework/Versions/3.12/lib/python3.12/importlib/__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap>:1387: in _gcd_import
+    ???
+<frozen importlib._bootstrap>:1360: in _find_and_load
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+name = 'northwind_llm_replay.tool_order'
+import_ = <function _gcd_import at 0x10412c0e0>
+
+>   ???
+E   ModuleNotFoundError: No module named 'northwind_llm_replay.tool_order'
+
+<frozen importlib._bootstrap>:1324: ModuleNotFoundError
+_______________ test_a_body_with_no_messages_is_untouched[body2] _______________
+
+body = {'model': 'claude-haiku-5-5', 'messages': 'not a list'}
+
+    @pytest.mark.parametrize(
+        "body",
+        [
+            {"model": MODEL, "max_tokens": 1},
+            {"model": MODEL, "messages": []},
+            {"model": MODEL, "messages": "not a list"},
+            [1, 2, 3],
+            "text",
+            None,
+        ],
+    )
+    def test_a_body_with_no_messages_is_untouched(body: Any) -> None:
+>       assert ordered_tool_results(body) is None
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+services/llm-replay/tests/test_tool_result_order.py:435: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+services/llm-replay/tests/test_tool_result_order.py:71: in ordered_tool_results
+    module = importlib.import_module("northwind_llm_replay.tool_order")
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.12/3.12.16/Frameworks/Python.framework/Versions/3.12/lib/python3.12/importlib/__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap>:1387: in _gcd_import
+    ???
+<frozen importlib._bootstrap>:1360: in _find_and_load
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+name = 'northwind_llm_replay.tool_order'
+import_ = <function _gcd_import at 0x10412c0e0>
+
+>   ???
+E   ModuleNotFoundError: No module named 'northwind_llm_replay.tool_order'
+
+<frozen importlib._bootstrap>:1324: ModuleNotFoundError
+_______________ test_a_body_with_no_messages_is_untouched[body3] _______________
+
+body = [1, 2, 3]
+
+    @pytest.mark.parametrize(
+        "body",
+        [
+            {"model": MODEL, "max_tokens": 1},
+            {"model": MODEL, "messages": []},
+            {"model": MODEL, "messages": "not a list"},
+            [1, 2, 3],
+            "text",
+            None,
+        ],
+    )
+    def test_a_body_with_no_messages_is_untouched(body: Any) -> None:
+>       assert ordered_tool_results(body) is None
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+services/llm-replay/tests/test_tool_result_order.py:435: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+services/llm-replay/tests/test_tool_result_order.py:71: in ordered_tool_results
+    module = importlib.import_module("northwind_llm_replay.tool_order")
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.12/3.12.16/Frameworks/Python.framework/Versions/3.12/lib/python3.12/importlib/__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap>:1387: in _gcd_import
+    ???
+<frozen importlib._bootstrap>:1360: in _find_and_load
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+name = 'northwind_llm_replay.tool_order'
+import_ = <function _gcd_import at 0x10412c0e0>
+
+>   ???
+E   ModuleNotFoundError: No module named 'northwind_llm_replay.tool_order'
+
+<frozen importlib._bootstrap>:1324: ModuleNotFoundError
+_______________ test_a_body_with_no_messages_is_untouched[text] ________________
+
+body = 'text'
+
+    @pytest.mark.parametrize(
+        "body",
+        [
+            {"model": MODEL, "max_tokens": 1},
+            {"model": MODEL, "messages": []},
+            {"model": MODEL, "messages": "not a list"},
+            [1, 2, 3],
+            "text",
+            None,
+        ],
+    )
+    def test_a_body_with_no_messages_is_untouched(body: Any) -> None:
+>       assert ordered_tool_results(body) is None
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+services/llm-replay/tests/test_tool_result_order.py:435: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+services/llm-replay/tests/test_tool_result_order.py:71: in ordered_tool_results
+    module = importlib.import_module("northwind_llm_replay.tool_order")
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.12/3.12.16/Frameworks/Python.framework/Versions/3.12/lib/python3.12/importlib/__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap>:1387: in _gcd_import
+    ???
+<frozen importlib._bootstrap>:1360: in _find_and_load
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+name = 'northwind_llm_replay.tool_order'
+import_ = <function _gcd_import at 0x10412c0e0>
+
+>   ???
+E   ModuleNotFoundError: No module named 'northwind_llm_replay.tool_order'
+
+<frozen importlib._bootstrap>:1324: ModuleNotFoundError
+_______________ test_a_body_with_no_messages_is_untouched[None] ________________
+
+body = None
+
+    @pytest.mark.parametrize(
+        "body",
+        [
+            {"model": MODEL, "max_tokens": 1},
+            {"model": MODEL, "messages": []},
+            {"model": MODEL, "messages": "not a list"},
+            [1, 2, 3],
+            "text",
+            None,
+        ],
+    )
+    def test_a_body_with_no_messages_is_untouched(body: Any) -> None:
+>       assert ordered_tool_results(body) is None
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+services/llm-replay/tests/test_tool_result_order.py:435: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+services/llm-replay/tests/test_tool_result_order.py:71: in ordered_tool_results
+    module = importlib.import_module("northwind_llm_replay.tool_order")
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.12/3.12.16/Frameworks/Python.framework/Versions/3.12/lib/python3.12/importlib/__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap>:1387: in _gcd_import
+    ???
+<frozen importlib._bootstrap>:1360: in _find_and_load
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+name = 'northwind_llm_replay.tool_order'
+import_ = <function _gcd_import at 0x10412c0e0>
+
+>   ???
+E   ModuleNotFoundError: No module named 'northwind_llm_replay.tool_order'
+
+<frozen importlib._bootstrap>:1324: ModuleNotFoundError
+_____ test_a_user_message_with_no_preceding_assistant_message_is_untouched _____
+
+    def test_a_user_message_with_no_preceding_assistant_message_is_untouched() -> None:
+        body = {
+            "model": MODEL,
+            "messages": [{"role": "user", "content": [result("b"), result("a")]}],
+        }
+>       assert ordered_tool_results(body) is None
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+services/llm-replay/tests/test_tool_result_order.py:443: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+services/llm-replay/tests/test_tool_result_order.py:71: in ordered_tool_results
+    module = importlib.import_module("northwind_llm_replay.tool_order")
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.12/3.12.16/Frameworks/Python.framework/Versions/3.12/lib/python3.12/importlib/__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap>:1387: in _gcd_import
+    ???
+<frozen importlib._bootstrap>:1360: in _find_and_load
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+name = 'northwind_llm_replay.tool_order'
+import_ = <function _gcd_import at 0x10412c0e0>
+
+>   ???
+E   ModuleNotFoundError: No module named 'northwind_llm_replay.tool_order'
+
+<frozen importlib._bootstrap>:1324: ModuleNotFoundError
+__________________ test_the_helper_does_not_modify_its_input ___________________
+
+    def test_the_helper_does_not_modify_its_input() -> None:
+        body = conversation(["b", "a"])
+        before = copy.deepcopy(body)
+>       out = ordered_tool_results(body)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+services/llm-replay/tests/test_tool_result_order.py:449: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+services/llm-replay/tests/test_tool_result_order.py:71: in ordered_tool_results
+    module = importlib.import_module("northwind_llm_replay.tool_order")
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.12/3.12.16/Frameworks/Python.framework/Versions/3.12/lib/python3.12/importlib/__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap>:1387: in _gcd_import
+    ???
+<frozen importlib._bootstrap>:1360: in _find_and_load
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+name = 'northwind_llm_replay.tool_order'
+import_ = <function _gcd_import at 0x10412c0e0>
+
+>   ???
+E   ModuleNotFoundError: No module named 'northwind_llm_replay.tool_order'
+
+<frozen importlib._bootstrap>:1324: ModuleNotFoundError
+________ test_the_cassette_and_the_log_hold_the_reordered_scrubbed_body ________
+
+rig = Rig(upstream=<services.llm-replay.tests.test_tool_result_order.RawUpstream object at 0x10b3b0e30>, tmp=PosixPath('/pri...-rapido/pytest-99/test_the_cassette_and_the_log_0'), ledger=<northwind_llm_replay.ledger.Ledger object at 0x10b3b1bb0>)
+
+    def test_the_cassette_and_the_log_hold_the_reordered_scrubbed_body(rig: Rig) -> None:
+        with rig.proxy("record") as p:
+            send(p.url, odd_bytes(conversation(["b", "a"])))
+        [cassette_path] = rig.cassettes
+        cassette = Cassette.from_json(cassette_path.read_text(encoding="utf-8"))
+        expected = scrub(conversation(["a", "b"]))
+>       assert cassette.match["body"] == expected
+E       AssertionError: assert {'max_tokens'...iku-5-5', ...} == {'model': 'cl...er_id>'}, ...}
+E         
+E         Omitting 4 identical items, use -vv to show
+E         Differing items:
+E         {'messages': [{'content': [{'text': 'What do they cost? café', 'type': 'text'}], 'role': 'user'}, {'content': [{'text'...'b', 'type': 'tool_result'}, {'content': 'result for a', 'tool_use_id': 'a', 'type': 'tool_result'}], 'role': 'user'}]} != {'messages': [{'role': 'user', 'content': [{'type': 'text', 'text': 'What do they cost? café'}]}, {'role': 'assistant'...ol_use_id': 'a', 'content': 'result for a'}, {'type': 'tool_result', 'tool_use_id': 'b', 'content': 'result for b'}]}]}
+E         Use -v to get more diff
+
+services/llm-replay/tests/test_tool_result_order.py:490: AssertionError
+________ test_the_gate_sees_exactly_the_bytes_that_go_upstream[order0] _________
+
+rig = Rig(upstream=<services.llm-replay.tests.test_tool_result_order.RawUpstream object at 0x10b5bc200>, tmp=PosixPath('/pri...-rapido/pytest-99/test_the_gate_sees_exactly_the0'), ledger=<northwind_llm_replay.ledger.Ledger object at 0x10b5bda60>)
+order = ['b', 'a']
+
+    @pytest.mark.parametrize("order", [["b", "a"], ["a", "b"]])
+    def test_the_gate_sees_exactly_the_bytes_that_go_upstream(rig: Rig, order: list[str]) -> None:
+        gate = SpyGate()
+        original = odd_bytes(conversation(order))
+        with rig.proxy("live", gate=gate) as p:
+            assert send(p.url, original).status_code == 200
+        [forwarded] = rig.upstream.raw
+        [(refuse_raw, refuse_body)] = gate.refused
+        assert gate.leak_checks == [forwarded]  # request_leaks: the forwarded bytes, nothing else
+        assert refuse_raw == forwarded  # refuse: the same bytes
+        assert refuse_body == json.loads(forwarded)  # and the parsed form of them
+>       assert result_ids(json.loads(forwarded)) == ["a", "b"]
+E       AssertionError: assert ['b', 'a'] == ['a', 'b']
+E         
+E         At index 0 diff: 'b' != 'a'
+E         Use -v to get more diff
+
+services/llm-replay/tests/test_tool_result_order.py:518: AssertionError
+______ test_the_ledger_reserves_for_the_forwarded_length_not_the_original ______
+
+rig = Rig(upstream=<services.llm-replay.tests.test_tool_result_order.RawUpstream object at 0x10b5c89e0>, tmp=PosixPath('/pri...-rapido/pytest-99/test_the_ledger_reserves_for_t0'), ledger=<northwind_llm_replay.ledger.Ledger object at 0x10b416c00>)
+
+    def test_the_ledger_reserves_for_the_forwarded_length_not_the_original(rig: Rig) -> None:
+        original = odd_bytes(conversation(["b", "a"]))
+        with rig.proxy("record") as p:
+            send(p.url, original)
+        [forwarded] = rig.upstream.raw
+>       assert len(forwarded) < len(original)  # the trailing padding did not go upstream
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       assert 5112 < 5112
+E        +  where 5112 = len(b'{\n  "model": "claude-haiku-5-5",\n  "max_tokens": 64,\n  "stream": false,\n  "metadata": {\n    "user_id": "{\\"dev...                                                                                                                      ')
+E        +  and   5112 = len(b'{\n  "model": "claude-haiku-5-5",\n  "max_tokens": 64,\n  "stream": false,\n  "metadata": {\n    "user_id": "{\\"dev...                                                                                                                      ')
+
+services/llm-replay/tests/test_tool_result_order.py:528: AssertionError
+_________________ test_the_runner_forwards_the_reordered_bytes _________________
+
+tmp_path = PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-99/test_the_runner_forwards_the_r0')
+
+    def test_the_runner_forwards_the_reordered_bytes(tmp_path: Path) -> None:
+        with runner_rig(tmp_path) as r:
+            reply = send(r.url, as_json(conversation(["b", "a"])), headers={"x-api-key": r.token})
+        assert reply.status_code == 200, reply.text
+>       assert result_ids(json.loads(r.upstream.raw[0])) == ["a", "b"]
+E       AssertionError: assert ['b', 'a'] == ['a', 'b']
+E         
+E         At index 0 diff: 'b' != 'a'
+E         Use -v to get more diff
+
+services/llm-replay/tests/test_tool_result_order.py:593: AssertionError
+____________ test_scrub_of_a_reordered_body_is_the_reordered_scrub _____________
+
+    def test_scrub_of_a_reordered_body_is_the_reordered_scrub() -> None:
+        texts = {"a": "price at session-1f3a ok", "b": "stock at session-9c2e ok"}
+        body = conversation(["b", "a"], extra=texts)
+>       reordered = ordered_tool_results(body)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+services/llm-replay/tests/test_tool_result_order.py:622: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+services/llm-replay/tests/test_tool_result_order.py:71: in ordered_tool_results
+    module = importlib.import_module("northwind_llm_replay.tool_order")
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.12/3.12.16/Frameworks/Python.framework/Versions/3.12/lib/python3.12/importlib/__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap>:1387: in _gcd_import
+    ???
+<frozen importlib._bootstrap>:1360: in _find_and_load
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+name = 'northwind_llm_replay.tool_order'
+import_ = <function _gcd_import at 0x10412c0e0>
+
+>   ???
+E   ModuleNotFoundError: No module named 'northwind_llm_replay.tool_order'
+
+<frozen importlib._bootstrap>:1324: ModuleNotFoundError
+__________ test_every_committed_cassette_is_already_in_tool_use_order __________
+
+    def test_every_committed_cassette_is_already_in_tool_use_order() -> None:
+        offenders: list[str] = []
+        checked = 0
+        for path in sorted((REPO / "cassettes").rglob("*.json")):
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            match = data.get("match") if isinstance(data, dict) else None
+            if not isinstance(match, dict) or not isinstance(match.get("body"), dict):
+                continue
+            checked += 1
+>           if ordered_tool_results(match["body"]) is not None:
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+services/llm-replay/tests/test_tool_result_order.py:651: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+services/llm-replay/tests/test_tool_result_order.py:71: in ordered_tool_results
+    module = importlib.import_module("northwind_llm_replay.tool_order")
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.12/3.12.16/Frameworks/Python.framework/Versions/3.12/lib/python3.12/importlib/__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap>:1387: in _gcd_import
+    ???
+<frozen importlib._bootstrap>:1360: in _find_and_load
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+name = 'northwind_llm_replay.tool_order'
+import_ = <function _gcd_import at 0x10412c0e0>
+
+>   ???
+E   ModuleNotFoundError: No module named 'northwind_llm_replay.tool_order'
+
+<frozen importlib._bootstrap>:1324: ModuleNotFoundError
+_________ test_miss_diff_compares_with_the_same_tests_cassettes_first __________
+
+tmp_path = PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-99/test_miss_diff_compares_with_t0')
+
+    def test_miss_diff_compares_with_the_same_tests_cassettes_first(tmp_path: Path) -> None:
+        store = two_test_store(tmp_path)
+>       diff = miss_diff(store, match_for(QUESTION), test_id="tests/test_x.py::test_mine")
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+services/llm-replay/tests/test_tool_result_order.py:715: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+store = <northwind_llm_replay.cassette.CassetteStore object at 0x10b8d9ca0>
+match = {'method': 'POST', 'path': '/v1/messages?beta=true', 'headers': {'anthropic-version': '2023-06-01'}, 'body': {'model':...de-haiku-5-5', 'max_tokens': 64, 'messages': [{'role': 'user', 'content': 'What sizes does P0001 come in, in blue?'}]}}
+args = (), kw = {'test_id': 'tests/test_x.py::test_mine'}
+
+    def miss_diff(store: Any, match: dict[str, Any], *args: Any, **kw: Any) -> str:
+        """`CassetteStore.miss_diff`, called untyped: `test_id` is the signature this row adds."""
+>       diff: str = store.miss_diff(match, *args, **kw)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: CassetteStore.miss_diff() got an unexpected keyword argument 'test_id'
+
+services/llm-replay/tests/test_tool_result_order.py:698: TypeError
+______ test_miss_diff_picks_the_most_similar_of_the_same_tests_cassettes _______
+
+tmp_path = PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-99/test_miss_diff_picks_the_most_0')
+
+    def test_miss_diff_picks_the_most_similar_of_the_same_tests_cassettes(tmp_path: Path) -> None:
+        store = two_test_store(tmp_path)
+        store.put(cassette_for("3", CLOSE + "!", "tests/test_x.py::test_mine"))
+>       diff = miss_diff(store, match_for(QUESTION), test_id="tests/test_x.py::test_mine")
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+services/llm-replay/tests/test_tool_result_order.py:723: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+store = <northwind_llm_replay.cassette.CassetteStore object at 0x10b583e30>
+match = {'method': 'POST', 'path': '/v1/messages?beta=true', 'headers': {'anthropic-version': '2023-06-01'}, 'body': {'model':...de-haiku-5-5', 'max_tokens': 64, 'messages': [{'role': 'user', 'content': 'What sizes does P0001 come in, in blue?'}]}}
+args = (), kw = {'test_id': 'tests/test_x.py::test_mine'}
+
+    def miss_diff(store: Any, match: dict[str, Any], *args: Any, **kw: Any) -> str:
+        """`CassetteStore.miss_diff`, called untyped: `test_id` is the signature this row adds."""
+>       diff: str = store.miss_diff(match, *args, **kw)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: CassetteStore.miss_diff() got an unexpected keyword argument 'test_id'
+
+services/llm-replay/tests/test_tool_result_order.py:698: TypeError
+__ test_miss_diff_falls_back_to_the_whole_suite_without_that_tests_cassettes ___
+
+tmp_path = PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-99/test_miss_diff_falls_back_to_t0')
+
+    def test_miss_diff_falls_back_to_the_whole_suite_without_that_tests_cassettes(
+        tmp_path: Path,
+    ) -> None:
+        store = two_test_store(tmp_path)
+>       diff = miss_diff(store, match_for(QUESTION), test_id="tests/test_x.py::test_new")
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+services/llm-replay/tests/test_tool_result_order.py:731: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+store = <northwind_llm_replay.cassette.CassetteStore object at 0x10b5835c0>
+match = {'method': 'POST', 'path': '/v1/messages?beta=true', 'headers': {'anthropic-version': '2023-06-01'}, 'body': {'model':...de-haiku-5-5', 'max_tokens': 64, 'messages': [{'role': 'user', 'content': 'What sizes does P0001 come in, in blue?'}]}}
+args = (), kw = {'test_id': 'tests/test_x.py::test_new'}
+
+    def miss_diff(store: Any, match: dict[str, Any], *args: Any, **kw: Any) -> str:
+        """`CassetteStore.miss_diff`, called untyped: `test_id` is the signature this row adds."""
+>       diff: str = store.miss_diff(match, *args, **kw)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: CassetteStore.miss_diff() got an unexpected keyword argument 'test_id'
+
+services/llm-replay/tests/test_tool_result_order.py:698: TypeError
+_____ test_miss_diff_without_a_test_id_still_compares_with_the_whole_suite _____
+
+tmp_path = PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-99/test_miss_diff_without_a_test_0')
+
+    def test_miss_diff_without_a_test_id_still_compares_with_the_whole_suite(tmp_path: Path) -> None:
+        store = two_test_store(tmp_path)
+        assert header_of(miss_diff(store, match_for(QUESTION))) == f"--- cassette {'1' * 12}"
+>       assert header_of(miss_diff(store, match_for(QUESTION), None)) == f"--- cassette {'1' * 12}"
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+services/llm-replay/tests/test_tool_result_order.py:738: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+services/llm-replay/tests/test_tool_result_order.py:698: in miss_diff
+    diff: str = store.miss_diff(match, *args, **kw)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <northwind_llm_replay.cassette.CassetteStore object at 0x10b53b530>
+match = {'method': 'POST', 'path': '/v1/messages?beta=true', 'headers': {'anthropic-version': '2023-06-01'}, 'body': {'model':...de-haiku-5-5', 'max_tokens': 64, 'messages': [{'role': 'user', 'content': 'What sizes does P0001 come in, in blue?'}]}}
+max_lines = None
+
+    def miss_diff(self, match: dict[str, Any], max_lines: int = 200) -> str:
+        """Unified diff of `match` against the most similar cassette with the same method + path."""
+        candidates = [
+            c
+            for c in self.all()
+            if c.match.get("method") == match.get("method")
+            and c.match.get("path") == match.get("path")
+        ]
+        if not candidates:
+            return f"(no cassette in {self.dir} for {match.get('method')} {match.get('path')})"
+        want = canonical(match)
+        nearest = max(
+            candidates,
+            key=lambda c: difflib.SequenceMatcher(
+                None, canonical(c.match), want, autojunk=False
+            ).ratio(),
+        )
+        lines = list(
+            difflib.unified_diff(
+                pretty(nearest.match),
+                pretty(match),
+                fromfile=f"cassette {nearest.hash[:12]}",
+                tofile="request",
+                lineterm="",
+            )
+        )
+>       if len(lines) > max_lines:
+           ^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: '>' not supported between instances of 'int' and 'NoneType'
+
+services/llm-replay/src/northwind_llm_replay/cassette.py:138: TypeError
+_____ test_a_replay_miss_reports_the_diff_against_the_same_tests_cassette ______
+
+tmp_path = PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-99/test_a_replay_miss_reports_the0')
+
+    def test_a_replay_miss_reports_the_diff_against_the_same_tests_cassette(tmp_path: Path) -> None:
+        two_test_store(tmp_path)
+        mine = "tests/test_x.py::test_mine"
+        cfg = ProxyConfig(mode="replay", suite="s", cassette_root=tmp_path / "cassettes")
+        body = {"model": MODEL, "max_tokens": 64, "messages": [{"role": "user", "content": QUESTION}]}
+        with RunningProxy(cfg) as p:
+            base = f"{p.url}/_t/{encode_test_id(mine)}"
+            reply = send(base, as_json(body), path="/v1/messages?beta=true")
+        assert reply.status_code == 400
+>       assert header_of(reply.json()["diff"]) == f"--- cassette {'2' * 12}"
+E       AssertionError: assert '--- cassette 111111111111' == '--- cassette 222222222222'
+E         
+E         - --- cassette 222222222222
+E         + --- cassette 111111111111
+
+services/llm-replay/tests/test_tool_result_order.py:752: AssertionError
+__ test_the_model_sees_the_same_second_request_whichever_tool_finishes_first ___
+
+tmp_path = PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-99/test_the_model_sees_the_same_s0')
+
+    def test_the_model_sees_the_same_second_request_whichever_tool_finishes_first(
+        tmp_path: Path,
+    ) -> None:
+        """The probe's shape: retrieve_context (toolu_a) and get_product (toolu_b) in one turn. In one
+        run the retriever is slow (b finishes first, so the CLI appends b, a); in the other the catalog
+        is slow (a, b). The proxy must hand the model the same request both times."""
+        finished_rag_slow: list[str] = []
+        rag_slow = record_turn(
+            tmp_path / "rag-slow",
+            two_tool_blocks(),
+            catalog=e2e_catalog({"get_product": lambda args: 0.0}, finished_rag_slow),
+            retriever=e2e_retriever(slow=True),
+        )
+        finished_catalog_slow: list[str] = []
+        catalog_slow = record_turn(
+            tmp_path / "catalog-slow",
+            two_tool_blocks(),
+            catalog=e2e_catalog({"get_product": lambda args: E2E_DELAY}, finished_catalog_slow),
+            retriever=e2e_retriever(slow=False),
+        )
+        first, second = second_request_body(rag_slow), second_request_body(catalog_slow)
+>       assert result_ids(first) == ["toolu_a", "toolu_b"]
+E       AssertionError: assert ['toolu_b', 'toolu_a'] == ['toolu_a', 'toolu_b']
+E         
+E         At index 0 diff: 'toolu_b' != 'toolu_a'
+E         Use -v to get more diff
+
+services/llm-replay/tests/test_tool_result_order.py:911: AssertionError
+_ test_five_parallel_prices_finishing_in_reverse_are_forwarded_in_tool_use_order _
+
+tmp_path = PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-99/test_five_parallel_prices_fini0')
+
+    def test_five_parallel_prices_finishing_in_reverse_are_forwarded_in_tool_use_order(
+        tmp_path: Path,
+    ) -> None:
+        """The #12 shape: five get_price calls on one server, the earliest the slowest."""
+        from northwind_common import catalog_tool
+    
+        variants = [
+            "P0011-SAG-REG-L",
+            "P0011-SAG-REG-M",
+            "P0011-SAG-REG-S",
+            "P0011-SAG-REG-XL",
+            "P0011-SAG-REG-XS",
+        ]
+        delay = {v: 0.3 * (len(variants) - i) for i, v in enumerate(variants)}  # earlier = slower
+        blocks = [
+            {
+                "type": "tool_use",
+                "id": f"toolu_p{i}",
+                "name": catalog_tool.PRICE_TOOL,
+                "input": {"variant_id": v},
+            }
+            for i, v in enumerate(variants)
+        ]
+        finished: list[str] = []
+        run = record_turn(
+            tmp_path,
+            blocks,
+            catalog=e2e_catalog({"get_price": lambda args: delay[args["variant_id"]]}, finished),
+            retriever=e2e_retriever(slow=False),
+        )
+        # the precondition: the tools really did finish in the reverse of tool_use order
+        assert finished == [f"get_price:{v}" for v in reversed(variants)]
+        forwarded = run.upstream_requests[1]["body"]
+>       assert result_ids(forwarded) == [f"toolu_p{i}" for i in range(5)]
+E       AssertionError: assert ['toolu_p4', ...', 'toolu_p0'] == ['toolu_p0', ...', 'toolu_p4']
+E         
+E         At index 0 diff: 'toolu_p4' != 'toolu_p0'
+E         Use -v to get more diff
+
+services/llm-replay/tests/test_tool_result_order.py:951: AssertionError
+=========================== short test summary info ============================
+FAILED services/llm-replay/tests/test_tool_result_order.py::test_two_orders_of_the_same_results_are_one_cassette[first0-second0-record]
+FAILED services/llm-replay/tests/test_tool_result_order.py::test_two_orders_of_the_same_results_are_one_cassette[first0-second0-replay]
+FAILED services/llm-replay/tests/test_tool_result_order.py::test_two_orders_of_the_same_results_are_one_cassette[first1-second1-record]
+FAILED services/llm-replay/tests/test_tool_result_order.py::test_two_orders_of_the_same_results_are_one_cassette[first1-second1-replay]
+FAILED services/llm-replay/tests/test_tool_result_order.py::test_one_proxy_run_serves_the_other_order_from_the_cassette_it_just_wrote
+FAILED services/llm-replay/tests/test_tool_result_order.py::test_reversed_results_are_forwarded_in_tool_use_order
+FAILED services/llm-replay/tests/test_tool_result_order.py::test_the_slots_rule_holds_through_the_proxy
+FAILED services/llm-replay/tests/test_tool_result_order.py::test_the_live_mode_forwards_the_reordered_body_too
+FAILED services/llm-replay/tests/test_tool_result_order.py::test_results_fill_the_slots_results_already_hold
+FAILED services/llm-replay/tests/test_tool_result_order.py::test_a_result_for_no_tool_use_keeps_its_place
+FAILED services/llm-replay/tests/test_tool_result_order.py::test_a_result_of_an_earlier_turn_is_not_a_slot_of_this_one
+FAILED services/llm-replay/tests/test_tool_result_order.py::test_each_user_message_follows_its_own_preceding_assistant_message
+FAILED services/llm-replay/tests/test_tool_result_order.py::test_non_result_blocks_never_move
+FAILED services/llm-replay/tests/test_tool_result_order.py::test_duplicate_results_for_one_tool_use_keep_their_relative_order
+FAILED services/llm-replay/tests/test_tool_result_order.py::test_an_in_order_body_gives_none
+FAILED services/llm-replay/tests/test_tool_result_order.py::test_one_result_and_unlisted_results_give_none
+FAILED services/llm-replay/tests/test_tool_result_order.py::test_a_string_content_user_message_is_untouched
+FAILED services/llm-replay/tests/test_tool_result_order.py::test_a_body_with_no_messages_is_untouched[body0]
+FAILED services/llm-replay/tests/test_tool_result_order.py::test_a_body_with_no_messages_is_untouched[body1]
+FAILED services/llm-replay/tests/test_tool_result_order.py::test_a_body_with_no_messages_is_untouched[body2]
+FAILED services/llm-replay/tests/test_tool_result_order.py::test_a_body_with_no_messages_is_untouched[body3]
+FAILED services/llm-replay/tests/test_tool_result_order.py::test_a_body_with_no_messages_is_untouched[text]
+FAILED services/llm-replay/tests/test_tool_result_order.py::test_a_body_with_no_messages_is_untouched[None]
+FAILED services/llm-replay/tests/test_tool_result_order.py::test_a_user_message_with_no_preceding_assistant_message_is_untouched
+FAILED services/llm-replay/tests/test_tool_result_order.py::test_the_helper_does_not_modify_its_input
+FAILED services/llm-replay/tests/test_tool_result_order.py::test_the_cassette_and_the_log_hold_the_reordered_scrubbed_body
+FAILED services/llm-replay/tests/test_tool_result_order.py::test_the_gate_sees_exactly_the_bytes_that_go_upstream[order0]
+FAILED services/llm-replay/tests/test_tool_result_order.py::test_the_ledger_reserves_for_the_forwarded_length_not_the_original
+FAILED services/llm-replay/tests/test_tool_result_order.py::test_the_runner_forwards_the_reordered_bytes
+FAILED services/llm-replay/tests/test_tool_result_order.py::test_scrub_of_a_reordered_body_is_the_reordered_scrub
+FAILED services/llm-replay/tests/test_tool_result_order.py::test_every_committed_cassette_is_already_in_tool_use_order
+FAILED services/llm-replay/tests/test_tool_result_order.py::test_miss_diff_compares_with_the_same_tests_cassettes_first
+FAILED services/llm-replay/tests/test_tool_result_order.py::test_miss_diff_picks_the_most_similar_of_the_same_tests_cassettes
+FAILED services/llm-replay/tests/test_tool_result_order.py::test_miss_diff_falls_back_to_the_whole_suite_without_that_tests_cassettes
+FAILED services/llm-replay/tests/test_tool_result_order.py::test_miss_diff_without_a_test_id_still_compares_with_the_whole_suite
+FAILED services/llm-replay/tests/test_tool_result_order.py::test_a_replay_miss_reports_the_diff_against_the_same_tests_cassette
+FAILED services/llm-replay/tests/test_tool_result_order.py::test_the_model_sees_the_same_second_request_whichever_tool_finishes_first
+FAILED services/llm-replay/tests/test_tool_result_order.py::test_five_parallel_prices_finishing_in_reverse_are_forwarded_in_tool_use_order
+38 failed, 13 passed in 21.01s
+
+After the implementation (2026-11-23): two tests added by the session, each shown failing first or found by a
+failing test.
+- test_the_cache_breakpoint_stays_in_its_slot_when_results_move: the end-to-end test failed after the first
+  implementation, because the CLI marks the message's last block with cache_control, and the marker moved with
+  its result. The fix keeps cache_control with the slot.
+- test_a_body_that_is_not_utf8_is_refused_and_never_forwarded: test-writer reported that such a body is a
+  500. Widening the except broke test_runner's refused-unreadable path (the runner turns that exception into a
+  counted refusal), so the except is unchanged and this test pins the fail-closed behaviour instead: refused,
+  nothing forwarded.

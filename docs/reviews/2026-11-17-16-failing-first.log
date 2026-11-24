@@ -1,0 +1,63 @@
+Row #16 failing-first log, 2026-11-17T08:46:01Z. The row's new and changed CHK-01 tests, run from this checkout at efe7583 against main's sources (5539421), extracted with 'git archive 5539421 | tar -x' (approved by the user after git worktree add failed, stop 4). Main's src directories come first on PYTHONPATH, ahead of this checkout's editable installs.
+Proof the shadowing works: northwind_mcp_catalog is imported from:
+  /tmp/claude-502/main16/services/mcp-catalog/src/northwind_mcp_catalog/__init__.py
+  CART_TOOLS on main: False
+
+== Python: the row's test files ==
+  ERROR services/mcp-catalog/tests/test_cart.py
+  ERROR services/mcp-catalog/tests/test_chk01_criteria.py
+  ERROR services/gateway/tests/test_cart_session.py
+  ERROR services/gateway/tests/test_chk01_gateway_criteria.py
+  ERROR services/assistant/tests/test_chk01_cart.py - ValueError: unknown catal...
+  ERROR services/assistant/tests/test_chk01_assistant_criteria.py
+  ERROR evals/tests/test_chk01_eval_cart.py
+  !!!!!!!!!!!!!!!!!!! Interrupted: 7 errors during collection !!!!!!!!!!!!!!!!!!!!
+  7 errors in 0.69s
+
+== Python, again with --continue-on-collection-errors (the files that do collect on main) ==
+  FAILED services/common/tests/test_localenv.py::test_the_database_line_names_only_the_database[postgresql://northwind:northwind-local@localhost:5432/northwind_16-northwind_16]
+  FAILED services/common/tests/test_localenv.py::test_the_database_line_names_only_the_database[postgres://u:p@h/northwind-northwind]
+  FAILED services/common/tests/test_localenv.py::test_the_database_line_names_only_the_database[dbname=northwind_16 host=localhost password=secret-northwind_16]
+  FAILED services/common/tests/test_localenv.py::test_the_database_line_names_only_the_database[postgresql://u:secret@h/-(unreadable)]
+  FAILED services/common/tests/test_localenv.py::test_the_database_line_names_only_the_database[postgresql://u:secret@h/a b-(unreadable)]
+  FAILED services/common/tests/test_localenv.py::test_the_database_line_names_only_the_database[not a url secret-(unreadable)]
+  6 failed, 6 passed in 0.53s
+
+== Vitest: ChatPanel.test.tsx and Cart.test.tsx against main's apps/portal/src ==
+   FAIL  src/Cart.test.tsx [ src/Cart.test.tsx ]
+  Error: Failed to resolve import "./Cart" from "src/Cart.test.tsx". Does the file exist?
+   FAIL  src/ChatPanel.test.tsx [ src/ChatPanel.test.tsx ]
+  Error: Failed to resolve import "./Cart" from "src/ChatPanel.test.tsx". Does the file exist?
+   Test Files  2 failed (2)
+        Tests  no tests
+
+Not failing-first: services/gateway/tests/test_playwright_servers.py passes on main (6 passed above): its pins read playwright.config.ts and ChatServices, which main already satisfies, and cart.json/cart.e2e.ts from this checkout. They are guards, not failing-first tests.
+
+== Mutants at efe7583: each breaks one rule; source restored after each ==
+  M1 replay is not stored (idempotency): KILLED (1 failed, 99 deselected in 0.72s)
+  M2 conflict ignores the arguments: KILLED (1 failed, 99 deselected in 0.69s)
+  M3 cart keyed on region only: KILLED (1 failed, 99 deselected in 0.67s)
+  M4 refusal records the alternatives' stock: KILLED (1 failed, 22 deselected in 0.49s)
+  M5 a forged cookie keeps its session: KILLED (3 failed, 5 passed, 11 deselected in 0.59s)
+  git status after the mutants: '?? docs/reviews/2026-11-17-16-failing-first.log' (empty means restored)
+  Earlier (at e741dd1, session record): dropping only the product-visibility check in the alternatives scan SURVIVED services/mcp-catalog/tests/test_catalog_canary.py, because each variant's own visibility check also keeps P0009 out (a second guard); dropping both was KILLED (1 failed).
+
+== Mutants again at f3f97a1 + uncommitted re-review fixes (N1, N2, F4 pin); source restored after each ==
+  M1 replay is not stored (idempotency): KILLED (1 failed, 103 deselected in 0.69s)
+  M2 conflict ignores the arguments: KILLED (1 failed, 103 deselected in 0.70s)
+  M3 cart keyed on region only: KILLED (1 failed, 103 deselected in 0.69s)
+  M6 get_cart creates a cart (F4): KILLED (1 failed, 103 deselected in 0.74s)
+  M7 a replay reads as a new change (N1): KILLED (1 failed, 103 deselected in 0.74s)
+  source files changed by the mutants afterwards: ' M services/assistant/src/northwind_assistant/prompt.py  M services/mcp-catalog/src/northwind_mcp_catalog/cart.py ' (the row's own uncommitted edits only)
+  M4 refusal records the alternatives' stock: KILLED (1 failed, 22 deselected in 0.52s)
+  M5 a forged cookie keeps its session: KILLED (3 failed, 5 passed, 12 deselected in 0.62s)
+  M8 a line total vouches a price (F2): KILLED (1 failed, 22 deselected in 0.52s)
+
+== Stop-5 test change approved by the user (2026-11-18): tests/governance/test_internal_text.py, the bare get_cart exception ==
+  Before the change, at 1b38866: test_every_streamed_recording_gives_its_answer_to_the_scan FAILED on assistant-cart seq 6 (a thinking block with no text, then one get_cart tool_use with input {}).
+  After: 23 passed in that file. Mutants of the exception (source restored after each):
+  G1 the name check dropped (any no-input tool excepted): KILLED (2 failed, 21 passed in 24.24s)
+  G2 other block types allowed beside the call: KILLED (1 failed, 22 passed in 2.67s)
+  G3 the input-delta check dropped: KILLED (1 failed, 22 passed in 2.73s)
+  Narrowed again by the user (2026-11-18): a thinking block beside the call must be empty (its text and every thinking_delta). 25 passed in the file. Mutant (source restored):
+  G4 the empty-thinking check dropped: KILLED (2 failed, 23 passed in 2.84s)

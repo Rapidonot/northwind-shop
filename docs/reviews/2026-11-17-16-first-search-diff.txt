@@ -1,0 +1,30 @@
+Row #16, before W1: every suite's first searches, recorded vs now (no LLM, no spend). 2026-11-17.
+
+Index, read-only three-part check first, on the scratch database (DATABASE_URL=…/northwind_16, given on
+make's command line; the user's terminal probe printed northwind_16):
+  index_version 389cae01996a2dd6, data_version 2, dataset_sha256 3ac5e2e18f2b… = data/fixtures/manifest.json
+  (ingested into the empty northwind_16 by `make ingest DATABASE_URL=…/northwind_16`: 2,352 chunks inserted;
+  the shared northwind, read only before and after: 389cae01996a2dd6, data_version 2, created 2026-11-12,
+  6 manifest rows, unchanged).
+
+Recorded: the first user message of every seq-0 answerer cassette in
+cassettes/{assistant-smoke,assistant-redteam,a2a-05-partner,eval-answers} (the judge's eval-answers calls
+hold no first search and are skipped), with its shopper message and the region from the system prompt.
+Now: the same message rebuilt through the production path (search_sources -> McpRagSearcher -> mcp-rag
+render -> user_prompt) over:
+  - assistant-smoke, assistant-redteam: the index in northwind_16 (CallerIndex, frozen vectors);
+  - eval-answers: each item's saved context (SavedFirstIndex over evals/contexts/dense-only.jsonl);
+  - a2a-05-partner: each fixture's recorded context, which is what its replay serves.
+A move is any byte of difference in the whole first user message (sources, escaping, message).
+Script: the session scratchpad first_search_diff.py.
+
+first searches compared 153 (by suite: a2a-05-partner 9, assistant-redteam 28, assistant-smoke 14, eval-answers 102), moved 0
+
+So the only model-input changes W1-W3 record are the tool list (four cart tools), the prompt's cart
+lines and the tool results. assistant-cart (W4) is new: it has no recording, and its first search is
+served by a fixed retriever over the P0001 and P0008 product records (its messages have no frozen
+vectors, and data/embeddings/** is off-limits while #32 runs), so it does not depend on the index.
+
+Re-run before W1 (2026-11-17), after keys per turn (option A) and the totals prompt line; same index check
+(northwind_16: 389cae01996a2dd6, data_version 2, dataset_sha256 = manifest):
+first searches compared 153 (by suite: a2a-05-partner 9, assistant-redteam 28, assistant-smoke 14, eval-answers 102), moved 0

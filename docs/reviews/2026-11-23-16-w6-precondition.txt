@@ -1,0 +1,15 @@
+Row #16, 2026-11-23: no-spend precondition for W6 (plan addendum 8, updates 1-2). Working tree on HEAD 47e08f7 with the offer rule and the proxy reorder, LLM_MODE=replay, all 308 eval items through the production replay clients (the scratchpad's replay_one.py; its miss_diff patch only saves each missed request).
+
+MISSES [["eval-judge", "a4f7a9c06aea"], ["eval-judge", "32fc0c528923"], ["eval-judge", "4f0864626582"], ["eval-judge", "804075b21eb2"], ["eval-judge", "c8edc2ef3470"], ["eval-judge", "b5329b8f4acb"], ["eval-judge", "c5645dd7f95a"], ["eval-judge", "e0e38cf8639a"], ["eval-judge", "ecdd3c4cfd24"], ["eval-judge", "4979d5219231"], ["eval-judge", "83c2acb7ef39"], ["eval-answerer:EV-165", "435766b92813"], ["eval-answerer:EV-165", "bfe4bdce84b2"], ["eval-answerer:EV-165", "d89e90d2ba54"], ["eval-judge", "02b04ff3d2aa"], ["eval-judge", "e381586a9e0c"], ["eval-judge", "1a6ab58a6375"], ["eval-judge", "8e44c19768d1"], ["eval-judge", "0499b847b743"], ["eval-judge", "24cdd2f44cdf"], ["eval-judge", "ced971ae1467"], ["eval-judge", "89e7662a61ba"], ["eval-judge", "6639988190d4"], ["eval-judge", "590e91edb585"]]
+STATUS {"EV-033": "stale", "EV-034": "stale", "EV-037": "stale", "EV-038": "stale", "EV-039": "stale", "EV-045": "stale", "EV-065": "stale", "EV-090": "stale", "EV-091": "stale", "EV-092": "stale", "EV-100": "stale", "EV-165": "stale", "EV-180": "stale", "EV-186": "stale", "EV-188": "stale", "EV-191": "stale", "EV-194": "stale", "EV-198": "stale", "EV-202": "stale", "EV-217": "stale", "EV-219": "stale", "EV-291": "stale"}
+
+Items not ok: 22 = the 21 predicted (EV-033, 034, 037, 038, 039, 045, 065, 090, 091, 092, 100, 180, 186, 188, 191, 194, 198, 202, 217, 219, 291) + EV-165.
+Misses: 21 eval-judge (one per changed item) + eval-answerer:EV-165 (seq 1, retried; hash 435766b92813, the in-order request). No other answerer miss, no refinement miss; the 12 other exposed eval-answers requests: 0 first-try misses. Spend: none.
+
+Rerun on the final tree, after the security pass's L1-L4 fixes (2026-11-23; HEAD 47e08f7 plus the uncommitted row work; code unchanged since the fixes):
+- services/llm-replay/tests/test_tool_result_order.py: 1 failed, 60 passed in 21.77s. The one failure is test_every_committed_cassette_is_already_in_tool_use_order, on eval-answers/85c78f91b8aa (EV-165 seq 1) only, as expected until W6 re-records it.
+- The full 308-item replay, rerun: the MISSES and STATUS lines are byte-identical to the run above (cmp).
+- EV-165 and EV-092 alone (no spend):
+    MISSES [["eval-judge", "4979d5219231"], ["eval-answerer:EV-165", "435766b92813"], ["eval-answerer:EV-165", "bfe4bdce84b2"], ["eval-answerer:EV-165", "d89e90d2ba54"]]
+    STATUS {"EV-092": "stale", "EV-165": "stale"}
+  EV-092: one eval-judge miss, its answerer request hits (the offer drop changes only the judged text). EV-165: its answerer request misses on seq 1 with the in-order hash 435766b92813 (and the retries), as predicted; nothing else.

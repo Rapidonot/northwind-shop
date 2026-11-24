@@ -1,0 +1,79 @@
+{
+  "region": "US",
+  "steps": [
+    {
+      "name": "in-stock add",
+      "message": "Please add the Tidewick Harbor Rain Jacket in Black, regular fit, size M to my cart.",
+      "tool": "add_to_cart",
+      "arguments": {
+        "variant_id": "P0001-BLK-REG-M",
+        "quantity": 1,
+        "idempotency_key": "journey-add-to-cart-1"
+      },
+      "answer": [
+        "Done: ",
+        "it's in your cart."
+      ],
+      "expect": [
+        {
+          "variant_id": "P0001-BLK-REG-M",
+          "quantity": 1
+        }
+      ]
+    },
+    {
+      "name": "out-of-stock add",
+      "message": "Please add the Brindlemoor Squall Rain Jacket in Charcoal, relaxed fit, size M to my cart.",
+      "tool": "add_to_cart",
+      "arguments": {
+        "variant_id": "P0008-CHR-REL-M",
+        "quantity": 1,
+        "idempotency_key": "journey-add-to-cart-2"
+      },
+      "answer": [
+        "That one is out of stock, ",
+        "so I didn't add it."
+      ],
+      "expect": [
+        {
+          "variant_id": "P0001-BLK-REG-M",
+          "quantity": 1
+        }
+      ]
+    },
+    {
+      "name": "change quantity",
+      "message": "Change the quantity of the Tidewick Harbor Rain Jacket in Black, regular fit, size M in my cart to 2.",
+      "tool": "set_cart_quantity",
+      "arguments": {
+        "variant_id": "P0001-BLK-REG-M",
+        "quantity": 2,
+        "idempotency_key": "journey-set-cart-quantity-3"
+      },
+      "answer": [
+        "Updated: ",
+        "now two in your cart."
+      ],
+      "expect": [
+        {
+          "variant_id": "P0001-BLK-REG-M",
+          "quantity": 2
+        }
+      ]
+    },
+    {
+      "name": "remove",
+      "message": "Remove the Tidewick Harbor Rain Jacket in Black, regular fit, size M from my cart.",
+      "tool": "remove_from_cart",
+      "arguments": {
+        "variant_id": "P0001-BLK-REG-M",
+        "idempotency_key": "journey-remove-from-cart-4"
+      },
+      "answer": [
+        "Removed it ",
+        "from your cart."
+      ],
+      "expect": []
+    }
+  ]
+}

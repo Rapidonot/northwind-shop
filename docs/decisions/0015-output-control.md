@@ -379,3 +379,24 @@ stock sentence. No other #13 assertion changed, and the check is not loosened.
 "out-of-stock", "sold-out" (and "low-stock", "on-hand" in the same patterns). At e9401f7, "The M is in-stock."
 passed with no check. They are vouched under D3 as the spaced forms are, and "in-stock" after a plural range ends
 the range exception as "in stock" does.
+
+## Amendment: row #16, the `offer` class (the user, 2026-11-23)
+
+**A class that drops its sentence with nothing in its place** (plan `docs/reviews/2026-11-17-16-plan.md`, addendum
+8). It covers an unprompted offer to look up, check or give a price, stock or availability. This is the hard rule 5
+/ D8 class, and it caused W5's EV-092 containment stop.
+- **The patterns keep strictly to the user's words.**
+  - Frames: "I/we can, could, may or would", "want/like me to", "shall, should, can or may I".
+  - Verbs: look up, check, give.
+  - Nouns: price(s), stock, availability, at most 26 characters after the verb, so each pattern fits `L`.
+  - "will" and "'ll" are out, so the preamble "I'll check the price." stays.
+  - Past tense and "only" between the modal and the verb do not match, so both fixed sentences pass.
+- **The class is decided when the sentence ends.**
+  - If another class has a blocking (non-exempt) match in the same sentence, that class's fixed sentence is shown
+    and counted.
+  - Otherwise the sentence goes, with the whitespace after it.
+  - `offer` is in `COUNTED`, not in `FIXED_SENTENCES`.
+- **No exemption for the AI disclosure** (hard rule 11): the disclosure stands in its own sentence.
+- **The pattern change after a recording** (stop 7 above) is approved with the plan.
+
+The changed shown answers are re-judged in W6. Tests: `services/assistant/tests/test_rag08_offer_drop.py`.

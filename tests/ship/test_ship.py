@@ -125,6 +125,13 @@ case "$1 $2" in
         exit "$(cat "$S/watch_rc")" ;;
     esac
     [[ -e "$S/checks_fail" ]] && { echo "gh: checks failed" >&2; exit 1; }
+    # No checks yet: the first N calls that are not --watch see an empty list (PR just opened).
+    if [[ -s "$S/checks_empty_calls" ]] && (( $(cat "$S/checks_empty_calls") > 0 )); then
+      echo $(( $(cat "$S/checks_empty_calls") - 1 )) > "$S/checks_empty_calls"
+      echo '[]' > "$S/empty.json"
+      serve "$S/empty.json"
+      exit 0
+    fi
     serve "$S/checks.json"
     exit 0 ;;
   "pr merge")
@@ -333,6 +340,7 @@ class Rig:
     view_after: dict[str, Any] | None = None
     checks: list[dict[str, str]] = field(default_factory=list)
     watch_rc: int = 0
+    checks_empty_calls: int = 0  # the first N `pr checks` calls without --watch serve []
     version: str = "gh version 2.103.3 (2026-10-26)\n"
     help_checks: str = GH_HELP_CHECKS
     help_merge: str = GH_HELP_MERGE
@@ -426,6 +434,7 @@ class Rig:
         (self.scn / "checks.json").write_text(json.dumps(checks))
         (self.scn / "final.json").write_text(json.dumps({"state": self.final_state}))
         (self.scn / "watch_rc").write_text(str(self.watch_rc))
+        (self.scn / "checks_empty_calls").write_text(str(self.checks_empty_calls))
         (self.scn / "merge_rc").write_text(str(self.merge_rc))
         (self.scn / "head").write_text(self.head)
         (self.scn / "version").write_text(self.version)
@@ -537,6 +546,9 @@ def rig(tmp_path: Path) -> Rig:
         **shared.tool_env(tmp_path, bin_dir),
         "GH_SCENARIO": str(tmp_path / "scn"),
         "GH_ORIGIN": str(tmp_path / "origin.git"),
+        # No wait for checks by default (a missing job refuses at once); a test may override.
+        "SHIP_CHECKS_WAIT": "0",
+        "SHIP_CHECKS_POLL": "1",
     }
     seed = tmp_path / "seed"
     seed.mkdir()

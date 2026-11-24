@@ -6,16 +6,17 @@ import pytest
 
 from northwind_common import catalog_tool
 from northwind_common.mcp_token import CATALOG_SERVER
-from northwind_common.tool_scopes import CATALOG_READ_TOOLS
+from northwind_common.tool_scopes import CART_TOOLS, CATALOG_READ_TOOLS
 
 pytestmark = [pytest.mark.req("RAG-09"), pytest.mark.req("NFR-03")]
 
 
 def test_the_contract_names_the_scoped_tools_on_the_catalog_server() -> None:
     assert catalog_tool.SERVER_NAME == CATALOG_SERVER == "northwind-catalog"
-    assert set(catalog_tool.TOOL_NAMES) == CATALOG_READ_TOOLS
+    # Row #16 (CHK-01): the cart tools join the same label and list. Still exact.
+    assert set(catalog_tool.TOOL_NAMES) == CATALOG_READ_TOOLS | CART_TOOLS
     assert catalog_tool.ALLOWED_TOOLS == tuple(
-        f"mcp__northwind-catalog__{name}" for name in sorted(CATALOG_READ_TOOLS)
+        f"mcp__northwind-catalog__{name}" for name in sorted(CATALOG_READ_TOOLS | CART_TOOLS)
     )
     assert catalog_tool.PRICE_TOOL in catalog_tool.ALLOWED_TOOLS
     assert catalog_tool.STOCK_TOOL in catalog_tool.ALLOWED_TOOLS

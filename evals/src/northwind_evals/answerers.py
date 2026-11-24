@@ -291,7 +291,16 @@ def payload_hits(
 
 
 LIVE_SOURCE_TYPE = "catalog"
-LIVE_TOOLS = frozenset({"get_price", "check_stock"})
+# Row #16 (CHK-01): the cart tools' results carry live prices and stock too.
+LIVE_TOOLS = frozenset(
+    {"get_price", "check_stock", "get_cart", "add_to_cart", "remove_from_cart", "set_cart_quantity"}
+)
+
+
+def eval_session(item_id: str) -> str:
+    """The cart session for one eval item (row #16; the user's amendment 2): derived from the item
+    ID, so a rerun of the item is the same turn. It reaches only the MCP token, never the model."""
+    return hashlib.sha256(f"northwind-eval-session:{item_id}".encode()).hexdigest()[:32]
 
 
 class CatalogLog:
@@ -302,11 +311,15 @@ class CatalogLog:
         self._lock = threading.Lock()
         self.results: list[tuple[str, bool, str]] = []
         self.leak = False  # a result held internal content: refused before the model saw it
+        # Row #16: set by `serve_catalog`; drops a session's carts, so each item starts empty.
+        self.drop_cart: Callable[[str], None] | None = None
 
-    def begin(self) -> None:
+    def begin(self, session: str | None = None) -> None:
         with self._lock:
             self.results = []
             self.leak = False
+        if session is not None and self.drop_cart is not None:
+            self.drop_cart(session)
 
     def add(self, tool: str, is_error: bool, text: str) -> None:
         with self._lock:
@@ -317,12 +330,60 @@ class CatalogLog:
             return list(self.results)
 
 
+_LIVE_FIELDS = (
+    "variant_id",
+    "quantity",
+    "unit_price",
+    "line_total",
+    "currency",
+    "on_hand",
+    "in_stock",
+)
+
+
+def judge_view(name: str, value: Any) -> Any:
+    """What the judge sees of a cart result (row #16): its live values only. Names, colours, sizes
+    and fits are dropped, so a catalog record is never support for a product claim (security review
+    pass 1, finding 9). Price and stock results pass as they are."""
+    if name in ("get_price", "check_stock") or not isinstance(value, dict):
+        return value
+
+    def lines(rows: Any) -> list[Any]:
+        return [
+            {k: row.get(k) for k in _LIVE_FIELDS if k in row} if isinstance(row, dict) else None
+            for row in rows or []
+        ]
+
+    if "requested" in value:  # a stock refusal: the requested variant, the alternatives offered
+        alternatives = value.get("alternatives") or []
+        return {
+            "region": value.get("region"),
+            "requested": value.get("requested"),
+            # Product name and variant ID: how the prompt offers them (security review F8). No
+            # colour, size or fit: those stay claims that need a cited source.
+            "alternatives": [
+                {"variant_id": a.get("variant_id"), "name": a.get("name")}
+                for a in alternatives
+                if isinstance(a, dict)
+            ],
+        }
+    cart = value if name == "get_cart" else value.get("cart")
+    if not isinstance(cart, dict):
+        return None
+    view = {k: cart.get(k) for k in ("region", "item_count", "subtotal", "currency")}
+    view["lines"] = lines(cart.get("lines"))
+    if name != "get_cart":
+        view = {"result": value.get("result"), "variant_id": value.get("variant_id"), "cart": view}
+    return view
+
+
 def live_of(
     results: Sequence[tuple[str, bool, str]], region: str
 ) -> tuple[tuple[ContextChunk, ...], Any]:
     """The turn's live values as judge blocks, and its `LiveValues` for the check's numbers.
 
-    A block is one successful, labelled `get_price` or `check_stock` result: id `live:<tool>:<n>`,
+    A block is one labelled `get_price`, `check_stock` or cart result (a cart stock refusal's
+    labelled block included, row #16): id `live:<tool>:<n>`,
     type `catalog`, the JSON it held as text (the judge renders it through `as_data`, like every
     source). Only live values: a product attribute that only `get_product` returned is not
     support, because a product claim must cite a retrieved source (hard rule 5; security review
@@ -334,16 +395,16 @@ def live_of(
     state = ToolState(region=region)
     blocks: list[ContextChunk] = []
     for n, (tool, is_error, text) in enumerate(results):
-        labelled = None if is_error else catalog_tool.unlabel(text)
+        labelled = catalog_tool.labelled_result(text, is_error)
         if labelled is None or labelled[0] != tool:  # the label must name the tool called
             continue
         if tool not in LIVE_TOOLS:
             continue
         name, value = labelled
-        body = json.dumps(value, sort_keys=True, ensure_ascii=False)
+        body = json.dumps(judge_view(name, value), sort_keys=True, ensure_ascii=False)
         source_id = f"live:{name}:{n}"
         blocks.append(ContextChunk(source_id, source_id, LIVE_SOURCE_TYPE, body))
-        record_live(state, f"mcp__{catalog_tool.SERVER_NAME}__{name}", is_error=False, text=text)
+        record_live(state, f"mcp__{catalog_tool.SERVER_NAME}__{name}", is_error=is_error, text=text)
     return tuple(blocks), state.live
 
 
@@ -379,15 +440,16 @@ class AssistantAnswerer:
         from northwind_assistant.turn import Reset, TextDelta, TurnError, stream_answer
         from northwind_common.llm import agent_runtime
 
+        session = eval_session(item.id)
         self._index.begin(item, context)
-        self._catalog_log.begin()
+        self._catalog_log.begin(session)
         root = Path(tempfile.mkdtemp(prefix="nw-eval-"))
         try:
             base_url = f"{self._proxy_url}/_t/{self._test_id('eval-answerer:' + item.id)}"
             runtime = agent_runtime(base_url=base_url, root=root)
 
             async def collect() -> list[Any]:
-                caller = Caller(region=item.region)  # type: ignore[arg-type]
+                caller = Caller(region=item.region, session=session)  # type: ignore[arg-type]
                 return [
                     e
                     async for e in stream_answer(
@@ -509,17 +571,31 @@ def serve_catalog(
         except Exception:  # noqa: BLE001 - a guard that cannot run counts as a leak
             return True
 
+    from northwind_common import catalog_tool
+
+    def joined(result: Any) -> str:
+        # As the assistant joins a live tool's blocks (row #16): one block is unchanged.
+        return catalog_tool.BLOCK_SEPARATOR.join(
+            getattr(block, "text", "") for block in result.content
+        )
+
     class Recording(CatalogServer):
         async def call_tool(self, ctx: Any, params: Any) -> Any:
             result = await super().call_tool(ctx, params)
-            text = "".join(getattr(block, "text", "") for block in result.content)
-            if not result.is_error and leaking(str(params.name), text):
+            text = joined(result)
+            # Every result holding catalog data goes through the guard: a success, and since row
+            # #16 a cart stock refusal, whose alternatives are catalog records.
+            holds_data = not result.is_error or (
+                catalog_tool.labelled_result(text, True) is not None
+            )
+            if holds_data and leaking(str(params.name), text):
                 log.leak = True
                 result = error_result(tool_failed())
-                text = "".join(getattr(block, "text", "") for block in result.content)
+                text = joined(result)
             log.add(str(params.name), bool(result.is_error), text)
             return result
 
     server = Recording(FixtureCatalog(), key=key, tools=TOOLS)
+    log.drop_cart = server.carts.drop
     with catalog_testing.running(server) as url:
         yield url

@@ -3,9 +3,12 @@
 The gateway mints one for each turn from the caller it built itself. The token says who is asking
 (`aud`, `region`), which agent (`agent`), for which server (`srv`), for which turn (`turn`, which
 the server's search cap is counted against) and until when (`exp`, at most `MAX_TTL_SECONDS` after
-minting). Servers take audience and region from the token, never from tool arguments, and accept
-only a token minted for themselves (`verify_for`; #10b, CC-10 security review L4), so a token for
-one server is refused by every other one that shares the key.
+minting). A shopper token may also carry `sid`, the gateway's session id (row #16, CHK-01, decision
+0019), which the cart is keyed on: it is present only when the minter passes a session, so a token
+without one keeps the claim set it always had. The session id never reaches the model: it rides in
+the token, which the CLI only forwards as a header. Servers take audience and region from the token,
+never from tool arguments, and accept only a token minted for themselves (`verify_for`; #10b, CC-10
+security review L4), so a token for one server is refused by every other one that shares the key.
 
 Format: `v1.<base64url JSON claims>.<base64url HMAC-SHA256>`, signed with the key in
 `NORTHWIND_MCP_TOKEN_KEY`. The key comes only from the environment, is never logged, and never
@@ -35,12 +38,15 @@ TTL_SECONDS = 120
 MAX_TTL_SECONDS = 120
 VERSION = "v1"
 CLAIMS = frozenset({"aud", "region", "agent", "srv", "turn", "exp"})
+# Row #16: present only on a token minted with a session (`mint(session=…)`).
+OPTIONAL_CLAIMS = frozenset({"sid"})
 RAG_SERVER = "northwind-rag"
 CATALOG_SERVER = "northwind-catalog"
 SERVERS = frozenset({RAG_SERVER, CATALOG_SERVER})
 _UUID4 = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
 _B64 = re.compile(r"^[A-Za-z0-9_-]+$")
 _REGION = re.compile(r"^[A-Z]{2,3}$")
+SESSION_ID = re.compile(r"[0-9a-f]{32}", re.ASCII)  # fullmatch: no trailing "\n"
 
 
 class TokenError(Exception):
@@ -62,6 +68,7 @@ class Claims:
     turn: str
     exp: int
     srv: str
+    sid: str | None = None  # row #16: the gateway's session, which the cart is keyed on
 
 
 def signing_key(environ: dict[str, str] | None = None) -> bytes:
@@ -97,6 +104,7 @@ def mint(
     now: float | None = None,
     server: str,
     ttl: int = TTL_SECONDS,
+    session: str | None = None,
 ) -> tuple[str, Claims]:
     """A fresh token and its claims, for one server. The turn id is new each time.
 
@@ -110,6 +118,10 @@ def mint(
         raise ValueError(f"ttl must be 1 to {MAX_TTL_SECONDS} seconds")
     if audience == "shopper" and region is None:
         raise ValueError("a shopper token needs a region")
+    if session is not None and (
+        audience != "shopper" or not isinstance(session, str) or not SESSION_ID.fullmatch(session)
+    ):
+        raise ValueError("a session is 32 lowercase hex characters, on a shopper token only")
     claims = Claims(
         aud=audience,
         region=region,
@@ -117,8 +129,9 @@ def mint(
         turn=str(uuid.uuid4()),
         exp=int(now if now is not None else time.time()) + ttl,
         srv=server,
+        sid=session,
     )
-    body = {
+    body: dict[str, Any] = {
         "aud": claims.aud,
         "region": claims.region,
         "agent": claims.agent,
@@ -126,13 +139,18 @@ def mint(
         "turn": claims.turn,
         "exp": claims.exp,
     }
+    if session is not None:
+        body["sid"] = session
     payload = _b64(json.dumps(body, sort_keys=True, separators=(",", ":")).encode("utf-8"))
     return f"{VERSION}.{payload}.{_sign(key, payload)}", claims
 
 
 def _claims(body: Any, now: float) -> Claims:
-    if not isinstance(body, dict) or set(body) != CLAIMS:
+    if not isinstance(body, dict) or not (
+        set(body) == CLAIMS or set(body) == CLAIMS | OPTIONAL_CLAIMS
+    ):
         raise TokenError
+    sid = body.get("sid")
     aud, region, agent, srv, turn, exp = (
         body[k] for k in ("aud", "region", "agent", "srv", "turn", "exp")
     )
@@ -149,9 +167,13 @@ def _claims(body: Any, now: float) -> Claims:
         or isinstance(exp, bool)
         or exp <= now
         or exp > now + MAX_TTL_SECONDS
+        or (
+            "sid" in body
+            and not (aud == "shopper" and isinstance(sid, str) and SESSION_ID.fullmatch(sid))
+        )
     ):
         raise TokenError
-    return Claims(aud=aud, region=region, agent=agent, turn=turn, exp=exp, srv=srv)
+    return Claims(aud=aud, region=region, agent=agent, turn=turn, exp=exp, srv=srv, sid=sid)
 
 
 def _verify(token: object, *, key: bytes, now: float | None = None) -> Claims:
