@@ -67,7 +67,7 @@ def _jsonl(path: Path) -> list[dict[str, Any]]:
         return [json.loads(line) for line in handle if line.strip()]
 
 
-def verify(data: Path) -> None:
+def verify_files(data: Path) -> None:
     manifest = json.loads((data / "manifest.json").read_text(encoding="utf-8"))
     for name in FILES:
         digest = hashlib.sha256((data / name).read_bytes()).hexdigest()
@@ -101,7 +101,7 @@ class OrderBook:
 
     @classmethod
     def from_data(cls, data: Path = DATA) -> OrderBook:
-        verify(data)
+        verify_files(data)
         state = OrderState.from_data(data)
         for label in _jsonl(data / "replay_labels.jsonl"):
             order = state.orders[label["order_id"]]
