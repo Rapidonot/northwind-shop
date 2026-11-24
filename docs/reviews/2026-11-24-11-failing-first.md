@@ -23,5 +23,24 @@ WARNING  northwind_assistant.understand:understand.py:263 query understanding fa
 - test_rag04_plan_claim.py and test_rag04_turn_qu.py were written after the code they test (mcp_token claim; the turn wiring). Both pass; the security pass and test-writer cover them.
 
 ## Named-product exception (after W5, the user's and advisor's go)
-- `evals/tests/test_rag04_named_product.py` written first. Before the change it failed at collection:
-  `ImportError: names_catalog_product`, 1 error. After `b4a3521`: 16 passed.
+- `evals/tests/test_rag04_named_product.py` was written first. Its raw output before the change (the test and the
+  code share commit `b4a3521`, so git cannot show the order):
+  ```
+  ERROR evals/tests/test_rag04_named_product.py
+  !!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+  1 error in 0.46s
+  ```
+  The cause is `ImportError: names_catalog_product`. After `b4a3521`: 16 passed.
+- **Note:** `test_a_browsing_query_still_narrows_on_both_paths` fails first only through that ImportError. Against
+  the pre-fix logic it would pass. It is the requested "still narrows" guard, not a behaviour change.
+- **`bc618e0` (the vouch list):**
+  - The failure it fixes, `make eval-integrity` at `b4a3521`'s code:
+    `frozen vectors vouched (…, disk): 5 of 9, largest distance 2.300e-07 (allowed 1e-04)` and
+    `eval-integrity FAILED against origin/main`. The 4 keys are `hdmcdpek…`, `kdldcdlh…`, `neljmjcf…` and
+    `odpaehbm…`: "no fixture, eval or smoke text has this key".
+  - The new test, run against `b4a3521`'s `query_plans.py`:
+    ```
+    >       assert len(texts) == 7  # W1's 7 frozen eval part texts, all still vouched
+    E       AssertionError: assert 3 == 7
+    ```
+  - After `bc618e0`: 22 passed in the file, and integrity vouches 9 of 9.

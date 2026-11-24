@@ -53,7 +53,7 @@
 
 19 items moved, all among the 48.
 
-- **`behaviour_ok` lost on 11:** EV-042, EV-047, EV-204, EV-208, EV-214, EV-217, EV-219, EV-221, EV-223 and EV-263.
+- **`behaviour_ok` lost on 10:** EV-042, EV-047, EV-204, EV-208, EV-214, EV-217, EV-219, EV-221, EV-223 and EV-263.
   - **Gained** on EV-220.
 - **Other changes:**
   - EV-044 lost `fabricated_ok` and `citation_ok`; EV-206 lost `fabricated_ok`.
@@ -70,7 +70,8 @@
 - So the evidence that answers "no, it comes in these" is gone.
   - Before: EV-042's context was the product and 4 Glacier Blue variants.
   - After: the product and 4 reviews.
-- All 13 regressed items name a product. So do 40 of the 48 changed items.
+- All 13 regressed items (those that lost any metric: the 10 above, plus EV-044, EV-065 and EV-206) name a
+  product. So do 40 of the 48 changed items.
 
 ## Asked-for counts
 - **D8** (#17's script, at `/tmp/…/d8.py`): 29 claims on 24 items.

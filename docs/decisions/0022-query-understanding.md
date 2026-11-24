@@ -82,8 +82,8 @@ the evidence that answers it.
 - **Example:** "Is the Corvane Ridge Fleece Jacket in Glacier Blue available in 4XL?"
 - **What happens:** the colour and size filters drop every variant chunk, because each variant has one colour and one
   size. Reviews fill the top 5.
-- **Effect:** `variant` `behaviour_ok` fell from 0.844 to 0.594. All 13 regressed items name a product. The
-  candidate was not promoted.
+- **Effect:** `variant` `behaviour_ok` fell from 0.844 to 0.594. All 13 items that lost any metric name a
+  product. The candidate was not promoted.
 
 **Rule:** a message that names a catalog product runs the plain first search, with no colour, size or live-filter
 narrowing.
@@ -94,3 +94,16 @@ narrowing.
 - **A brand alone names no product:** "Tidewick rain jackets in M" still narrows.
 - **Haiku is still called** for a routed message that names a product, because extraction is unchanged. Its plan
   narrows nothing there.
+- **Known limits of the detection** (the advisor's scoped read, finding 5):
+  - It matches a brand followed by a model word. Some model words are ordinary words ("Organic", "Everyday",
+    "Cosy", "Highland", "Merino"), so "Larchpell organic sheets in white" counts as named and is not narrowed. That
+    errs to the plain, pre-row search, the safe side.
+  - A question that names a product without its brand ("the Ridge Fleece Jacket in 4XL") is not detected, so it
+    still narrows. That is the W5 failure mode, for unbranded names.
+  - A product whose name does not start with its brand gets no key.
+- **First-token time (finding 8):** a routed message that names a product still waits for Haiku. In live mode that
+  is at most the 700 ms deadline, and its plan narrows nothing. This follows from keeping extraction unchanged.
+- **Frozen vectors:**
+  - The 4 part texts of routed eval items that name a product are frozen (`ce9f4c5`) and vouched (`bc618e0`:
+    `part_texts` lists every recorded part text), but no search reads them.
+  - Whether to keep them or drop them before merge is the user's choice (`docs/reviews/2026-11-24-11-w5-rerun.md`).
