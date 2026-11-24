@@ -335,7 +335,10 @@ ORDER_WORDS = ("order", "checkout", "pay", "purchase", "refund", "capture", "ass
 
 
 def test_the_registry_holds_the_catalog_reads_and_the_four_cart_tools_and_nothing_else() -> None:
-    assert set(TOOLS) == set(tool_scopes.CATALOG_READ_TOOLS) | set(CART_TOOLS)
+    # Row #11 (approved under stop 5): plus the server-only live filter, read-only.
+    assert set(TOOLS) == set(tool_scopes.CATALOG_READ_TOOLS) | set(CART_TOOLS) | {
+        tool_scopes.ELIGIBLE_PRODUCTS
+    }
     assert tool_scopes.CART_TOOLS == frozenset(CART_TOOLS)
     for name in TOOLS:
         assert not any(word in name for word in ORDER_WORDS), name
