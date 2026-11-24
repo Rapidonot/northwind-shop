@@ -178,3 +178,22 @@ def test_the_planned_part_texts_are_frozen_queries() -> None:
     assert texts  # W1 recorded Haiku's plans; their rewritten parts are new queries
     assert set(texts) <= set(_frozen_queries(items))
     assert not set(texts) & {i.query for i in items}
+
+
+def test_the_red_teams_planned_part_texts_are_frozen_queries() -> None:
+    """The red team's two routed messages (RT-010, RT-011) search Haiku's rewritten parts, read from
+    `assistant-redteam`'s own cassettes; their test asserts the first search used a frozen vector."""
+    import json
+
+    from northwind_evals.cli import ITEMS, RED_TEAM, _frozen_queries
+    from northwind_evals.items import load_items
+
+    repo = Path(__file__).resolve().parents[2]
+    red = [json.loads(line) for line in (repo / RED_TEAM).read_text("utf-8").splitlines()]
+    texts = query_plans.part_texts(
+        [(r["query"], r["region"]) for r in red],
+        cassettes=repo / "cassettes",
+        suite="assistant-redteam",
+    )
+    assert len(texts) == 2
+    assert set(texts) <= set(_frozen_queries(load_items(repo / ITEMS)))

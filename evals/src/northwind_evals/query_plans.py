@@ -101,7 +101,9 @@ def shopper_parts(plan: QueryPlan, message: str, region: str, store: FixtureCata
 
 @contextmanager
 def planner(
-    messages: Sequence[tuple[str, str]], cassettes: Path = Path("cassettes")
+    messages: Sequence[tuple[str, str]],
+    cassettes: Path = Path("cassettes"),
+    suite: str = SUITE,
 ) -> Iterator[Callable[[str, str], Parts]]:
     """`parts(message, region)` for each eval message. A replay proxy runs only if a message needs
     the model; any miss raises SystemExit once the plans are made."""
@@ -109,7 +111,7 @@ def planner(
     needed = [(m, r) for m, r in messages if rules_plan(m, r).needs_model]
     plans: dict[tuple[str, str], QueryPlan] = {}
     if needed:
-        config = proxy_config("replay", SUITE, cassette_root=cassettes, log_path=None)
+        config = proxy_config("replay", suite, cassette_root=cassettes, log_path=None)
         with RunningProxy(config) as running:
             understand = Understander(live=False)
             base_url = f"{running.url}/_t/{encode_test_id(TEST_ID)}"
@@ -123,7 +125,7 @@ def planner(
             if state.misses:
                 raise SystemExit(
                     f"{len(state.misses)} query-understanding replay misses: "
-                    f"re-record with `make record SUITE={SUITE}`"
+                    f"re-record with `make record SUITE={suite}`"
                 )
             if failed or state.fallback_attempts:
                 # Security review M1: any other failure (a refused request, a proxy that did not
@@ -141,13 +143,17 @@ def planner(
 
 
 def part_texts(
-    messages: Sequence[tuple[str, str]], cassettes: Path = Path("cassettes")
+    messages: Sequence[tuple[str, str]],
+    cassettes: Path = Path("cassettes"),
+    suite: str = SUITE,
 ) -> list[str]:
     """Row #11 (security review M2): the rewritten part texts the planned first search embeds, from
     the replayed plans, so they get frozen vectors like every other query (decision 0012). A part
-    that searches the raw message needs none: the message is frozen already."""
+    that searches the raw message needs none: the message is frozen already. `suite` is where the
+    plans were recorded: `query-understanding` for eval items, `assistant-redteam` for the red
+    team."""
     texts: list[str] = []
-    with planner(messages, cassettes) as parts:
+    with planner(messages, cassettes, suite) as parts:
         for message, region in messages:
             if rules_plan(message, region).needs_model:
                 texts += [text for text, _ in parts(message, region) if text != message]
