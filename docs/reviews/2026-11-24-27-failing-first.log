@@ -147,3 +147,28 @@ $ uv run pytest -p no:cacheprovider -q tests/governance/test_citations.py
 37 passed in 0.21s
 $ uv run pytest -p no:cacheprovider -q tests/governance/test_data_flow.py
 28 passed in 0.06s
+
+## 2026-11-24T16:00:44Z bundled BE-07 flake (whole-body card search): helper test only, before model_text exists
+$ uv run pytest -p no:cacheprovider -q services/backend/tests/care/test_27_model_text.py
+ImportError while importing test module '/Users/rapido/Projects/northwind-shop-b/services/backend/tests/care/test_27_model_text.py'.
+E   ImportError: cannot import name 'model_text' from 'care._driver' (/Users/rapido/Projects/northwind-shop-b/services/backend/tests/care/_driver.py)
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+## 2026-11-24T16:01:00Z after model_text in care/_driver.py
+3 passed in 0.62s
+## 2026-11-24T16:01:25Z the four BE-07/BE-01 files on model_text
+$ uv run pytest -p no:cacheprovider -q services/backend/tests/care/test_27_model_text.py
+3 passed in 0.50s
+$ uv run pytest -p no:cacheprovider -q services/backend/tests/care/test_be07_criteria.py
+20 passed in 30.02s
+$ uv run pytest -p no:cacheprovider -q services/backend/tests/care/test_be07_writer.py
+73 passed in 54.02s
+$ uv run pytest -p no:cacheprovider -q services/backend/tests/orchestrator/test_be01_criteria.py
+20 passed in 22.82s
+$ uv run pytest -p no:cacheprovider -q services/backend/tests/orchestrator/test_be01_scripted.py
+12 passed in 23.03s
+$ uv run pytest -p no:cacheprovider -q services/backend/tests/care/test_be07_units.py
+99 passed in 0.48s
+$ uv run pytest -p no:cacheprovider -q services/backend/tests/orchestrator/test_be01_review_fixes.py
+16 passed in 14.18s
+$ uv run pytest -p no:cacheprovider -q services/backend/tests/orchestrator/test_be01_units.py
+30 passed in 1.14s

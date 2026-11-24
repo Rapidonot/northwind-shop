@@ -33,6 +33,7 @@ from ._driver import (
     fixed_clock,
     full_plan,
     load_jsonl,
+    model_text,
     run,
     scanned_clean_order,
     script_orders,
@@ -297,7 +298,7 @@ def test_no_run_id_time_or_deadline_reaches_a_model(tmp_path: Path) -> None:
             run_id="run-zzzzzzzzzzzz",
             deadline_seconds=137.25,
         )
-        bodies = json.dumps([r["body"] for r in llm.requests])
+        bodies = model_text(llm.requests)  # what the model reads (row #27, bundled)
     assert llm.requests
     for banned in ("run-zzzzzzzzzzzz", "137.25", "2026-11-23", ".t1", ".plan"):
         assert banned not in bodies

@@ -29,6 +29,7 @@ from ._driver import (
     RETURNS,
     World,
     full_plan,
+    model_text,
     run,
     script_orders,
     script_planner,
@@ -164,7 +165,7 @@ def test_the_same_request_twice_makes_the_same_model_input(tmp_path: Path) -> No
             script_returns(llm, world)
             run(world, world.request(refund=True), llm, tmp_path / run_id, run_id=run_id)
             agents = by_agent(llm)
-            bodies = json.dumps([r["body"] for r in llm.requests])
+            bodies = model_text(llm.requests)  # what the model reads (row #27, bundled)
         out = {
             marker: [
                 request_hash(match_key("POST", r["path"], r["headers"], scrub(r["body"])))
