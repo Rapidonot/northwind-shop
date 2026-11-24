@@ -21,6 +21,7 @@ never the index.
 
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Mapping
 from typing import Any
@@ -415,8 +416,78 @@ READ_TOOLS: Mapping[str, ToolSpec] = {
     for name, handler in _HANDLERS.items()
 }
 
+# ---- row #11 (RAG-04): the server's own live filter, never offered to a model -------------------
+
+ELIGIBLE_PRODUCTS = "eligible_products"
+MAX_MINOR_UNITS = 1_000_000  # northwind_rag.query.MAX_MINOR
+
+
+def _bound(args: Mapping[str, Any], key: str) -> int | None:
+    value = args.get(key)
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int) or not 0 < value <= MAX_MINOR_UNITS:
+        raise invalid_argument()
+    return value
+
+
+async def eligible_products(
+    server: CatalogServer, claims: Claims, args: Mapping[str, Any]
+) -> t.CallToolResult:
+    """Which public products a price or stock filter keeps, in the token's region, from the live
+    store (hard rule 2). Product IDs only. Scoped to `shopper-query`, the assistant server's own
+    agent: no model holds a token for it (`tool_scopes`)."""
+    from northwind_common.tool_scopes import REGION_CURRENCY
+    from northwind_mcp_catalog.live import eligible_products as live_eligible
+
+    _checked(args, frozenset({"price_min", "price_max", "in_stock"}))
+    low, high = _bound(args, "price_min"), _bound(args, "price_max")
+    if low is not None and high is not None and low > high:
+        raise invalid_argument()
+    in_stock = args.get("in_stock", False)
+    if not isinstance(in_stock, bool):
+        raise invalid_argument()
+    region = claims.region
+    if region is None or region not in REGION_CURRENCY:
+        raise region_required()
+    products = live_eligible(
+        server.catalog,
+        region,
+        currency=REGION_CURRENCY[region],
+        price_min=low,
+        price_max=high,
+        in_stock=in_stock,
+    )
+    # Plain JSON, not a `<catalog_data>` label: that format is for the model's own tools
+    # (`catalog_tool.TOOL_NAMES`), and this one is never in a model's tool list.
+    body = json.dumps({"region": region, "products": products}, separators=(",", ":"))
+    return t.CallToolResult(content=[t.TextContent(type="text", text=body)], is_error=False)
+
+
+QUERY_TOOLS: Mapping[str, ToolSpec] = {
+    ELIGIBLE_PRODUCTS: ToolSpec(
+        tool=t.Tool(
+            name=ELIGIBLE_PRODUCTS,
+            description=(
+                "Product IDs whose live price in the caller's region is within the bounds (minor "
+                "units) and, with in_stock, that have stock. IDs only."
+            ),
+            input_schema=_schema(
+                {
+                    "price_min": {"type": "integer", "minimum": 1, "maximum": MAX_MINOR_UNITS},
+                    "price_max": {"type": "integer", "minimum": 1, "maximum": MAX_MINOR_UNITS},
+                    "in_stock": {"type": "boolean"},
+                },
+                [],
+            ),
+            annotations=_READ_ONLY,
+        ),
+        handler=eligible_products,
+    )
+}
+
 # Row #16 (CHK-01): the cart tools, on this server beside the live store whose stock they check
 # (decision 0019). Imported last: `cart` uses the checks above.
 from northwind_mcp_catalog.cart import CART_SPECS  # noqa: E402
 
-TOOLS: Mapping[str, ToolSpec] = {**READ_TOOLS, **CART_SPECS}
+TOOLS: Mapping[str, ToolSpec] = {**READ_TOOLS, **CART_SPECS, **QUERY_TOOLS}

@@ -441,7 +441,8 @@ def test_a_token_minted_without_a_session_has_no_sid_claim() -> None:
     bearer, claims = minted(None)
     assert claims.sid is None
     assert verify_for(bearer, key=KEY, server=CATALOG_SERVER).sid is None
-    assert OPTIONAL_CLAIMS == frozenset({"sid"})
+    # Row #11 (RAG-04) adds `qf`, a query plan for northwind-rag only (decision 0022).
+    assert OPTIONAL_CLAIMS == frozenset({"sid", "qf"})
 
 
 @pytest.mark.parametrize(

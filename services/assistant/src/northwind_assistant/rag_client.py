@@ -44,14 +44,19 @@ class RagEndpoint:
 
     def mint(self, caller: Caller) -> str:
         """A fresh token for one turn of this caller."""
-        token, _ = mint(
+        return self.mint_turn(caller)[0]
+
+    def mint_turn(self, caller: Caller) -> tuple[str, str]:
+        """A fresh token for one turn of this caller, and the turn's id (row #11: the planned first
+        search's token keeps it, so RAG-10's cap counts that search)."""
+        token, claims = mint(
             audience=caller.audience,
             region=caller.region,
             agent=AGENT,
             key=self.key,
             server=RAG_SERVER,
         )
-        return token
+        return token, claims.turn
 
 
 @dataclass(frozen=True)

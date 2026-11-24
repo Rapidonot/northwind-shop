@@ -86,6 +86,19 @@ class CallerSearcher:
         )
         return result
 
+    def search_planned(
+        self, parts: Any, *, audience: str, region: str | None
+    ) -> Sequence[RetrievedChunk]:
+        """Row #11: a retriever with `search_planned(parts, caller)` runs the plan; one without it
+        cannot, and the search fails as any other refused search does."""
+        planned = getattr(self.retriever, "search_planned", None)
+        if planned is None:
+            raise RuntimeError("this retriever cannot run a query plan")
+        result: Sequence[RetrievedChunk] = planned(
+            parts, self.make_caller(region=region, audience=audience)
+        )
+        return result
+
 
 def _no_db() -> Any:
     raise RuntimeError("no database behind this test server")
@@ -135,3 +148,6 @@ class CallerIndex:
 
     def search(self, query: str, caller: Any) -> Sequence[RetrievedChunk]:
         return self._index.search(query, audience=caller.audience, region=caller.region)
+
+    def search_planned(self, parts: Any, caller: Any) -> Sequence[RetrievedChunk]:
+        return self._index.search_planned(parts, audience=caller.audience, region=caller.region)

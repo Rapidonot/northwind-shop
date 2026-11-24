@@ -24,6 +24,7 @@ from northwind_assistant.catalog_client import CatalogEndpoint
 from northwind_assistant.output_check import FIXED_SENTENCES
 from northwind_assistant.rag_client import RagEndpoint
 from northwind_assistant.turn import Citations, TextDelta, TurnEvent, stream_answer
+from northwind_assistant.understand import Understander
 from northwind_assistant.usage import TELEMETRY_LOGGER
 from northwind_common.llm import agent_runtime
 from northwind_gateway.app import app
@@ -75,7 +76,10 @@ def ask(question: str, root: Path, live: FixtureCatalog | None = None) -> list[T
 
     async def collect(rag: RagEndpoint, catalog: CatalogEndpoint) -> list[TurnEvent]:
         caller = Caller(region="US")
-        return [e async for e in stream_answer(question, caller, rag, runtime, catalog)]
+        # Row #11 (RAG-04): the gateway's surface, query understanding included.
+        return [
+            e async for e in stream_answer(question, caller, rag, runtime, catalog, Understander())
+        ]
 
     with (
         serve_retriever(index, Caller) as (url, _),
@@ -225,7 +229,10 @@ def injection_turn(
         catalog_testing.running(catalog_testing.server(key=KEY)) as catalog_url,
     ):
         services = ChatServices(
-            RagEndpoint(url, KEY), agent_runtime(root=tmp_path), CatalogEndpoint(catalog_url, KEY)
+            RagEndpoint(url, KEY),
+            agent_runtime(root=tmp_path),
+            CatalogEndpoint(catalog_url, KEY),
+            Understander(),
         )
         app.dependency_overrides[chat_services] = lambda: services
         try:

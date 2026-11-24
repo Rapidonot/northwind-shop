@@ -112,6 +112,7 @@ from northwind_rag.retrieval import (
     dense_search,
     keyword_search,
     retrieve_context,
+    retrieve_planned,
     retriever_id,
 )
 from northwind_rag.sources import build_chunks
@@ -173,8 +174,31 @@ def _region(item: EvalItem) -> ShopperRegion:
 def _live(
     conn: psycopg.Connection, embedder: Embedder, items: Sequence[EvalItem]
 ) -> dict[str, list[RetrievedChunk]]:
-    """What a shopper in the item's region gets: the agents' path, hybrid (RAG-03, row #8). Queries
-    with a frozen vector use it, so every platform ranks the same (the PR #30 drift)."""
+    """What a shopper in the item's region gets: the agents' path, hybrid (RAG-03, row #8), run as
+    the message's query plan since row #11 (RAG-04, `query_plans`). Queries with a frozen vector use
+    it, so every platform ranks the same (the PR #30 drift)."""
+    from northwind_evals.query_plans import planner
+
+    embedder = cached(embedder)
+    with planner([(item.query, item.region) for item in items]) as parts:
+        return {
+            item.id: retrieve_planned(
+                conn,
+                embedder,
+                parts(item.query, item.region),
+                region=_region(item),
+                audience="shopper",
+                k=RETRIEVAL_K,
+            )
+            for item in items
+        }
+
+
+def _live_plain(
+    conn: psycopg.Connection, embedder: Embedder, items: Sequence[EvalItem]
+) -> dict[str, list[RetrievedChunk]]:
+    """The plain hybrid search on the raw query, as before row #11: RAG-03's arm comparison and the
+    enrichment report's E1 rule were fixed on it before measuring."""
     embedder = cached(embedder)
     return {
         item.id: retrieve_context(
@@ -201,7 +225,7 @@ def _arms(
         )
         for item in items
     }
-    hybrid = _live(conn, embedder, items)
+    hybrid = _live_plain(conn, embedder, items)
     return {
         arm: {item_id: [chunk.source_id for chunk in chunks] for item_id, chunks in found.items()}
         for arm, found in (("dense", dense), ("keyword", keyword), ("hybrid", hybrid))
@@ -922,7 +946,7 @@ def cmd_enrichment_report(_: argparse.Namespace) -> int:
     with _connect() as conn:
         problems = [f"plain index: {p}" for p in _index_problems(conn, embedder.id, side="plain")]
         plain_identity = _index_identity(conn)
-        plain = _live(conn, embedder, items)
+        plain = _live_plain(conn, embedder, items)
     try:
         enriched_conn = psycopg.connect(enriched_database_url())
     except psycopg.Error:
@@ -938,7 +962,7 @@ def cmd_enrichment_report(_: argparse.Namespace) -> int:
             for problem in problems:
                 print(f"eval-enrichment-report refused: {problem}", file=sys.stderr)
             return 1
-        enriched = _live(conn, embedder, items)
+        enriched = _live_plain(conn, embedder, items)
     report = build_report(
         items,
         plain,
