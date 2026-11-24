@@ -41,6 +41,9 @@ REPO = Path(__file__).resolve().parents[2]
 # planned first search (RAG-04), measured on `northwind_16` (index 3a89123f2aaf586f). 8 items differ
 # (EV-018, 029, 030, 031, 035, 067, 068, 190); `cli._live_plain` still gives 168c823b92378ee8….
 MACOS_HASH = "b5bc42db9fb7b39b66636d52aa4f12a7ad5304c458d50333dc5e737e889d8051"
+# Row #11: the plain search (`cli._live_plain`, which RAG-03's arms and E1 read) keeps its own pin,
+# the pre-row hash, so neither path can drift unseen.
+MACOS_HASH_PLAIN = "168c823b92378ee8c8c26a1c0ed5ceee1fa4fa7140b9f64b1bfee9960b496b4d"
 
 
 def _real_embedder() -> Any:
@@ -179,6 +182,9 @@ def test_the_eval_retrieval_over_every_item_gives_the_macos_hash(
 
     live = cli._live(real_index, FastEmbedEmbedder(), items)
     assert fingerprint({i: [c.chunk_id for c in found] for i, found in live.items()}) == MACOS_HASH
+    plain = cli._live_plain(real_index, FastEmbedEmbedder(), items)
+    fingerprinted = {i: [c.chunk_id for c in found] for i, found in plain.items()}
+    assert fingerprint(fingerprinted) == MACOS_HASH_PLAIN
 
 
 # ---- the add-only rule for frozen vectors (D3) -------------------------------------------------

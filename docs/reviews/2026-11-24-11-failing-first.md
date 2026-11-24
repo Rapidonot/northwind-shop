@@ -240,3 +240,29 @@ afterwards):
 
 - **The `OPTIONAL_CLAIMS` pin** (`test_chk01_criteria.py`, `{"sid", "qf"}`) was changed in `9d103a7`, the first
   implementation commit, with the `qf` claim. It is not one of the ten.
+
+## `make ci` at `b8c669d`: the drift pin (re-pinned with the user's approval under stop 5)
+
+`caffeinate -dims make ci DATABASE_URL=…/northwind_16` at `b8c669d` exited 2.
+- **Passed:** lint, mypy (386 files), the scan, the unit tests (7,833 passed, 9 skipped, 24 xfailed) and Vitest (104).
+- **Integration:** 1 failed, 302 passed, 1 skipped:
+  `evals/tests/test_rag03_drift.py::test_the_eval_retrieval_over_every_item_gives_the_macos_hash`. Output:
+
+```
+E       AssertionError: assert 'b5bc42db9fb7...e737e889d8051' == '168c823b9237...ee9960b496b4d'
+E         
+E         - 168c823b92378ee8c8c26a1c0ed5ceee1fa4fa7140b9f64b1bfee9960b496b4d
+E         + b5bc42db9fb7b39b66636d52aa4f12a7ad5304c458d50333dc5e737e889d8051
+```
+
+**Measured on `northwind_16`** (index `3a89123f2aaf586f`), over the 308 items:
+- `cli._live_plain` gives `168c823b92378ee8c8c26a1c0ed5ceee1fa4fa7140b9f64b1bfee9960b496b4d`, the old pin exactly.
+- `cli._live` gives `b5bc42db9fb7b39b66636d52aa4f12a7ad5304c458d50333dc5e737e889d8051`.
+- They differ on exactly 8 items: EV-018, EV-029, EV-030, EV-031, EV-035, EV-067, EV-068 and EV-190, the 8 contexts
+  the eval re-snapshot changed.
+
+So the pin moved because `_live` runs the planned first search, a behaviour change, not a weakened check. The session
+stopped under stop 5, and the user replied "re-pin approved".
+- **`d0c0bb2`:** `MACOS_HASH` is `b5bc42db…`.
+- **The next commit:** `MACOS_HASH_PLAIN` (`168c823b…`) is asserted on `cli._live_plain`, so the plain path keeps its
+  own pin (the advisor's suggestion). This adds a check.
