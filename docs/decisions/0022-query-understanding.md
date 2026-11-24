@@ -1,7 +1,10 @@
 # 0022: Query understanding on the first search: rules first, Haiku only when needed
 
-Status: accepted by the user with the row #11 plan, 2026-11-24 (`docs/reviews/2026-11-24-11-plan.md`, changes at
-approval 1 to 5). Requirement: RAG-04. Amends decision 0007's consequence that RAG-04 "would put a Haiku call
+Status: points 1–4 and 6–9 were accepted by the user with the row #11 plan, 2026-11-24
+(`docs/reviews/2026-11-24-11-plan.md`, changes at approval 1 to 5). Point 5 (sequential, not parallel) was a
+build-time deviation, reported to the user in the stop before W1 and carried in the PR body. The "Exception" section
+was decided by the user and the advisor after W5, and its frozen-vector note after their option (b), both
+2026-11-24. Requirement: RAG-04. Amends decision 0007's consequence that RAG-04 "would put a Haiku call
 before first text".
 
 ## Context
@@ -103,7 +106,7 @@ narrowing.
   - A product whose name does not start with its brand gets no key.
 - **First-token time (finding 8):** a routed message that names a product still waits for Haiku. In live mode that
   is at most the 700 ms deadline, and its plan narrows nothing. This follows from keeping extraction unchanged.
-- **Frozen vectors:**
-  - The 4 part texts of routed eval items that name a product are frozen (`ce9f4c5`) and vouched (`bc618e0`:
-    `part_texts` lists every recorded part text), but no search reads them.
-  - Whether to keep them or drop them before merge is the user's choice (`docs/reviews/2026-11-24-11-w5-rerun.md`).
+- **Frozen vectors:** the user chose option (b) (`0d4d721`). The 4 part texts of routed eval items that name a
+  product are no longer searched, so their vectors were dropped before merge. They had been added in this row and
+  were never on main. `part_texts` again lists only the part texts the planned search embeds. Five vectors were
+  added in all: 3 eval and 2 red-team. They are vouched 5 of 5.

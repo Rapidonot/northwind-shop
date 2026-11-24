@@ -44,3 +44,62 @@ WARNING  northwind_assistant.understand:understand.py:263 query understanding fa
     E       AssertionError: assert 3 == 7
     ```
   - After `bc618e0`: 22 passed in the file, and integrity vouches 9 of 9.
+  - **Superseded by option (b)** (`0d4d721`): `bc618e0`'s change is reverted and the 4 vectors are dropped. The
+    test is now `test_the_frozen_part_texts_are_the_searched_ones` (3 eval part texts), and integrity vouches 5 of 5.
+
+## After the fact (the advisor's full review, finding H1)
+
+Each fix's pinning tests were run against the pre-fix file (`git show <rev>:<path>`) or a one-line mutation, then the
+file was restored from HEAD. The runner is `/tmp/…/ff_runner.py`.
+
+- **Two weak first attempts** were replaced by the lines at the end of the list:
+  - The L4 swap failed only at import, so a mutation of `_around` replaces it.
+  - The first cache mutation, the read guard only, passed. The write guard alone already keeps the cache empty
+    outside live mode. The second mutation removes both guards.
+
+- **security M1: planner stops on non-replayed paths** (evals/src/northwind_evals/query_plans.py@6d86bb3): `5 failed in 1.67s`
+  `E       Failed: DID NOT RAISE SystemExit`
+- **security L1: cap keeps the later expiry** (services/mcp-rag/src/northwind_mcp_rag/ledger.py@6d86bb3): `1 failed in 0.44s`
+  `E       assert not True`
+- **security L2+L3: card text in c/s items; turn with a trailing newline** (services/common/src/northwind_common/mcp_token.py@6d86bb3): `3 failed in 0.47s`
+  `E       AssertionError: assert not True`
+- **security L4: around bounds in range** (services/rag/src/northwind_rag/query.py@6d86bb3): `1 error in 0.44s`
+  `E   ImportError: cannot import name 'names_catalog_product' from 'northwind_rag.query' (/Users/rapido/Projects/northwind-shop/services/rag/src/northwind_rag/query.py)`
+- **security L4: the eval scores the gateway's fallbacks** (evals/src/northwind_evals/query_plans.py@6d86bb3): `2 failed in 0.48s`
+  `E       AttributeError: module 'northwind_evals.query_plans' has no attribute 'shopper_parts'`
+- **security L6: the SDK logger is quiet** (services/assistant/src/northwind_assistant/rag_client.py@6d86bb3): `1 failed in 0.47s`
+  `E       AssertionError: assert 'anthropic' in ('mcp.client', 'mcp.shared', 'httpx', 'httpcore', 'httpx2', 'httpcore2')`
+- **security L7: no SDK retries in live mode** (services/assistant/src/northwind_assistant/understand.py@6d86bb3): `1 failed in 1.24s`
+  `E       AssertionError: assert 2 == 0`
+- **re-review N1: quiet after the client is built** (services/assistant/src/northwind_assistant/understand.py@330f379): `1 failed in 0.48s`
+  `E       assert [10] == [30]`
+- **re-review N2: a refusal extends the cap entry** (services/mcp-rag/src/northwind_mcp_rag/ledger.py@330f379): `1 failed in 0.43s`
+  `E       AssertionError: assert not True`
+- **test-writer F1+F2: card text never to Haiku or a token on its own** (services/assistant/src/northwind_assistant/understand.py@dd4de87, services/common/src/northwind_common/mcp_token.py@dd4de87): `2 failed in 0.60s`
+  `E       AssertionError: assert ['multi_part-...ewlines', ...] == []`
+- **test-writer F3: validate_plan refuses card text in any form** (services/rag/src/northwind_rag/query.py@dd4de87): `1 failed in 0.09s`
+  `E       AssertionError: assert ['dotted', 's... 'cvv_spaced'] == []`
+- **M2: eval part texts are frozen queries** (evals/src/northwind_evals/cli.py@bfe9ca8): `1 failed in 1.68s`
+  `E       AssertionError: assert {'alpaca-blen...nce question'} <= {'A review sa... price?', ...}`
+- **M2 red team: RT-010/011 part texts are frozen queries** (evals/src/northwind_evals/cli.py@ce9f4c5, evals/src/northwind_evals/query_plans.py@ce9f4c5): `1 failed in 1.22s`
+  `E       TypeError: part_texts() got an unexpected keyword argument 'suite'`
+- **named product, gateway path** (services/assistant/src/northwind_assistant/understand.py@b4a3521^): `4 failed in 0.44s`
+  `E       AssertionError: assert {'parts': [{'c': ['Glacier Blue'], 's': ['4XL']}]} is None`
+- **named product, eval path** (evals/src/northwind_evals/query_plans.py@b4a3521^): `4 failed in 0.53s`
+  `E       AssertionError: assert [('Is the Cor...oducts=None))] == [('Is the Cor...oducts=None))]`
+- **user's item 3: the cache is live-mode only (mutation: cache in every mode)** (mutation in services/assistant/src/northwind_assistant/understand.py): `1 passed in 0.47s`
+- **decision 0022: the deadline is live-mode only (mutation: deadline in every mode)** (mutation in services/assistant/src/northwind_assistant/understand.py): `1 failed in 1.14s`
+  `E       AssertionError: assert ('timeout' == 'model'`
+- **user's item 4: the model is not told the filter (mutation: name it in the prompt)** (mutation in services/assistant/src/northwind_assistant/turn.py): `1 failed in 1.77s`
+  `E           assert 'price_max' not in '[{"role": "... "medium"}}]'`
+- **user's item 3: the cache is live-mode only (mutation: cache read and write in every mode)** (mutation): `1 failed in 0.52s`
+  `E           assert 1 == 3`
+- **security L4: around bounds in range (mutation: _around returns them unclamped)** (mutation): `2 failed in 0.45s`
+  `E       assert (0, 0) == None`
+
+**Not failing-first, said plainly:**
+- `test_rag04_plan_claim.py`, and the other tests in `test_rag04_turn_qu.py`, were written after their code. Of
+  `test_rag04_turn_qu.py`, the cache, deadline and "under $50" tests now have mutation evidence above.
+- The `*_tw.py` files are `test-writer`'s tests of code that already existed. Their findings came from failing runs
+  of those files (all fixed in `f698484`, with evidence above).
+- `test_rag04_post_review_tw.py` (23 tests, the advisor's H2) found no defect.

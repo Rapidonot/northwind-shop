@@ -227,7 +227,9 @@ def test_every_new_frozen_vector_is_the_key_of_a_frozen_query() -> None:
     new = set(now) - old
     wanted = {frozen_key(t) for t in _frozen_queries(load_items(REPO / ITEMS))}
     assert new <= wanted
-    assert len(new) == 5
+    # Not an exact count: once this row merges, origin/main holds these keys and `new` is empty.
+    # Row #11 added 5 (3 eval part texts, 2 red-team); every one must be a frozen query's key.
+    assert len(new) <= 5
 
 
 # 3. The ledger (RAG-10 cap)
