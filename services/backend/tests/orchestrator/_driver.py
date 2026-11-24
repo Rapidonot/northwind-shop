@@ -178,3 +178,42 @@ def full_plan(world: World, *, refund: bool = False) -> list[dict[str, Any]]:
     if refund:
         plan.append({"kind": "unsupported", "topic": "refund_request", "order_id": world.order_id})
     return plan
+
+
+def _block_text(block: Any) -> list[str]:
+    if isinstance(block, str):
+        return [block]
+    if not isinstance(block, dict):
+        return []
+    kind = block.get("type")
+    if kind == "text":
+        return [str(block.get("text", ""))]
+    if kind == "tool_use":
+        return [json.dumps(block.get("input", {}), ensure_ascii=False, sort_keys=True)]
+    if kind == "tool_result":
+        content = block.get("content")
+        if isinstance(content, list):
+            return [t for part in content for t in _block_text(part)]
+        return [str(content)] if content is not None else []
+    return []
+
+
+def model_text(requests: Any) -> str:
+    """What the model reads in the recorded requests: the system prompt and the message contents
+    (text, `tool_use` input, `tool_result` content), one piece per line. Never the CLI's
+    `metadata.user_id` (a random device hash and session UUID), the model name or an ID, which a
+    whole-body search mistook for card digits (row #27, bundled; it failed #11's `make ci`)."""
+    out: list[str] = []
+    for request in requests:
+        body = request["body"]
+        system = body.get("system")
+        out.extend(_block_text(system) if isinstance(system, str) else [])
+        if isinstance(system, list):
+            out.extend(t for part in system for t in _block_text(part))
+        for message in body.get("messages", []):
+            content = message.get("content")
+            if isinstance(content, list):
+                out.extend(t for part in content for t in _block_text(part))
+            else:
+                out.extend(_block_text(content))
+    return "\n".join(out)
