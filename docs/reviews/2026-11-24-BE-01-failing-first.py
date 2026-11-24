@@ -30,7 +30,10 @@ CASES: list[tuple[str, str, str, str, list[str]]] = [
         "northwind_backend/agents/orders_check.py",
         "if intent.order_id != task.order_id:",
         "if False:",
-        [RF + "test_an_intent_of_another_order_is_refused_and_its_values_reach_neither_model_nor_answer"],
+        [
+            RF
+            + "test_an_intent_of_another_order_is_refused_and_its_values_reach_neither_model_nor_answer"  # noqa: E501
+        ],
     ),
     (
         "M1/N6 aggregate takes a foreign payment out",
@@ -111,8 +114,9 @@ def pytest(nodes: list[str], pythonpath: str | None) -> tuple[int, str]:
     env = dict(os.environ)
     if pythonpath:
         env["PYTHONPATH"] = pythonpath
-    proc = subprocess.run(
-        ["uv", "run", "pytest", "-q", "-p", "no:cacheprovider", *nodes],
+    argv = ["uv", "run", "pytest", "-q", "-p", "no:cacheprovider", *nodes]
+    proc = subprocess.run(  # noqa: S603 - fixed argv; the node IDs come from this file
+        argv,
         cwd=ROOT,
         env=env,
         capture_output=True,
@@ -124,7 +128,8 @@ def pytest(nodes: list[str], pythonpath: str | None) -> tuple[int, str]:
 
 
 def main() -> int:
-    head = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True)
+    git = ["git", "rev-parse", "--short", "HEAD"]
+    head = subprocess.run(git, capture_output=True, text=True)  # noqa: S603
     print(f"\n# Review-fix failing-first (advisor finding 1), at head {head.stdout.strip()}")
     bad = 0
     with tempfile.TemporaryDirectory(dir=os.environ.get("TMPDIR")) as tmp:
