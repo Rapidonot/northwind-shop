@@ -14,6 +14,9 @@
 
 ## How to run it ($0, no LLM)
 
+Save the script block below as `equiv.py`, and run it from the repository root: it reads `cassettes/` by relative
+path.
+
     git show 7bcc221:services/assistant/src/northwind_assistant/output_check.py > "$TMPDIR/oc_74c8ba9d.py"
     uv run --offline python equiv.py "$TMPDIR/oc_74c8ba9d.py"
 
