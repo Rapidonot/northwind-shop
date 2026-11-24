@@ -181,8 +181,9 @@ def test_the_planned_part_texts_are_frozen_queries() -> None:
 
 
 def test_the_red_teams_planned_part_texts_are_frozen_queries() -> None:
-    """The red team's two routed messages (RT-010, RT-011) search Haiku's rewritten parts, read from
-    `assistant-redteam`'s own cassettes; their test asserts the first search used a frozen vector."""
+    """The red team's two routed messages (RT-010, RT-011) search Haiku's rewritten parts, read
+    from `assistant-redteam`'s own cassettes; their test asserts the first search used a frozen
+    vector."""
     import json
 
     from northwind_evals.cli import ITEMS, RED_TEAM, _frozen_queries
