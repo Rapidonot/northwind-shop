@@ -104,3 +104,44 @@ After REPLACED_IN_RECORDING = {"RT-003"}, and the guard test pinning RT-003:
 
     28 passed, 7855 deselected
     offline tests in the file: 25 passed, 28 deselected
+
+## Mutants on the SA-02 hard-rule pins (advisor finding 3, 2026-11-24, at dca6053)
+
+Each mutant was applied by hand and the file was restored with `git checkout` afterwards. The Python runs were serial
+(`-p no:xdist`) over these files: `test_sa02_source_cards.py`, `test_sa02_source_card_edges.py`,
+`test_sa02_citation_cards.py`, `test_sa02_citation_card_edges.py` and `test_chat.py`. Unmutated: 56 passed.
+
+M1. `_card` ignores `TRUSTED_SOURCE_TYPES`, so a review gets a title, brand and department (hard rule 6).
+
+    FAILED services/assistant/tests/test_sa02_source_cards.py::test_a_review_card_carries_no_text_from_the_review
+    FAILED services/assistant/tests/test_sa02_source_card_edges.py::test_an_unknown_source_type_is_untrusted_and_carries_no_text
+    FAILED services/assistant/tests/test_sa02_source_card_edges.py::test_a_review_with_a_brand_line_still_carries_no_brand
+    FAILED services/gateway/tests/test_sa02_citation_cards.py::test_the_citations_event_carries_a_card_per_cited_source
+    FAILED services/gateway/tests/test_sa02_citation_card_edges.py::test_a_review_card_has_only_id_and_type_even_with_a_brand_line
+    5 failed, 51 passed
+
+M2. `source_cards` drops the cited filter and makes a card for every source of the turn (hard rule 5).
+
+    14 failed, 42 passed, including:
+    test_only_cited_sources_get_a_card_in_citation_order
+    test_a_cited_id_with_no_source_text_gets_no_card
+    test_an_uncited_source_gets_no_card
+    test_a_marker_for_an_unretrieved_id_is_not_cited_and_gets_no_card
+    test_a_review_card_has_only_id_and_type_even_with_a_brand_line
+
+M3. `linked()` in `Chat.tsx` links every marker, cited or not.
+(`corepack pnpm exec vitest run src/ChatSources.test.tsx src/ChatSourcesEdges.test.tsx`)
+
+    × leaves a marker the gateway did not cite as plain text
+    × leaves a group marker's text exactly as streamed
+    × leaves [<img src=x>] as plain text with no link, element or handler
+    × leaves [P0178"><b>x</b>] as plain text with no link, element or handler
+    × leaves [javascript:alert(1)] as plain text with no link, element or handler
+    × links only the cited IDs in a group marker and keeps the text
+    × never links a marker whose ID is not among the cited ones, whatever it looks like
+    × makes no card and no link for a sources entry whose ID was not cited
+    Tests  8 failed | 26 passed (34)
+
+Hard rule 2 (no price or stock field) has no code path to mutate: neither `SourceCard` nor the gateway's `_card`
+has such a field. It is pinned by `test_sa02_source_cards.py::test_a_card_has_no_price_or_stock_field`, which checks the exact field
+set, and by the exact citations dict in `test_sa02_citation_cards.py`.

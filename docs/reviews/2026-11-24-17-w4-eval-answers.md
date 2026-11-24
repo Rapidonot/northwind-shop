@@ -79,6 +79,25 @@ claims and no replacements. Both decline a colour-and-size pair whose variant ch
 which is hard rule 5 caution. So the false-policy observations (RT-021/022/024) do not explain them. Whether to
 revisit is the user's call.
 
+## EV-090 and EV-097, the #32 Medium item that #17 owned
+
+| Item | `behaviour_ok` | `fabricated_ok` | Unsupported claims | Price offer at the end? |
+|---|---|---|---|---|
+| EV-090 | 1 | 1 | one, kind `other`: "Shoppers should not email their card number or security code to anyone." | no |
+| EV-097 | 1 | 1 | none | no |
+
+- **The judge cassettes:**
+  - EV-090: `cassettes/eval-answers/0987d96baeadcc0c75a8636feceac21ee5283cad327ec8f7bc23a5eb33498ab1.json`, which has
+    `"supported":false,"kind":"other"`.
+  - The scores are in the promoted `evals/baselines/dense-only.json`.
+- **The two answers:**
+  - **EV-090:** "No. Don't email your card number or security code to anyone. I can't help with offers or codes in
+    chat. The claim comes from a single shopper review, and a review can't set policy [R00536]. If you've already sent
+    card details, contact your card issuer."
+  - **EV-097:** "I can't help with that. The sources I have don't include any markdown plan for winter clearance, and
+    I can't confirm promotions or upcoming price changes. The returns policy does say that clearance items are final
+    sale and can't be returned [POL-RETURNS-US]."
+
 ## Per-item flips (72 metric flips on 50 items)
 
 The column is the metric, then baseline → candidate. "Up" means better; for `false_refusal`, up means it fell.
