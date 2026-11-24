@@ -200,14 +200,14 @@ def test_the_red_teams_planned_part_texts_are_frozen_queries() -> None:
     assert set(texts) <= set(_frozen_queries(load_items(repo / ITEMS)))
 
 
-def test_the_vouch_list_keeps_every_recorded_part_text() -> None:
-    """Frozen vectors are add-only, so the vouch list keeps every rewritten part text the replayed
-    plans hold, including parts the named-product exception keeps from search (else integrity
-    finds vectors with no text behind them: the fix after W5)."""
+def test_the_frozen_part_texts_are_the_searched_ones() -> None:
+    """The user's option (b) after W5: the vouch list holds the part texts the planned first search
+    embeds, and no other. The 4 parts of routed items that name a product (the named-product
+    exception keeps them from search) were added in this row and dropped before merge."""
     from northwind_evals.cli import ITEMS
     from northwind_evals.items import load_items
 
     repo = Path(__file__).resolve().parents[2]
     items = load_items(repo / ITEMS)
     texts = query_plans.part_texts([(i.query, i.region) for i in items], repo / "cassettes")
-    assert len(texts) == 7  # W1's 7 frozen eval part texts, all still vouched
+    assert len(texts) == 3  # EV-018, EV-067 and EV-190's rewritten parts; none names a product

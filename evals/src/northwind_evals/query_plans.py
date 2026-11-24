@@ -108,22 +108,6 @@ def planner(
     """`parts(message, region)` for each eval message. A replay proxy runs only if a message needs
     the model; any miss raises SystemExit once the plans are made."""
     store = FixtureCatalog()
-    plans = replayed_plans(messages, cassettes, suite)
-
-    def parts(message: str, region: str) -> Parts:
-        plan = plans.get((message, region)) or rules_plan(message, region)
-        return shopper_parts(plan, message, region, store)
-
-    yield parts
-
-
-def replayed_plans(
-    messages: Sequence[tuple[str, str]],
-    cassettes: Path = Path("cassettes"),
-    suite: str = SUITE,
-) -> dict[tuple[str, str], QueryPlan]:
-    """Haiku's plan for each message the rules route, replayed from `suite`; SystemExit on a miss
-    or any plan that did not come from a replayed reply (security review M1)."""
     needed = [(m, r) for m, r in messages if rules_plan(m, r).needs_model]
     plans: dict[tuple[str, str], QueryPlan] = {}
     if needed:
@@ -150,7 +134,12 @@ def replayed_plans(
                     f"query-understanding replay did not answer every plan: {dict(failed)}"
                     f"{' and a fallback beta' if state.fallback_attempts else ''}"
                 )
-    return plans
+
+    def parts(message: str, region: str) -> Parts:
+        plan = plans.get((message, region)) or rules_plan(message, region)
+        return shopper_parts(plan, message, region, store)
+
+    yield parts
 
 
 def part_texts(
@@ -158,13 +147,14 @@ def part_texts(
     cassettes: Path = Path("cassettes"),
     suite: str = SUITE,
 ) -> list[str]:
-    """Row #11 (security review M2): every rewritten part text in the replayed plans, so each gets a
-    frozen vector like every other query (decision 0012). It is the vouch list too, so it holds
-    every text a frozen vector may stand for: a part kept from search by the named-product exception
-    or a gateway fallback still counts, since its vector is add-only and stays. A part that is the
-    raw message needs none: the message is frozen already. `suite` is where the plans were
-    recorded: `query-understanding` for eval items, `assistant-redteam` for the red team."""
+    """Row #11 (security review M2): the rewritten part texts the planned first search embeds, from
+    the replayed plans, so they get frozen vectors like every other query (decision 0012). A part
+    that searches the raw message needs none: the message is frozen already. `suite` is where the
+    plans were recorded: `query-understanding` for eval items, `assistant-redteam` for the red
+    team."""
     texts: list[str] = []
-    for (message, _), plan in replayed_plans(messages, cassettes, suite).items():
-        texts += [part.text for part in plan.parts if part.text != message]
+    with planner(messages, cassettes, suite) as parts:
+        for message, region in messages:
+            if rules_plan(message, region).needs_model:
+                texts += [text for text, _ in parts(message, region) if text != message]
     return list(dict.fromkeys(texts))
