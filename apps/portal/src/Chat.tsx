@@ -124,8 +124,14 @@ export function Chat({ onTurnEnd }: { onTurnEnd?: () => void } = {}) {
     }
   }
 
-  const cards = new Map(turn.cards.map((card) => [card.id, card]));
-  const products = turn.cards.filter((card) => PRODUCT_TYPES.has(card.type) && card.title);
+  // Only a cited source gets a card: an entry for an ID outside `source_ids` has no anchor to link.
+  const cited = new Set(turn.sources);
+  const cards = new Map(
+    turn.cards.filter((card) => cited.has(card.id)).map((card) => [card.id, card]),
+  );
+  const products = [...cards.values()].filter(
+    (card) => PRODUCT_TYPES.has(card.type) && card.title,
+  );
 
   return (
     <section aria-label="Chat">
@@ -142,7 +148,7 @@ export function Chat({ onTurnEnd }: { onTurnEnd?: () => void } = {}) {
         </button>
       </form>
       <p data-testid="answer" aria-live="polite">
-        {linked(turn.answer, new Set(turn.sources))}
+        {linked(turn.answer, cited)}
       </p>
       {turn.notice && <p role="alert">{turn.notice}</p>}
       {products.length > 0 && (
