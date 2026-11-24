@@ -737,7 +737,7 @@ _PLAN_KEYS = frozenset({"parts"})
 _DECIMAL = re.compile(r"\d{1,7}(?:\.\d{1,2})?", re.ASCII)
 # Anything card-shaped (hard rule 1), screened here without `northwind_common`, which this package
 # must not depend on: 12 or more digits whatever separates them, or a card word. A search part never
-# needs either; the assistant also applies `northwind_common.cards` (row #11, test-writer finding 3).
+# needs either; the assistant also applies `northwind_common.cards` (row #11, test-writer F3).
 _CARD_WORDS = re.compile(
     r"\b(?:c\s*v\s*v2?|c\s*v\s*c2?|cvn|cid|csc|security\s+code|card\s+(?:code|number|no)|"
     r"expiry|expiration|exp\.?\s+date)\b",
