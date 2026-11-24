@@ -78,3 +78,42 @@ def test_a_conditional_still_passes_with_no_order_read() -> None:
 def test_a_vouched_order_sentence_counts_as_tool_backed_not_sourced() -> None:
     assert live_backed("O000064: order confirmed.", DELIVERED) == 1
     assert live_backed("O000064: order confirmed.", LiveValues()) == 0
+
+
+# ---- security review pass 1 (docs/reviews/2026-11-24-27-security-review.raw.md) -----------------
+
+BOTH_READ = LiveValues(orders={"O000064": "delivered", "O000113": "on_hold"})
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        # M1: the claim's subject is another order than the one named.
+        "O000064 arrived on 22 October, and your other order was placed and is being prepared.",
+        "O000064 is delivered, and the second order has been confirmed.",
+        "O000064 shipped first; the order was placed later.",
+    ],
+)
+def test_m1_a_named_order_does_not_vouch_for_another_order_in_its_sentence(text: str) -> None:
+    assert hits(text, live=BOTH_READ).get("confirmation", 0) == 1
+
+
+@pytest.mark.parametrize(
+    "verb", ["approved", "authorised", "authorized", "processed", "applied", "issued"]
+)
+def test_l1_only_placed_or_confirmed_is_vouched(verb: str) -> None:
+    assert hits(f"O000064: your order has been {verb}.", live=DELIVERED).get("confirmation") == 1
+
+
+@pytest.mark.parametrize("cut", range(1, 7))
+def test_l2_an_order_cut_by_the_windows_left_edge_still_counts(cut: int) -> None:
+    """An on-hold order straddling the 64-character look-back edge, in the same sentence as a
+    vouched claim, must still be seen, so the sentence stays blocked."""
+    tail = " and O000064: your order was placed."
+    claim_at = tail.index("order was placed")
+    # Put O000113 so that `cut` of its 7 characters fall before the window's start.
+    gap = 64 - claim_at - (7 - cut)
+    text = "O000113 " + "x" * (gap - 1) + tail
+    start = text.index("order was placed")
+    assert text.index("O000113") == start - 64 - cut
+    assert hits(text, live=BOTH_READ).get("confirmation", 0) == 1, text

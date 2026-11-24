@@ -408,13 +408,21 @@ The changed shown answers are re-judged in W6. Tests: `services/assistant/tests/
 ## Row #27 amendment (2026-11-24): an order's own status (CHK-06, decision 0023)
 
 - **Confirmation class, order subject only.** A signed-in turn can read an order's status with `get_order`.
-  - "Your order was placed / has been confirmed" (the first confirmation pattern, with an `order` subject) and
-    "order confirmed" pass when the same sentence, before the claim and within `L` characters, names one or more
-    orders, and every one of them is an order this turn's `get_order` returned with a confirmed status
-    (`order_tool.CONFIRMED_STATUSES`: `confirmed` through `delivered`). The status is read from the tool result
-    (`LiveValues.orders`), never from text.
+  - "Your order was placed / has been confirmed" (the first confirmation pattern, with an `order` subject and the
+    participle `placed` or `confirmed` only) and "order confirmed" pass under three conditions:
+    - the claim's own subject is bound to an order ID written directly before it, with nothing between them but a
+      separator and one of "your", "the" or "this" (for example "O000064: your order was placed");
+    - that order, and every other order named earlier in the same sentence within `L` characters, is one this
+      turn's `get_order` returned with a confirmed status (`order_tool.CONFIRMED_STATUSES`: `confirmed` through
+      `delivered`);
+    - IDs are found over the whole text, so an ID cut by the window's edge still counts.
+
+    The status is read from the tool result (`LiveValues.orders`), never from text. Security review pass 1 tightened
+    this rule: M1 (binding), L1 (participles) and L2 (window edge); see
+    `docs/reviews/2026-11-24-27-security-review.raw.md`.
   - Anything else stays blocked:
-    - an unnamed order;
+    - an unnamed order, or one not bound to the claim ("O000064 arrived, and your other order was placed");
+    - "approved", "processed", "authorised", "applied" or "issued", even for a vouched order;
     - an order named only after the claim, or in another sentence;
     - an order on hold, still processing, or not read this turn;
     - a payment, refund, discount or code subject;

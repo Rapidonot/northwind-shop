@@ -224,3 +224,26 @@ def test_chat_services_always_sets_the_orders_endpoint(monkeypatch: pytest.Monke
         assert services.orders is not None and services.orders.url == "http://127.0.0.1:18434/mcp"
     finally:
         chat_services.cache_clear()
+
+
+# Security review pass 1, informational: with the flag off the route is indistinguishable from a
+# missing one, even for a visitor with no session (no Set-Cookie either).
+@pytest.mark.parametrize("method", ["post", "get"])
+def test_with_the_flag_off_a_new_visitor_cannot_tell_the_route_exists(
+    spy: Spy, monkeypatch: pytest.MonkeyPatch, method: str
+) -> None:
+    monkeypatch.delenv(DEMO_SIGNIN_ENV, raising=False)
+    client = TestClient(app)
+    here = getattr(client, method)(PATH)
+    missing = getattr(client, method)("/api/session/nobody")
+    assert (here.status_code, here.json()) == (missing.status_code, missing.json())
+    assert here.headers.get_list("set-cookie") == missing.headers.get_list("set-cookie") == []
+
+
+def test_two_shopper_cookies_are_no_sign_in(spy: Spy, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Security review pass 1, L3: a planted second `nw_shopper` is refused, never picked."""
+    monkeypatch.setenv(DEMO_SIGNIN_ENV, "1")
+    good = sign_shopper(session_key(KEY), SESSION, "S0031")
+    header = f"{session_cookie()}; {SHOPPER_COOKIE}={good}; {SHOPPER_COOKIE}={good}"
+    TestClient(app).get("/api/cart", headers={"cookie": header})
+    assert spy.callers[-1].shopper_id is None

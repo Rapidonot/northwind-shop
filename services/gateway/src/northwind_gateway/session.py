@@ -125,11 +125,12 @@ def cookie_values(scope: Scope, name: str) -> list[str]:
     return found
 
 
-def _cookie_value(scope: Scope) -> str:
-    """The first `nw_session` value sent. Browsers send a cookie with a longer path first, so ours
-    (`Path=/api`) comes before one another app set on `/`."""
-    values = cookie_values(scope, COOKIE)
-    return values[0] if values else ""
+def _cookie_value(scope: Scope, name: str = COOKIE) -> str:
+    """The one value sent for cookie `name`, or "" for none or more than one. Two values mean
+    another localhost app planted one (browsers scope cookies by host, not port, and send a longer
+    path first), so neither is trusted (security review pass 1, L3): fail closed."""
+    values = cookie_values(scope, name)
+    return values[0] if len(values) == 1 else ""
 
 
 def set_cookie_header(key: bytes, session: str) -> tuple[bytes, bytes]:
@@ -149,6 +150,9 @@ def session_middleware(app: ASGIApp, key: Callable[[], bytes] | None = None) -> 
         if scope["type"] != "http" or scope.get("path") not in SESSION_PATHS:
             await app(scope, receive, send)
             return
+        if scope.get("path") == SIGNIN_PATH and not demo_signin_enabled():
+            await app(scope, receive, send)  # row #27: no session, so the 404 sets no cookie either
+            return
         try:
             cookie_key = current_key()
         except TokenKeyError:
@@ -162,8 +166,8 @@ def session_middleware(app: ASGIApp, key: Callable[[], bytes] | None = None) -> 
         state: dict[str, Any] = dict(scope.get("state") or {})
         state[STATE_KEY] = session
         if not issue and demo_signin_enabled():  # row #27: a new session has no sign-in yet
-            sent = cookie_values(scope, SHOPPER_COOKIE)
-            shopper = verified_shopper(cookie_key, session, sent[0]) if sent else None
+            sent = _cookie_value(scope, SHOPPER_COOKIE)
+            shopper = verified_shopper(cookie_key, session, sent) if sent else None
             if shopper is not None:
                 state[SHOPPER_STATE_KEY] = shopper
 

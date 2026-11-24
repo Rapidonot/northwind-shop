@@ -36,9 +36,13 @@ UNAVAILABLE = {
 }
 
 
-@router.post(SIGNIN_PATH)
+# Every method, so with the flag off any request is the same 404 as a path that does not exist
+# (security review pass 1); with it on, only POST signs in.
+@router.api_route(
+    SIGNIN_PATH, methods=["GET", "POST", "PUT", "PATCH", "DELETE"], include_in_schema=False
+)
 def sign_in(request: Request) -> JSONResponse:
-    if not demo_signin_enabled():
+    if not demo_signin_enabled() or request.method != "POST":
         raise HTTPException(status_code=404, detail="Not Found")
     session = getattr(request.state, STATE_KEY, None)
     try:

@@ -78,9 +78,12 @@ def test_lenient_parsing_still_takes_only_a_value_the_gateway_signed(spy: Spy, v
     assert spy.sessions[-1] != "a" * 32
 
 
-def test_the_first_session_cookie_wins_when_two_are_sent(spy: Spy) -> None:
+# Security review pass 1, L3: another localhost app can plant a second `nw_session` with a longer
+# path, which browsers send first. Two values are refused: a new session, never either one.
+def test_two_session_cookies_get_a_new_session_never_either_one(spy: Spy) -> None:
     first = sign(session_key(KEY), SESSION)
     second = sign(session_key(KEY), "c" * 32)
     header = f"{COOKIE}={first}; {COOKIE}={second}"
-    TestClient(app).get("/api/cart", headers={"cookie": header})
-    assert spy.sessions[-1] == SESSION
+    response = TestClient(app).get("/api/cart", headers={"cookie": header})
+    assert response.headers.get_list("set-cookie") != []
+    assert spy.sessions[-1] not in (SESSION, "c" * 32)

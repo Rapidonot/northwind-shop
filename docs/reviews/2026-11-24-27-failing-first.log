@@ -48,3 +48,56 @@ $ uv run pytest -p no:cacheprovider -q tests/infra/test_27_compose_binding.py
 2 passed in 0.05s
 $ uv run pytest -p no:cacheprovider -q services/llm-replay/tests/test_runner_support.py
 207 passed in 36.63s
+
+## 2026-11-24T14:48:21Z security review pass 1 (M1, L1, L2, L3, flag-off 404): tests only, at edd5d57's code
+$ uv run pytest -p no:cacheprovider -q services/assistant/tests/test_chk06_output_check.py
+FAILED services/assistant/tests/test_chk06_output_check.py::test_m1_a_named_order_does_not_vouch_for_another_order_in_its_sentence[O000064 arrived on 22 October, and your other order was placed and is being prepared.]
+FAILED services/assistant/tests/test_chk06_output_check.py::test_m1_a_named_order_does_not_vouch_for_another_order_in_its_sentence[O000064 is delivered, and the second order has been confirmed.]
+FAILED services/assistant/tests/test_chk06_output_check.py::test_m1_a_named_order_does_not_vouch_for_another_order_in_its_sentence[O000064 shipped first; the order after it was placed later.]
+FAILED services/assistant/tests/test_chk06_output_check.py::test_l1_only_placed_or_confirmed_is_vouched[approved]
+FAILED services/assistant/tests/test_chk06_output_check.py::test_l1_only_placed_or_confirmed_is_vouched[authorised]
+FAILED services/assistant/tests/test_chk06_output_check.py::test_l1_only_placed_or_confirmed_is_vouched[authorized]
+FAILED services/assistant/tests/test_chk06_output_check.py::test_l1_only_placed_or_confirmed_is_vouched[processed]
+FAILED services/assistant/tests/test_chk06_output_check.py::test_l1_only_placed_or_confirmed_is_vouched[applied]
+FAILED services/assistant/tests/test_chk06_output_check.py::test_l1_only_placed_or_confirmed_is_vouched[issued]
+9 failed, 20 passed in 0.12s
+$ uv run pytest -p no:cacheprovider -q services/gateway/tests/test_27_session_cookie_parsing.py
+FAILED services/gateway/tests/test_27_session_cookie_parsing.py::test_two_session_cookies_get_a_new_session_never_either_one
+1 failed, 9 passed in 0.58s
+$ uv run pytest -p no:cacheprovider -q services/gateway/tests/test_chk06_signin.py
+FAILED services/gateway/tests/test_chk06_signin.py::test_with_the_flag_off_a_new_visitor_cannot_tell_the_route_exists[post]
+FAILED services/gateway/tests/test_chk06_signin.py::test_with_the_flag_off_a_new_visitor_cannot_tell_the_route_exists[get]
+FAILED services/gateway/tests/test_chk06_signin.py::test_two_shopper_cookies_are_no_sign_in
+3 failed, 20 passed in 0.65s
+$ uv run pytest -p no:cacheprovider -q services/assistant/tests/test_chk06_output_check.py  (L2 test rewritten to straddle the window edge)
+FAILED services/assistant/tests/test_chk06_output_check.py::test_m1_a_named_order_does_not_vouch_for_another_order_in_its_sentence[O000064 arrived on 22 October, and your other order was placed and is being prepared.]
+FAILED services/assistant/tests/test_chk06_output_check.py::test_m1_a_named_order_does_not_vouch_for_another_order_in_its_sentence[O000064 is delivered, and the second order has been confirmed.]
+FAILED services/assistant/tests/test_chk06_output_check.py::test_m1_a_named_order_does_not_vouch_for_another_order_in_its_sentence[O000064 shipped first; the order after it was placed later.]
+FAILED services/assistant/tests/test_chk06_output_check.py::test_l1_only_placed_or_confirmed_is_vouched[approved]
+FAILED services/assistant/tests/test_chk06_output_check.py::test_l1_only_placed_or_confirmed_is_vouched[authorised]
+FAILED services/assistant/tests/test_chk06_output_check.py::test_l1_only_placed_or_confirmed_is_vouched[authorized]
+FAILED services/assistant/tests/test_chk06_output_check.py::test_l1_only_placed_or_confirmed_is_vouched[processed]
+FAILED services/assistant/tests/test_chk06_output_check.py::test_l1_only_placed_or_confirmed_is_vouched[applied]
+FAILED services/assistant/tests/test_chk06_output_check.py::test_l1_only_placed_or_confirmed_is_vouched[issued]
+FAILED services/assistant/tests/test_chk06_output_check.py::test_l2_an_order_cut_by_the_windows_left_edge_still_counts[1]
+FAILED services/assistant/tests/test_chk06_output_check.py::test_l2_an_order_cut_by_the_windows_left_edge_still_counts[2]
+FAILED services/assistant/tests/test_chk06_output_check.py::test_l2_an_order_cut_by_the_windows_left_edge_still_counts[3]
+FAILED services/assistant/tests/test_chk06_output_check.py::test_l2_an_order_cut_by_the_windows_left_edge_still_counts[4]
+FAILED services/assistant/tests/test_chk06_output_check.py::test_l2_an_order_cut_by_the_windows_left_edge_still_counts[5]
+FAILED services/assistant/tests/test_chk06_output_check.py::test_l2_an_order_cut_by_the_windows_left_edge_still_counts[6]
+15 failed, 19 passed in 0.14s
+# note: the third M1 case "O000064 shipped first; the order after it was placed later." never matches the confirmation pattern ("order" must be followed by its verb), so it was a bad case, not a bypass; replaced by "O000064 shipped first; the order was placed later.".
+## 2026-11-24T14:49:54Z that replaced case on edd5d57's output_check.py (git show into a scratch copy, nothing written in the repo)
+old code, confirmation hits: 0 (1 = blocked; expected 0 = the bug)
+## 2026-11-24T14:49:54Z after the fixes (output_check binding/verbs/whole-text IDs)
+$ uv run pytest -p no:cacheprovider -q services/assistant/tests/test_chk06_output_check.py
+34 passed in 0.09s
+## 2026-11-24T14:50:12Z after the fixes (session.py one-value cookies, flag-off pass-through; signin.py every method)
+$ uv run pytest -p no:cacheprovider -q services/gateway/tests/test_27_session_cookie_parsing.py
+10 passed in 0.55s
+$ uv run pytest -p no:cacheprovider -q services/gateway/tests/test_chk06_signin.py
+23 passed in 0.58s
+$ uv run pytest -p no:cacheprovider -q services/gateway/tests/test_cart_session.py
+20 passed in 1.07s
+$ uv run pytest -p no:cacheprovider -q services/gateway/tests/test_chk01_gateway_criteria.py
+22 passed, 1 warning in 1.03s

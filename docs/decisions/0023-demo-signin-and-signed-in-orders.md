@@ -19,6 +19,9 @@ but no shopper, so "own orders" had no meaning. Accounts (SA-04) are not built.
      The mac is HMAC-SHA256 under the session cookie's derived key, over `northwind-shopper-v1`, the session ID and
      the shopper ID. It is valid only with the session it was issued for, and only while the flag is on: a new
      session, a forged or other-key mac, a non-demo shopper, or the flag turned off all leave the caller anonymous.
+     A request carrying two values of either cookie gets neither: another localhost app can plant one, because
+     cookies are scoped by host, not port (security review pass 1, L3). With the flag off the route gets no session
+     and is the same 404 for every method, with no `Set-Cookie`.
    - The gateway's caller then gets `shopper_id`, and its region becomes the shopper's own (RAG-11).
    - There is no portal picker (SA-01, window B). This row tests through the API.
 2. **`shp`, a northwind-orders-only token claim.** The signed-in shopper rides in one MCP token, northwind-orders',
@@ -42,9 +45,10 @@ but no shopper, so "own orders" had no meaning. Accounts (SA-04) are not built.
    - The PR carries the user's `baseline-change` label.
    - A side effect, stated: per decision 0017, `eval-integrity` then lets refinements change. This row changes none.
 6. **The output check (decision 0015, row #27 amendment).**
-   - "Your order was placed/confirmed" and "order confirmed" pass only when, earlier in the same sentence and within
-     64 characters, every order named is one this turn's `get_order` returned with a confirmed status (`confirmed`
-     through `delivered`).
+   - "Your order was placed/confirmed" and "order confirmed" pass only when the claim's subject is bound to an
+     order ID written directly before it ("O000064: your order …"), and that order and every order named earlier
+     in the sentence (within 64 characters) is one this turn's `get_order` returned with a confirmed status
+     (`confirmed` through `delivered`). Only "placed" and "confirmed" are vouched.
    - Refund authority, "I've confirmed …" and a payment subject stay blocked always.
    - With no order read this turn, the check is unchanged.
 

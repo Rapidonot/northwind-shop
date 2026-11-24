@@ -351,7 +351,7 @@ PATTERNS: tuple[Pattern, ...] = (
     _p(
         "confirmation",
         rf"\b(?P<subj>{_SUBJECT})(?:{_S}(?P<cop>is|has{_S}(?:{_ADVERB_WORD}{_S})?been|was)|['’]s{_S}been){_S}{_ADVERB}"
-        r"(?:confirmed|processed|approved|authori[sz]ed|applied|placed|issued)\b",
+        r"(?P<verb>confirmed|processed|approved|authori[sz]ed|applied|placed|issued)\b",
         "conditional",
     ),
     _p(
@@ -561,22 +561,37 @@ class Source:
 
 _ORDER_ID = re.compile(r"(?<![^\W_])o\d{6}(?![^\W_])")  # the casefolded view of `O000064`
 _SENTENCE_BREAK = re.compile(r"[.!?](?=\s)|\n")
+# Row #27, security review pass 1 (M1): the named order must be the claim's own subject, written
+# directly before it ("O000064: your order", "order O000064 - the order"), with nothing between them
+# but a separator and one determiner. "O000064 …, and your other order was placed" does not bind.
+_BOUND = re.compile(
+    r"(?<![^\W_])(?P<id>o\d{6})\s{0,3}[:,\-–—]?\s{0,3}(?:(?:your|the|this)\s{1,3})?$"
+)
+# L1: only these participles may be vouched; "approved", "processed" and the rest stay blocked.
+VOUCHED_VERBS = frozenset({"placed", "confirmed"})
 
 
 def order_vouched(text: str, start: int, live: LiveValues) -> bool:
     """Row #27 (CHK-06; decision 0015's row #27 amendment): an order called confirmed or placed
-    passes only when its own sentence, before the claim and within `L` characters, names one or more
-    orders and every one of them is an order this turn's `get_order` returned with a confirmed
-    status (`order_tool.CONFIRMED_STATUSES`). An unnamed order, another sentence's order, or an
-    order on hold or still processing stays blocked: the model cannot vouch for one in text."""
+    passes only when the claim's own subject is named by an order ID written directly before it,
+    and every order named earlier in the same sentence, within `L` characters, is one this turn's
+    `get_order` returned with a confirmed status (`order_tool.CONFIRMED_STATUSES`). An unnamed or
+    unbound order, another sentence's order, or an order on hold, still processing or not read
+    stays blocked: the model cannot vouch for one in text. IDs are found over the whole text, so
+    one cut by the window's edge still counts (security review pass 1, L2)."""
     if not live.orders:
         return False
-    window = text[max(0, start - L) : start]
-    breaks = list(_SENTENCE_BREAK.finditer(window))
-    if breaks:
-        window = window[breaks[-1].end() :]
-    named = {m.group().upper() for m in _ORDER_ID.finditer(window)}
-    return bool(named) and all(live.orders.get(o) in CONFIRMED_STATUSES for o in named)
+    low = max(0, start - L)
+    breaks = list(_SENTENCE_BREAK.finditer(text, low, start))
+    cut = breaks[-1].end() if breaks else low
+    bound = _BOUND.search(text[cut:start])
+    if bound is None:
+        return False
+    named = {
+        m.group().upper() for m in _ORDER_ID.finditer(text) if m.end() > cut and m.start() < start
+    }
+    named.add(bound["id"].upper())
+    return all(live.orders.get(o) in CONFIRMED_STATUSES for o in named)
 
 
 @dataclass
@@ -1061,8 +1076,11 @@ class OutputCheck:
             if bool(introduced) and copula in PRESENT_COPULAS:
                 return True
             # Row #27: "your order was placed" about an order this turn's `get_order` returned.
-            return found.groupdict().get("subj") == "order" and order_vouched(
-                view.text, start, self.live
+            groups = found.groupdict()
+            return (
+                groups.get("subj") == "order"
+                and groups.get("verb") in VOUCHED_VERBS
+                and order_vouched(view.text, start, self.live)
             )
         if pattern.exempt == "live_order":
             return order_vouched(view.text, start, self.live)
