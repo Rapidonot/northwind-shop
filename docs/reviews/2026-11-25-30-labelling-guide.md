@@ -99,6 +99,12 @@ writing them had read recorded answers made with the old prompt, on eval items, 
 5. **Fit** is named in availability messages for every product with a fit, single-fit ones included.
 6. **"Men's" and "women's"** include unisex. "Duvet" in IC-030 covers comforters, which share its subcategory.
 7. **Recommendation sets ignore stock**, so P0008 stays in IC-021 though its relaxed fit is out of stock.
+8. **Wording added by the user's decision (2026-11-25), after test-writer's report and before any label was measured:**
+   - SA-04 `budget`: "spend" and "spending".
+   - SA-03 stock wordings read a hyphen as a space: "out-of-stock", "sold-out", "in-stock". This holds for the live
+     answer and for the out-of-stock wordings in `absent` (IC-039, IC-040), so a hyphen hides neither. Every other
+     wording keeps its hyphens.
+   - "none left", "0 left" and "no stock left" say out of stock.
 
 ## Changes at the user's review (2026-11-25)
 - **IC-009** (answer C): `absent` gains "not machine-washable", "do not machine wash", "don't machine wash".
