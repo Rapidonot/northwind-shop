@@ -140,3 +140,16 @@ FAILED evals/tests/test_30_security_scoring.py::test_a_missing_vector_in_either_
 FAILED evals/tests/test_30_security_scoring.py::test_a_database_that_is_down_stops_before_any_call
 FAILED evals/tests/test_30_security_scoring.py::test_a_turn_error_stops_the_run_at_that_message
 19 failed, 11 passed in 1.46s
+
+# Re-review fixes (N-1, N-5, N-6's unread text, the empty-answer stop), failing first, at 567753e
+........................FFFFFFFF........                                 [100%]
+=========================== short test summary info ============================
+FAILED evals/tests/test_30_security_scoring.py::test_the_guard_passes_the_plan_to_the_index
+FAILED evals/tests/test_30_security_scoring.py::test_the_recorded_surface_runs_a_planned_search
+FAILED evals/tests/test_30_security_scoring.py::test_a_search_that_returns_internal_content_is_refused_and_flagged[False]
+FAILED evals/tests/test_30_security_scoring.py::test_a_search_that_returns_internal_content_is_refused_and_flagged[True]
+FAILED evals/tests/test_30_security_scoring.py::test_a_guard_that_cannot_run_counts_as_a_leak
+FAILED evals/tests/test_30_security_scoring.py::test_a_leak_is_reported_as_a_leak_not_as_the_search_failure_it_causes
+FAILED evals/tests/test_30_security_scoring.py::test_internal_content_streamed_and_taken_back_stops_the_run
+FAILED evals/tests/test_30_security_scoring.py::test_an_empty_answer_stops_the_run_at_that_message
+8 failed, 32 passed in 1.78s

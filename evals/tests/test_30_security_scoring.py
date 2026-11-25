@@ -20,6 +20,7 @@ from northwind_evals.harness import (
     steer_target,
     steered,
 )
+from northwind_mcp_rag.testing import CallerSearcher
 from northwind_rag.retrieval import RetrievedChunk
 
 
@@ -148,10 +149,9 @@ def test_the_recorded_surface_searches_through_the_guard(monkeypatch: pytest.Mon
 
     monkeypatch.setattr(recorded, "serve_retriever", serve)
     with recorded.surface(Index(INTERNAL)):
-        pass
-    [index] = served
-    with pytest.raises(RuntimeError):
-        index.search("q", None)
+        [index] = served
+        with pytest.raises(RuntimeError):
+            index.search("q", None)
 
 
 class Log:
@@ -163,8 +163,8 @@ class Log:
 @pytest.mark.parametrize(
     ("shown", "leak", "problem"),
     [
-        ("The Corvane Ascent Pro Shell.", False, "internal content on screen"),
-        ("It is warm.", True, "a catalog result held internal content"),
+        ("The Corvane Ascent Pro Shell.", False, "internal content in the answer"),
+        ("It is warm.", True, "held internal content"),
     ],
 )
 def test_internal_content_stops_the_run_at_that_message(
@@ -183,11 +183,111 @@ def test_internal_content_stops_the_run_at_that_message(
     assert asked == ["m1"]
 
 
+class Planned(Index):
+    """An index with the production shape: `search_planned` as `CallerIndex` has."""
+
+    def __init__(self, chunk: RetrievedChunk) -> None:
+        super().__init__(chunk)
+        self.parts: list[Any] = []
+
+    def search_planned(self, parts: Any, caller: Any) -> list[RetrievedChunk]:
+        self.parts.append(parts)
+        return [self.chunk]
+
+
+PARTS: tuple[Any, ...] = (("rain jacket", {"size": ["M"]}), ("queen sheets", {}))
+
+
+@pytest.mark.req("RAG-04")
+def test_the_guard_passes_the_plan_to_the_index(tmp_path: Path) -> None:
+    """Re-review N-1: without `search_planned`, mcp-rag's test server drops every filter and every
+    part after the first, and W1 would record inputs production never sends."""
+    index, log = Planned(PUBLIC), Log(False)
+    assert recorded.Guarded(index, log).search_planned(PARTS, None) == [PUBLIC]
+    assert index.parts == [PARTS]
+    assert log.leak is False
+
+
+@pytest.mark.req("RAG-04")
+def test_the_recorded_surface_runs_a_planned_search(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Through the adapter the served mcp-rag uses, so a wrapper without the method is caught."""
+    served: list[Any] = []
+
+    @contextmanager
+    def serve(index: Any, caller: Any) -> Iterator[tuple[str, None]]:
+        served.append(CallerSearcher(index, caller))
+        yield "http://127.0.0.1:9/mcp", None
+
+    monkeypatch.setattr(recorded, "serve_retriever", serve)
+    index = Planned(PUBLIC)
+    with recorded.surface(index):
+        served[0].search_planned(PARTS, audience="shopper", region="US")
+    assert index.parts == [PARTS]
+
+
 @pytest.mark.req("RAG-11")
-def test_a_search_that_returns_internal_content_never_reaches_the_model() -> None:
-    assert recorded.Guarded(Index(PUBLIC)).search("q", None) == [PUBLIC]
+@pytest.mark.parametrize("planned", [False, True])
+def test_a_search_that_returns_internal_content_is_refused_and_flagged(planned: bool) -> None:
+    """Re-review N-5: mcp-rag turns the refusal into an ordinary search failure, so the flag is what
+    reports it."""
+    log = Log(False)
+    guarded = recorded.Guarded(Planned(INTERNAL), log)
     with pytest.raises(RuntimeError):
-        recorded.Guarded(Index(INTERNAL)).search("q", None)
+        guarded.search_planned(PARTS, None) if planned else guarded.search("q", None)
+    assert log.leak is True
+
+
+@pytest.mark.req("RAG-11")
+def test_a_guard_that_cannot_run_counts_as_a_leak(monkeypatch: pytest.MonkeyPatch) -> None:
+    def broken() -> Any:
+        def guard(chunks: Any) -> bool:
+            raise FileNotFoundError("no canaries")
+
+        return guard
+
+    monkeypatch.setattr(recorded, "_chunk_guard", broken)
+    log = Log(False)
+    with pytest.raises(RuntimeError):
+        recorded.Guarded(Planned(PUBLIC), log).search("q", None)
+    assert log.leak is True
+
+
+@pytest.mark.req("RAG-11")
+def test_a_leak_is_reported_as_a_leak_not_as_the_search_failure_it_causes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    turn = recorded.Turn("", (), {}, "retrieval_failed")
+    monkeypatch.setattr(recorded, "ask", lambda *_: turn)
+    items = [{"id": "CL-1", "prompt": "m", "region": "US"}]
+    with pytest.raises(AssertionError, match="held internal content"):
+        recorded.run_turns(items, "prompt", lambda i: None, None, None, Log(True), lambda i: None)
+
+
+@pytest.mark.req("RAG-11")
+def test_internal_content_streamed_and_taken_back_stops_the_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    turn = recorded.Turn("It is warm.", (), {}, None, "See P0009. It is warm.")
+    monkeypatch.setattr(recorded, "ask", lambda *_: turn)
+    items = [{"id": "CL-1", "prompt": "m", "region": "US"}]
+    with pytest.raises(AssertionError, match="internal content"):
+        recorded.run_turns(items, "prompt", lambda i: None, None, None, Log(False), lambda i: None)
+
+
+@pytest.mark.req("SA-04")
+def test_an_empty_answer_stops_the_run_at_that_message(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The user's Q2: an empty answer is a stop, so the rest of the suite is not paid for."""
+    asked: list[str] = []
+
+    def ask(message: str, *_: Any) -> Any:
+        asked.append(message)
+        return recorded.Turn(" ", (), {})
+
+    monkeypatch.setattr(recorded, "ask", ask)
+    items = [{"id": f"CL-{n}", "prompt": f"m{n}", "region": "US"} for n in (1, 2)]
+    with pytest.raises(AssertionError, match="CL-1: empty answer"):
+        recorded.run_turns(items, "prompt", lambda i: None, None, None, Log(False), lambda i: None)
+    assert asked == ["m1"]
 
 
 @pytest.mark.req("RAG-11")
@@ -256,5 +356,5 @@ def test_a_turn_error_stops_the_run_at_that_message(
     monkeypatch.setattr(recorded, "ask", ask)
     items = [{"id": f"CL-{n}", "prompt": f"m{n}", "region": "US"} for n in (1, 2)]
     with pytest.raises(AssertionError, match="CL-1.*retrieval_failed"):
-        recorded.run_turns(items, "prompt", lambda item: None, None, None, None, lambda i: None)
+        recorded.run_turns(items, "prompt", lambda i: None, None, None, Log(False), lambda i: None)
     assert asked == ["m1"]

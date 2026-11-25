@@ -55,12 +55,14 @@ PASS_MARK = 18  # SA-04: at least 90% of 20
 
 @dataclass(frozen=True)
 class Turn:
-    """One message's answer: the text left on screen, the IDs cited, what `check_stock` returned."""
+    """One message's answer: the text left on screen, the IDs cited, what `check_stock` returned,
+    and every token streamed, text later taken back included."""
 
     shown: str
     cited: tuple[str, ...]
     checked: Mapping[str, int]
     error: str | None = None
+    sent: str = ""
 
 
 def labelled(name: str) -> list[dict[str, Any]]:
@@ -89,18 +91,32 @@ def internal_content(text: str) -> list[str]:
 
 class Guarded:
     """The index, refusing a search that returned internal content before the model or a cassette
-    sees it: the guard `eval-answers` refinements get (security review M-1)."""
+    sees it: the guard `eval-answers` refinements get (security review M-1). Both search methods go
+    through it, so the query plan reaches the index as in production (re-review N-1). A refusal, or
+    a guard that cannot run, sets the item's `leak` flag, because mcp-rag reports it to the model as
+    an ordinary search failure (re-review N-5)."""
 
-    def __init__(self, index: Any) -> None:
+    def __init__(self, index: Any, log: Any) -> None:
         self._index = index
+        self._log = log
         self._leaks = _chunk_guard()
 
     def search(self, query: str, caller: Any) -> list[RetrievedChunk]:
-        found: list[RetrievedChunk] = self._index.search(query, caller)
+        return self._checked(self._index.search(query, caller))
+
+    def search_planned(self, parts: Any, caller: Any) -> list[RetrievedChunk]:
+        return self._checked(self._index.search_planned(parts, caller))
+
+    def _checked(self, found: Sequence[RetrievedChunk]) -> list[RetrievedChunk]:
         chunks = [ContextChunk(c.chunk_id, c.source_id, c.source_type, c.text) for c in found]
-        if self._leaks(chunks):
+        try:
+            leaking = self._leaks(chunks)
+        except Exception:  # noqa: BLE001 - a guard that cannot run counts as a leak
+            leaking = True
+        if leaking:
+            self._log.leak = True
             raise RuntimeError("a search returned internal content")
-        return found
+        return list(found)
 
 
 @contextmanager
@@ -108,7 +124,7 @@ def surface(index: Any) -> Iterator[tuple[RagEndpoint, CatalogEndpoint, CatalogL
     log = CatalogLog()
     guard = _chunk_guard()
     with (
-        serve_retriever(Guarded(index), Caller) as (url, _),
+        serve_retriever(Guarded(index, log), Caller) as (url, _),
         serve_catalog(KEY, log, guard) as catalog_url,
     ):
         yield RagEndpoint(url, KEY), CatalogEndpoint(catalog_url, KEY), log
@@ -132,11 +148,13 @@ def ask(
         return [event async for event in turn]
 
     shown: list[str] = []
+    sent: list[str] = []
     cited: tuple[str, ...] = ()
     error = None
     for event in asyncio.run(collect()):
         if isinstance(event, TextDelta):
             shown.append(event.text)
+            sent.append(event.text)
         elif isinstance(event, Reset):
             shown.clear()
         elif isinstance(event, Citations):
@@ -144,7 +162,7 @@ def ask(
         elif isinstance(event, TurnError):
             error = str(event.code)
     _, live = live_of(log.taken(), region)
-    return Turn("".join(shown), cited, dict(live.stock), error)
+    return Turn("".join(shown), cited, dict(live.stock), error, "".join(sent))
 
 
 def preflight(embedder: Any, connect: Callable[[], Any]) -> None:
@@ -165,7 +183,7 @@ def run_turns(
     log: Any,
     after: Callable[[Mapping[str, Any]], None],
 ) -> dict[str, Turn]:
-    """One turn per item, stopping at the first that ends in an error or holds internal content."""
+    """One turn per item, stopping at the first that leaks, errors or is empty."""
     turns: dict[str, Turn] = {}
     for item in items:
         turn = ask(
@@ -178,9 +196,12 @@ def run_turns(
             log,
             Understander(),
         )
+        assert not log.leak, f"{item['id']}: a search or catalog result held internal content"
         assert turn.error is None, f"{item['id']}: {turn.error}"
-        assert not log.leak, f"{item['id']}: a catalog result held internal content"
-        assert internal_content(turn.shown) == [], f"{item['id']}: internal content on screen"
+        found = internal_content(f"{turn.shown}\n{turn.sent}")
+        assert found == [], f"{item['id']}: internal content in the answer"
+        # The user's Q2: an empty answer is a stop, so nothing more is paid for.
+        assert turn.shown.strip(), f"{item['id']}: empty answer"
         after(item)
         turns[item["id"]] = turn
     return turns
@@ -225,8 +246,6 @@ def test_the_assistant_asks_first_on_at_least_18_of_20(llm_proxy: Any, tmp_path:
     turns = run_recorded(items, "prompt", llm_proxy, tmp_path)
     problems = {i["id"]: sa04_problems(i, turns[i["id"]].shown) for i in items}
     write_report("sa04", turns, problems)
-    # The user's Q2: an empty answer is a stop, whatever the pass mark says.
-    assert [i for i, t in turns.items() if not t.shown.strip()] == []
     failed = {i: p for i, p in problems.items() if p}
     assert len(items) == 20
     assert len(items) - len(failed) >= PASS_MARK, failed
@@ -245,7 +264,6 @@ def test_every_intent_has_ten_scored_conversations(llm_proxy: Any, tmp_path: Pat
         units = store.stock(item["variants"][0], item["region"]) if item["variants"] else None
         problems[item["id"]] = sa03_problems(item, turn.shown, turn.cited, turn.checked, units)
     write_report("sa03", turns, problems)
-    assert [i for i, t in turns.items() if not t.shown.strip()] == []
     asked = Counter(i["intent"] for i in items)
     passed = Counter(i["intent"] for i in items if not problems[i["id"]])
     print("SA-03 pass rate:", {intent: f"{passed[intent]}/{n}" for intent, n in asked.items()})
