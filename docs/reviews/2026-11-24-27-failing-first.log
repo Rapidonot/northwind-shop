@@ -283,3 +283,20 @@ $ LLM_MODE=replay uv run pytest -p no:cacheprovider -q services/llm-replay/tests
 4 passed in 0.99s
 $ LLM_MODE=replay uv run pytest -p no:cacheprovider -q tests/nfr08/test_prompt_disclosure.py
 5 passed in 0.48s
+
+## 2026-11-25T05:10:15Z get_order's description and argument example name S0188's real O000800 (the user's decision: O012345, no real order). Test first
+$ uv run pytest -p no:cacheprovider -q services/mcp-orders/tests/test_chk06_get_order.py -k names_no_real_order
+E       AssertionError: assert ({'O000800'} == {'O012345'}
+FAILED services/mcp-orders/tests/test_chk06_get_order.py::test_the_tools_own_text_names_no_real_order
+1 failed, 43 deselected in 0.42s
+## 2026-11-25T05:10:17Z after O012345; one file at a time
+$ LLM_MODE=replay uv run pytest -p no:cacheprovider -q tests/mcp/test_contract.py
+80 passed in 11.79s
+$ LLM_MODE=replay uv run pytest -p no:cacheprovider -q services/mcp-orders/tests/test_chk06_get_order.py
+44 passed in 4.64s
+$ LLM_MODE=replay uv run pytest -p no:cacheprovider -q services/mcp-orders/tests/test_chk06_tw_edges.py
+22 passed in 4.58s
+$ LLM_MODE=replay uv run pytest -p no:cacheprovider -q services/assistant/tests/test_orders_journey_e2e.py
+36 passed, 6 deselected in 45.37s
+$ LLM_MODE=replay uv run pytest -p no:cacheprovider -q services/assistant/tests/test_chk06_orders_attached.py
+18 passed in 13.67s

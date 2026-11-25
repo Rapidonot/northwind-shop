@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from collections.abc import Iterator
 from itertools import product
 from pathlib import Path
@@ -22,10 +23,11 @@ from northwind_backend.fakes.orders import DATA
 from northwind_backend.ports import OrderStatus, Tracking, TrackingEvent
 from northwind_common.errors import ToolError
 from northwind_common.mcp_token import CATALOG_SERVER
-from northwind_common.order_tool import CONFIRMED_STATUSES, STATUSES
+from northwind_common.order_tool import CONFIRMED_STATUSES, ORDER_ID, STATUSES
 from northwind_mcp_orders import testing
 from northwind_mcp_orders.book import OrderBook, shopper_status
 from northwind_mcp_orders.server import OrdersServer
+from northwind_mcp_orders.tools import TOOLS
 
 pytestmark = pytest.mark.req("CHK-06")
 
@@ -369,3 +371,14 @@ def test_the_server_refuses_to_start_on_data_that_does_not_match_its_manifest(
         handle.write("\n ")
     with pytest.raises(RuntimeError, match="tracking.jsonl"):
         OrderBook.from_data(tmp_path)
+
+
+def test_the_tools_own_text_names_no_real_order() -> None:
+    """Hard rule 2: the definition goes to the model with every signed-in turn, so its example is a
+    well-formed number that is no order (the user's decision, with the prompt's placeholders)."""
+    tool = TOOLS["get_order"].tool
+    text = json.dumps(tool.model_dump(mode="json"))
+    named = set(re.findall(r"O\d{6}", text))
+    real = OrderBook.from_data().placed_on
+    assert named == {"O012345"} and not named & set(real)
+    assert ORDER_ID.fullmatch("O012345")  # still shows the right shape
