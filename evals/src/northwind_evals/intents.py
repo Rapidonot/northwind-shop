@@ -123,7 +123,7 @@ _OUT = re.compile(
     rf"\bout of stock\b|\bsold out\b|\bunavailable\b|{_NEGATED}(?:in stock|available)\b"
     r"|\bnone left\b|(?<![\d.,])0 left\b|\bno stock left\b"
 )
-# The out-of-stock wordings of IC-039's and IC-040's `absent`, read as the live answer is, so a
+# The stock wordings of IC-039's and IC-040's `absent`, read as the live answer is, so a
 # hyphen hides neither (clarification 8).
 _STOCK_WORDINGS = frozenset(
     (
@@ -133,6 +133,7 @@ _STOCK_WORDINGS = frozenset(
         "restock",
         "currently unavailable",
         "not in stock",
+        "is in stock",
     )
 )
 
