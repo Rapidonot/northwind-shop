@@ -17,6 +17,9 @@ recommendation ____, availability ____, policy ____. Left: delivery, order statu
 - **Split ranges and the stock rule:** W6 count ____. If above 0, owner: window B's output-check prerequisite row before
   RECORD-ALL.
 
+- **Hedged planted claims and steers (N-2, N-3):** W6 report ____ sentences, read by the advisor: ____. Owner of the
+  RECORD-ALL rerun: window B's RECORD-ALL prerequisites row.
+
 ## PROGRESS log line
 - 2026-____: rows #30 (SA-04) and #22 (SA-03 partial) `/req-done` at `____`: **____.** `make ci` exit ____ at that head
   (____ unit, ____ Vitest, ____ integration; `eval-gate` ____). Windows W1 to W6 $____ (ledger $____ → $____ of $90).
