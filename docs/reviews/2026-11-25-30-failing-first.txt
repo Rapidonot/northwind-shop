@@ -190,3 +190,19 @@ FAILED evals/tests/test_sa_frozen_queries.py::test_every_labelled_message_is_in_
 FAILED evals/tests/test_sa_frozen_queries.py::test_the_labelled_messages_come_after_every_earlier_query
 FAILED evals/tests/test_sa_frozen_queries.py::test_every_labelled_message_has_a_committed_vector
 3 failed in 2.82s
+
+# The 5 part texts, failing first, at c963681
+.FF.                                                                     [100%]
+=========================== short test summary info ============================
+FAILED evals/tests/test_sa_frozen_queries.py::test_the_labelled_messages_then_their_part_texts_come_after_every_earlier_query
+FAILED evals/tests/test_sa_frozen_queries.py::test_every_recorded_part_text_has_a_committed_vector
+2 failed, 2 passed in 3.52s
+
+# Stop 5 test: a stray vector really in the file fails it, at c963681 plus the edit
+line keys ['key', 'vector']
+## with the stray line
+      Left contains one more item: 'stray vector strayfdobibcbmailhlpaomdpjjckiniglgnoainlmpimgklfaofgdjhnoapekim'
+FAILED evals/tests/test_rag04_post_review_tw.py::test_every_new_frozen_vector_is_the_key_of_a_frozen_query
+1 failed, 25 passed in 6.45s
+## restored, same sha256: yes
+26 passed in 6.48s

@@ -228,9 +228,15 @@ def _planned_part_texts() -> list[str]:
     items = [json.loads(line) for line in (REPO / "evals/fixtures/starter_set.jsonl").open()]
     red = [json.loads(line) for line in (REPO / "evals/adversarial/rag11_red_team.jsonl").open()]
     cassettes = REPO / "cassettes"
+    intents = [
+        (row[key], row["region"])
+        for name, key in (("sa04_prompts", "prompt"), ("sa03_conversations", "query"))
+        for row in map(json.loads, (REPO / f"evals/fixtures/{name}.jsonl").open())
+    ]
     return [
         *part_texts([(i["query"], i["region"]) for i in items], cassettes),
         *part_texts([(r["query"], r["region"]) for r in red], cassettes, "assistant-redteam"),
+        *part_texts(intents, cassettes, "assistant-intents"),
     ]
 
 
