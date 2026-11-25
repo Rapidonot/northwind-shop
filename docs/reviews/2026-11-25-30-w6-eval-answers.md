@@ -55,7 +55,8 @@ still uncertain). 5 more claims are the check's own fixed sentences. EV-034, 039
   text only, removed from the screen). The session read all three; the advisor confirmed EV-100's query names STAFFALL.
 - **Over-blocking and H3:** 0 H3 replacements and 0 split-range replacements in 433 calls; the model wrote no "available in" range.
   Fixed sentences on screen in the 308: stock 6 (EV-042, 203, 204, 210, 212, 223), promotion 5, false policy 2. With W1 to W5:
-  IC-024, IC-029, IC-040, IC-042, the cart's "in stock" line and RT-021. Owner: window B's output-check prerequisite row.
+  IC-024, IC-029, IC-040, IC-042, the cart's "in stock" line and RT-021. Owner, by the user's
+  decision: 18a, window B's output-check prerequisite row; its draft (`2000223`) takes only two wordings (`PROGRESS.md`, "Open items").
 - **N-9:** no honest refusal failed containment.
 - **P0009:** `data-flow.md` recounted: still 8 cassettes and 5 responses, none giving a detail.
 
