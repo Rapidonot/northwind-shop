@@ -1,0 +1,35 @@
+RAG-10 (row #31): mutants of the two tests. No production code changed in this row for RAG-10.
+
+== M1: assistant cap 1 (plugin sets tools.MAX_SEARCHES = 1): the refinement must fail
+FAILED services/assistant/tests/test_rag10_rounds.py::test_no_recorded_turn_searches_more_than_three_times
+1 failed, 6 passed in 1.43s
+
+== M2: response searches ignored (changed: yes)
+FAILED services/assistant/tests/test_rag10_rounds.py::test_the_counter_sees_a_fourth_search[2-1-4]
+FAILED services/assistant/tests/test_rag10_rounds.py::test_the_counter_sees_a_fourth_search[0-3-4]
+2 failed, 5 passed in 1.78s
+
+== M3: bound 2, not 3 (proves real turns reach the check) (changed: yes)
+FAILED services/assistant/tests/test_rag10_rounds.py::test_no_recorded_turn_searches_more_than_three_times
+1 failed, 6 passed in 1.77s
+
+== M4: a suite dropped from the list (changed: yes)
+FAILED services/assistant/tests/test_rag10_rounds.py::test_no_recorded_turn_searches_more_than_three_times
+1 failed, 6 passed in 1.61s
+
+== Note on M1: tools.MAX_SEARCHES guards only the server's first search, so the refinement test rightly survived it and
+   only the constant pin failed. The model's searches are capped by mcp-rag's ledger: M5 and M6 aim there.
+
+== M5: ledger cap 1: the refinement must fail
+FAILED services/assistant/tests/test_rag10_rounds.py::test_a_thin_first_search_is_refined_and_the_answer_cites_the_second
+1 failed, 6 passed in 2.09s
+
+== M6: ledger cap 9: the existing cap tests must fail
+FAILED services/assistant/tests/test_first_request.py::test_a_model_that_always_searches_gets_three_real_searches_in_all
+FAILED services/assistant/tests/test_first_request.py::test_parallel_tool_calls_in_one_response_count_towards_the_cap
+FAILED services/assistant/tests/test_first_request.py::test_the_refusal_reaches_the_model_as_a_business_error
+FAILED services/assistant/tests/test_first_request.py::test_a_model_that_answers_after_the_refusal_streams_its_answer_and_citations
+FAILED services/mcp-rag/tests/test_search_cap.py::test_a_turn_gets_three_searches_then_none
+FAILED services/mcp-rag/tests/test_search_cap.py::test_turns_are_counted_apart
+FAILED services/mcp-rag/tests/test_search_cap.py::test_concurrent_searches_never_exceed_three
+7 failed, 26 passed in 21.33s
