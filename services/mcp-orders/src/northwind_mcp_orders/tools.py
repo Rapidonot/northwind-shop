@@ -13,14 +13,17 @@ text echoes an argument.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
+from itertools import permutations
 from typing import Any
 
 import mcp.types as t
 
-from northwind_common.cards import holds_card_data
+from northwind_common.cards import contains_card_data, holds_card_data
 from northwind_common.errors import ToolError
 from northwind_common.mcp_token import Claims
+from northwind_common.order_tool import ORDER_ID
 from northwind_common.returns_policy import CONDITIONS
 from northwind_common.tool_scopes import GET_ORDER, REQUEST_RETURN
 from northwind_mcp_orders.book import not_found
@@ -29,6 +32,7 @@ from northwind_mcp_orders.wording import worded
 
 MAX_ID_CHARS = 32
 MAX_VARIANT_CHARS = 64
+MAX_SPLIT_CHARS = 256  # longer pairs are no split card number
 RETURN_ARGUMENTS = frozenset({"order_id", "variant_id", "condition", "idempotency_key"})
 
 
@@ -65,6 +69,27 @@ def normal_order_id(value: Any) -> str | None:
     return value.strip().removeprefix("#").strip().upper()
 
 
+_VARIANT = re.compile(r"P\d{4}(?:-[A-Z0-9]{1,16}){1,4}", re.ASCII)
+
+
+def _well_formed(value: str) -> bool:
+    return bool(ORDER_ID.fullmatch(value) or _VARIANT.fullmatch(value)) or value in CONDITIONS
+
+
+def _card_across(args: Mapping[str, Any]) -> bool:
+    """A card number split over two arguments, which the argument names between them hide from
+    `holds_card_data`. A pair counts only if neither is an order number, a variant ID or a
+    condition, so a good request is never refused for the digits in its key."""
+    known = [args[key] for key in RETURN_ARGUMENTS if key in args]  # at most four
+    values = [str(v) for v in known if isinstance(v, str | int)]
+    return any(
+        contains_card_data(first + second)
+        for first, second in permutations(values, 2)
+        if len(first) + len(second) <= MAX_SPLIT_CHARS
+        and not (_well_formed(first) or _well_formed(second))
+    )
+
+
 def _checked(claims: Claims, args: Mapping[str, Any], allowed: frozenset[str]) -> tuple[str, str]:
     """The signed-in shopper and the order number, after the checks every tool makes, in order."""
     if holds_card_data(args):
@@ -91,6 +116,8 @@ async def request_return(
     server: OrdersServer, claims: Claims, args: Mapping[str, Any]
 ) -> t.CallToolResult:
     """The desk decides eligibility again itself: no argument says what was decided (rule 9)."""
+    if _card_across(args):
+        raise card_data_refused()
     shopper, order_id = _checked(claims, args, RETURN_ARGUMENTS)
     made = server.desk.request(
         shopper=shopper,

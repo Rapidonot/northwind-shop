@@ -18,6 +18,7 @@ No `dry_run` (D15): `evaluate_return_eligibility` is the dry run."""
 
 from __future__ import annotations
 
+import copy
 import json
 import re
 from collections import OrderedDict
@@ -172,7 +173,7 @@ class ReturnDesk:
             if seen is not None:
                 if seen[0] != fingerprint:
                     raise idempotency_conflict()
-                return {**seen[1], "result": "already_requested"}
+                return {**copy.deepcopy(seen[1]), "result": "already_requested"}
             found = assess(
                 self.book,
                 self.policy,
@@ -184,7 +185,7 @@ class ReturnDesk:
             )
             line = (shopper, found.order_id, found.variant_id)
             if line in self.open:
-                return {**self.open[line], "result": "already_requested"}
+                return {**copy.deepcopy(self.open[line]), "result": "already_requested"}
             if found.decision.outcome not in REQUEST_STATUS:
                 raise not_eligible(found.decision)
             stored = {
@@ -195,4 +196,4 @@ class ReturnDesk:
             keys[(turn, key)] = (fingerprint, stored)
             while len(keys) > MAX_KEYS:
                 keys.popitem(last=False)
-            return {**stored, "result": "recorded"}
+            return {**copy.deepcopy(stored), "result": "recorded"}

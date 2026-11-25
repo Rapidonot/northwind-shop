@@ -170,3 +170,25 @@ def test_the_server_does_not_start_on_policy_that_lost_a_fact(
     monkeypatch.setattr(PolicyData, "from_fixtures", lambda: real(tmp_path))
     with pytest.raises(DataMismatch, match="POL-RETURNS-US"):
         app.build()
+
+
+@pytest.mark.parametrize("key", ["4242424242424242a", "42424242", "4111-1111-11"])
+def test_the_split_card_check_never_refuses_a_good_request_for_its_key(
+    live: tuple[OrdersServer, str], key: str
+) -> None:
+    """Beside well-formed arguments the pair check is silent: what it adds is only for malformed
+    ones. (A whole card number in the key itself is still `holds_card_data`'s.)"""
+    body = call(live[1], testing.token()[0], **{**GOOD, "idempotency_key": key})[2]
+    if key.startswith("4242424242424242"):
+        assert body["code"] == "card_data_refused"
+    else:
+        assert body["result"] == "recorded"
+
+
+def test_a_returned_request_shares_nothing_with_the_stored_one() -> None:
+    desk = testing.server().desk
+    args: dict[str, Any] = {k: v for k, v in GOOD.items() if k != "idempotency_key"}
+    first = desk.request(shopper="S0188", region="US", turn="t", key="return-key-1", **args)
+    first["facts"].clear()
+    again = desk.request(shopper="S0188", region="US", turn="t", key="return-key-1", **args)
+    assert again["facts"]
