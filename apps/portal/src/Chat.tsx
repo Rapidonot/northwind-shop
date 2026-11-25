@@ -29,6 +29,13 @@ const TYPE_LABEL: Record<string, string> = {
   review: "Shopper review",
 };
 
+// A group's parts, as the server reads them (`output_check.citation_parts`, row #30, M1).
+const citationParts = (group: string) =>
+  group
+    .split(/[,;]/)
+    .map((id) => id.trim())
+    .filter((id) => id !== "");
+
 const anchor = (id: string) => `source-${id}`;
 
 function linked(answer: string, cited: ReadonlySet<string>): ReactNode[] {
@@ -36,20 +43,20 @@ function linked(answer: string, cited: ReadonlySet<string>): ReactNode[] {
   let last = 0;
   for (const match of answer.matchAll(MARKER)) {
     const start = match.index;
-    const ids = (match[1] ?? "").split(",").map((id) => id.trim());
+    const ids = citationParts(match[1] ?? "");
     if (!ids.some((id) => cited.has(id))) continue;
     out.push(answer.slice(last, start));
-    if (ids.length === 1) {
+    if (ids.length === 1 && ids[0] === match[1]?.trim()) {
       out.push(
         <a key={start} href={`#${anchor(ids[0] ?? "")}`}>
           {match[0]}
         </a>,
       );
     } else {
-      // "[P0011, R00002]": each cited ID in the group is its own link; the commas and spaces are
+      // "[P0011, R00002]": each cited ID in the group is its own link; separators and spaces are
       // kept exactly as streamed, so links change no text.
       out.push("[");
-      (match[1] ?? "").split(/(\s*,\s*)/).forEach((part, n) => {
+      (match[1] ?? "").split(/(\s*[,;]\s*)/).forEach((part, n) => {
         out.push(
           n % 2 === 0 && cited.has(part.trim()) ? (
             <a key={`${start}-${n}`} href={`#${anchor(part.trim())}`}>

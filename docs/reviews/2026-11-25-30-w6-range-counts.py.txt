@@ -1,0 +1,71 @@
+"""Row #30, for the W6 report ($0, reads cassettes/ only): over every recorded answer call,
+(a) H3: sentences replaced because a negated or "unavailable" plural range is now a stock claim;
+(b) finding 1: un-negated ranges the stock rule replaced only because of where the deltas fell.
+Run: uv run --no-sync --offline python <this file>   (add --control for the positive control)"""
+import glob, json, re, sys
+from northwind_assistant import output_check as oc
+from northwind_assistant.tools import parse_sources
+from northwind_evals.answerers import live_of
+
+DELTA = re.compile(r'"type":"text_delta","text":"((?:[^"\\]|\\.)*)"')
+RANGE = re.compile(rf"\b(?:un)?available{oc._S}in{oc._S}{oc._RANGE}")
+SUITES = ("eval-answers", "assistant-smoke", "assistant-cart", "assistant-redteam", "assistant-intents", "assistant-orders")
+WITHOUT_H3 = tuple(p for p in oc.PATTERNS if p.exempt != "offered_range")
+
+
+def text_of(content):
+    if isinstance(content, str):
+        return content
+    return "".join(b.get("text", "") for b in content or [] if isinstance(b, dict))
+
+
+def calls():
+    for suite in SUITES:
+        for f in sorted(glob.glob(f"cassettes/{suite}/*.json")):
+            c = json.load(open(f))
+            deltas = [json.loads(f'"{d}"') for d in DELTA.findall(c["body"])]
+            if c["test_id"] == "eval-judge" or not deltas:
+                continue
+            rendered, names, results = "", {}, []
+            for m in c["match"]["body"]["messages"]:
+                blocks = m["content"] if isinstance(m["content"], list) else [{"type": "text", "text": m["content"]}]
+                for b in blocks:
+                    if b.get("type") == "tool_use":
+                        names[b["id"]] = b["name"].split("__")[-1]
+                    elif b.get("type") == "tool_result":
+                        rendered += text_of(b.get("content"))
+                        results.append((names.get(b.get("tool_use_id"), ""), bool(b.get("is_error")), text_of(b.get("content"))))
+                    else:
+                        rendered += b.get("text", "")
+            region = re.search(r"The shopper is in the (\w+) region", text_of(c["match"]["body"].get("system", "")))
+            yield suite, c["test_id"], deltas, parse_sources(rendered), live_of(results, region.group(1) if region else "US")[1]
+
+
+def run(deltas, sources, live, patterns):
+    kept, oc.PATTERNS = oc.PATTERNS, patterns
+    try:
+        check = oc.OutputCheck({s.source_id for s in sources}, list(sources), live=live)
+        for d in deltas:
+            check.feed(d)
+        check.finish()
+        return check.shown, check.counts["stock"]
+    finally:
+        oc.PATTERNS = kept
+
+
+CONTROL = [("control", "H3", ["It is unavailable in sizes M and L."], [], oc.LiveValues()),
+           ("control", "split", ["It is available in ", "three colours."], [], oc.LiveValues())]
+n = h3 = split = raw = 0
+for suite, test, deltas, sources, live in CONTROL if "--control" in sys.argv else calls():
+    n += 1
+    ranges = len(RANGE.findall(oc.view_of("".join(deltas), plain=True).text))
+    raw += ranges
+    if not ranges:
+        continue
+    now, before = run(deltas, sources, live, oc.PATTERNS), run(deltas, sources, live, WITHOUT_H3)
+    whole = run(["".join(deltas)], sources, live, oc.PATTERNS)
+    if now[1] > before[1]:
+        h3 += now[1] - before[1]; print("H3", suite, test)
+    if now[1] > whole[1]:
+        split += now[1] - whole[1]; print("SPLIT", suite, test)
+print(f"answer calls {n}, range phrases the model wrote {raw}, H3 replacements {h3}, split-range replacements {split}")

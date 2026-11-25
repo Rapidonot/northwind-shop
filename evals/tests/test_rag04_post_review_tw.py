@@ -210,6 +210,48 @@ def test_frozen_queries_include_the_eval_and_red_team_part_texts() -> None:
     assert set(red_texts) <= frozen
 
 
+def intent_keys() -> set[str]:
+    """Rows #30 and #22: exactly the 70 labelled messages and the part texts Haiku rewrote the
+    routed ones into (the user's stop 5, 2026-11-25). Nothing else is exempt from the cap below."""
+    asked = [
+        (str(row[key]), str(row["region"]))
+        for name, key in (("sa04_prompts", "prompt"), ("sa03_conversations", "query"))
+        for row in map(
+            json.loads, (REPO / f"evals/fixtures/{name}.jsonl").read_text("utf-8").splitlines()
+        )
+    ]
+    parts = part_texts(asked, REPO / "cassettes", suite="assistant-intents")
+    return {frozen_key(text) for text in [*(message for message, _ in asked), *parts]}
+
+
+def new_vector_problems(new: set[str], wanted: set[str], exempt: set[str]) -> list[str]:
+    problems = [f"stray vector {key}" for key in sorted(new - wanted)]
+    others = new - exempt
+    if len(others) > 5:  # row #11's own count (3 eval part texts, 2 red-team)
+        problems.append(f"{len(others)} new vectors beyond the exempt ones")
+    return problems
+
+
+def test_a_stray_vector_is_a_problem_even_beside_exempt_ones() -> None:
+    exempt = {"m1", "m2"}
+    assert new_vector_problems({"m1", "m2"}, exempt, exempt) == []
+    assert new_vector_problems({"m1", "stray"}, exempt, exempt) == ["stray vector stray"]
+    # exempt only names keys: one that is not a frozen query is still a stray
+    assert new_vector_problems({"m1"}, set(), {"m1"}) == ["stray vector m1"]
+
+
+def test_at_most_five_new_vectors_beyond_the_exempt_ones() -> None:
+    exempt = {f"m{n}" for n in range(75)}
+    five, six = {f"q{n}" for n in range(5)}, {f"q{n}" for n in range(6)}
+    assert new_vector_problems(exempt | five, exempt | five, exempt) == []
+    problems = new_vector_problems(exempt | six, exempt | six, exempt)
+    assert problems == ["6 new vectors beyond the exempt ones"]
+
+
+def test_the_exempt_keys_are_this_rows_75_texts() -> None:
+    assert len(intent_keys()) == 75
+
+
 def test_every_new_frozen_vector_is_the_key_of_a_frozen_query() -> None:
     shown = subprocess.run(  # noqa: S603 - read-only git, fixed arguments
         ["git", "show", f"origin/main:{VECTORS}"],  # noqa: S607
@@ -234,10 +276,8 @@ def test_every_new_frozen_vector_is_the_key_of_a_frozen_query() -> None:
     ]
     new = set(now) - old
     wanted = {frozen_key(t) for t in _frozen_queries(load_items(REPO / ITEMS))}
-    assert new <= wanted
-    # Not an exact count: once this row merges, origin/main holds these keys and `new` is empty.
-    # Row #11 added 5 (3 eval part texts, 2 red-team); every one must be a frozen query's key.
-    assert len(new) <= 5
+    # Not an exact count: once a row merges, origin/main holds its keys and they are not `new`.
+    assert new_vector_problems(new, wanted, intent_keys()) == []
 
 
 # 3. The ledger (RAG-10 cap)

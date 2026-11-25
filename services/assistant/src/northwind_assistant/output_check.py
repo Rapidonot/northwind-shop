@@ -282,7 +282,8 @@ class Pattern:
     `free_terms` when a public document says returns are free; `policy_span` when a public policy
     document holds the same words; `conditional` when an `if`-like word directly introduces its
     subject in the present or future tense; `phone` when the digits are too few or form
-    a date.
+    a date; `offered_range` when "available in" a plural range is not negated, or `check_stock`
+    says so.
     `exact` patterns run on the view before casefolding."""
 
     cls: str
@@ -450,6 +451,9 @@ PATTERNS: tuple[Pattern, ...] = (
     #    A time word before it makes even a plural range a stock claim ("now available in sizes M
     #    and L").
     _p("stock", rf"\b(?:now|currently|still){_S}available\b", "live_stock"),
+    #    The range offered is that only when nothing negates it (row #30, H3): "unavailable in sizes
+    #    M and L" and "isn't available in three colours" are stock claims, vouched as any other.
+    _p("stock", rf"\b(?:un)?available{_S}in{_S}{_RANGE}", "offered_range"),
     #    Quantities no tool returns (security review pass 1, finding 4): always blocked.
     _p(
         "stock",
@@ -458,6 +462,8 @@ PATTERNS: tuple[Pattern, ...] = (
         rf"colou?rs))?{_S}(?:left|remaining|in{_J}stock|available|on{_J}hand)\b",
     ),
     _p("stock", rf"\blimited{_S}(?:stock|availability|quantities|numbers)\b"),
+    #    Row #30, security M-4 (the user's approval, 2026-11-25): vouched as "out of stock" is.
+    _p("stock", rf"\b(?:none|no{_S}stock){_S}left\b", "live_stock"),
     #    More member-price wordings (#13b R4 left these to #12), class 1: no exemption.
     _p("promotion", rf"\bmembers?[\s-]{{1,3}}only{_S}(?:rates?|prices?|pricing|deals?|offers?)\b"),
     _p("promotion", rf"\bmember{_S}(?:rates?|deals?|offers?|savings?|exclusives?)\b"),
@@ -469,6 +475,20 @@ PATTERNS: tuple[Pattern, ...] = (
     #    ("checked") and "only" between the modal and the verb (the fixed sentences) do not match.
     #    The noun may come at most 26 characters after the verb, so each pattern fits `L`.
     *(_p("offer", rf"{frame}{_S}{_OFFER_VERB}\b{_OFFER_OBJECT}") for frame in _OFFER_FRAMES),
+    #    Row #30 (D8's remainder; the user's approval, 2026-11-25): the tails recorded on EV-034,
+    #    035, 039, 100, 180 and 190, "I can then give you the price" and "if you'd like a price or
+    #    stock check". A question that only starts "if you'd like" is not one.
+    _p(
+        "offer",
+        rf"\b(?:i|we){_S}(?:can|could|may|would){_S}(?:then|also){_S}{_OFFER_VERB}\b"
+        r"[^.!?\n]{0,20}?\b(?:prices?|stock|availability)\b",
+    ),
+    _p(
+        "offer",
+        r"\bif\s{1,2}you(?:['’]d\s{1,2}like|\s{1,2}would\s{1,2}like|\s{1,2}want)\s{1,2}(?:an?|the)"
+        r"\s{1,2}(?:live\s{1,2})?(?:price|stock|availability)"
+        r"(?:\s{1,2}(?:or|and)\s{1,2}(?:price|stock))?\s{1,2}check\b",
+    ),
 )
 # A public document that says returns are free, in any of these words, lets the terms above pass:
 # the US policy says "prepaid return label" and answers say "the prepaid label".
@@ -485,7 +505,7 @@ TRIGGER = re.compile(
     r"\$|£|€|avail|currently|still|loyal|usd|gbp|eur|aud|cad|price|cost|pound|grand|thousand|"
     r"million|few|handful|several|plenty|lots|loads|many|some|tons|limited|"
     r"look|give|check|want|like|shall|should|"
-    rf"code|\d|\bi['’\s]|\bwe['’\s]|\[|\+|\(|\b(?:{_SPELLED_WORDS}|hundred|dozen|night|out|only|low|half|clearance)\b"
+    rf"code|\d|\bi['’\s]|\bwe['’\s]|\[|\+|\(|\b(?:{_SPELLED_WORDS}|hundred|dozen|night|out|only|low|half|clearance|none)\b"
 )
 # A duration is a policy term only in a sentence that holds one of these stems (the user's list,
 # row #13): a reviewer's "after an hour of steady rain" is an experience, not a policy.
@@ -514,10 +534,27 @@ _BOUNDARY = re.compile(r"[.!?](?=\s)|\n")
 # itself (security review pass 1, H1).
 _BULLET = re.compile(r"[ \t]*(?:[-*+]|\d{1,3}[.)])[ \t]+")
 _MARKER = re.compile(r"\[([^\[\]\n]{1,62})\]")
-_ID = r"[A-Za-z]{1,4}(?:\d|-[A-Za-z0-9])[A-Za-z0-9-]*"
-_ID_LIKE = re.compile(_ID)
+# How a citation group, the text between brackets, is read (row #30, M1). The evals and `turn.py`
+# use this and the portal mirrors it; the shared cases are `apps/portal/src/citationCases.json`. It
+# lives here so the check's identity hash covers it. Each reader keeps its own bracket pattern.
+SEPARATOR = r"[,;]"
+# Anything shaped like a source ID, valid or not, so a malformed citation is not simply skipped.
+ID = r"[A-Za-z]{1,4}(?:\d|-[A-Za-z0-9])[A-Za-z0-9-]*"
+_ID_LIKE = re.compile(ID)
+
+
+def citation_parts(group: str) -> list[str]:
+    """The non-empty parts of a group, stripped."""
+    return [part for part in (p.strip() for p in re.split(SEPARATOR, group)) if part]
+
+
+def citation_ids(group: str) -> list[str]:
+    """The parts shaped like a source ID, in order."""
+    return [part for part in citation_parts(group) if _ID_LIKE.fullmatch(part)]
+
+
 # A citation marker, every part ID-shaped: `[FAQ-019, POL-RETURNS-US]`.
-_CITATION = re.compile(rf"\[\s*{_ID}(?:\s*,\s*{_ID})*\s*\]")
+_CITATION = re.compile(rf"\[\s*{ID}(?:\s*,\s*{ID})*\s*\]")
 _ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 
 
@@ -702,8 +739,10 @@ def _about_weight(view: str, start: int) -> bool:
 # What may follow a stock or money match at the end of a delta and still be continued: markers, then
 # at most a "." or "," (W1's decimal hold).
 _OPEN_TAIL = re.compile(r"[*_`]*[.,]?[*_`]*")
-_COUNT_IN = re.compile(rf"\d[\d,]*|{_SPELLED_COUNT}")
-_NEGATIVE = re.compile(rf"\bout{_J}of{_J}stock\b|\bsold{_J}out\b|\bunavailable\b")
+_COUNT_IN = re.compile(rf"\d[\d,]*|\b{_SPELLED_COUNT}")  # \b: "none" holds no "one"
+_NEGATIVE = re.compile(
+    rf"\bout{_J}of{_J}stock\b|\bsold{_J}out\b|\bunavailable\b|\b(?:none|no{_S}stock){_S}left\b"
+)
 _LOW = re.compile(r"\blow\b")
 
 
@@ -758,8 +797,8 @@ def _negated(view: str, start: int) -> bool | None:
     before = view[max(0, start - 40) : start]
     if _NEGATED_ASIDE.search(before):
         return None  # a negation across an aside: unvouched, blocked at any stock level
-    for cut in _NEGATION_CUT.finditer(before):
-        before = before[cut.end() :]
+    cuts = list(_NEGATION_CUT.finditer(before))  # the last one only: each position is in `before`
+    before = before[cuts[-1].end() :] if cuts else before
     if _GOVERNING_NEGATION.search(before):
         return True
     return None if _NEGATION.search(before) else False
@@ -1064,6 +1103,12 @@ class OutputCheck:
             return qualified is not None and any(
                 (qualified[0], currency) in self.live.prices for currency in qualified[1]
             )
+        if pattern.exempt == "offered_range":
+            # Only the word is vouched: the "three" of "in three colours" is no unit count.
+            word, negated = span.split()[0], _negated(view.text, start)
+            if word == "available" and negated is False:
+                return True
+            return stock_vouched(word, self.live, negated)
         if pattern.exempt == "live_stock":
             return stock_vouched(span, self.live, _negated(view.text, start))
 
@@ -1285,7 +1330,9 @@ class OutputCheck:
             start, end = word.start(), word.end()
             if word_is_link(word.group()):
                 if best is None or start < best.start:
-                    best = Match("link", start, end)
+                    # Without the punctuation that ends its sentence, so the search for that end
+                    # does not skip to the next one's (row #30, M2).
+                    best = Match("link", start, start + len(word.group().rstrip(_EDGE)))
                 break
             checked = end
         self._words_to = checked
@@ -1390,8 +1437,8 @@ class OutputCheck:
         return pieces
 
     def _fix_marker(self, found: re.Match[str]) -> str:
-        parts = [part.strip() for part in found.group(1).split(",")]
-        if not all(_ID_LIKE.fullmatch(part) for part in parts):
+        parts = citation_parts(found.group(1))
+        if not parts or citation_ids(found.group(1)) != parts:
             return found.group()  # not a citation marker
         kept = [part for part in parts if part in self.seen]
         if len(kept) == len(parts):

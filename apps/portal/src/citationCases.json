@@ -1,0 +1,15 @@
+[
+  { "group": "P0011", "ids": ["P0011"] },
+  { "group": "P0011, R00002", "ids": ["P0011", "R00002"] },
+  { "group": "P0011,R00002", "ids": ["P0011", "R00002"] },
+  { "group": "P0011; R00002", "ids": ["P0011", "R00002"] },
+  { "group": "P0011;R00002, FAQ-019", "ids": ["P0011", "R00002", "FAQ-019"] },
+  { "group": " P0011 ;  POL-RETURNS-US ", "ids": ["P0011", "POL-RETURNS-US"] },
+  { "group": "P0156-CHR-BATHTOWEL; SG-TOWELS", "ids": ["P0156-CHR-BATHTOWEL", "SG-TOWELS"] },
+  { "group": "P0011;", "ids": ["P0011"] },
+  { "group": "see P0011", "ids": [] },
+  { "group": "P0011 and R00002", "ids": [] },
+  { "group": "P0011, see chart", "ids": ["P0011"] },
+  { "group": "size chart", "ids": [] },
+  { "group": ";", "ids": [] }
+]

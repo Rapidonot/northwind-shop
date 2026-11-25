@@ -209,6 +209,16 @@ def _red_team_queries() -> list[str]:
     return [json.loads(x)["query"] for x in path.read_text(encoding="utf-8").splitlines()]
 
 
+def _intent_messages() -> list[str]:
+    """Rows #30 and #22 (SA-04, SA-03): the 70 labelled messages recorded as `assistant-intents`."""
+    sets = (("sa04_prompts", "prompt"), ("sa03_conversations", "query"))
+    return [
+        json.loads(line)[key]
+        for name, key in sets
+        for line in (REPO / f"evals/fixtures/{name}.jsonl").read_text("utf-8").splitlines()
+    ]
+
+
 def _planned_part_texts() -> list[str]:
     """Row #11 (RAG-04; approved under stop 5): the rewritten part texts the planned first search
     embeds, replayed from the suites that recorded them, through the same `part_texts` the integrity
@@ -218,16 +228,23 @@ def _planned_part_texts() -> list[str]:
     items = [json.loads(line) for line in (REPO / "evals/fixtures/starter_set.jsonl").open()]
     red = [json.loads(line) for line in (REPO / "evals/adversarial/rag11_red_team.jsonl").open()]
     cassettes = REPO / "cassettes"
+    intents = [
+        (row[key], row["region"])
+        for name, key in (("sa04_prompts", "prompt"), ("sa03_conversations", "query"))
+        for row in map(json.loads, (REPO / f"evals/fixtures/{name}.jsonl").open())
+    ]
     return [
         *part_texts([(i["query"], i["region"]) for i in items], cassettes),
         *part_texts([(r["query"], r["region"]) for r in red], cassettes, "assistant-redteam"),
+        *part_texts(intents, cassettes, "assistant-intents"),
     ]
 
 
 def test_the_committed_file_covers_every_chunk_eval_query_and_smoke_question() -> None:
     frozen = load_frozen(REAL, 384)
     chunk_keys = {frozen_key(c.embed_text) for c in build_chunks(REPO / "data" / "fixtures")}
-    queries = [*_eval_queries(), *_smoke_questions(), *_red_team_queries(), *_planned_part_texts()]
+    queries = [*_eval_queries(), *_smoke_questions(), *_red_team_queries(), *_intent_messages()]
+    queries += _planned_part_texts()
     query_keys = {frozen_key(q) for q in queries}
     assert chunk_keys <= set(frozen), "run `make embed-cache`"
     assert query_keys <= set(frozen), "run `make embed-cache`"

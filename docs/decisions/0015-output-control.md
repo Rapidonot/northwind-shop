@@ -407,7 +407,8 @@ The changed shown answers are re-judged in W6. Tests: `services/assistant/tests/
 
 ## Row #27 note (2026-11-24): no order exemption (CHK-06, decision 0023)
 
-- **The check is unchanged by row #27.** `output_check.py` is byte for byte main's.
+- **The check is unchanged by row #27.** At row #27 `output_check.py` is byte for byte main's (row #30's note below
+  changes it).
 - **What was tried.** Row #27 first added an exemption letting "your order was placed / has been confirmed" through
   for an order this turn's `get_order` returned as confirmed. Three security passes kept finding ways to bind the
   claim to a different order than the one named: M1, then N1, then N1-R (an abbreviation's dot or a newline taken
@@ -428,3 +429,27 @@ The changed shown answers are re-judged in W6. Tests: `services/assistant/tests/
   carries no confirmation claim.
 - **The cost.** If the model still writes "your order was placed", the shopper sees `CONFIRMATION_SENTENCE`. That
   fails closed.
+
+## Row #30 note (2026-11-25)
+
+Approved by the user with the row #30 plan (`docs/reviews/2026-11-25-30-plan.md`, Q3 and the M1 and M2 fixes). They change
+6 of 356 recorded answers (`docs/reviews/2026-11-25-30-step0.md`). H3 and the offer class only tighten. M2 shows a
+sentence the check used to drop: the one after a link that ended its own sentence, when it matches no class itself. It is
+checked on its own, as it already was without a link before it (security review L-2).
+
+- **H3, class `stock`:** "available in" a plural range is the range offered only when nothing negates it. "Unavailable in
+  sizes M and L" and "isn't available in three colours" are stock claims, vouched by `check_stock` as any other (exemption
+  `offered_range`; the range's own number is never read as units).
+- **Class `offer`:** "I can then/also give…" and "if you'd like/want a … price or stock check" join it.
+- **Not loosened (the user's Q2):** a question built on the assistant's own lookup ("Which size should I check the price
+  for?") is still dropped whole. SA-04's questions are steered by the prompt instead.
+- **Class `stock`, security M-4 (the user, 2026-11-25):** "none left" and "no stock left" join it, vouched as "out of
+  stock" is. "none" is held until the phrase is decided, and is never read as "one".
+- **Negation across two commas (the user, 2026-11-25; on main since row #12):** `_negated` cut the clause at each comma but
+  reused the original positions, so "…, …, is not in stock" lost its "not": it passed with units in stock (hard rule 2) and
+  was blocked when true. It now cuts once, at the last one. One of 522 recorded calls changes (IC-032, freed). Besides a
+  true negated claim at zero, it now also shows a negated negative phrase at units above zero ("…, …, is not out of stock")
+  and text where the old offset made a false "not" inside a word; "…, …, is never out of stock" is newly shown too (low).
+- **Links (M2):** the match ends before the punctuation that ends its sentence, so the next sentence is checked on its own.
+- **Citation groups (M1):** `citation_parts` and `citation_ids` are the one reading (`,` and `;`) for the check, `turn.py`
+  and the evals, mirrored in the portal. They live in `output_check.py` so the check's identity hash covers them.
