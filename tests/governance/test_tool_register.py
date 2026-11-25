@@ -218,10 +218,11 @@ def test_the_tool_the_assistant_really_offers_has_a_register_row() -> None:
     from northwind_common.tool_scopes import AGENT_TOOLS
     from northwind_mcp_catalog.tools import TOOLS as CATALOG_TOOLS
     from northwind_mcp_orders.tools import TOOLS as ORDERS_TOOLS
+    from northwind_mcp_policy.tools import TOOLS as POLICY_TOOLS
     from northwind_mcp_rag.retrieve import TOOLS as RAG_TOOLS
 
-    # mcp-catalog joins at #10b, mcp-orders at row #27 (CHK-06).
-    served = set(RAG_TOOLS) | set(CATALOG_TOOLS) | set(ORDERS_TOOLS)
+    # mcp-catalog joins at #10b, mcp-orders at row #27 (CHK-06), mcp-policy at its PR 2 (CHK-07).
+    served = set(RAG_TOOLS) | set(CATALOG_TOOLS) | set(ORDERS_TOOLS) | set(POLICY_TOOLS)
     scoped = {name for row in AGENT_TOOLS.values() for names in row.values() for name in names}
     assert served, "the tool scan found nothing"
     assert scoped <= served, "an agent is scoped to a tool no server offers"

@@ -37,7 +37,7 @@ def server(book: OrderBook | None = None, *, key: bytes = KEY) -> OrdersServer:
 
 
 @contextlib.contextmanager
-def running(instance: OrdersServer) -> Iterator[str]:
+def running(instance: Any) -> Iterator[str]:
     port = free_port()
     config = uvicorn.Config(
         instance.app(), host="127.0.0.1", port=port, log_level="warning", lifespan="on"

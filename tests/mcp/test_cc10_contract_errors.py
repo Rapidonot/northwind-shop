@@ -21,6 +21,7 @@ from northwind_common.rag_tool import NO_SOURCES, TOOL_NAME
 from northwind_common.tool_scopes import AGENT_TOOLS, FORBIDDEN_FRAGMENTS
 from northwind_mcp_catalog.tools import TOOLS as CATALOG_TOOLS
 from northwind_mcp_orders.tools import TOOLS as ORDERS_TOOLS
+from northwind_mcp_policy.tools import TOOLS as POLICY_TOOLS
 from northwind_mcp_rag.retrieve import TOOLS
 from northwind_mcp_rag.server import Backend, RagServer
 from northwind_mcp_rag.testing import KEY, CallerSearcher, connect, running, token
@@ -193,7 +194,8 @@ def test_the_real_registry_holds_no_refund_capture_or_assign_tool_and_nothing_th
     fragments = FORBIDDEN_FRAGMENTS["shopper-assistant"]
     # #10b: mcp-catalog's registry joins (decision D1 scopes it to the assistant).
     # Row #27 (CHK-06): mcp-orders' registry joins: `get_order`, read-only.
-    registry: dict[str, Any] = {**TOOLS, **CATALOG_TOOLS, **ORDERS_TOOLS}
+    # Row #27 PR 2 (CHK-07): mcp-policy's: `evaluate_return_eligibility`, read-only.
+    registry: dict[str, Any] = {**TOOLS, **CATALOG_TOOLS, **ORDERS_TOOLS, **POLICY_TOOLS}
     # Row #16 (CHK-01): the three cart writes are the only tools that change state, and they change
     # only the caller's own cart. Hard rule 9: a tool that changes state requires an idempotency
     # key, and a read-only tool takes none. No tool takes `dry_run` (not useful for a reversible

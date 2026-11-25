@@ -52,7 +52,7 @@ def sign_in_required() -> ToolError:
     )
 
 
-def _order_id(value: Any) -> str | None:
+def normal_order_id(value: Any) -> str | None:
     """The order number as a shopper may type it: surrounding spaces, a leading `#` and lower case
     are forgiven. Anything else is not an order number."""
     if not isinstance(value, str) or len(value) > MAX_ID_CHARS:
@@ -69,7 +69,7 @@ async def get_order(
         raise unknown_argument()
     if claims.shp is None or claims.aud != "shopper":
         raise sign_in_required()
-    order_id = _order_id(args.get("order_id"))
+    order_id = normal_order_id(args.get("order_id"))
     if order_id is None:
         raise not_found()
     return json_result(
