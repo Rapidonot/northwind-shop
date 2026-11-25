@@ -3,6 +3,7 @@ stock claims, vouched by this turn's `check_stock` as "out of stock" is. Failing
 
 from __future__ import annotations
 
+import re
 from re import _parser  # type: ignore[attr-defined]
 
 import pytest
@@ -63,7 +64,8 @@ def test_it_never_stays_on_screen_however_the_deltas_fall(text: str) -> None:
 @pytest.mark.parametrize("text", ["There are none left in size M.", "None left, sorry."])
 def test_none_is_held_until_the_phrase_is_decided(text: str) -> None:
     check = OutputCheck(set(), [])
-    sent = [piece for word in text.split() for piece in check.feed(word + " ")] + check.finish()
+    deltas = re.findall(r"\s+|\S+", text)  # the space alone: a trailing word is held without this
+    sent = [piece for delta in deltas for piece in check.feed(delta)] + check.finish()
     assert not any(piece and "none" in piece.lower() for piece in sent)
 
 
