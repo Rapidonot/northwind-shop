@@ -15,35 +15,26 @@ blocked sentence is still counted.
 from __future__ import annotations
 
 import json
-import re
 from pathlib import Path
 
 import pytest
 
-from northwind_assistant.output_check import FIXED_SENTENCES, OutputCheck, check_text
-from northwind_assistant.tools import parse_sources
+from northwind_assistant.output_check import FIXED_SENTENCES, OutputCheck, Source, check_text
 
 pytestmark = pytest.mark.req("RAG-08")
 
-REPO = Path(__file__).resolve().parents[3]
 PROMO = FIXED_SENTENCES["promotion"]
 MONEY = FIXED_SENTENCES["money"]
-INJECTION_TEST = "test_a_planted_injection_in_a_review_is_not_followed"
 
 
 def recorded_injection_answer() -> tuple[list[str], OutputCheck]:
-    """Window 1's recorded answer, in its own deltas, and a check over its recorded sources."""
-    [cassette] = [
-        c
-        for path in sorted((REPO / "cassettes/assistant-smoke").glob("*.json"))
-        if INJECTION_TEST in (c := json.loads(path.read_text(encoding="utf-8")))["test_id"]
-    ]
-    deltas = re.findall(r'"type":"text_delta","text":"((?:[^"\\]|\\.)*)"', cassette["body"])
-    first = cassette["match"]["body"]["messages"][0]["content"]
-    prompt = first if isinstance(first, str) else "".join(b.get("text", "") for b in first)
-    sources = parse_sources(prompt)
-    check = OutputCheck({source.source_id for source in sources}, sources)
-    return [json.loads(f'"{delta}"') for delta in deltas], check
+    """The answer recorded before row #30's window 2, in its own deltas, and a check over its own
+    sources. Frozen in `frozen_answers.json` (the user's stop 5, 2026-11-25): the re-recording holds
+    one blocked sentence, not two, so a live recording no longer shows the repeat."""
+    frozen = json.loads((Path(__file__).parent / "frozen_answers.json").read_text("utf-8"))
+    answer = frozen["smoke_injection"]
+    sources = [Source(s["id"], s["type"], s["text"]) for s in answer["sources"]]
+    return answer["deltas"], OutputCheck({source.source_id for source in sources}, sources)
 
 
 def test_the_recorded_injection_answer_shows_the_promotion_sentence_once() -> None:
