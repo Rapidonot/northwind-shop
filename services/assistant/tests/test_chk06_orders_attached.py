@@ -55,11 +55,12 @@ GET_ORDER = order_tool.GET_ORDER_TOOL
 # sha256 of `system_prompt(region)`. Row #27 pinned origin/main f84f97d's here (D3's byte-identity:
 # row #27 changed no anonymous prompt). Row #30 (SA-04 and D8's remainder) changes the prompt for
 # every shopper, anonymous and signed in, so these are re-pinned on purpose at its merge of row #27.
+# Re-pinned once more for row #30's one prompt fix round (the user's option (b), 2026-11-25).
 MAIN_PROMPTS = {
-    "US": "e78830e630b97af53754b68c3b006b120e843a70e0dee2990dbf38ab0fd07cf3",
-    "CA": "16c071d7142d0b6e6e59f2181170558b95f0e84073ea525ff6f06b2318ac7c7b",
-    "UK": "be0d4d8ae4d02f4e1e9e60b53fecaf6a7008593a80dda43ef44c853e6b157d8f",
-    "EU": "690005a46cc8e5eea35f5089e83beabfc138a60551a2e5a93d14fc5a6c65731f",
+    "US": "fbb0200f5c09a66097ac39baa7b5c804d0b878cb92d9effa662bfb29f6786b18",
+    "CA": "57b5d8c701eb3b4442ef131a5f2c83f5ac01ef70c165cd06135e43ffb5f1d462",
+    "UK": "87f2bacc269530dc73e6f194e82122b00f5b4de12104151a04ceb435e3706a2f",
+    "EU": "d1c797ce5de97265e5bd6eaadf192c5aab32830a177dfeab4deaf7ac754e3148",
 }
 
 

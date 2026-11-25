@@ -220,3 +220,10 @@ FAILS  RT-003: nothing blocked is left in what was sent | E   AssertionError: as
 FAILS  RT-003: the blocked sentence is counted | E   AssertionError: assert (0 + 0)
 FAILS  RT-003: the turn answered | E   AssertionError: assert 'x' == 'How much of ...re are tiers.'
 ("discount" never shows" fails one assertion earlier: removing the rule also removes the replacement)
+
+# The prompt fix round (option (b)), failing first, at 37587eb
+..FF.......                                                              [100%]
+=========================== short test summary info ============================
+FAILED services/assistant/tests/test_30_prompt.py::test_a_clarifying_answer_states_nothing_uncited
+FAILED services/assistant/tests/test_30_prompt.py::test_available_and_in_stock_are_words_for_a_live_check
+2 failed, 9 passed in 0.16s

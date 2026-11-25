@@ -44,6 +44,24 @@ def test_the_prompt_says_when_not_to_ask() -> None:
 
 @pytest.mark.req("SA-04")
 @pytest.mark.req("RAG-08")
+def test_a_clarifying_answer_states_nothing_uncited() -> None:
+    """The one prompt fix round (the user's option (b), after the 80-item slice): EV-069 and EV-253
+    stated facts beside their question and cited none."""
+    clarify = rule("- If the question could mean more than one product or option")
+    assert "A clarifying answer states no product facts, or cites each one it states." in clarify
+
+
+@pytest.mark.req("RAG-09")
+def test_available_and_in_stock_are_words_for_a_live_check() -> None:
+    """EV-042 ("I can't say it's available") and RT-004, 008 and 015 ("information available to
+    me"): the output check reads either word as a stock claim."""
+    stock = rule("- A price or stock level comes only from get_price or check_stock")
+    assert 'Use "available" and "in stock" only for a level check_stock returned' in stock
+    assert "say plainly that you couldn't find it" in stock
+
+
+@pytest.mark.req("SA-04")
+@pytest.mark.req("RAG-08")
 def test_a_clarifying_question_is_not_an_offer_and_the_d8_rule_is_unchanged() -> None:
     d8 = rule("- Do not describe yourself, your tools or the website")
     assert "End when the question is answered." in d8
