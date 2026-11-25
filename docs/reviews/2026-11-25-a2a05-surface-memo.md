@@ -1,6 +1,6 @@
 # Decision memo: what the A2A-05 partner gets
 
-**For:** the user. **Needed before** RECORD-ALL (#18, about Dec 13) re-records `a2a-05-partner`; the script cannot get new
+**Decided by the user, 2026-11-25: option B** (answers at the end). **Needed before** RECORD-ALL (#18, about Dec 13) re-records `a2a-05-partner`; the script cannot get new
 answers after the credit ends. Nothing here was built or run.
 
 ## The question
@@ -32,13 +32,15 @@ Estimates are from this ledger's past calls, not a measurement. B's calls carry 
 3. **At recording:** clear `cassettes/a2a-05-partner/`, update the index pins, confirm every fixture carries its cassette hash,
    and read `order-01` for "available" beside a variant (L9).
 
-Effort: about a quarter day. It touches `evals/tests` and, at recording, `evals/fixtures/a2a-05-partner/**` and the cassettes
-(control surface). It can go in 18a or at the start of #18; **recommended: #18**, with the recording.
+Effort: about a quarter day. Items 1 and 2 touch `evals/tests` and go in **18a** (the user), so RECORD-ALL only records. Item 3 is
+#18's, with `evals/fixtures/a2a-05-partner/**` and the cassettes (control surface).
 
 ## A limit that no option removes
 The order turn's text will probably still say the assistant cannot place orders, because the prompt says so. A2A-05's order
 outcome is a structured artifact from the cart and order tools. **If the recorded text denies an order the artifact shows, A2A-05
-should return the artifact alone** (already allowed for that turn). Please confirm this as the rule.
+returns the artifact alone** (already allowed for that turn). Confirmed by the user as the rule.
 
-## What you answer
-1. A, B, C or D. 2. Artifact alone when the order text contradicts it: yes or no. 3. The recorder change in #18 or 18a.
+## The user's answers (2026-11-25)
+1. **Option B:** an anonymous shopper's surface (mcp-rag, mcp-catalog, cart tools); no query understanding, no orders or policy
+   tools. 2. **Artifact alone** when the recorded order text contradicts it: yes. 3. The recorder change and P3-1 go in **18a**, not
+   #18. A decision record (or 0002's amendment) is written in 18a.
