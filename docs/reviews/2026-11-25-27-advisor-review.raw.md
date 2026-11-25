@@ -1,4 +1,4 @@
-# Row #27 advisor-reviewer, row review at 0c0db58 (raw, verbatim)
+# Row #27 advisor-reviewer, row review at 0c0db58 (raw, verbatim; trailing spaces stripped)
 
 findings
 

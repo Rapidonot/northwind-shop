@@ -34,7 +34,7 @@ M = [
     ("status: no scans is an error", BOOK, '    if not tracking.events:\n        return "label_created"', "    if not tracking.events:\n        raise tracking_unavailable()", [T_ORD]),
     ("card data: not refused", TOOLS, "    if holds_card_data(args):\n        raise card_data_refused()\n", "", [T_ORD, T_EDGE]),
     ("unknown keys: not refused", TOOLS, "    if any(not isinstance(key, str) or key != \"order_id\" for key in args):\n        raise unknown_argument()\n", "", [T_ORD, T_EDGE]),
-    ("sign-in: a token with no shopper is served", TOOLS, "    if claims.shp is None or claims.aud != \"shopper\":\n        raise sign_in_required()\n", "", [T_ORD, T_EDGE]),
+    ("sign-in: a token with no shopper is not told to sign in (the lookup still finds nothing)", TOOLS, "    if claims.shp is None or claims.aud != \"shopper\":\n        raise sign_in_required()\n", "", [T_ORD, T_EDGE]),
     ("shp: any server may carry it", TOKEN, "        and srv == ORDERS_SERVER\n        and isinstance(shp, str)", "        and isinstance(shp, str)", [T_CLAIM]),
     ("shp: a staff token may carry it", TOKEN, '        aud == "shopper"\n        and srv == ORDERS_SERVER\n        and isinstance(shp, str)', "        srv == ORDERS_SERVER\n        and isinstance(shp, str)", [T_CLAIM]),
     ("shp: its shape is not checked", TOKEN, "        and SHOPPER_ID.fullmatch(shp) is not None\n", "", [T_CLAIM]),
@@ -47,7 +47,7 @@ M = [
     ("cookie: the first of two values is taken", SESSION, 'return values[0] if len(values) == 1 else ""', 'return values[0] if values else ""', [T_SIGN]),
     ("flag: the cookie counts with the flag off", SESSION, '    return os.environ.get(DEMO_SIGNIN_ENV) == "1"', "    return True", [T_SIGN]),
     ("flag: any value turns it on", SESSION, 'os.environ.get(DEMO_SIGNIN_ENV) == "1"', "bool(os.environ.get(DEMO_SIGNIN_ENV))", [T_SIGN]),
-    ("sign-in: any signed shopper, not only the demo one", SETTINGS, " or shopper not in DEMO_SHOPPERS", " or shopper is None", [T_SIGN]),
+    ("sign-in: any signed shopper, not only the demo one", SETTINGS, " or shopper not in DEMO_SHOPPERS:\n        return caller\n    region = cast(ShopperRegion, DEMO_SHOPPERS[shopper])", " or shopper is None:\n        return caller\n    region = cast(ShopperRegion, DEMO_SHOPPERS.get(shopper, 'US'))", [T_SIGN]),
     ("sign-in: the region stays the server's", SETTINGS, "dataclasses.replace(caller, region=region, shopper_id=shopper)", "dataclasses.replace(caller, shopper_id=shopper)", [T_SIGN]),
     ("scope: another agent gets get_order", SCOPES, '"northwind-catalog": frozenset({GET_CART})},', '"northwind-catalog": frozenset({GET_CART}), "northwind-orders": ORDER_TOOLS},', [T_SCOPE, T_GAPS]),
     ("anonymous: the order section is in every prompt", PROMPT, "signed_in: bool = False", "signed_in: bool = True", [T_ATT, T_GAPS]),
@@ -78,6 +78,6 @@ for name, path, old, new, tests in M:
     failed, tail = run(tests)
     file.write_text(text)
     survived += not failed
-    print("KILLED  " if failed else "SURVIVED", "|", name, "|", tail, "|", ", ".join(failed[:3]) + (" ..." if len(failed) > 3 else ""))
+    print("KILLED  " if failed else "SURVIVED", "|", name, "|", tail, "|", ", ".join(failed))
 print("restored:", run(every)[1])
 print(len(M), "mutants,", survived, "not killed")

@@ -162,10 +162,13 @@ def test_two_signed_in_sessions_at_once_never_see_each_others_orders(
     live: tuple[OrdersServer, str],
 ) -> None:
     _, url = live
-    other_id = next(s for s in sorted({r["shopper_id"] for r in ORDERS.values()}) if s != DEMO)
+    demo_region = ORDERS[DEMO_ORDERS[0]]["region"]
+    # In the same region, so only the owner check can refuse (advisor R-2).
+    peers = {r["shopper_id"] for r in ORDERS.values() if r["region"] == demo_region}
+    other_id = min(peers - {DEMO})
     others = sorted(o for o, r in ORDERS.items() if r["shopper_id"] == other_id)
     other_region = ORDERS[others[0]]["region"]
-    demo_region = ORDERS[DEMO_ORDERS[0]]["region"]
+    assert other_region == demo_region
     mine, theirs = testing.token(DEMO, demo_region)[0], testing.token(other_id, other_region)[0]
 
     def ask(job: tuple[str, str]) -> tuple[str, bool, Any]:
