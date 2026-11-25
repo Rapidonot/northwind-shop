@@ -132,6 +132,10 @@ REVIEW_LIST = Path("docs/reviews/RAG-12-eval-review.md")
 ENRICHMENT_REPORT = Path("docs/reviews/RAG-02-enrichment-report.md")
 SMOKE_QUESTIONS = Path("apps/portal/e2e/questions.json")
 CONTRADICTIONS = Path("services/assistant/tests/contradictions.json")
+INTENT_SETS = (
+    (Path("evals/fixtures/sa04_prompts.jsonl"), "prompt"),
+    (Path("evals/fixtures/sa03_conversations.jsonl"), "query"),
+)
 RED_TEAM = Path("evals/adversarial/rag11_red_team.jsonl")
 RETRIEVAL_REPORT = Path("docs/reviews/RAG-03-retrieval-report.md")
 SUITE = "eval-answers"
@@ -734,6 +738,10 @@ def _frozen_queries(items: Sequence[EvalItem]) -> list[str]:
     # The red team's routed messages: their plans are in the suite that records them (row #11 W3).
     red_plans = [(red["query"], red["region"]) for red in red_items]
     texts += part_texts(red_plans, suite="assistant-redteam")
+    # SA-04 and SA-03's labelled messages (rows #30 and #22), last, so earlier queries keep their
+    # place. Their rewritten part texts join once W1 has recorded them.
+    for path, key in INTENT_SETS:
+        texts += [json.loads(line)[key] for line in path.read_text("utf-8").splitlines()]
     return list(dict.fromkeys(texts))
 
 

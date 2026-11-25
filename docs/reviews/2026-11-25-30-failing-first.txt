@@ -180,3 +180,13 @@ FAILED services/assistant/tests/test_30_none_left.py::test_it_never_stays_on_scr
 =========================== short test summary info ============================
 FAILED evals/tests/test_sa_scorers.py::test_is_in_stock_fails_a_combination_that_does_not_exist[It is in-stock.]
 1 failed, 75 passed in 0.14s
+
+# Frozen queries for the 70 messages, failing first, at 18c251a
+      Left contains 70 more items, first extra item: 'I need a rain jacket. Which one should I get?'
+      Use -v to get more diff
+/Users/rapido/Projects/northwind-shop/evals/tests/test_sa_frozen_queries.py:57: AssertionError: assert ['I need a ra...myself?', ...] == []
+=========================== short test summary info ============================
+FAILED evals/tests/test_sa_frozen_queries.py::test_every_labelled_message_is_in_the_frozen_list_once
+FAILED evals/tests/test_sa_frozen_queries.py::test_the_labelled_messages_come_after_every_earlier_query
+FAILED evals/tests/test_sa_frozen_queries.py::test_every_labelled_message_has_a_committed_vector
+3 failed in 2.82s
