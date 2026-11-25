@@ -14,6 +14,8 @@ recommendation ____, availability ____, policy ____. Left: delivery, order statu
 
 ## PROGRESS Open items
 - **D8 remainder:** ____ (close, or restate the count and owner).
+- **Over-blocking:** IC-024 and IC-040 (W1), and the W6 count ____. Owner: window B's output-check prerequisite row before
+  RECORD-ALL, with the split-range finding.
 - **Split ranges and the stock rule:** W6 count ____. If above 0, owner: window B's output-check prerequisite row before
   RECORD-ALL.
 
