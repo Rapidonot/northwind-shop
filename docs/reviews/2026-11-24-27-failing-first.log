@@ -1,0 +1,394 @@
+# Row #27 failing-first log (scripted, single files, serially; no database)
+# base f84f97df528956c6fd76bb0db8d3c3fb69175ced (origin/main f84f97d), before any fix
+
+## 2026-11-24T13:45:11Z bundled fixes, tests only
+$ uv run pytest -p no:cacheprovider -q services/gateway/tests/test_27_session_cookie_parsing.py
+services/gateway/tests/test_27_session_cookie_parsing.py:63: AssertionError
+E       AssertionError: assert ['nw_session=...t; Path=/api'] == []
+services/gateway/tests/test_27_session_cookie_parsing.py:63: AssertionError
+E       AssertionError: assert ['nw_session=...t; Path=/api'] == []
+services/gateway/tests/test_27_session_cookie_parsing.py:63: AssertionError
+E       AssertionError: assert ['nw_session=...t; Path=/api'] == []
+services/gateway/tests/test_27_session_cookie_parsing.py:63: AssertionError
+E       AssertionError: assert 'cccccccccccc...ccccccccccccc' == 'bbbbbbbbbbbb...bbbbbbbbbbbbb'
+services/gateway/tests/test_27_session_cookie_parsing.py:86: AssertionError
+FAILED services/gateway/tests/test_27_session_cookie_parsing.py::test_another_apps_cookie_does_not_hide_the_session[other app=1; {cookie}]
+FAILED services/gateway/tests/test_27_session_cookie_parsing.py::test_another_apps_cookie_does_not_hide_the_session[flag; {cookie}]
+FAILED services/gateway/tests/test_27_session_cookie_parsing.py::test_another_apps_cookie_does_not_hide_the_session[{cookie}; flag]
+FAILED services/gateway/tests/test_27_session_cookie_parsing.py::test_another_apps_cookie_does_not_hide_the_session[a="x; {cookie}]
+FAILED services/gateway/tests/test_27_session_cookie_parsing.py::test_the_first_session_cookie_wins_when_two_are_sent
+5 failed, 5 passed in 0.88s
+$ uv run pytest -p no:cacheprovider -q services/backend/tests/test_27_escalate_card_check.py
+E       AssertionError: assert Ok(value=Order(order_id='O000001', shopper_id='S0103', region='US', lines=(OrderLine(product_id='P0102', variant_id='P...scalation='fraud_review', address_on_file=False, dry_run=False, payment_status=None, captured_minor=0), is_error=False) == ToolError(error_category=<ErrorCategory.VALIDATION: 'validation'>, is_retryable=False, code='card_data_refused', message='Card data is not accepted here. Use a payment token.', is_error=True)
+services/backend/tests/test_27_escalate_card_check.py:43: AssertionError
+E       AssertionError: assert Ok(value=Order(order_id='O000001', shopper_id='S0103', region='US', lines=(OrderLine(product_id='P0102', variant_id='P...scalation='fraud_review', address_on_file=False, dry_run=False, payment_status=None, captured_minor=0), is_error=False) == ToolError(error_category=<ErrorCategory.VALIDATION: 'validation'>, is_retryable=False, code='card_data_refused', message='Card data is not accepted here. Use a payment token.', is_error=True)
+services/backend/tests/test_27_escalate_card_check.py:43: AssertionError
+E       AssertionError: assert Ok(value=Order(order_id='O000001', shopper_id='S0103', region='US', lines=(OrderLine(product_id='P0102', variant_id='P...scalation='fraud_review', address_on_file=False, dry_run=False, payment_status=None, captured_minor=0), is_error=False) == ToolError(error_category=<ErrorCategory.VALIDATION: 'validation'>, is_retryable=False, code='card_data_refused', message='Card data is not accepted here. Use a payment token.', is_error=True)
+services/backend/tests/test_27_escalate_card_check.py:43: AssertionError
+FAILED services/backend/tests/test_27_escalate_card_check.py::test_card_data_in_an_escalation_context_is_refused[context0]
+FAILED services/backend/tests/test_27_escalate_card_check.py::test_card_data_in_an_escalation_context_is_refused[context1]
+FAILED services/backend/tests/test_27_escalate_card_check.py::test_card_data_in_an_escalation_context_is_refused[context2]
+3 failed, 2 passed in 0.12s
+$ uv run pytest -p no:cacheprovider -q tests/infra/test_27_compose_binding.py
+E       AssertionError: assert ['${POSTGRES_...:-5432}:5432'] == ['127.0.0.1:$...:-5432}:5432']
+tests/infra/test_27_compose_binding.py:21: AssertionError
+FAILED tests/infra/test_27_compose_binding.py::test_postgres_is_published_on_loopback_only
+1 failed, 1 passed in 0.07s
+
+## 2026-11-24T13:45:32Z after the fixes (session.py lenient parser; orders.py raw-text card check; compose 127.0.0.1)
+$ uv run pytest -p no:cacheprovider -q services/gateway/tests/test_27_session_cookie_parsing.py
+10 passed in 0.57s
+$ uv run pytest -p no:cacheprovider -q services/gateway/tests/test_cart_session.py
+20 passed in 1.11s
+$ uv run pytest -p no:cacheprovider -q services/backend/tests/test_27_escalate_card_check.py
+5 passed in 0.10s
+$ uv run pytest -p no:cacheprovider -q services/backend/tests/test_found3_card_data.py
+69 passed in 0.09s
+$ uv run pytest -p no:cacheprovider -q tests/infra/test_27_compose_binding.py
+2 passed in 0.05s
+$ uv run pytest -p no:cacheprovider -q services/llm-replay/tests/test_runner_support.py
+207 passed in 36.63s
+
+## 2026-11-24T14:48:21Z security review pass 1 (M1, L1, L2, L3, flag-off 404): tests only, at edd5d57's code
+$ uv run pytest -p no:cacheprovider -q services/assistant/tests/test_chk06_output_check.py
+FAILED services/assistant/tests/test_chk06_output_check.py::test_m1_a_named_order_does_not_vouch_for_another_order_in_its_sentence[O000064 arrived on 22 October, and your other order was placed and is being prepared.]
+FAILED services/assistant/tests/test_chk06_output_check.py::test_m1_a_named_order_does_not_vouch_for_another_order_in_its_sentence[O000064 is delivered, and the second order has been confirmed.]
+FAILED services/assistant/tests/test_chk06_output_check.py::test_m1_a_named_order_does_not_vouch_for_another_order_in_its_sentence[O000064 shipped first; the order after it was placed later.]
+FAILED services/assistant/tests/test_chk06_output_check.py::test_l1_only_placed_or_confirmed_is_vouched[approved]
+FAILED services/assistant/tests/test_chk06_output_check.py::test_l1_only_placed_or_confirmed_is_vouched[authorised]
+FAILED services/assistant/tests/test_chk06_output_check.py::test_l1_only_placed_or_confirmed_is_vouched[authorized]
+FAILED services/assistant/tests/test_chk06_output_check.py::test_l1_only_placed_or_confirmed_is_vouched[processed]
+FAILED services/assistant/tests/test_chk06_output_check.py::test_l1_only_placed_or_confirmed_is_vouched[applied]
+FAILED services/assistant/tests/test_chk06_output_check.py::test_l1_only_placed_or_confirmed_is_vouched[issued]
+9 failed, 20 passed in 0.12s
+$ uv run pytest -p no:cacheprovider -q services/gateway/tests/test_27_session_cookie_parsing.py
+FAILED services/gateway/tests/test_27_session_cookie_parsing.py::test_two_session_cookies_get_a_new_session_never_either_one
+1 failed, 9 passed in 0.58s
+$ uv run pytest -p no:cacheprovider -q services/gateway/tests/test_chk06_signin.py
+FAILED services/gateway/tests/test_chk06_signin.py::test_with_the_flag_off_a_new_visitor_cannot_tell_the_route_exists[post]
+FAILED services/gateway/tests/test_chk06_signin.py::test_with_the_flag_off_a_new_visitor_cannot_tell_the_route_exists[get]
+FAILED services/gateway/tests/test_chk06_signin.py::test_two_shopper_cookies_are_no_sign_in
+3 failed, 20 passed in 0.65s
+$ uv run pytest -p no:cacheprovider -q services/assistant/tests/test_chk06_output_check.py  (L2 test rewritten to straddle the window edge)
+FAILED services/assistant/tests/test_chk06_output_check.py::test_m1_a_named_order_does_not_vouch_for_another_order_in_its_sentence[O000064 arrived on 22 October, and your other order was placed and is being prepared.]
+FAILED services/assistant/tests/test_chk06_output_check.py::test_m1_a_named_order_does_not_vouch_for_another_order_in_its_sentence[O000064 is delivered, and the second order has been confirmed.]
+FAILED services/assistant/tests/test_chk06_output_check.py::test_m1_a_named_order_does_not_vouch_for_another_order_in_its_sentence[O000064 shipped first; the order after it was placed later.]
+FAILED services/assistant/tests/test_chk06_output_check.py::test_l1_only_placed_or_confirmed_is_vouched[approved]
+FAILED services/assistant/tests/test_chk06_output_check.py::test_l1_only_placed_or_confirmed_is_vouched[authorised]
+FAILED services/assistant/tests/test_chk06_output_check.py::test_l1_only_placed_or_confirmed_is_vouched[authorized]
+FAILED services/assistant/tests/test_chk06_output_check.py::test_l1_only_placed_or_confirmed_is_vouched[processed]
+FAILED services/assistant/tests/test_chk06_output_check.py::test_l1_only_placed_or_confirmed_is_vouched[applied]
+FAILED services/assistant/tests/test_chk06_output_check.py::test_l1_only_placed_or_confirmed_is_vouched[issued]
+FAILED services/assistant/tests/test_chk06_output_check.py::test_l2_an_order_cut_by_the_windows_left_edge_still_counts[1]
+FAILED services/assistant/tests/test_chk06_output_check.py::test_l2_an_order_cut_by_the_windows_left_edge_still_counts[2]
+FAILED services/assistant/tests/test_chk06_output_check.py::test_l2_an_order_cut_by_the_windows_left_edge_still_counts[3]
+FAILED services/assistant/tests/test_chk06_output_check.py::test_l2_an_order_cut_by_the_windows_left_edge_still_counts[4]
+FAILED services/assistant/tests/test_chk06_output_check.py::test_l2_an_order_cut_by_the_windows_left_edge_still_counts[5]
+FAILED services/assistant/tests/test_chk06_output_check.py::test_l2_an_order_cut_by_the_windows_left_edge_still_counts[6]
+15 failed, 19 passed in 0.14s
+# note: the third M1 case "O000064 shipped first; the order after it was placed later." never matches the confirmation pattern ("order" must be followed by its verb), so it was a bad case, not a bypass; replaced by "O000064 shipped first; the order was placed later.".
+## 2026-11-24T14:49:54Z that replaced case on edd5d57's output_check.py (git show into a scratch copy, nothing written in the repo)
+old code, confirmation hits: 0 (1 = blocked; expected 0 = the bug)
+## 2026-11-24T14:49:54Z after the fixes (output_check binding/verbs/whole-text IDs)
+$ uv run pytest -p no:cacheprovider -q services/assistant/tests/test_chk06_output_check.py
+34 passed in 0.09s
+## 2026-11-24T14:50:12Z after the fixes (session.py one-value cookies, flag-off pass-through; signin.py every method)
+$ uv run pytest -p no:cacheprovider -q services/gateway/tests/test_27_session_cookie_parsing.py
+10 passed in 0.55s
+$ uv run pytest -p no:cacheprovider -q services/gateway/tests/test_chk06_signin.py
+23 passed in 0.58s
+$ uv run pytest -p no:cacheprovider -q services/gateway/tests/test_cart_session.py
+20 passed in 1.07s
+$ uv run pytest -p no:cacheprovider -q services/gateway/tests/test_chk01_gateway_criteria.py
+22 passed, 1 warning in 1.03s
+## 2026-11-24T15:06:26Z scoped re-review N1, N2: tests only, at 30f2e54's code
+$ uv run pytest -p no:cacheprovider -q services/assistant/tests/test_chk06_output_check.py
+FAILED services/assistant/tests/test_chk06_output_check.py::test_n1_an_id_ending_a_lead_in_clause_does_not_bind[Unlike O000064, your order has been confirmed but not yet shipped.]
+FAILED services/assistant/tests/test_chk06_output_check.py::test_n1_an_id_ending_a_lead_in_clause_does_not_bind[Besides O000064, your order was placed.]
+FAILED services/assistant/tests/test_chk06_output_check.py::test_n1_an_id_ending_a_lead_in_clause_does_not_bind[As with O000064, the order was placed.]
+FAILED services/assistant/tests/test_chk06_output_check.py::test_n1_an_id_ending_a_lead_in_clause_does_not_bind[Apart from O000064 your order has been confirmed.]
+FAILED services/assistant/tests/test_chk06_output_check.py::test_n1_an_id_ending_a_lead_in_clause_does_not_bind[Like O000064, your order was placed on time.]
+5 failed, 39 passed in 0.13s
+$ uv run pytest -p no:cacheprovider -q services/gateway/tests/test_chk06_signin.py
+FAILED services/gateway/tests/test_chk06_signin.py::test_n2_with_the_flag_off_no_method_tells_the_route_exists[HEAD]
+FAILED services/gateway/tests/test_chk06_signin.py::test_n2_with_the_flag_off_no_method_tells_the_route_exists[OPTIONS]
+FAILED services/gateway/tests/test_chk06_signin.py::test_n2_with_the_flag_off_no_method_tells_the_route_exists[TRACE]
+3 failed, 23 passed in 0.69s
+## 2026-11-24T15:06:47Z after the N1/N2 fixes (_BOUND fullmatch over the sentence, fail closed with no sentence start in view; flag-off 404 from the middleware)
+$ uv run pytest -p no:cacheprovider -q services/assistant/tests/test_chk06_output_check.py
+44 passed in 0.11s
+$ uv run pytest -p no:cacheprovider -q services/assistant/tests/test_chk06_tw_gaps.py
+145 passed in 0.61s
+$ uv run pytest -p no:cacheprovider -q services/assistant/tests/test_chk06_orders_attached.py
+11 passed in 8.71s
+$ uv run pytest -p no:cacheprovider -q services/gateway/tests/test_chk06_signin.py
+26 passed in 0.67s
+
+## 2026-11-24T15:23:20Z the user's N1-R option (B): test only, at 72aef0b's code (the exemption still in)
+$ uv run pytest -p no:cacheprovider -q services/assistant/tests/test_chk06_orders_attached.py -k test_b_
+FAILED services/assistant/tests/test_chk06_orders_attached.py::test_b_a_confirmed_or_placed_claim_stays_blocked_on_a_signed_in_turn[O000064: your order has been confirmed.]
+FAILED services/assistant/tests/test_chk06_orders_attached.py::test_b_a_confirmed_or_placed_claim_stays_blocked_on_a_signed_in_turn[O000064: your order was placed on 16 October.]
+FAILED services/assistant/tests/test_chk06_orders_attached.py::test_b_a_confirmed_or_placed_claim_stays_blocked_on_a_signed_in_turn[O000064: order confirmed, and it was delivered.]
+3 failed, 11 deselected in 5.09s
+## 2026-11-24T15:24:22Z after option (B): output_check.py == origin/main, order-status recording removed, ORDERS_RULES line added
+$ uv run pytest -p no:cacheprovider -q services/assistant/tests/test_chk06_orders_attached.py
+14 passed in 13.32s
+$ uv run pytest -p no:cacheprovider -q services/assistant/tests/test_chk06_tw_gaps.py
+29 passed in 0.69s
+$ uv run pytest -p no:cacheprovider -q services/common/tests/test_chk06_shopper_claim.py
+28 passed in 0.09s
+$ uv run pytest -p no:cacheprovider -q services/mcp-orders/tests/test_chk06_tw_edges.py
+22 passed in 4.50s
+# note (scoped re-review of option B, L2): the failing run above used S0031's O000064 (the demo shopper at 72aef0b); the committed test uses S0188's O000800 and now also asserts get_order returned it as delivered, so it cannot pass for a failed lookup.
+## 2026-11-24T15:41:52Z after the option-B re-review's L1/L2 (tests) and L3 (threat model Open + Owners line)
+$ uv run pytest -p no:cacheprovider -q tests/governance/test_owners.py
+50 passed in 0.07s
+$ uv run pytest -p no:cacheprovider -q tests/governance/test_citations.py
+37 passed in 0.21s
+$ uv run pytest -p no:cacheprovider -q tests/governance/test_data_flow.py
+28 passed in 0.06s
+
+## 2026-11-24T16:00:44Z bundled BE-07 flake (whole-body card search): helper test only, before model_text exists
+$ uv run pytest -p no:cacheprovider -q services/backend/tests/care/test_27_model_text.py
+ImportError while importing test module '/Users/rapido/Projects/northwind-shop-b/services/backend/tests/care/test_27_model_text.py'.
+E   ImportError: cannot import name 'model_text' from 'care._driver' (/Users/rapido/Projects/northwind-shop-b/services/backend/tests/care/_driver.py)
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+## 2026-11-24T16:01:00Z after model_text in care/_driver.py
+3 passed in 0.62s
+## 2026-11-24T16:01:25Z the four BE-07/BE-01 files on model_text
+$ uv run pytest -p no:cacheprovider -q services/backend/tests/care/test_27_model_text.py
+3 passed in 0.50s
+$ uv run pytest -p no:cacheprovider -q services/backend/tests/care/test_be07_criteria.py
+20 passed in 30.02s
+$ uv run pytest -p no:cacheprovider -q services/backend/tests/care/test_be07_writer.py
+73 passed in 54.02s
+$ uv run pytest -p no:cacheprovider -q services/backend/tests/orchestrator/test_be01_criteria.py
+20 passed in 22.82s
+$ uv run pytest -p no:cacheprovider -q services/backend/tests/orchestrator/test_be01_scripted.py
+12 passed in 23.03s
+$ uv run pytest -p no:cacheprovider -q services/backend/tests/care/test_be07_units.py
+99 passed in 0.48s
+$ uv run pytest -p no:cacheprovider -q services/backend/tests/orchestrator/test_be01_review_fixes.py
+16 passed in 14.18s
+$ uv run pytest -p no:cacheprovider -q services/backend/tests/orchestrator/test_be01_units.py
+30 passed in 1.14s
+
+## 2026-11-25T04:51:29Z model_text Medium (after merge 3b6aa19): the allow-list misses a card in any other part of the request; backend_audit has no copy yet. Tests first
+$ uv run pytest -p no:cacheprovider -q -ra services/backend/tests/care/test_27_model_text.py
+ERROR test_27_model_text.py::test_a_1111_only_in_the_clis_metadata_is_not_model_input[backend_audit]
+ERROR test_27_model_text.py::test_a_card_fragment_in_a_message_is_still_found[backend_audit]
+ERROR test_27_model_text.py::test_a_string_body_or_plain_tool_result_is_read_too[backend_audit]
+ERROR test_27_model_text.py::test_a_card_anywhere_but_the_top_level_metadata_is_found[backend_audit-document_block]
+ERROR test_27_model_text.py::test_a_card_anywhere_but_the_top_level_metadata_is_found[backend_audit-nested_metadata]
+ERROR test_27_model_text.py::test_a_card_anywhere_but_the_top_level_metadata_is_found[backend_audit-new_top_level_field]
+ERROR test_27_model_text.py::test_a_card_anywhere_but_the_top_level_metadata_is_found[backend_audit-stop_sequence]
+ERROR test_27_model_text.py::test_a_card_anywhere_but_the_top_level_metadata_is_found[backend_audit-thinking_block]
+ERROR test_27_model_text.py::test_a_card_anywhere_but_the_top_level_metadata_is_found[backend_audit-tool_description]
+ERROR test_27_model_text.py::test_a_card_anywhere_but_the_top_level_metadata_is_found[backend_audit-tool_schema_enum]
+ERROR test_27_model_text.py::test_a_card_anywhere_but_the_top_level_metadata_is_found[backend_audit-tool_use_id]
+ERROR test_27_model_text.py::test_a_card_anywhere_but_the_top_level_metadata_is_found[backend_audit-tool_use_input_key]
+ERROR test_27_model_text.py::test_a_card_anywhere_but_the_top_level_metadata_is_found[backend_audit-tool_use_name]
+ERROR test_27_model_text.py::test_a_card_anywhere_but_the_top_level_metadata_is_found[backend_audit-unknown_block]
+ERROR test_27_model_text.py::test_a_card_anywhere_but_the_top_level_metadata_is_found[backend_audit-unknown_block_in_a_tool_result]
+ERROR test_27_model_text.py::test_a_bare_number_is_found[backend_audit]
+ERROR test_27_model_text.py::test_text_is_searched_as_the_model_reads_it_not_json_escaped[backend_audit-4111 1111\n1111 1111]
+ERROR test_27_model_text.py::test_text_is_searched_as_the_model_reads_it_not_json_escaped[backend_audit-say "4111"]
+ERROR test_27_model_text.py::test_text_is_searched_as_the_model_reads_it_not_json_escaped[backend_audit-\uff14\uff11\uff11\uff11 \uff11\uff11\uff11\uff11]
+ERROR test_27_model_text.py::test_text_is_searched_as_the_model_reads_it_not_json_escaped[backend_audit-4111\u200b1111]
+ERROR test_27_model_text.py::test_the_request_itself_is_not_changed[backend_audit]
+FAILED test_27_model_text.py::test_a_card_anywhere_but_the_top_level_metadata_is_found[care-document_block]
+FAILED test_27_model_text.py::test_a_card_anywhere_but_the_top_level_metadata_is_found[care-new_top_level_field]
+FAILED test_27_model_text.py::test_a_card_anywhere_but_the_top_level_metadata_is_found[care-stop_sequence]
+FAILED test_27_model_text.py::test_a_card_anywhere_but_the_top_level_metadata_is_found[care-thinking_block]
+FAILED test_27_model_text.py::test_a_card_anywhere_but_the_top_level_metadata_is_found[care-tool_description]
+FAILED test_27_model_text.py::test_a_card_anywhere_but_the_top_level_metadata_is_found[care-tool_schema_enum]
+FAILED test_27_model_text.py::test_a_card_anywhere_but_the_top_level_metadata_is_found[care-tool_use_id]
+FAILED test_27_model_text.py::test_a_card_anywhere_but_the_top_level_metadata_is_found[care-tool_use_name]
+FAILED test_27_model_text.py::test_a_card_anywhere_but_the_top_level_metadata_is_found[care-unknown_block]
+FAILED test_27_model_text.py::test_a_card_anywhere_but_the_top_level_metadata_is_found[care-unknown_block_in_a_tool_result]
+FAILED test_27_model_text.py::test_a_card_anywhere_but_the_top_level_metadata_is_found[orchestrator-document_block]
+FAILED test_27_model_text.py::test_a_card_anywhere_but_the_top_level_metadata_is_found[orchestrator-new_top_level_field]
+FAILED test_27_model_text.py::test_a_card_anywhere_but_the_top_level_metadata_is_found[orchestrator-stop_sequence]
+FAILED test_27_model_text.py::test_a_card_anywhere_but_the_top_level_metadata_is_found[orchestrator-thinking_block]
+FAILED test_27_model_text.py::test_a_card_anywhere_but_the_top_level_metadata_is_found[orchestrator-tool_description]
+FAILED test_27_model_text.py::test_a_card_anywhere_but_the_top_level_metadata_is_found[orchestrator-tool_schema_enum]
+FAILED test_27_model_text.py::test_a_card_anywhere_but_the_top_level_metadata_is_found[orchestrator-tool_use_id]
+FAILED test_27_model_text.py::test_a_card_anywhere_but_the_top_level_metadata_is_found[orchestrator-tool_use_name]
+FAILED test_27_model_text.py::test_a_card_anywhere_but_the_top_level_metadata_is_found[orchestrator-unknown_block]
+FAILED test_27_model_text.py::test_a_card_anywhere_but_the_top_level_metadata_is_found[orchestrator-unknown_block_in_a_tool_result]
+20 failed, 22 passed, 21 errors in 0.65s
+## 2026-11-25T04:51:44Z after model_text searches the whole body minus top-level metadata (three copies), BE-02 on it, the shadowed name renamed; one file at a time
+$ uv run pytest -p no:cacheprovider -q services/backend/tests/care/test_27_model_text.py
+FAILED services/backend/tests/care/test_27_model_text.py::test_a_1111_only_in_the_clis_metadata_is_not_model_input[care]
+FAILED services/backend/tests/care/test_27_model_text.py::test_a_1111_only_in_the_clis_metadata_is_not_model_input[orchestrator]
+FAILED services/backend/tests/care/test_27_model_text.py::test_a_1111_only_in_the_clis_metadata_is_not_model_input[backend_audit]
+3 failed, 60 passed in 0.55s
+$ uv run pytest -p no:cacheprovider -q services/backend/tests/care/test_be07_criteria.py
+20 passed in 24.50s
+$ uv run pytest -p no:cacheprovider -q services/backend/tests/care/test_be07_writer.py
+73 passed in 38.85s
+$ uv run pytest -p no:cacheprovider -q services/backend/tests/orchestrator/test_be01_criteria.py
+20 passed in 14.09s
+$ uv run pytest -p no:cacheprovider -q services/backend/tests/orchestrator/test_be01_scripted.py
+12 passed in 21.82s
+$ uv run pytest -p no:cacheprovider -q services/backend/tests/backend_audit/test_be02_agent_scripted.py
+21 passed in 17.00s
+# note: the 3 failures above are the helper test's own fixture, whose tool ID toolu_1111 asserted that IDs are not searched (the allow-list's behaviour). The user's instruction searches IDs too, so the fixture's ID is now toolu_a; the assertion is unchanged, and the tool_use_id case requires a card in an ID to be found.
+## 2026-11-25T04:53:54Z after the fixture's ID
+$ uv run pytest -p no:cacheprovider -q services/backend/tests/care/test_27_model_text.py
+63 passed in 0.49s
+
+## 2026-11-25T04:56:54Z BE-05 (test_be05_place_scripted.py:90): same flake class. Before: the old search on a body whose only match is in metadata.user_id (throwaway file), then the helper test with orders_place added
+$ uv run pytest -p no:cacheprovider -q <throwaway>/test_old_be05.py
+1 failed in 0.12s
+$ uv run pytest -p no:cacheprovider -q services/backend/tests/care/test_27_model_text.py
+  21 E           AttributeError: module 'model_text_orders_place._placement' has no attribute 'model_text'
+63 passed, 21 errors in 0.63s
+## 2026-11-25T04:57:04Z after: BE-05 on the same model_text (fourth copy, in _placement.py)
+$ uv run pytest -p no:cacheprovider -q services/backend/tests/care/test_27_model_text.py
+84 passed in 0.51s
+$ uv run pytest -p no:cacheprovider -q services/backend/tests/orders_place/test_be05_place_scripted.py
+30 passed in 24.06s
+
+## 2026-11-25 the six recorded scenarios (test_orders_journey_e2e.py), before the window
+$ LLM_MODE=replay uv run pytest -p no:cacheprovider -q services/assistant/tests/test_orders_journey_e2e.py
+36 passed, 6 deselected (the checks at $0 on a scripted model: 6 right answers pass, 17 wrong answers fail, 5 answers with no tool call fail)
+$ LLM_MODE=replay uv run pytest -p no:cacheprovider -q -m "" --llm-suite assistant-orders
+6 failed, 9227 deselected, 6 errors: 6 first requests missed, one per scenario, suite assistant-orders, no cassette yet.
+# Each miss answers HTTP 400, and the CLI then retries twice with fewer beta headers, so each test reports 3 missed requests. Only anthropic-beta and thinking.display differ. The first-request hashes were the same in three runs.
+
+## 2026-11-25T05:06:03Z ORDERS_RULES holds S0188's real O000800, its status and date (hard rule 2; the user's decision: placeholders). Test first
+$ LLM_MODE=replay uv run pytest -p no:cacheprovider -q services/assistant/tests/test_chk06_orders_attached.py -k holds_no_order_data
+FAILED services/assistant/tests/test_chk06_orders_attached.py::test_the_signed_in_prompt_holds_no_order_data[CA]
+FAILED services/assistant/tests/test_chk06_orders_attached.py::test_the_signed_in_prompt_holds_no_order_data[EU]
+FAILED services/assistant/tests/test_chk06_orders_attached.py::test_the_signed_in_prompt_holds_no_order_data[UK]
+FAILED services/assistant/tests/test_chk06_orders_attached.py::test_the_signed_in_prompt_holds_no_order_data[US]
+4 failed, 14 deselected in 0.53s
+## 2026-11-25T05:06:19Z after the placeholders; one file at a time
+$ LLM_MODE=replay uv run pytest -p no:cacheprovider -q services/assistant/tests/test_orders_journey_e2e.py
+36 passed, 6 deselected in 46.35s
+$ LLM_MODE=replay uv run pytest -p no:cacheprovider -q services/assistant/tests/test_chk06_orders_attached.py
+18 passed in 13.59s
+$ LLM_MODE=replay uv run pytest -p no:cacheprovider -q services/assistant/tests/test_chk06_tw_gaps.py
+29 passed in 0.60s
+$ LLM_MODE=replay uv run pytest -p no:cacheprovider -q services/assistant/tests/test_source_types.py
+21 passed in 1.08s
+$ LLM_MODE=replay uv run pytest -p no:cacheprovider -q services/assistant/tests/test_tool_loop.py
+33 passed in 42.50s
+$ LLM_MODE=replay uv run pytest -p no:cacheprovider -q services/assistant/tests/test_chk01_cart.py
+26 passed in 4.21s
+$ LLM_MODE=replay uv run pytest -p no:cacheprovider -q services/assistant/tests/test_sa02_source_card_edges.py
+12 passed in 0.13s
+$ LLM_MODE=replay uv run pytest -p no:cacheprovider -q services/llm-replay/tests/test_scripted_routes.py
+4 passed in 0.99s
+$ LLM_MODE=replay uv run pytest -p no:cacheprovider -q tests/nfr08/test_prompt_disclosure.py
+5 passed in 0.48s
+
+## 2026-11-25T05:10:15Z get_order's description and argument example name S0188's real O000800 (the user's decision: O012345, no real order). Test first
+$ uv run pytest -p no:cacheprovider -q services/mcp-orders/tests/test_chk06_get_order.py -k names_no_real_order
+E       AssertionError: assert ({'O000800'} == {'O012345'}
+FAILED services/mcp-orders/tests/test_chk06_get_order.py::test_the_tools_own_text_names_no_real_order
+1 failed, 43 deselected in 0.42s
+## 2026-11-25T05:10:17Z after O012345; one file at a time
+$ LLM_MODE=replay uv run pytest -p no:cacheprovider -q tests/mcp/test_contract.py
+80 passed in 11.79s
+$ LLM_MODE=replay uv run pytest -p no:cacheprovider -q services/mcp-orders/tests/test_chk06_get_order.py
+44 passed in 4.64s
+$ LLM_MODE=replay uv run pytest -p no:cacheprovider -q services/mcp-orders/tests/test_chk06_tw_edges.py
+22 passed in 4.58s
+$ LLM_MODE=replay uv run pytest -p no:cacheprovider -q services/assistant/tests/test_orders_journey_e2e.py
+36 passed, 6 deselected in 45.37s
+$ LLM_MODE=replay uv run pytest -p no:cacheprovider -q services/assistant/tests/test_chk06_orders_attached.py
+18 passed in 13.67s
+
+## 2026-11-25T05:17:15Z stop 5, the user's option A: the recorded in_transit answer wrote 'in_transit' and the wording check wanted a space; the status bans missed underscored codes too. Tests first (281bc82, 11 new cassettes uncommitted)
+$ LLM_MODE=replay uv run pytest -p no:cacheprovider -q services/assistant/tests/test_orders_journey_e2e.py
+FAILED test_orders_journey_e2e.py::test_a_right_answer_in_the_results_own_spelling_passes[in_transit-Order O000928: its status is in_transit. Last scan 2026-10-16: in_transit.]
+FAILED test_orders_journey_e2e.py::test_a_wrong_answer_fails_its_scenario[label_created_no_scans-The label for O000406 was made; its status is in_transit.]
+FAILED test_orders_journey_e2e.py::test_a_wrong_answer_fails_its_scenario[label_created_no_scans-O000406 has a label_created status. It was picked_up.]
+FAILED test_orders_journey_e2e.py::test_a_wrong_answer_fails_its_scenario[another_shoppers_order-I couldn't find O000001, but its status is on_hold.]
+FAILED test_orders_journey_e2e.py::test_a_wrong_answer_fails_its_scenario[another_shoppers_order-I couldn't find O000001; it is not yet in_transit.]
+FAILED test_orders_journey_e2e.py::test_a_wrong_answer_fails_its_scenario[another_shoppers_order-I couldn't find O000001, only a label_created status.]
+FAILED test_orders_journey_e2e.py::test_a_wrong_answer_fails_its_scenario[no_order_number-What's your order number? Its status is on_hold.]
+FAILED test_orders_journey_e2e.py::test_a_wrong_answer_fails_its_scenario[no_order_number-What's your order number? It is not yet in_transit.]
+FAILED test_orders_journey_e2e.py::test_a_wrong_answer_fails_its_scenario[no_order_number-What's your order number? The last scan is out_for_delivery.]
+FAILED test_orders_journey_e2e.py::test_a_wrong_answer_fails_its_scenario[no_order_number-What's your order number? The last scan is picked_up.]
+FAILED test_orders_journey_e2e.py::test_a_wrong_answer_fails_its_scenario[no_order_number-What's your order number? It is label_created.]
+11 failed, 39 passed, 6 deselected in 64.64s (0:01:04)
+## 2026-11-25T05:21:05Z after: the status and wording checks read _ as a space; private values still on the exact answer (a token case added)
+$ LLM_MODE=replay uv run pytest -p no:cacheprovider -q -ra services/assistant/tests/test_orders_journey_e2e.py
+51 passed, 6 deselected in 65.43s (0:01:05)
+$ LLM_MODE=replay uv run pytest -p no:cacheprovider -q -ra -m "" --llm-suite assistant-orders services/assistant/tests/test_orders_journey_e2e.py
+6 passed, 51 deselected in 9.28s
+$ LLM_MODE=replay uv run pytest -p no:cacheprovider -q -ra -m "" --llm-suite assistant-orders services/assistant/tests/test_orders_journey_e2e.py
+6 passed, 51 deselected in 9.17s
+
+## 2026-11-25 advisor M-2, AFTER THE FACT: no failing run was logged for the feature's first security tests, so each control was broken in a scratch copy
+$ uv run python -I docs/reviews/2026-11-25-27-mutants.py.txt <scratch copy> .venv/bin/python
+unmutated: 176 passed in 22.81s
+KILLED   | own orders: the owner check is gone | 2 failed, 64 passed in 9.01s | test_another_shoppers_an_unknown_and_a_malformed_order_get_the_same_bytes, test_toolerror_is_what_the_book_raises_for_a_wrong_shopper
+KILLED   | own orders: the region check is gone | 1 failed, 65 passed in 8.81s | test_the_region_in_the_token_must_be_the_orders
+KILLED   | same bytes: a malformed number gets another message | 1 failed, 43 passed in 4.65s | test_another_shoppers_an_unknown_and_a_malformed_order_get_the_same_bytes
+KILLED   | allow-list: the payment token is returned | 3 failed, 41 passed in 4.44s | test_all_1000_orders_match_the_store_and_the_carrier_as_their_owner, test_no_result_carries_a_forbidden_field_over_all_1000_orders, test_over_http_the_owner_gets_each_order_as_the_files_state_it
+KILLED   | allow-list: the escalation reason is returned | 3 failed, 41 passed in 4.46s | test_all_1000_orders_match_the_store_and_the_carrier_as_their_owner, test_no_result_carries_a_forbidden_field_over_all_1000_orders, test_over_http_the_owner_gets_each_order_as_the_files_state_it
+KILLED   | live reads: a view is kept after the first read | 1 failed, 43 passed in 4.95s | test_a_status_or_scan_changed_while_the_server_runs_shows_in_the_next_result
+KILLED   | errors: an unavailable carrier looks like no shipment | 1 failed, 43 passed in 4.71s | test_a_carrier_timeout_is_transient_and_distinct_from_a_label_with_no_scans
+KILLED   | status: escalated is called processing | 7 failed, 37 passed in 4.70s | test_a_status_or_scan_changed_while_the_server_runs_shows_in_the_next_result, test_all_1000_orders_match_the_store_and_the_carrier_as_their_owner, test_every_store_status_and_last_scan_maps_to_one_shopper_status ...
+KILLED   | status: no scans is an error | 6 failed, 38 passed in 4.51s | test_a_carrier_timeout_is_transient_and_distinct_from_a_label_with_no_scans, test_all_1000_orders_match_the_store_and_the_carrier_as_their_owner, test_every_store_status_and_last_scan_maps_to_one_shopper_status ...
+KILLED   | card data: not refused | 4 failed, 62 passed in 8.96s | test_card_data_in_any_argument_is_refused_before_the_store_is_read
+KILLED   | unknown keys: not refused | 1 failed, 65 passed in 8.79s | test_an_unknown_argument_is_refused
+KILLED   | sign-in: a token with no shopper is served | 1 failed, 65 passed in 8.96s | test_a_token_with_no_signed_in_shopper_gets_no_order
+KILLED   | shp: any server may carry it | 5 failed, 26 passed in 0.10s | test_a_signed_token_with_a_bad_shp_is_refused_by_every_server, test_a_token_carrying_both_claims_verifies_nowhere, test_minting_a_shopper_into_another_servers_token_raises
+KILLED   | shp: a staff token may carry it | 2 failed, 29 passed in 0.10s | test_a_signed_token_with_a_bad_shp_is_refused_by_every_server, test_a_staff_token_cannot_carry_a_shopper
+KILLED   | shp: its shape is not checked | 8 failed, 23 passed in 0.11s | test_a_malformed_shopper_is_refused_at_mint, test_a_signed_token_with_a_bad_shp_is_refused_by_every_server
+KILLED   | shp: verify does not check it | 8 failed, 23 passed in 0.13s | test_a_signed_token_with_a_bad_shp_is_refused_by_every_server, test_a_token_carrying_both_claims_verifies_nowhere
+KILLED   | shp: mint does not check it | 11 failed, 20 passed in 0.12s | test_a_malformed_shopper_is_refused_at_mint, test_a_staff_token_cannot_carry_a_shopper, test_minting_a_shopper_into_another_servers_token_raises
+KILLED   | both claims: qf is taken on any server | 1 failed, 30 passed in 0.10s | test_a_token_carrying_both_claims_verifies_nowhere
+KILLED   | label: angle brackets are not escaped | 3 failed, 50 passed in 4.57s | test_a_hostile_scan_date_cannot_close_or_forge_the_label, test_a_result_is_labelled_escaped_data_and_reads_back, test_label_escapes_angle_brackets_and_ampersands_in_any_value
+KILLED   | cookie: the mac does not cover the session | 1 failed, 25 passed in 0.79s | test_anything_but_this_sessions_signed_demo_shopper_is_anonymous
+KILLED   | cookie: any mac is accepted | 3 failed, 23 passed in 0.72s | test_anything_but_this_sessions_signed_demo_shopper_is_anonymous
+KILLED   | cookie: the first of two values is taken | 1 failed, 25 passed in 0.73s | test_two_shopper_cookies_are_no_sign_in
+KILLED   | flag: the cookie counts with the flag off | 12 failed, 14 passed in 0.79s | test_n2_with_the_flag_off_no_method_tells_the_route_exists, test_only_exactly_1_turns_the_flag_on, test_turning_the_flag_off_signs_everyone_out ...
+KILLED   | flag: any value turns it on | 4 failed, 22 passed in 0.71s | test_only_exactly_1_turns_the_flag_on
+KILLED   | sign-in: any signed shopper, not only the demo one | 1 failed, 25 passed in 0.84s | test_anything_but_this_sessions_signed_demo_shopper_is_anonymous
+KILLED   | sign-in: the region stays the server's | 2 failed, 24 passed in 0.70s | test_a_chat_turn_gets_the_orders_endpoint_and_the_caller_as_signed_in, test_sign_in_binds_the_demo_shopper_to_the_session
+KILLED   | scope: another agent gets get_order | 2 failed, 33 passed in 0.62s | test_get_order_is_the_assistants_alone, test_get_order_is_the_assistants_alone_in_the_scopes
+KILLED   | anonymous: the order section is in every prompt | 9 failed, 38 passed in 13.85s | test_an_anonymous_turn_has_no_orders_server_tool_or_prompt_section, test_the_anonymous_prompt_is_mains_byte_for_byte, test_the_order_section_appears_once_and_just_before_the_last_rule
+KILLED   | anonymous: the endpoint mints without a shopper | 2 failed, 45 passed in 13.56s | test_an_anonymous_caller_gets_no_orders_token, test_an_anonymous_turn_sends_the_same_request_with_or_without_an_orders_endpoint
+restored: 176 passed in 22.60s
+29 mutants, 0 not killed
+
+## 2026-11-25 advisor R-2 and R-3, AFTER THE FACT: the two-shopper test now uses a shopper in the same region (the run above shows it did not fail under the owner mutant; it does here), two mutants corrected, every failing test named
+$ uv run python -I docs/reviews/2026-11-25-27-mutants.py.txt <scratch copy> .venv/bin/python
+unmutated: 176 passed in 22.63s
+KILLED   | own orders: the owner check is gone | 3 failed, 63 passed in 8.58s | test_another_shoppers_an_unknown_and_a_malformed_order_get_the_same_bytes, test_toolerror_is_what_the_book_raises_for_a_wrong_shopper, test_two_signed_in_sessions_at_once_never_see_each_others_orders
+KILLED   | own orders: the region check is gone | 1 failed, 65 passed in 8.67s | test_the_region_in_the_token_must_be_the_orders
+KILLED   | same bytes: a malformed number gets another message | 1 failed, 43 passed in 4.68s | test_another_shoppers_an_unknown_and_a_malformed_order_get_the_same_bytes
+KILLED   | allow-list: the payment token is returned | 3 failed, 41 passed in 4.35s | test_all_1000_orders_match_the_store_and_the_carrier_as_their_owner, test_no_result_carries_a_forbidden_field_over_all_1000_orders, test_over_http_the_owner_gets_each_order_as_the_files_state_it
+KILLED   | allow-list: the escalation reason is returned | 3 failed, 41 passed in 4.37s | test_all_1000_orders_match_the_store_and_the_carrier_as_their_owner, test_no_result_carries_a_forbidden_field_over_all_1000_orders, test_over_http_the_owner_gets_each_order_as_the_files_state_it
+KILLED   | live reads: a view is kept after the first read | 1 failed, 43 passed in 4.75s | test_a_status_or_scan_changed_while_the_server_runs_shows_in_the_next_result
+KILLED   | errors: an unavailable carrier looks like no shipment | 1 failed, 43 passed in 4.74s | test_a_carrier_timeout_is_transient_and_distinct_from_a_label_with_no_scans
+KILLED   | status: escalated is called processing | 7 failed, 37 passed in 4.47s | test_a_status_or_scan_changed_while_the_server_runs_shows_in_the_next_result, test_all_1000_orders_match_the_store_and_the_carrier_as_their_owner, test_every_store_status_and_last_scan_maps_to_one_shopper_status, test_over_http_the_owner_gets_each_order_as_the_files_state_it, test_the_demo_shoppers_orders_cover_every_state
+KILLED   | status: no scans is an error | 6 failed, 38 passed in 4.43s | test_a_carrier_timeout_is_transient_and_distinct_from_a_label_with_no_scans, test_all_1000_orders_match_the_store_and_the_carrier_as_their_owner, test_every_store_status_and_last_scan_maps_to_one_shopper_status, test_no_result_carries_a_forbidden_field_over_all_1000_orders, test_over_http_the_owner_gets_each_order_as_the_files_state_it, test_the_demo_shoppers_orders_cover_every_state
+KILLED   | card data: not refused | 4 failed, 62 passed in 8.66s | test_card_data_in_any_argument_is_refused_before_the_store_is_read
+KILLED   | unknown keys: not refused | 1 failed, 65 passed in 8.55s | test_an_unknown_argument_is_refused
+KILLED   | sign-in: a token with no shopper is not told to sign in (the lookup still finds nothing) | 1 failed, 65 passed in 8.67s | test_a_token_with_no_signed_in_shopper_gets_no_order
+KILLED   | shp: any server may carry it | 5 failed, 26 passed in 0.11s | test_a_signed_token_with_a_bad_shp_is_refused_by_every_server, test_a_token_carrying_both_claims_verifies_nowhere, test_minting_a_shopper_into_another_servers_token_raises
+KILLED   | shp: a staff token may carry it | 2 failed, 29 passed in 0.10s | test_a_signed_token_with_a_bad_shp_is_refused_by_every_server, test_a_staff_token_cannot_carry_a_shopper
+KILLED   | shp: its shape is not checked | 8 failed, 23 passed in 0.11s | test_a_malformed_shopper_is_refused_at_mint, test_a_signed_token_with_a_bad_shp_is_refused_by_every_server
+KILLED   | shp: verify does not check it | 8 failed, 23 passed in 0.11s | test_a_signed_token_with_a_bad_shp_is_refused_by_every_server, test_a_token_carrying_both_claims_verifies_nowhere
+KILLED   | shp: mint does not check it | 11 failed, 20 passed in 0.11s | test_a_malformed_shopper_is_refused_at_mint, test_a_staff_token_cannot_carry_a_shopper, test_minting_a_shopper_into_another_servers_token_raises
+KILLED   | both claims: qf is taken on any server | 1 failed, 30 passed in 0.10s | test_a_token_carrying_both_claims_verifies_nowhere
+KILLED   | label: angle brackets are not escaped | 3 failed, 50 passed in 4.52s | test_a_hostile_scan_date_cannot_close_or_forge_the_label, test_a_result_is_labelled_escaped_data_and_reads_back, test_label_escapes_angle_brackets_and_ampersands_in_any_value
+KILLED   | cookie: the mac does not cover the session | 1 failed, 25 passed in 0.67s | test_anything_but_this_sessions_signed_demo_shopper_is_anonymous
+KILLED   | cookie: any mac is accepted | 3 failed, 23 passed in 0.67s | test_anything_but_this_sessions_signed_demo_shopper_is_anonymous
+KILLED   | cookie: the first of two values is taken | 1 failed, 25 passed in 0.65s | test_two_shopper_cookies_are_no_sign_in
+KILLED   | flag: the cookie counts with the flag off | 12 failed, 14 passed in 0.72s | test_n2_with_the_flag_off_no_method_tells_the_route_exists, test_only_exactly_1_turns_the_flag_on, test_turning_the_flag_off_signs_everyone_out, test_with_the_flag_off_a_new_visitor_cannot_tell_the_route_exists, test_with_the_flag_off_sign_in_is_the_same_404_as_no_route
+KILLED   | flag: any value turns it on | 4 failed, 22 passed in 0.68s | test_only_exactly_1_turns_the_flag_on
+KILLED   | sign-in: any signed shopper, not only the demo one | 1 failed, 25 passed in 0.67s | test_anything_but_this_sessions_signed_demo_shopper_is_anonymous
+KILLED   | sign-in: the region stays the server's | 2 failed, 24 passed in 0.67s | test_a_chat_turn_gets_the_orders_endpoint_and_the_caller_as_signed_in, test_sign_in_binds_the_demo_shopper_to_the_session
+KILLED   | scope: another agent gets get_order | 2 failed, 33 passed in 0.58s | test_get_order_is_the_assistants_alone, test_get_order_is_the_assistants_alone_in_the_scopes
+KILLED   | anonymous: the order section is in every prompt | 9 failed, 38 passed in 13.54s | test_an_anonymous_turn_has_no_orders_server_tool_or_prompt_section, test_the_anonymous_prompt_is_mains_byte_for_byte, test_the_order_section_appears_once_and_just_before_the_last_rule
+KILLED   | anonymous: the endpoint mints without a shopper | 2 failed, 45 passed in 13.92s | test_an_anonymous_caller_gets_no_orders_token, test_an_anonymous_turn_sends_the_same_request_with_or_without_an_orders_endpoint
+restored: 176 passed in 22.34s
+29 mutants, 0 not killed

@@ -344,11 +344,34 @@ def test_the_registry_holds_the_catalog_reads_and_the_four_cart_tools_and_nothin
         assert not any(word in name for word in ORDER_WORDS), name
 
 
+# Row #27 (CHK-06, decision 0023): the one exception, exactly: the assistant's `get_order` on
+# northwind-orders, a read of the signed-in shopper's own order that cannot place one (read-only, no
+# write tool on that server). Flagged to the user under stop 5 with the row #27 report.
+READ_ONLY_ORDER_TOOL = ("shopper-assistant", "northwind-orders", "get_order")
+
+
 def test_no_agent_is_scoped_to_a_tool_that_could_place_an_order() -> None:
     for agent, servers in tool_scopes.AGENT_TOOLS.items():
-        for names in servers.values():
+        for server, names in servers.items():
             for name in names:
+                if (agent, server, name) == READ_ONLY_ORDER_TOOL:
+                    continue
                 assert not any(word in name for word in ORDER_WORDS), (agent, name)
+
+
+def test_the_one_order_tool_is_read_only_and_the_orders_server_has_nothing_else() -> None:
+    from northwind_mcp_orders.tools import TOOLS as ORDERS_TOOLS
+
+    assert set(ORDERS_TOOLS) == {"get_order"} == set(tool_scopes.ORDER_TOOLS)
+    annotations = ORDERS_TOOLS["get_order"].tool.annotations
+    assert annotations is not None and annotations.read_only_hint is True
+    assert annotations.destructive_hint in (None, False)
+    holders = {
+        agent
+        for agent, servers in tool_scopes.AGENT_TOOLS.items()
+        if servers.get("northwind-orders")
+    }
+    assert holders == {"shopper-assistant"}
 
 
 def test_each_agent_gets_exactly_its_cart_tools() -> None:
@@ -445,7 +468,8 @@ def test_a_token_minted_without_a_session_has_no_sid_claim() -> None:
     assert claims.sid is None
     assert verify_for(bearer, key=KEY, server=CATALOG_SERVER).sid is None
     # Row #11 (RAG-04) adds `qf`, a query plan for northwind-rag only (decision 0022).
-    assert OPTIONAL_CLAIMS == frozenset({"sid", "qf"})
+    # Row #27 (CHK-06) adds `shp`, the signed-in shopper, on a northwind-orders token only.
+    assert OPTIONAL_CLAIMS == frozenset({"sid", "qf", "shp"})
 
 
 @pytest.mark.parametrize(

@@ -43,6 +43,7 @@ from northwind_backend.ports import (
     claim_payment_view,
     further_along,
 )
+from northwind_common.cards import argument_texts, holds_card_data
 
 ORDER_SCOPES = frozenset({"get", "use_address_on_file", "confirm", "escalate", "claim_payment"})
 DATA = Path(__file__).resolve().parents[5] / "data" / "backend"
@@ -184,7 +185,9 @@ class OrderStoreFake(FakeService):
         )
         if refused is not None:
             return refused
-        if card_data_in(json.dumps(dict(context), sort_keys=True)):
+        # H5 (row #27): the raw keys and values, not a JSON encoding, which writes a newline as
+        # `\n` and a fullwidth digit as `\uff14` and so hides a card number from the check.
+        if holds_card_data(context) or card_data_in(*argument_texts(context)):
             return CARD_DATA_REFUSED
         kept = MappingProxyType(json.loads(json.dumps(dict(context))))  # a plain copy, JSON only
 

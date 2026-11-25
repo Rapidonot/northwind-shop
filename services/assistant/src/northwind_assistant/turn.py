@@ -22,6 +22,7 @@ from claude_agent_sdk.types import StreamEvent, ToolResultBlock, ToolUseBlock
 
 from northwind_assistant.caller import Caller
 from northwind_assistant.catalog_client import CatalogEndpoint
+from northwind_assistant.orders_client import OrdersEndpoint
 from northwind_assistant.output_check import OutputCheck, citation_parts
 from northwind_assistant.prompt import system_prompt, user_prompt
 from northwind_assistant.rag_client import McpRagSearcher, RagEndpoint
@@ -44,7 +45,7 @@ from northwind_assistant.understand import (
     query_ok,
 )
 from northwind_assistant.usage import TurnUsage
-from northwind_common import catalog_tool
+from northwind_common import catalog_tool, order_tool
 from northwind_common.llm import ASSISTANT_MODEL, AgentRuntime, agent_options
 from northwind_common.mcp_token import bearer
 
@@ -118,12 +119,17 @@ def assistant_options(
     token: str,
     runtime: AgentRuntime,
     catalog: tuple[str, str] | None = None,
+    orders: tuple[str, str] | None = None,
 ) -> Any:
     """mcp-rag over HTTP with this turn's token, `retrieve_context` its one tool; and, given
     `catalog` (URL, token), mcp-catalog with its five read-only tools (row #12, RAG-09; PRD §7,
     NFR-01) and, from row #16 (CHK-01), its four cart tools, which act on the session in the
     token. Each server gets its own token, which the other refuses. The CLI gets the tokens, never
-    the key."""
+    the key.
+
+    Row #27 (CHK-06): given `orders` (URL, token), a signed-in turn also gets mcp-orders with
+    `get_order`, and the prompt's order section. Without it, the options are the anonymous turn's,
+    unchanged."""
     servers: dict[str, Any] = {SERVER_NAME: {"type": "http", "url": url, "headers": bearer(token)}}
     allowed = [ALLOWED_TOOL]
     if catalog is not None:
@@ -134,8 +140,16 @@ def assistant_options(
             "headers": bearer(catalog_token),
         }
         allowed.extend(catalog_tool.ALLOWED_TOOLS)
+    if orders is not None:
+        orders_url, orders_token = orders
+        servers[order_tool.SERVER_NAME] = {
+            "type": "http",
+            "url": orders_url,
+            "headers": bearer(orders_token),
+        }
+        allowed.extend(order_tool.ALLOWED_TOOLS)
     return agent_options(
-        system_prompt=system_prompt(caller.region),
+        system_prompt=system_prompt(caller.region, signed_in=orders is not None),
         model=ASSISTANT_MODEL,
         tools=[],
         runtime=runtime,
@@ -333,13 +347,17 @@ async def stream_answer(
     runtime: AgentRuntime,
     catalog: CatalogEndpoint | None = None,
     understand: Understander | None = None,
+    orders: OrdersEndpoint | None = None,
 ) -> AsyncIterator[TurnEvent]:
     """`catalog` attaches mcp-catalog (row #12). The gateway and the eval answerer always pass one
     (pinned by tests); `None` is the one-server surface that tests written before #12 use.
 
     `understand` (row #11, RAG-04): query understanding for the first search. The gateway passes
     one; the eval answerer does not, because its first search is the saved context, which already
-    holds the planned search (`make eval-snapshot`)."""
+    holds the planned search (`make eval-snapshot`).
+
+    `orders` (row #27, CHK-06) attaches mcp-orders, only for a signed-in caller: the gateway passes
+    one; the eval answerer does not, and its caller is never signed in."""
     state = ToolState(region=caller.region)
     token, turn = rag.mint_turn(caller)
     understood: Understood | None = None
@@ -364,7 +382,9 @@ async def stream_answer(
         yield TurnError("retrieval_failed")
         return
     attached = None if catalog is None else (catalog.url, catalog.mint(caller))
-    options = assistant_options(caller, rag.url, token, runtime, attached)
+    orders_token = None if orders is None else orders.mint(caller)
+    signed_in = None if orders is None or orders_token is None else (orders.url, orders_token)
+    options = assistant_options(caller, rag.url, token, runtime, attached, signed_in)
     usage = _turn_usage(understood, deferred=True)
     check = OutputCheck(state.seen, state.sources, live=state.live)
     try:

@@ -12,6 +12,7 @@ members = [
     "northwind-gateway",
     "northwind-llm-replay",
     "northwind-mcp-catalog",
+    "northwind-mcp-orders",
     "northwind-mcp-rag",
     "northwind-rag",
     "northwind-shop",
@@ -858,6 +859,25 @@ requires-dist = [
 ]
 
 [[package]]
+name = "northwind-mcp-orders"
+version = "0.0.0"
+source = { editable = "services/mcp-orders" }
+dependencies = [
+    { name = "mcp" },
+    { name = "northwind-backend" },
+    { name = "northwind-common" },
+    { name = "uvicorn", extra = ["standard"] },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "mcp", specifier = ">=2.3,<3" },
+    { name = "northwind-backend", editable = "services/backend" },
+    { name = "northwind-common", editable = "services/common" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.54.0" },
+]
+
+[[package]]
 name = "northwind-mcp-rag"
 version = "0.0.0"
 source = { editable = "services/mcp-rag" }
@@ -908,6 +928,7 @@ dependencies = [
     { name = "northwind-gateway" },
     { name = "northwind-llm-replay" },
     { name = "northwind-mcp-catalog" },
+    { name = "northwind-mcp-orders" },
     { name = "northwind-mcp-rag" },
     { name = "northwind-rag" },
 ]
@@ -931,6 +952,7 @@ requires-dist = [
     { name = "northwind-gateway", editable = "services/gateway" },
     { name = "northwind-llm-replay", editable = "services/llm-replay" },
     { name = "northwind-mcp-catalog", editable = "services/mcp-catalog" },
+    { name = "northwind-mcp-orders", editable = "services/mcp-orders" },
     { name = "northwind-mcp-rag", editable = "services/mcp-rag" },
     { name = "northwind-rag", editable = "services/rag" },
 ]

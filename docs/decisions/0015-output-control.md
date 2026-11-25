@@ -405,6 +405,31 @@ The changed shown answers are re-judged in W6. Tests: `services/assistant/tests/
 
 `REPLACED_IN_RECORDING` is now `{"RT-003"}`. See decision 0018, "Row #17 amendment".
 
+## Row #27 note (2026-11-24): no order exemption (CHK-06, decision 0023)
+
+- **The check is unchanged by row #27.** At row #27 `output_check.py` is byte for byte main's (row #30's note below
+  changes it).
+- **What was tried.** Row #27 first added an exemption letting "your order was placed / has been confirmed" through
+  for an order this turn's `get_order` returned as confirmed. Three security passes kept finding ways to bind the
+  claim to a different order than the one named: M1, then N1, then N1-R (an abbreviation's dot or a newline taken
+  for a sentence start). See `docs/reviews/2026-11-24-27-security-review.raw.md`, `…-security-rereview.raw.md` and
+  `…-security-rereview-2.raw.md`.
+- **The user's decision (N1-R, option B).** No exemption, so the confirmation class treats every turn the same, signed
+  in or not.
+- **What the class does not catch (main's pattern, found by the advisor's row review, 2026-11-25).** The verb must follow
+  the noun directly. "Your order has been confirmed" is blocked. "Order O000418 has been confirmed", "Your order O000418
+  has been confirmed" and "O000418 has been confirmed" are not: with the order number between them, the claim is held
+  by the prompt only. Three recorded answers in `cassettes/assistant-orders/` say "Order <number> was placed on <date>",
+  truthfully. The gap is older than this row, but this row's answers name order numbers. It was found after the decision
+  above. Owner (the user, 2026-11-25): row #27's PR 2 (CHK-07), with D9: a stated order status must match this
+  turn's `get_order` result. Not NFR-03, which decision 0021 cut.
+- **What the assistant does instead.** `ORDERS_RULES` tells it to give an order's status in the `get_order`
+  result's own words with the order number (for example `<order number> was delivered on <date>`; placeholders,
+  so the prompt holds no order data, hard rule 2). That phrasing
+  carries no confirmation claim.
+- **The cost.** If the model still writes "your order was placed", the shopper sees `CONFIRMATION_SENTENCE`. That
+  fails closed.
+
 ## Row #30 note (2026-11-25)
 
 Approved by the user with the row #30 plan (`docs/reviews/2026-11-25-30-plan.md`, Q3 and the M1 and M2 fixes). They change

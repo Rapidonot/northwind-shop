@@ -25,6 +25,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from northwind_assistant.caller import Caller
 from northwind_assistant.catalog_client import CatalogEndpoint
+from northwind_assistant.orders_client import OrdersEndpoint
 from northwind_assistant.rag_client import RagEndpoint
 from northwind_assistant.source_cards import SourceCard
 from northwind_assistant.turn import Citations, Reset, TextDelta, TurnError, stream_answer
@@ -33,6 +34,7 @@ from northwind_common.cards import contains_card_data
 from northwind_common.llm import AgentRuntime, agent_runtime
 from northwind_common.localenv import mcp_catalog_url, mcp_rag_url
 from northwind_common.mcp_token import signing_key
+from northwind_common.order_tool import mcp_orders_url
 from northwind_gateway.settings import shopper_caller
 
 log = logging.getLogger(__name__)
@@ -97,6 +99,9 @@ class ChatServices:
     # Row #11 (RAG-04): query understanding for the first search. `chat_services` always sets it;
     # `None` only in gateway tests that predate #11.
     understand: Understander | None = None
+    # Row #27 (CHK-06): the signed-in shopper's orders. `chat_services` always sets it; a turn uses
+    # it only when the caller is signed in (`OrdersEndpoint.mint`).
+    orders: OrdersEndpoint | None = None
 
 
 @lru_cache(maxsize=1)
@@ -111,6 +116,7 @@ def chat_services() -> ChatServices:
         agent_runtime(),
         CatalogEndpoint(mcp_catalog_url(), key),
         Understander(),  # deadline and cache only when LLM_MODE=live (decision 0022)
+        orders=OrdersEndpoint(mcp_orders_url(), key),
     )
 
 
@@ -151,7 +157,13 @@ async def chat(
     failed = False
     try:
         async for event in stream_answer(
-            message, caller, services.rag, services.runtime, services.catalog, services.understand
+            message,
+            caller,
+            services.rag,
+            services.runtime,
+            services.catalog,
+            services.understand,
+            orders=services.orders,
         ):
             failed = failed or isinstance(event, TurnError)
             yield _event(event)

@@ -2,7 +2,7 @@
 
 Every server in `SERVERS`, every agent in `tool_scopes`: the token gate, scoping, the error
 envelope, and per tool the description rules and a closed schema, over each server's real tool
-registry. mcp-catalog joined at #10b.
+registry. mcp-catalog joined at #10b, mcp-orders at row #27 (CHK-06).
 """
 
 from __future__ import annotations
@@ -23,6 +23,9 @@ from northwind_common.tool_scopes import AGENT_AUDIENCE, AGENT_TOOLS, agents, al
 from northwind_mcp_catalog import testing as catalog_testing
 from northwind_mcp_catalog.server import SERVER_NAME as CATALOG
 from northwind_mcp_catalog.tools import TOOLS as CATALOG_TOOLS
+from northwind_mcp_orders import testing as orders_testing
+from northwind_mcp_orders.server import SERVER_NAME as ORDERS
+from northwind_mcp_orders.tools import TOOLS as ORDERS_TOOLS
 from northwind_mcp_rag import retrieve
 from northwind_mcp_rag.server import SERVER_NAME as RAG
 from northwind_mcp_rag.server import Backend, RagServer
@@ -40,6 +43,7 @@ READ_ONLY_TOOLS = frozenset(
         "get_variant",
         "check_stock",
         "get_price",
+        "get_order",  # row #27 (CHK-06): PRD §7 "get_order (own orders)"
     }
 )
 # Row #16 (CHK-01): PRD §7's "cart tools". `get_cart` reads; the three writes change only the
@@ -50,7 +54,19 @@ SHOPPER_TOOLS = READ_ONLY_TOOLS | CART_READ_TOOLS | CART_WRITE_TOOLS
 # Row #11 (RAG-04, decision 0022; approved by the user under stop 5): one server-only tool, outside
 # PRD §7's shopper set, granted to exactly one agent that no model holds. Read-only, IDs only.
 SERVER_ONLY_TOOLS: dict[str, str] = {"eligible_products": "shopper-query"}
-CALLER_KEYS = {"audience", "region", "agent", "aud", "visibility", "turn", "sid", "session_id"}
+CALLER_KEYS = {
+    "audience",
+    "region",
+    "agent",
+    "aud",
+    "visibility",
+    "turn",
+    "sid",
+    "session_id",
+    "shp",  # row #27: the signed-in shopper comes only from the token
+    "shopper",
+    "shopper_id",
+}
 
 
 def _unreachable() -> Any:
@@ -63,6 +79,7 @@ SERVERS: dict[str, tuple[Callable[[], Any], dict[str, Any]]] = {
         dict(retrieve.TOOLS),
     ),
     CATALOG: (lambda: catalog_testing.server(key=KEY), dict(CATALOG_TOOLS)),
+    ORDERS: (lambda: orders_testing.server(key=KEY), dict(ORDERS_TOOLS)),
 }
 TOOL_CASES = [(server, name) for server, (_, tools) in SERVERS.items() for name in tools]
 

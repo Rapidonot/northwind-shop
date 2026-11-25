@@ -27,6 +27,7 @@ from northwind_gateway.chat import (
 )
 from northwind_gateway.session import SessionMiddleware
 from northwind_gateway.settings import database_url
+from northwind_gateway.signin import router as signin_router
 
 # OpenTelemetry comes later: for now the per-answer line goes to stderr (RAG-13).
 _telemetry = logging.getLogger(TELEMETRY_LOGGER)
@@ -45,6 +46,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(title="Northwind gateway", lifespan=lifespan)
 app.include_router(router)
 app.include_router(cart_router)
+app.include_router(signin_router)  # row #27: the demo sign-in, behind NORTHWIND_DEMO_SIGNIN
 app.add_middleware(SessionMiddleware)
 app.add_exception_handler(RequestValidationError, invalid_request)
 app.add_exception_handler(CardNumberRefused, card_refused)

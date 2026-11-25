@@ -40,6 +40,16 @@ const catalogEnv = {
   MCP_CATALOG_URL: `http://127.0.0.1:${catalogPort}/mcp`,
 };
 
+// mcp-orders (row #27, CHK-06): the gateway attaches it only to a signed-in turn, and the browser
+// journeys are anonymous, so no request here reaches it. Started anyway, so every server the gateway
+// can attach runs in the browser tests (#12's lesson), and a signed-in journey can follow.
+const ordersPort = 18434;
+const ordersEnv = {
+  NORTHWIND_MCP_TOKEN_KEY: tokenKey,
+  MCP_ORDERS_PORT: String(ordersPort),
+  MCP_ORDERS_URL: `http://127.0.0.1:${ordersPort}/mcp`,
+};
+
 const model = scripted
   ? `uv run python services/assistant/e2e/scripted_model.py --port ${modelPort}`
   : "uv run python -m northwind_llm_replay.cli serve --suite assistant-smoke";
@@ -71,10 +81,17 @@ export default defineConfig({
       timeout: 120_000,
     },
     {
+      command: "uv run python -m northwind_mcp_orders.app",
+      port: ordersPort,
+      cwd: repo,
+      env: ordersEnv,
+      timeout: 120_000,
+    },
+    {
       command: "uv run uvicorn northwind_gateway.app:app --port 8000",
       port: 8000,
       cwd: repo,
-      env: { ...modelEnv, ...ragEnv, ...catalogEnv },
+      env: { ...modelEnv, ...ragEnv, ...catalogEnv, ...ordersEnv },
       timeout: 60_000,
     },
     { command: "./node_modules/.bin/vite --port 5173 --strictPort", port: 5173, cwd: here },

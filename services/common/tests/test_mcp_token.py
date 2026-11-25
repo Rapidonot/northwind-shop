@@ -229,11 +229,13 @@ def for_server(server: str) -> str:
     )[0]
 
 
-def test_the_servers_are_rag_and_catalog() -> None:
-    assert mcp_token.SERVERS == {"northwind-rag", "northwind-catalog"}
-    assert (mcp_token.RAG_SERVER, mcp_token.CATALOG_SERVER) == (
+def test_the_servers_are_rag_catalog_and_orders() -> None:
+    # Row #27 (CHK-06) adds northwind-orders, exactly.
+    assert mcp_token.SERVERS == {"northwind-rag", "northwind-catalog", "northwind-orders"}
+    assert (mcp_token.RAG_SERVER, mcp_token.CATALOG_SERVER, mcp_token.ORDERS_SERVER) == (
         "northwind-rag",
         "northwind-catalog",
+        "northwind-orders",
     )
     assert "srv" in mcp_token.CLAIMS
 
@@ -282,7 +284,9 @@ def test_a_token_without_srv_is_refused() -> None:
 
 
 @pytest.mark.parametrize(
-    "srv", ["northwind-orders", "", "NORTHWIND-RAG", None, 7, ["northwind-rag"]]
+    # Row #27: northwind-orders is a server now, so the unknown one is named for what it is.
+    "srv",
+    ["northwind-unknown", "", "NORTHWIND-RAG", None, 7, ["northwind-rag"]],
 )
 def test_an_unknown_srv_is_refused(srv: object) -> None:
     with pytest.raises(TokenError):
@@ -322,7 +326,7 @@ def test_minting_for_an_unknown_server_raises() -> None:
             agent="shopper-assistant",
             key=KEY,
             now=NOW,
-            server="northwind-orders",
+            server="northwind-unknown",
         )
 
 
