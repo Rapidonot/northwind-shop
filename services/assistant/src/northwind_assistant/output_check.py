@@ -797,8 +797,8 @@ def _negated(view: str, start: int) -> bool | None:
     before = view[max(0, start - 40) : start]
     if _NEGATED_ASIDE.search(before):
         return None  # a negation across an aside: unvouched, blocked at any stock level
-    for cut in _NEGATION_CUT.finditer(before):
-        before = before[cut.end() :]
+    cuts = list(_NEGATION_CUT.finditer(before))  # the last one only: each position is in `before`
+    before = before[cuts[-1].end() :] if cuts else before
     if _GOVERNING_NEGATION.search(before):
         return True
     return None if _NEGATION.search(before) else False

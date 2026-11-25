@@ -445,6 +445,9 @@ checked on its own, as it already was without a link before it (security review 
   for?") is still dropped whole. SA-04's questions are steered by the prompt instead.
 - **Class `stock`, security M-4 (the user, 2026-11-25):** "none left" and "no stock left" join it, vouched as "out of
   stock" is. "none" is held until the phrase is decided, and is never read as "one".
+- **Negation across two commas (the user, 2026-11-25; on main since row #12):** `_negated` cut the clause at each comma but
+  reused the original positions, so "…, …, is not in stock" lost its "not": it passed with units in stock (hard rule 2) and
+  was blocked when true. It now cuts once, at the last one. One of 522 recorded calls changes (IC-032, freed).
 - **Links (M2):** the match ends before the punctuation that ends its sentence, so the next sentence is checked on its own.
 - **Citation groups (M1):** `citation_parts` and `citation_ids` are the one reading (`,` and `;`) for the check, `turn.py`
   and the evals, mirrored in the portal. They live in `output_check.py` so the check's identity hash covers them.

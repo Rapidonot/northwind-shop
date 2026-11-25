@@ -227,3 +227,22 @@ FAILS  RT-003: the turn answered | E   AssertionError: assert 'x' == 'How much o
 FAILED services/assistant/tests/test_30_prompt.py::test_a_clarifying_answer_states_nothing_uncited
 FAILED services/assistant/tests/test_30_prompt.py::test_available_and_in_stock_are_words_for_a_live_check
 2 failed, 9 passed in 0.16s
+
+# _negated with two commas, failing first, at e26ce7b
+..FFFFFF..FFFFFF............FF.                                          [100%]
+=========================== short test summary info ============================
+FAILED services/assistant/tests/test_30_negation_cut.py::test_a_negated_claim_is_blocked_with_units_in_stock[The towel in Slate, Bath size, is not in stock.]
+FAILED services/assistant/tests/test_30_negation_cut.py::test_a_negated_claim_is_blocked_with_units_in_stock[The towel in Slate, Bath size, UK, is not in stock.]
+FAILED services/assistant/tests/test_30_negation_cut.py::test_a_negated_claim_is_blocked_with_units_in_stock[The towel in Slate, Bath size, isn't in stock.]
+FAILED services/assistant/tests/test_30_negation_cut.py::test_a_negated_claim_is_blocked_with_units_in_stock[The towel in Slate, Bath size, is not available.]
+FAILED services/assistant/tests/test_30_negation_cut.py::test_a_negated_claim_is_blocked_with_units_in_stock[The towel in Slate, Bath size, is no longer in stock.]
+FAILED services/assistant/tests/test_30_negation_cut.py::test_a_negated_claim_is_blocked_with_units_in_stock[No, the Halvardine Home Birch Towel in Slate, Bath Towel size, is not in stock in the UK right now.]
+FAILED services/assistant/tests/test_30_negation_cut.py::test_a_true_negated_claim_passes_at_zero[The towel in Slate, Bath size, is not in stock.]
+FAILED services/assistant/tests/test_30_negation_cut.py::test_a_true_negated_claim_passes_at_zero[The towel in Slate, Bath size, UK, is not in stock.]
+FAILED services/assistant/tests/test_30_negation_cut.py::test_a_true_negated_claim_passes_at_zero[The towel in Slate, Bath size, isn't in stock.]
+FAILED services/assistant/tests/test_30_negation_cut.py::test_a_true_negated_claim_passes_at_zero[The towel in Slate, Bath size, is not available.]
+FAILED services/assistant/tests/test_30_negation_cut.py::test_a_true_negated_claim_passes_at_zero[The towel in Slate, Bath size, is no longer in stock.]
+FAILED services/assistant/tests/test_30_negation_cut.py::test_a_true_negated_claim_passes_at_zero[No, the Halvardine Home Birch Towel in Slate, Bath Towel size, is not in stock in the UK right now.]
+FAILED services/assistant/tests/test_30_negation_cut.py::test_a_negated_range_is_a_stock_claim_across_commas_too[The towel in Slate, Bath size, is not available in sizes M and L.]
+FAILED services/assistant/tests/test_30_negation_cut.py::test_a_negated_range_is_a_stock_claim_across_commas_too[The towel in Slate, Bath size, isn't available in three colours.]
+14 failed, 17 passed in 0.53s
