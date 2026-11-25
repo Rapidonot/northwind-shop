@@ -462,6 +462,8 @@ PATTERNS: tuple[Pattern, ...] = (
         rf"colou?rs))?{_S}(?:left|remaining|in{_J}stock|available|on{_J}hand)\b",
     ),
     _p("stock", rf"\blimited{_S}(?:stock|availability|quantities|numbers)\b"),
+    #    Row #30, security M-4 (the user's approval, 2026-11-25): vouched as "out of stock" is.
+    _p("stock", rf"\b(?:none|no{_S}stock){_S}left\b", "live_stock"),
     #    More member-price wordings (#13b R4 left these to #12), class 1: no exemption.
     _p("promotion", rf"\bmembers?[\s-]{{1,3}}only{_S}(?:rates?|prices?|pricing|deals?|offers?)\b"),
     _p("promotion", rf"\bmember{_S}(?:rates?|deals?|offers?|savings?|exclusives?)\b"),
@@ -503,7 +505,7 @@ TRIGGER = re.compile(
     r"\$|£|€|avail|currently|still|loyal|usd|gbp|eur|aud|cad|price|cost|pound|grand|thousand|"
     r"million|few|handful|several|plenty|lots|loads|many|some|tons|limited|"
     r"look|give|check|want|like|shall|should|"
-    rf"code|\d|\bi['’\s]|\bwe['’\s]|\[|\+|\(|\b(?:{_SPELLED_WORDS}|hundred|dozen|night|out|only|low|half|clearance)\b"
+    rf"code|\d|\bi['’\s]|\bwe['’\s]|\[|\+|\(|\b(?:{_SPELLED_WORDS}|hundred|dozen|night|out|only|low|half|clearance|none)\b"
 )
 # A duration is a policy term only in a sentence that holds one of these stems (the user's list,
 # row #13): a reviewer's "after an hour of steady rain" is an experience, not a policy.
@@ -737,8 +739,10 @@ def _about_weight(view: str, start: int) -> bool:
 # What may follow a stock or money match at the end of a delta and still be continued: markers, then
 # at most a "." or "," (W1's decimal hold).
 _OPEN_TAIL = re.compile(r"[*_`]*[.,]?[*_`]*")
-_COUNT_IN = re.compile(rf"\d[\d,]*|{_SPELLED_COUNT}")
-_NEGATIVE = re.compile(rf"\bout{_J}of{_J}stock\b|\bsold{_J}out\b|\bunavailable\b")
+_COUNT_IN = re.compile(rf"\d[\d,]*|\b{_SPELLED_COUNT}")  # \b: "none" holds no "one"
+_NEGATIVE = re.compile(
+    rf"\bout{_J}of{_J}stock\b|\bsold{_J}out\b|\bunavailable\b|\b(?:none|no{_S}stock){_S}left\b"
+)
 _LOW = re.compile(r"\blow\b")
 
 

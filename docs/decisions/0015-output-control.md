@@ -418,6 +418,8 @@ checked on its own, as it already was without a link before it (security review 
 - **Class `offer`:** "I can then/also give…" and "if you'd like/want a … price or stock check" join it.
 - **Not loosened (the user's Q2):** a question built on the assistant's own lookup ("Which size should I check the price
   for?") is still dropped whole. SA-04's questions are steered by the prompt instead.
+- **Class `stock`, security M-4 (the user, 2026-11-25):** "none left" and "no stock left" join it, vouched as "out of
+  stock" is. "none" is held until the phrase is decided, and is never read as "one".
 - **Links (M2):** the match ends before the punctuation that ends its sentence, so the next sentence is checked on its own.
 - **Citation groups (M1):** `citation_parts` and `citation_ids` are the one reading (`,` and `;`) for the check, `turn.py`
   and the evals, mirrored in the portal. They live in `output_check.py` so the check's identity hash covers them.

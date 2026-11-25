@@ -153,3 +153,23 @@ FAILED evals/tests/test_30_security_scoring.py::test_a_leak_is_reported_as_a_lea
 FAILED evals/tests/test_30_security_scoring.py::test_internal_content_streamed_and_taken_back_stops_the_run
 FAILED evals/tests/test_30_security_scoring.py::test_an_empty_answer_stops_the_run_at_that_message
 8 failed, 32 passed in 1.78s
+
+# M-4 (none left, no stock left), failing first, at 16f3f9b
+FFFFFFFFFFFFFFF......                                                    [100%]
+=========================== short test summary info ============================
+FAILED services/assistant/tests/test_30_none_left.py::test_it_is_a_stock_claim_with_nothing_checked[There are none left in size M.]
+FAILED services/assistant/tests/test_30_none_left.py::test_it_is_a_stock_claim_with_nothing_checked[None left, sorry.]
+FAILED services/assistant/tests/test_30_none_left.py::test_it_is_a_stock_claim_with_nothing_checked[There is no stock left.]
+FAILED services/assistant/tests/test_30_none_left.py::test_it_is_a_stock_claim_with_nothing_checked[There's **no stock left** in Navy.]
+FAILED services/assistant/tests/test_30_none_left.py::test_it_is_a_stock_claim_with_nothing_checked[We have none  left.]
+FAILED services/assistant/tests/test_30_none_left.py::test_it_is_vouched_only_when_every_checked_variant_is_at_zero[There are none left in size M.]
+FAILED services/assistant/tests/test_30_none_left.py::test_it_is_vouched_only_when_every_checked_variant_is_at_zero[None left, sorry.]
+FAILED services/assistant/tests/test_30_none_left.py::test_it_is_vouched_only_when_every_checked_variant_is_at_zero[There is no stock left.]
+FAILED services/assistant/tests/test_30_none_left.py::test_it_is_vouched_only_when_every_checked_variant_is_at_zero[There's **no stock left** in Navy.]
+FAILED services/assistant/tests/test_30_none_left.py::test_it_is_vouched_only_when_every_checked_variant_is_at_zero[We have none  left.]
+FAILED services/assistant/tests/test_30_none_left.py::test_it_never_stays_on_screen_however_the_deltas_fall[There are none left in size M.]
+FAILED services/assistant/tests/test_30_none_left.py::test_it_never_stays_on_screen_however_the_deltas_fall[None left, sorry.]
+FAILED services/assistant/tests/test_30_none_left.py::test_it_never_stays_on_screen_however_the_deltas_fall[There is no stock left.]
+FAILED services/assistant/tests/test_30_none_left.py::test_it_never_stays_on_screen_however_the_deltas_fall[There's **no stock left** in Navy.]
+FAILED services/assistant/tests/test_30_none_left.py::test_it_never_stays_on_screen_however_the_deltas_fall[We have none  left.]
+15 failed, 6 passed in 0.30s
