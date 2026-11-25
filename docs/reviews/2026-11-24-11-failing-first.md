@@ -269,6 +269,12 @@ stopped under stop 5, and the user replied "re-pin approved".
 
 ## GitHub's python job at `92530a6`: `git show origin/main` with no history (fixed with the user's approval under stop 5)
 
+**The user's approval, word for word,** from the user's message of 2026-11-25 (headed "Advisor + user"):
+
+> Approved fix (stop 5, this row's own test): follow the repo's convention in evals/tests/test_rag08b_citations.py:118-121 and pytest.skip("origin/main is not available in this checkout") when the ref can't be resolved. Note in the test that eval-integrity-main covers the same add-only/vouch check in CI.
+
+The `advisor-reviewer` did not issue this approval; its reads are reviews, not approval.
+
 GitHub's `CI / python` job checks out without history, so `origin/main` does not exist there.
 `test_rag04_post_review_tw.py::test_every_new_frozen_vector_is_the_key_of_a_frozen_query` ran
 `git show origin/main:…` with `check=True` and failed every time.
@@ -282,9 +288,17 @@ E               subprocess.CalledProcessError: Command '['git', 'show', 'origin/
 1 failed in 1.57s
 ```
 
-**After the fix.** It follows `test_rag08b_citations.py`: the test calls `pytest.skip` when the ref cannot be resolved. A comment names
-the CI jobs that run the same check against main: `Guard / eval-integrity-main` for add-only, and the
-`CI / eval-gate` integrity step for vouching.
+**After the fix.** It follows `test_rag08b_citations.py`: the test calls `pytest.skip` when the ref cannot be resolved.
+
+**What the comment says about CI coverage.** GitHub runs a related but weaker check, not the same one:
+- `Guard / eval-integrity-main` refuses a changed or removed frozen vector (add-only).
+- `CI / eval-gate`'s integrity step vouches that every added vector belongs to a known chunk or a frozen query.
+  `_frozen_texts` also covers the fixture chunks.
+- No CI job enforces "only frozen queries, at most 5 new". That strict form runs wherever origin/main exists, as in a
+  local `make ci`.
+- The approval's note asked for "the same add-only/vouch check". The comment is corrected to say what CI actually
+  runs (the advisor's low at `2f3783d`).
+
 ```
 SKIPPED [1] evals/tests/test_rag04_post_review_tw.py:226: origin/main is not available in this checkout
 1 skipped in 1.06s

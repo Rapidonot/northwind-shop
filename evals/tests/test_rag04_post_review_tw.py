@@ -219,10 +219,11 @@ def test_every_new_frozen_vector_is_the_key_of_a_frozen_query() -> None:
     )
     if shown.returncode != 0:
         # The repo's convention (test_rag08b_citations.py): GitHub's python job has no origin/main;
-        # only the integrity jobs fetch history. In CI the same check runs there, against main:
+        # only the integrity jobs fetch history. There a related, weaker check runs against main:
         # `Guard / eval-integrity-main` (main's code) refuses a changed or removed frozen vector,
-        # and `CI / eval-gate`'s "Eval integrity" step vouches that every added one is a frozen
-        # query's vector.
+        # and `CI / eval-gate`'s "Eval integrity" step vouches that every added one is the vector
+        # of a known chunk or frozen query. The strict form (only frozen queries, at most 5 new)
+        # runs wherever origin/main exists, as in a local `make ci`.
         pytest.skip("origin/main is not available in this checkout")
     base = shown.stdout
     old = {json.loads(line)["key"] for line in base.splitlines() if line.strip()}
