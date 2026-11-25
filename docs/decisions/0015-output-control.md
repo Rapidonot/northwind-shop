@@ -420,7 +420,8 @@ The changed shown answers are re-judged in W6. Tests: `services/assistant/tests/
   has been confirmed" and "O000418 has been confirmed" are not: with the order number between them, the claim is held
   by the prompt only. Three recorded answers in `cassettes/assistant-orders/` say "Order <number> was placed on <date>",
   truthfully. The gap is older than this row, but this row's answers name order numbers. It was found after the decision
-  above. Proposed owner: Window B P6, NFR-03, awaiting the user.
+  above. Owner (the user, 2026-11-25): row #27's PR 2 (CHK-07), with D9: a stated order status must match this
+  turn's `get_order` result. Not NFR-03, which decision 0021 cut.
 - **What the assistant does instead.** `ORDERS_RULES` tells it to give an order's status in the `get_order`
   result's own words with the order number (for example `<order number> was delivered on <date>`; placeholders,
   so the prompt holds no order data, hard rule 2). That phrasing

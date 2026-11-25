@@ -51,7 +51,8 @@ but no shopper, so "own orders" had no meaning. Accounts (SA-04) are not built.
    - "Your order was placed / has been confirmed" stays blocked on every turn, signed in or not. `output_check.py` is
      main's.
    - The same claim with the order number between the noun and the verb ("Order O000418 has been confirmed") is not
-     blocked on any turn. It is held by the prompt only (decision 0015's row #27 note).
+     blocked on any turn. It is held by the prompt only (decision 0015's row #27 note). Owner: PR 2 (CHK-07), with D9:
+     a stated order status must match this turn's `get_order` result (the user, 2026-11-25).
    - The assistant gives the status in the result's own words with the order number (`ORDERS_RULES`).
    - An exemption bound to the named order was tried and dropped after three security passes.
 
