@@ -897,8 +897,10 @@ _SYSTEM_TEXT = re.compile(
     r"|\b(?:system|assistant|developer|admin|ai|bot)\]?\s?:|\b(?:ignore|disregard|override|bypass|"
     r"forget|break) (?:(?:your|all|any|of|the|previous|prior|above|earlier|system|safety) ){0,5}"
     r"(?:instructions?|prompts?|guidelines|guardrails|restrictions|rules|filters?)\b"
-    r"|\b(?:ignore|disregard|override|bypass|forget) (?:your|previous|prior|the above|"
-    r"everything|what you)\b|\byour (?:system |hidden |initial |original |secret )?(?:prompt|"
+    r"|\b(?:ignore|disregard|override|bypass|forget) (?:your|previous|prior|the above|everything|"
+    r"(?:what|whatever|anything|all) you)\b|\byou (?:were|are|have been) told\b"
+    r"|\b(?:speak|answer|respond|reply|behave) as (?:an? |the )?(?:owner|admin\w*|manager|"
+    r"developer|engineer|system)\b|\byour (?:system |hidden |initial |original |secret )?(?:prompt|"
     r"instructions(?! (?:for|on)))\b"
     r"|\bsystem (?:prompt|message|note|override)\b|\bnew instructions\b|\byou are now\b|jailbreak"
     r"|\b(?:developer|debug|admin|god) mode\b|\bpretend (?:to be|you)\b|\bfrom now on you\b"
@@ -915,7 +917,9 @@ _CALLER_WORDS = re.compile(
 # Words typical of one index, used for something else.
 _NEUTRAL = re.compile(
     r"\bheavy[- ]duty\b|\breturning (?:customer|shopper|favou?rite)\b|\breturn (?:trip|flight)\b|"
-    r"\bin order to\b|\bsoft[- ]?shell\b|\bsweat[- ]wick\w*|\bfeel free\b|\bworth (?=paying)",
+    r"\bin order to\b|\bsoft[- ]?shell\b|\bsweat[- ]wick\w*|\bfeel free\b|\bworth (?=paying)|"
+    r"(?<=worth )the (?:price|money|cost)\b|"
+    r"\bpaying for (?:an? |the )?(?:\w+ )?(?:label|name|brand|logo)\b",
     re.IGNORECASE,
 )
 _RATED = re.compile(
@@ -954,14 +958,18 @@ customer (?:care|service|support)|phone number|live chat|opening hours|in[- ]sto
 are you (?:an? )?(?:ai|bot|human|person)|faulty|defective|damaged
 replac(?:e|ed|ement)|(?:doesn't|don't) suit
 (?:hasn't|haven't|never|not) (?:come|turned up|shown up)|missing (?:item|part|button|parcel)
-wrong (?:item|one|size|colou?r|product)"""
+wrong (?:item|one|size|colou?r|product)|fix(?:es|ed|ing)?|mend(?:s|ed|ing)?|cards?
+porch|doorstep|neighbou?rs?|sign(?:s|ed|ing|ature)? for|left (?:on|at|with|outside|by)
+(?:be|is|am|are) (?:i |we |it |they )?covered|(?:get|send) (?:it|them|this|one) to|be with (?:me|us)
+(?:get|come|reach|have|here|make)\b[^,.;?!]{0,30}\b(?:by|before) (?:the weekend|\w+day)"""
 )
 # Reviews as a feature of the shop, "review" as a verb, a formal complaint.
 _REVIEW_POLICY = _cue(
     r"""(?:leave|write|post|submit|edit|delete|remove|add)\b[^,.;?!]{0,20}\breviews?
 review (?:my|our|this|the|an?) (?:order|refund|return|request|case|claim|product|item)
 my reviews?|reviews? (?:policy|real|fake|verified|moderated|checked|appear|published)
-under review|(?:i|i've) reviewed|(?:make|file|raise) a complaint"""
+under review|(?:i|i've) reviewed|(?:where|how) (?:do|can|should) i (?:go to )?(?:rate|review)
+(?:make|file|raise) a complaint"""
 )
 _WHO = (
     r"(?:people|customers?|shoppers?|buyers?|owners?|wearers?|users|folks?|others|every(?:one|body)|"
@@ -970,7 +978,9 @@ _WHO = (
 _VOICES = _cue(
     rf"""reviews?|reviewers?|reviewed|testimonials?|feedback|ratings?|rated|stars?|opinions?
 complaints?|thoughts|consensus|verdict|according to|(?:has|have) any(?:one|body)
-how (?:happy|satisfied) (?:are|were)|(?:best|most|well|highly)[- ]?(?:loved|liked|recommended)
+how (?:happy|satisfied) (?:are|were)|what (?:bug|bugs|bugged|annoy\w*|put|puts) (?:them|people|you)
+why (?:do|did|are|have) {_WHO}(?:send|sending|return\w*|give up|dislike)
+(?:best|most|well|highly)[- ]?(?:loved|liked|recommended)
 {_WHO}(?:say|said|saying|think|thinks|thought|find|finds|found|complain\w*|mention\w*
 report\w*|notic\w*|feel|felt|rate|recommend\w*|prefer|regret\w*|experienc\w*|tried|happy
 unhappy|satisfied|disappointed|impressed|pleased|reckon|rave|love|hate|agree)"""
@@ -999,6 +1009,7 @@ shed(?:s|ding)?(?! (?:water|rain|light))|sweat(?:y|s|ing)?|clammy|overheat\w*|se
 sheer|opaque|jam(?:s|med|ming)?|snag\w*|fray\w*|unravel\w*|sag(?:s|gy|ging)?
 zip\w*\b[^,.;?!]{0,30}\b(?:stick\w*|catch\w*|break\w*|broke|smooth\w*|fail\w*)
 (?:lose|loses|keep|keeps|hold|holds) (?:its|their) shape|stretch(?:es)? out|fad(?:e|es|ed|ing)
+bagg(?:y|ing|ed)|still looks?
 wears? (?:well|out|over|thin|down)|how (?!old)[^,.;?!]{0,40}\b(?:wears?|ages?)
 ag(?:e|es) (?:well|badly)
 (?:go|goes|get|gets|turn|turns) (?:all )?(?:baggy|lumpy|hard|limp|flat|fuzzy|thin)|age?ing
@@ -1065,13 +1076,15 @@ has (?:gone|split|come off)|turned up with|stained|poor"""
 # A clause ends at a sentence end, or at a comma or joiner before the start of a new ask.
 _INVERTED = (
     r"(?:(?:what|how|which|when|where|why|who)(?:'?s|'?re| (?:is|are|do|does|did|can|will|would|"
-    r"should|long|much|big|heavy|warm|about|size))|(?:can|could|do|does|is|are|will|would|should|"
+    r"should|long|much|big|heavy|warm|about|size))|am i|"
+    r"(?:can|could|do|does|is|are|will|would|should|"
     r"did) (?:i|it|they|you|the|this|that|these|those|we|your|my|anyone|people|customers|there|"
     r"reviewers|buyers|shoppers|returns)|(?:has|have) (?:anyone|anybody|people|customers)|any)\b"
 )
 _STARTER = (
     rf"(?:{_INVERTED}|(?:what|how|which|when|where|why|is|are|do|does|can|could|will|tell|show|"
-    r"give|find|recommend|suggest|compare|just|now|if|need|want|looking|i|i'm|i'd|i've|we|my|also|"
+    r"give|find|recommend|suggest|compare|just|now|if|need|want|looking|it|they|"
+    r"i|i'm|i'd|i've|we|my|also|"
     r"plus|thanks)\b)"
 )
 _BOUNDARY = re.compile(
@@ -1082,14 +1095,16 @@ _BOUNDARY = re.compile(
 _STARTS = re.compile(_STARTER, re.IGNORECASE)
 _INVERTED_START = re.compile(rf"\b{_INVERTED}", re.IGNORECASE)
 _REQUEST = _cue(
-    r"""tell|show|give|help|explain|compare|let me know|please|pls|(?:to|you|me) find|find me
+    r"""tell|show|^give|(?:please|can you|could you) give|help|explain|compare
+let me know|please|pls|(?:to|you|me) find|find me
 rec+om+end\w*|suggest\w*|how (?:do|does|can|is|are|long|much|many)
 i (?:want|need|would like|wonder)|i'd (?:like|love)|wonder\w*|looking for|i'm after|need|want
 wanna|worried|concerned|curious|not sure|unsure|can't (?:find|decide)|don't know|question"""
 )
 _PERSONAL = re.compile(
     r"(?:(?:hi|hey|hello|ok|so|well|and|but|also|yes|because|as)[ ,]+)?"
-    r"(?:i|i'm|i've|we|we've|it|they|he|she|my|our|the last|last \w+|this is|thinking|"
+    r"(?:i|i'm|i've|we|we've|it|they|he|she|my|our|sent|bought|got|returned|ordered|the last|"
+    r"last \w+|this is|thinking|"
     r"the (?:parcel|order|delivery)|"
     r"the (?:\w+ )?(?:label|page|description|site|size chart|size guide) (?:says|said|states))\b",
     re.IGNORECASE,
@@ -1097,7 +1112,9 @@ _PERSONAL = re.compile(
 _KNOWN = _cue(
     r"(?:i|we)(?:'ve| have)? (?:already|know|read|saw|seen|checked|understand|love|like|find)"
 )
-_LEADING_IF = _cue(r"if|when i\w*|once|since|because|although|even though|while")
+_LEADING_IF = _cue(
+    r"(?:and |but )?supposing|if|when i\w*|once|since|because|although|even though|while"
+)
 _THANKS = re.compile(
     r"\b(?:thanks|thank you|thx|cheers)\b[^?.!,;]{0,60}(?=[.!,;]|$)", re.IGNORECASE
 )
@@ -1122,7 +1139,8 @@ _NAMED_ITEM = re.compile(r"\bthe [A-Z][a-z]+ [A-Z][a-z]+")
 # One-letter typos of common cue words: both sides lose one letter and meet.
 _TYPO_WORDS = frozenset(
     """return returns refund exchange shipping delivery delivered review reviews reviewers
-    waterproof material comfortable scratchy washable washing machine breathable recommend
+    complaint complaints waterproof material comfortable scratchy washable washing machine
+    breathable recommend
     jacket jackets fleece sweater blanket available discount payment warranty customers""".split()
 )
 _TYPO_KEEP = frozenset("shopping slipping skipping snipping".split())
@@ -1144,11 +1162,19 @@ def _fix_typo(m: re.Match[str]) -> str:
     return next((hit for hit in hits if hit[:1] == word[0]), m.group(0))
 
 
+# A plain statement beside a question is background ("Washing it is easy. But does it …?").
+_STATEMENT = re.compile(r"\b(?:is|are|was|were|has|had|gave|went|came)\b", re.IGNORECASE)
+
+
 def _asks(clauses: Sequence[str]) -> list[str]:
     """The clauses that ask, without what the shopper tells ("I already read the reviews")."""
     asks: list[str] = []
+    asked = any(clause.endswith("?") for clause in clauses)
     for clause in clauses:
         question = clause.endswith("?")
+        stated = _STATEMENT.search(clause) and not _INVERTED_START.search(clause)
+        if asked and not question and stated and not _REQUEST.search(clause):
+            continue
         known = bool(_KNOWN.match(clause))
         if known and not question:
             continue
