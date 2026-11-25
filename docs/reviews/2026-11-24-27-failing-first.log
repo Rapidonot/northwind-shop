@@ -300,3 +300,25 @@ $ LLM_MODE=replay uv run pytest -p no:cacheprovider -q services/assistant/tests/
 36 passed, 6 deselected in 45.37s
 $ LLM_MODE=replay uv run pytest -p no:cacheprovider -q services/assistant/tests/test_chk06_orders_attached.py
 18 passed in 13.67s
+
+## 2026-11-25T05:17:15Z stop 5, the user's option A: the recorded in_transit answer wrote 'in_transit' and the wording check wanted a space; the status bans missed underscored codes too. Tests first (281bc82, 11 new cassettes uncommitted)
+$ LLM_MODE=replay uv run pytest -p no:cacheprovider -q services/assistant/tests/test_orders_journey_e2e.py
+FAILED test_orders_journey_e2e.py::test_a_right_answer_in_the_results_own_spelling_passes[in_transit-Order O000928: its status is in_transit. Last scan 2026-10-16: in_transit.]
+FAILED test_orders_journey_e2e.py::test_a_wrong_answer_fails_its_scenario[label_created_no_scans-The label for O000406 was made; its status is in_transit.]
+FAILED test_orders_journey_e2e.py::test_a_wrong_answer_fails_its_scenario[label_created_no_scans-O000406 has a label_created status. It was picked_up.]
+FAILED test_orders_journey_e2e.py::test_a_wrong_answer_fails_its_scenario[another_shoppers_order-I couldn't find O000001, but its status is on_hold.]
+FAILED test_orders_journey_e2e.py::test_a_wrong_answer_fails_its_scenario[another_shoppers_order-I couldn't find O000001; it is not yet in_transit.]
+FAILED test_orders_journey_e2e.py::test_a_wrong_answer_fails_its_scenario[another_shoppers_order-I couldn't find O000001, only a label_created status.]
+FAILED test_orders_journey_e2e.py::test_a_wrong_answer_fails_its_scenario[no_order_number-What's your order number? Its status is on_hold.]
+FAILED test_orders_journey_e2e.py::test_a_wrong_answer_fails_its_scenario[no_order_number-What's your order number? It is not yet in_transit.]
+FAILED test_orders_journey_e2e.py::test_a_wrong_answer_fails_its_scenario[no_order_number-What's your order number? The last scan is out_for_delivery.]
+FAILED test_orders_journey_e2e.py::test_a_wrong_answer_fails_its_scenario[no_order_number-What's your order number? The last scan is picked_up.]
+FAILED test_orders_journey_e2e.py::test_a_wrong_answer_fails_its_scenario[no_order_number-What's your order number? It is label_created.]
+11 failed, 39 passed, 6 deselected in 64.64s (0:01:04)
+## 2026-11-25T05:21:05Z after: the status and wording checks read _ as a space; private values still on the exact answer (a token case added)
+$ LLM_MODE=replay uv run pytest -p no:cacheprovider -q -ra services/assistant/tests/test_orders_journey_e2e.py
+51 passed, 6 deselected in 65.43s (0:01:05)
+$ LLM_MODE=replay uv run pytest -p no:cacheprovider -q -ra -m "" --llm-suite assistant-orders services/assistant/tests/test_orders_journey_e2e.py
+6 passed, 51 deselected in 9.28s
+$ LLM_MODE=replay uv run pytest -p no:cacheprovider -q -ra -m "" --llm-suite assistant-orders services/assistant/tests/test_orders_journey_e2e.py
+6 passed, 51 deselected in 9.17s

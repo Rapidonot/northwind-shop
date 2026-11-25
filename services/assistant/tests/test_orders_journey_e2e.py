@@ -234,14 +234,17 @@ SCENARIOS: dict[str, Scenario] = {
 
 def check(scenario: Scenario, turn: Turn) -> None:
     answer = turn.answer.replace("’", "'")
-    assert re.search(scenario.says, answer, re.I), answer
+    # The status and wording checks read a status code as its words ("in_transit", "in transit").
+    # The private values are looked for in the exact answer.
+    words = answer.replace("_", " ")
+    assert re.search(scenario.says, words, re.I), answer
     # Nothing was replaced by the output check: the scenario is the answer the model gave.
     assert not [s for s in FIXED_SENTENCES.values() if s in turn.answer], turn.answer
 
     if scenario.order_id is None:
         assert turn.reads == [] and turn.tool_calls == 0
         assert "?" in answer
-        assert not STATUS_WORDS.search(answer) and not dates_in(answer), answer
+        assert not STATUS_WORDS.search(words) and not dates_in(answer), answer
         return
 
     assert turn.reads, "get_order was never called"
@@ -249,7 +252,7 @@ def check(scenario: Scenario, turn: Turn) -> None:
         assert _rows("orders.jsonl")[scenario.order_id]["shopper_id"] != SHOPPER
         assert {r[:3] for r in turn.reads} == {(scenario.order_id, SHOPPER, REGION)}
         assert {r[3] for r in turn.reads} == {"not_found"}
-        assert not STATUS_WORDS.search(answer) and not dates_in(answer), answer
+        assert not STATUS_WORDS.search(words) and not dates_in(answer), answer
         for value in _private_values(scenario.order_id, with_order=True):
             assert value not in turn.answer, value
         return
@@ -261,7 +264,7 @@ def check(scenario: Scenario, turn: Turn) -> None:
     assert dates_in(answer) <= result_dates(expected), (dates_in(answer), answer)
     for value in _private_values(scenario.order_id, with_order=False):
         assert value not in turn.answer, value
-    for sentence in re.split(r"(?<=[.;!?])\s+", answer):
+    for sentence in re.split(r"(?<=[.;!?])\s+", words):
         if re.search(rf"\b(?:{NOT_YET.get(scenario.status, '$^')})\b", sentence, re.I):
             # only ever to say it has not happened, in that same sentence
             assert re.search(r"n't\b|\b(?:not|no|once|until|before)\b", sentence, re.I), answer
@@ -273,7 +276,7 @@ def check(scenario: Scenario, turn: Turn) -> None:
         # The reason is in no result and no answer, in the code's words or a shopper's.
         assert label["expected_reason"] not in json.dumps(turn.reads)
         assert not re.search(
-            r"out[ _-]of[ _-]stock|stock|sold out|unavailable|inventory|escalat", answer, re.I
+            r"out[ _-]of[ _-]stock|stock|sold out|unavailable|inventory|escalat", words, re.I
         ), answer
 
 
@@ -320,12 +323,28 @@ BAD = [
     ("on_hold", f"{ON_HOLD} is on hold because an item is out of stock."),
     ("on_hold", f"{ON_HOLD} is on hold: it was escalated to a person."),
     ("on_hold", f"{ON_HOLD} is on hold. A person will ship it to US-3391."),
+    ("on_hold", f"{ON_HOLD} is on hold. A person has tok_sandbox_ok_0188."),
     ("another_shoppers_order", f"I couldn't find {NOT_THEIRS}, but it was picked up."),
     ("another_shoppers_order", "I couldn't find it. It was with Fernway Freight."),
     ("another_shoppers_order", f"I couldn't find {NOT_THEIRS}, placed on 11 October."),
     ("no_order_number", "What's your order number? O000800 was delivered on 26 October."),
     ("no_order_number", "Please give me your order number? It is on its way."),
     ("no_order_number", "I can't look that up."),
+    # Underscored status codes: the same statement, in the result's own spelling.
+    ("in_transit", f"{IN_TRANSIT} was in_transit. Its status is out_for_delivery."),
+    (
+        "label_created_no_scans",
+        f"The label for {LABEL_CREATED} was made; its status is in_transit.",
+    ),
+    ("label_created_no_scans", f"{LABEL_CREATED} has a label_created status. It was picked_up."),
+    ("another_shoppers_order", f"I couldn't find {NOT_THEIRS}, but its status is on_hold."),
+    ("another_shoppers_order", f"I couldn't find {NOT_THEIRS}; it is not yet in_transit."),
+    ("another_shoppers_order", f"I couldn't find {NOT_THEIRS}, only a label_created status."),
+    ("no_order_number", "What's your order number? Its status is on_hold."),
+    ("no_order_number", "What's your order number? It is not yet in_transit."),
+    ("no_order_number", "What's your order number? The last scan is out_for_delivery."),
+    ("no_order_number", "What's your order number? The last scan is picked_up."),
+    ("no_order_number", "What's your order number? It is label_created."),
 ]
 
 
@@ -343,6 +362,23 @@ def scripted(name: str, answer: str, root: Path, *, call: str | None) -> Turn:
 def test_a_right_answer_passes_its_scenario(name: str, tmp_path: Path) -> None:
     scenario = SCENARIOS[name]
     check(scenario, scripted(name, GOOD[name], tmp_path, call=scenario.order_id))
+
+
+UNDERSCORED = [
+    (
+        "in_transit",
+        f"Order {IN_TRANSIT}: its status is in_transit. Last scan 2026-10-16: in_transit.",
+    ),
+    ("label_created_no_scans", f"{LABEL_CREATED} is label_created. It is not yet in_transit."),
+    ("on_hold", f"{ON_HOLD}: its status is on_hold. A person is looking at it."),
+]
+
+
+@pytest.mark.parametrize(("name", "answer"), UNDERSCORED)
+def test_a_right_answer_in_the_results_own_spelling_passes(
+    name: str, answer: str, tmp_path: Path
+) -> None:
+    check(SCENARIOS[name], scripted(name, answer, tmp_path, call=SCENARIOS[name].order_id))
 
 
 @pytest.mark.parametrize(("name", "answer"), BAD)
