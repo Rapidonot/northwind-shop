@@ -37,6 +37,7 @@ from ._driver import (
     World,
     first_of,
     lines_of,
+    model_text,
     plain_transcript,
     run,
     script_care,
@@ -260,7 +261,7 @@ def test_card_data_in_the_transcript_never_reaches_the_model(tmp_path: Path) -> 
     with ScriptedLLM() as llm:
         script_care(llm, order["order_id"], GOOD)
         result = run(world, task, llm, tmp_path)
-        bodies = json.dumps([r["body"] for r in llm.requests])
+        bodies = model_text(llm.requests)  # what the model reads, not the CLI's metadata (row #27)
     digits = TEST_PAN.replace(" ", "")
     assert TEST_PAN not in bodies and digits not in bodies
     assert WITHHELD in bodies
@@ -466,7 +467,7 @@ def test_a_split_card_never_reaches_the_model_end_to_end(
     with ScriptedLLM() as llm:
         script_care(llm, order["order_id"], GOOD)
         result = run(world, CareTask(order["order_id"], tuple(turns)), llm, tmp_path)
-        bodies = json.dumps([r["body"] for r in llm.requests], ensure_ascii=False)
+        bodies = model_text(llm.requests)  # what the model reads, not the CLI's metadata (row #27)
     assert result.case is not None
     assert "4111" not in bodies and "1111" not in bodies
     assert TEST_PAN.replace(" ", "") not in "".join(ch for ch in bodies if ch.isdigit())

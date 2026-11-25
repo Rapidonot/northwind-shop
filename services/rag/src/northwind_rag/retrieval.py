@@ -18,6 +18,13 @@ competitor: AND would match almost nothing on a natural question.
 `region` is an array column, so the region filter is `&&`, and the visibility filter stays because
 internal documents have region ALL (hard rule 7).
 
+Row #11 (RAG-04, decision 0022): `retrieve_planned` runs a query plan's parts. Each part may narrow
+by colour and size, through the index's metadata arrays (a chunk where the attribute does not apply,
+NULL, passes), and by a live product allow-list (`SearchFilter.products`), which the caller resolved
+from live price and stock (hard rule 2): product, variant and review chunks are kept only for those
+products, and documents pass. With no filter the statement returns what it always did. Several parts
+are fused by reciprocal rank over their chunk lists, the same `rrf_fuse` as the two arms.
+
 The dense order does not depend on the CPU (decision 0012, the PR #30 drift). pgvector's `<=>` is a
 float32 sum whose order varies by platform, so the SQL only picks a pool of `RERANK_FACTOR` times
 the candidates needed, with their exact float32 vectors. Python then ranks the pool by
@@ -44,7 +51,7 @@ from northwind_rag.store import vector_literal
 Audience = Literal["shopper", "staff"]
 ShopperRegion = Literal["US", "CA", "UK", "EU"]
 
-RETRIEVER_VERSION = 2
+RETRIEVER_VERSION = 3  # row #11: query-plan filters and parts (RAG-04)
 CONTEXT_K = 5
 RRF_K = 60
 CANDIDATE_DEPTH = 50
@@ -57,7 +64,12 @@ SHOPPER_REGIONS: frozenset[str] = frozenset(get_args(ShopperRegion))
 _VISIBLE: dict[str, tuple[str, ...]] = {"shopper": ("public",), "staff": ("public", "internal")}
 
 _FILTER = """visibility = ANY(%(visible)s)
-  AND (%(regions)s::text[] IS NULL OR region && %(regions)s::text[])"""
+  AND (%(regions)s::text[] IS NULL OR region && %(regions)s::text[])
+  AND (%(colours)s::text[] IS NULL OR colour IS NULL OR colour && %(colours)s::text[])
+  AND (%(sizes)s::text[] IS NULL OR size IS NULL OR size && %(sizes)s::text[])
+  AND (%(products)s::text[] IS NULL OR source_type = 'document'
+       OR (CASE WHEN source_type = 'product' THEN source_id ELSE parent_id END)
+          = ANY(%(products)s::text[]))"""
 
 # `plainto_tsquery` ANDs the lexemes; its text form quotes each one, so swapping the operator and
 # casting back cannot inject query syntax. A query of stop words only is empty and matches nothing.
@@ -109,6 +121,19 @@ SELECT 'keyword' AS arm, chunk_id, source_type, source_id, doc_type, text,
     NULL::float8, NULL::float8[]
 FROM keyword
 """  # noqa: S608 - constants only; every value is bound
+
+
+@dataclass(frozen=True)
+class SearchFilter:
+    """What one part of a query plan narrows to (row #11). None means no filter on that field.
+    `products` is a live allow-list the caller resolved from price and stock, never the index."""
+
+    colours: tuple[str, ...] | None = None
+    sizes: tuple[str, ...] | None = None
+    products: frozenset[str] | None = None
+
+
+NO_FILTER = SearchFilter()
 
 
 @dataclass(frozen=True)
@@ -210,8 +235,17 @@ def _check(audience: str, k: int) -> None:
         raise ValueError("k must be at least 1")
 
 
-def _params(audience: Audience, regions: list[str] | None, k: int) -> dict[str, object]:
-    return {"visible": list(_VISIBLE[audience]), "regions": regions, "k": k}
+def _params(
+    audience: Audience, regions: list[str] | None, k: int, narrow: SearchFilter = NO_FILTER
+) -> dict[str, object]:
+    return {
+        "visible": list(_VISIBLE[audience]),
+        "regions": regions,
+        "k": k,
+        "colours": None if narrow.colours is None else list(narrow.colours),
+        "sizes": None if narrow.sizes is None else list(narrow.sizes),
+        "products": None if narrow.products is None else sorted(narrow.products),
+    }
 
 
 def _dense(
@@ -258,13 +292,14 @@ def _hybrid(
     audience: Audience,
     regions: list[str] | None,
     k: int,
+    narrow: SearchFilter = NO_FILTER,
 ) -> list[RetrievedChunk]:
     _check(audience, k)
     [vector] = embedder.embed([query])
     # Never fewer candidates than asked for, so a large `k` still sees every match.
     depth = max(CANDIDATE_DEPTH, k)
     params = {
-        **_params(audience, regions, k),
+        **_params(audience, regions, k, narrow),
         "vector": vector_literal(vector),
         "query": query,
         "depth": depth,
@@ -339,3 +374,28 @@ def retrieve_context(
     (hard rule 7)."""
     regions = _regions(region, audience)
     return _hybrid(conn, embedder, query, audience=audience, regions=regions, k=k)
+
+
+def retrieve_planned(
+    conn: psycopg.Connection,
+    embedder: Embedder,
+    parts: Sequence[tuple[str, SearchFilter]],
+    *,
+    region: ShopperRegion | None,
+    audience: Audience = "shopper",
+    k: int = CONTEXT_K,
+) -> list[RetrievedChunk]:
+    """A query plan's search (row #11, RAG-04): each part's hybrid search under its own filter, the
+    parts fused by reciprocal rank, the top `k`. One part with no filter is `retrieve_context`
+    exactly. `audience` and `region` come from the caller, never from the plan (hard rule 7)."""
+    if not 1 <= len(parts) <= 3:
+        raise ValueError("a plan has one to three parts")
+    regions = _regions(region, audience)
+    found = [
+        _hybrid(conn, embedder, text, audience=audience, regions=regions, k=k, narrow=narrow)
+        for text, narrow in parts
+    ]
+    if len(found) == 1:
+        return found[0]
+    chunks = {c.chunk_id: c for result in found for c in result}
+    return [chunks[i] for i in rrf_fuse([[c.chunk_id for c in r] for r in found])[:k]]

@@ -1,5 +1,5 @@
 {
-  "answerer_id": "assistant:v1:claude-sonnet-5-5:prompt-95d4b694:check-74c8ba9d",
+  "answerer_id": "assistant:v1:claude-sonnet-5-5:prompt-95d4b694:check-a1e0e605",
   "answers": {
     "EV-001": {
       "behaviour_ok": 1.0,
@@ -246,7 +246,7 @@
       "citation_ok": 1.0,
       "fabricated_ok": 1.0,
       "false_refusal": 0.0,
-      "groundedness": 1.0,
+      "groundedness": 0.875,
       "relevance": 1.0
     },
     "EV-032": {
@@ -278,7 +278,7 @@
       "citation_ok": 1.0,
       "fabricated_ok": 1.0,
       "false_refusal": 0.0,
-      "groundedness": 0.833333,
+      "groundedness": 0.857143,
       "relevance": 1.0
     },
     "EV-036": {
@@ -1456,10 +1456,10 @@
     },
     "EV-190": {
       "behaviour_ok": 1.0,
-      "citation_ok": 0.0,
+      "citation_ok": 1.0,
       "fabricated_ok": 1.0,
       "false_refusal": 0.0,
-      "groundedness": 1.0,
+      "groundedness": 0.833333,
       "relevance": 1.0
     },
     "EV-191": {
@@ -2480,11 +2480,11 @@
     },
     "EV-029": {
       "mrr": 0.5,
-      "recall@10": 0.5,
+      "recall@10": 1.0,
       "recall@5": 0.5
     },
     "EV-030": {
-      "mrr": 0.25,
+      "mrr": 0.333333,
       "recall@10": 1.0,
       "recall@5": 1.0
     },
@@ -3414,7 +3414,7 @@
       "recall@5": 0.5
     }
   },
-  "retriever_id": "hybrid:v2:rrf60:d50:fts-text-english:fastembed:BAAI/bge-small-en-v1.5:384",
+  "retriever_id": "hybrid:v3:rrf60:d50:fts-text-english:fastembed:BAAI/bge-small-en-v1.5:384",
   "segments": {
     "EV-001": "specification",
     "EV-002": "specification",
@@ -3754,19 +3754,19 @@
       },
       "intent_filter": {
         "behaviour_ok": 0.945946,
-        "citation_ok": 0.918919,
+        "citation_ok": 0.945946,
         "fabricated_ok": 1.0,
         "false_refusal": 0.0,
-        "groundedness": 0.981017,
+        "groundedness": 0.973777,
         "n": 37,
         "relevance": 0.648649
       },
       "overall": {
         "behaviour_ok": 0.977273,
-        "citation_ok": 0.977273,
+        "citation_ok": 0.980519,
         "fabricated_ok": 0.983766,
         "false_refusal": 0.009302,
-        "groundedness": 0.977082,
+        "groundedness": 0.976048,
         "n": 308,
         "relevance": 0.926948
       },
@@ -3814,15 +3814,15 @@
         "recall@5": 0.985714
       },
       "intent_filter": {
-        "mrr": 0.63314,
+        "mrr": 0.635393,
         "n": 37,
-        "recall@10": 0.846847,
+        "recall@10": 0.86036,
         "recall@5": 0.662162
       },
       "overall": {
-        "mrr": 0.888726,
+        "mrr": 0.889114,
         "n": 215,
-        "recall@10": 0.964341,
+        "recall@10": 0.966667,
         "recall@5": 0.930233
       },
       "policy": {

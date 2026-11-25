@@ -176,7 +176,9 @@ CART_WRITES = {"add_to_cart", "remove_from_cart", "set_cart_quantity"}
 
 
 def test_the_server_serves_exactly_the_five_tools() -> None:
-    assert set(TOOLS) == FIVE | CART
+    # Row #11 (RAG-04; approved under stop 5): plus `eligible_products`, read-only, for
+    # `shopper-query` only (tests/mcp/test_contract.py).
+    assert set(TOOLS) == FIVE | CART | {"eligible_products"}
     writes = {
         name
         for name, spec in TOOLS.items()

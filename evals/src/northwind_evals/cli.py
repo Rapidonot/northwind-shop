@@ -112,6 +112,7 @@ from northwind_rag.retrieval import (
     dense_search,
     keyword_search,
     retrieve_context,
+    retrieve_planned,
     retriever_id,
 )
 from northwind_rag.sources import build_chunks
@@ -173,8 +174,31 @@ def _region(item: EvalItem) -> ShopperRegion:
 def _live(
     conn: psycopg.Connection, embedder: Embedder, items: Sequence[EvalItem]
 ) -> dict[str, list[RetrievedChunk]]:
-    """What a shopper in the item's region gets: the agents' path, hybrid (RAG-03, row #8). Queries
-    with a frozen vector use it, so every platform ranks the same (the PR #30 drift)."""
+    """What a shopper in the item's region gets: the agents' path, hybrid (RAG-03, row #8), run as
+    the message's query plan since row #11 (RAG-04, `query_plans`). Queries with a frozen vector use
+    it, so every platform ranks the same (the PR #30 drift)."""
+    from northwind_evals.query_plans import planner
+
+    embedder = cached(embedder)
+    with planner([(item.query, item.region) for item in items]) as parts:
+        return {
+            item.id: retrieve_planned(
+                conn,
+                embedder,
+                parts(item.query, item.region),
+                region=_region(item),
+                audience="shopper",
+                k=RETRIEVAL_K,
+            )
+            for item in items
+        }
+
+
+def _live_plain(
+    conn: psycopg.Connection, embedder: Embedder, items: Sequence[EvalItem]
+) -> dict[str, list[RetrievedChunk]]:
+    """The plain hybrid search on the raw query, as before row #11: RAG-03's arm comparison and the
+    enrichment report's E1 rule were fixed on it before measuring."""
     embedder = cached(embedder)
     return {
         item.id: retrieve_context(
@@ -201,7 +225,7 @@ def _arms(
         )
         for item in items
     }
-    hybrid = _live(conn, embedder, items)
+    hybrid = _live_plain(conn, embedder, items)
     return {
         arm: {item_id: [chunk.source_id for chunk in chunks] for item_id, chunks in found.items()}
         for arm, found in (("dense", dense), ("keyword", keyword), ("hybrid", hybrid))
@@ -695,13 +719,21 @@ def cmd_gate(args: argparse.Namespace) -> int:
 
 def _frozen_queries(items: Sequence[EvalItem]) -> list[str]:
     """Every query whose ranking a recording or the gate depends on: the eval items, the smoke
-    questions and the RAG-11 red-team queries. Follow-up searches the model writes are not here;
-    they embed live (D4)."""
+    questions and the RAG-11 red-team queries, and since row #11 the rewritten part texts of the
+    eval items' planned first searches (replayed from `query-understanding`; security review M2).
+    Follow-up searches the model writes are not here; they embed live (D4)."""
+    from northwind_evals.query_plans import part_texts
+
     portal = json.loads(SMOKE_QUESTIONS.read_text(encoding="utf-8"))
     traps = json.loads(CONTRADICTIONS.read_text(encoding="utf-8"))
-    red_team = [json.loads(line)["query"] for line in RED_TEAM.read_text("utf-8").splitlines()]
+    red_items = [json.loads(line) for line in RED_TEAM.read_text("utf-8").splitlines()]
+    red_team = [red["query"] for red in red_items]
     texts = [item.query for item in items] + list(portal.values()) + [t["question"] for t in traps]
     texts += red_team
+    texts += part_texts([(item.query, item.region) for item in items])
+    # The red team's routed messages: their plans are in the suite that records them (row #11 W3).
+    red_plans = [(red["query"], red["region"]) for red in red_items]
+    texts += part_texts(red_plans, suite="assistant-redteam")
     return list(dict.fromkeys(texts))
 
 
@@ -922,7 +954,7 @@ def cmd_enrichment_report(_: argparse.Namespace) -> int:
     with _connect() as conn:
         problems = [f"plain index: {p}" for p in _index_problems(conn, embedder.id, side="plain")]
         plain_identity = _index_identity(conn)
-        plain = _live(conn, embedder, items)
+        plain = _live_plain(conn, embedder, items)
     try:
         enriched_conn = psycopg.connect(enriched_database_url())
     except psycopg.Error:
@@ -938,7 +970,7 @@ def cmd_enrichment_report(_: argparse.Namespace) -> int:
             for problem in problems:
                 print(f"eval-enrichment-report refused: {problem}", file=sys.stderr)
             return 1
-        enriched = _live(conn, embedder, items)
+        enriched = _live_plain(conn, embedder, items)
     report = build_report(
         items,
         plain,

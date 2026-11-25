@@ -1,0 +1,11 @@
+eval-answers: 308 first messages; first search changed (rules plan) 41; unchanged 260; routed to Haiku (changes known after W1) 7
+  changed: ['EV-029', 'EV-030', 'EV-031', 'EV-035', 'EV-041', 'EV-042', 'EV-043', 'EV-044', 'EV-045', 'EV-046', 'EV-047', 'EV-048', 'EV-049', 'EV-050', 'EV-065', 'EV-068', 'EV-108', 'EV-203', 'EV-204', 'EV-205', 'EV-206', 'EV-207', 'EV-208', 'EV-209', 'EV-210', 'EV-211', 'EV-212', 'EV-213', 'EV-214', 'EV-215', 'EV-216', 'EV-217', 'EV-218', 'EV-219', 'EV-220', 'EV-221', 'EV-222', 'EV-223', 'EV-224', 'EV-263', 'EV-292']
+  routed: ['EV-018', 'EV-067', 'EV-102', 'EV-190', 'EV-272', 'EV-284', 'EV-307']
+assistant-smoke: 5 first messages; first search changed (rules plan) 0; unchanged 5; routed to Haiku (changes known after W1) 0
+assistant-cart: 4 first messages; first search changed (rules plan) 4; unchanged 0; routed to Haiku (changes known after W1) 0
+  changed: ['step0', 'step1', 'step2', 'step3']
+assistant-redteam: 28 first messages; first search changed (rules plan) 0; unchanged 26; routed to Haiku (changes known after W1) 2
+  routed: ['RT-010', 'RT-011']
+a2a-05-partner: 9 first messages; first search changed (rules plan) 1; unchanged 6; routed to Haiku (changes known after W1) 2
+  changed: ['8']
+  routed: ['0', '4']

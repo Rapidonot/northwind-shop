@@ -43,6 +43,7 @@ from ._driver import (
     World,
     first_of,
     lines_of,
+    model_text,
     orders,
     plain_transcript,
     run,
@@ -62,7 +63,8 @@ def digits_of(text: str) -> str:
 
 
 def bodies_of(llm: ScriptedLLM) -> str:
-    return json.dumps([r["body"] for r in llm.requests], ensure_ascii=False)
+    """What the model reads, not the CLI's random `metadata.user_id` (row #27, bundled)."""
+    return model_text(llm.requests)
 
 
 def tool_results(llm: ScriptedLLM) -> list[dict[str, Any]]:

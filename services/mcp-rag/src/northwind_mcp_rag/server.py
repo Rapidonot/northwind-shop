@@ -32,7 +32,7 @@ from mcp.shared.exceptions import MCPError
 from northwind_common import mcp_gate
 from northwind_common.errors import ToolError
 from northwind_common.mcp_gate import ASGIApp
-from northwind_common.mcp_token import RAG_SERVER, Claims
+from northwind_common.mcp_token import RAG_SERVER, Claims, bitmap_products
 from northwind_common.tool_scopes import allowed_resources, allowed_tools
 from northwind_data.dataset import FIXTURES_DIR
 from northwind_data.ingest_guard import verify_dataset
@@ -42,10 +42,37 @@ from northwind_rag.embedding import Embedder
 from northwind_rag.retrieval import (
     Audience,
     RetrievedChunk,
+    SearchFilter,
     ShopperRegion,
     retrieve_context,
+    retrieve_planned,
     retriever_id,
 )
+
+# Row #11 (RAG-04): a query plan's parts, each a search text and its filter.
+PlanParts = Sequence[tuple[str, SearchFilter]]
+
+
+def plan_parts(query: str, claims: Claims) -> PlanParts | None:
+    """The token's query plan as search parts, or None for a token without one. Only the claim is
+    read, never the arguments: a part with no text searches `query` (decision 0022)."""
+    if claims.qf is None:
+        return None
+    parts = []
+    for part in claims.qf["parts"]:
+        colours, sizes, bitmap = part.get("c"), part.get("s"), part.get("p")
+        parts.append(
+            (
+                part.get("q", query),
+                SearchFilter(
+                    colours=None if colours is None else tuple(colours),
+                    sizes=None if sizes is None else tuple(sizes),
+                    products=None if bitmap is None else bitmap_products(bitmap),
+                ),
+            )
+        )
+    return parts
+
 
 log = logging.getLogger("northwind_mcp_rag")
 
@@ -97,6 +124,15 @@ class Searcher(Protocol):
     ) -> Sequence[RetrievedChunk]: ...
 
 
+class PlannedSearcher(Protocol):
+    """A `Searcher` that can also run a query plan (row #11). Only a token with a `qf` claim
+    asks."""
+
+    def search_planned(
+        self, parts: PlanParts, *, audience: str, region: str | None
+    ) -> Sequence[RetrievedChunk]: ...
+
+
 class IndexSearcher:
     """The production `Searcher`: hybrid retrieval over the index for the token's caller."""
 
@@ -109,6 +145,18 @@ class IndexSearcher:
                 conn,
                 self.backend.embedder,
                 query,
+                region=cast(ShopperRegion | None, region),
+                audience=cast(Audience, audience),
+            )
+
+    def search_planned(
+        self, parts: PlanParts, *, audience: str, region: str | None
+    ) -> Sequence[RetrievedChunk]:
+        with self.backend.connect() as conn:
+            return retrieve_planned(
+                conn,
+                self.backend.embedder,
+                parts,
                 region=cast(ShopperRegion | None, region),
                 audience=cast(Audience, audience),
             )
@@ -176,7 +224,15 @@ class RagServer:
     def search(self, query: str, claims: Claims) -> Sequence[RetrievedChunk]:
         """One search for the token's caller (hard rule 7): audience and region from the token."""
         searcher = self._searcher or IndexSearcher(self.backend)
-        return searcher.search(query, audience=claims.aud, region=claims.region)
+        parts = plan_parts(query, claims)
+        if parts is None:
+            return searcher.search(query, audience=claims.aud, region=claims.region)
+        planned = getattr(searcher, "search_planned", None)
+        if planned is None:
+            raise RuntimeError("this searcher cannot run a query plan")  # a fixed search failure
+        return cast(PlannedSearcher, searcher).search_planned(
+            parts, audience=claims.aud, region=claims.region
+        )
 
     # ---- MCP handlers --------------------------------------------------------------------------
 

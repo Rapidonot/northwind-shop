@@ -81,7 +81,9 @@ def test_the_parameters_are_the_ones_fixed_in_the_plan() -> None:
 
 
 def test_the_retriever_id_names_the_method_so_old_contexts_go_stale() -> None:
-    assert retriever_id(FakeEmbedder()) == "hybrid:v2:rrf60:d50:fts-text-english:fake:sha256:384"
+    assert (
+        retriever_id(FakeEmbedder()) == "hybrid:v3:rrf60:d50:fts-text-english:fake:sha256:384"
+    )  # v3: row #11 (RAG-04)
 
 
 @pytest.mark.parametrize("name", ["_SEARCH", "_KEYWORD", "_HYBRID"])

@@ -28,6 +28,7 @@ from northwind_assistant.catalog_client import CatalogEndpoint
 from northwind_assistant.rag_client import RagEndpoint
 from northwind_assistant.source_cards import SourceCard
 from northwind_assistant.turn import Citations, Reset, TextDelta, TurnError, stream_answer
+from northwind_assistant.understand import Understander
 from northwind_common.cards import contains_card_data
 from northwind_common.llm import AgentRuntime, agent_runtime
 from northwind_common.localenv import mcp_catalog_url, mcp_rag_url
@@ -93,6 +94,9 @@ class ChatServices:
     # Row #12 (RAG-09): live price and stock. `chat_services` always sets it (a test pins that);
     # `None` only in gateway tests that predate #12 and never reach a model.
     catalog: CatalogEndpoint | None = None
+    # Row #11 (RAG-04): query understanding for the first search. `chat_services` always sets it;
+    # `None` only in gateway tests that predate #11.
+    understand: Understander | None = None
 
 
 @lru_cache(maxsize=1)
@@ -106,6 +110,7 @@ def chat_services() -> ChatServices:
         RagEndpoint(mcp_rag_url(), key),
         agent_runtime(),
         CatalogEndpoint(mcp_catalog_url(), key),
+        Understander(),  # deadline and cache only when LLM_MODE=live (decision 0022)
     )
 
 
@@ -146,7 +151,7 @@ async def chat(
     failed = False
     try:
         async for event in stream_answer(
-            message, caller, services.rag, services.runtime, services.catalog
+            message, caller, services.rag, services.runtime, services.catalog, services.understand
         ):
             failed = failed or isinstance(event, TurnError)
             yield _event(event)

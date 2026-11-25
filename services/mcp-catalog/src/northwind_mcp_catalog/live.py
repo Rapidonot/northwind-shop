@@ -224,3 +224,38 @@ class FixtureCatalog:
             raise ValueError("on_hand must be a non-negative integer")
         with self._lock:
             self._stock[(variant_id, region)] = on_hand
+
+
+def eligible_products(
+    catalog: LiveCatalog,
+    region: str,
+    *,
+    currency: str,
+    price_min: int | None = None,
+    price_max: int | None = None,
+    in_stock: bool = False,
+) -> list[str]:
+    """Public products with at least one variant sold in `region` whose live price, in `currency`,
+    is within the bounds (minor units, inclusive) and, with `in_stock`, that has stock on hand.
+    Price
+    and stock must hold for the same variant. IDs only, never a price or a count (row #11, RAG-04;
+    hard rule 2: read live on every call, never from the index)."""
+    found: list[str] = []
+    for product in catalog.products():
+        if product.visibility != "public":
+            continue
+        for variant in catalog.variants_of(product.product_id):
+            if variant.visibility != "public":
+                continue
+            price = catalog.price(variant.variant_id, region)
+            if price is None or price.currency != currency:
+                continue
+            if price_min is not None and price.minor_units < price_min:
+                continue
+            if price_max is not None and price.minor_units > price_max:
+                continue
+            if in_stock and (catalog.stock(variant.variant_id, region) or 0) <= 0:
+                continue
+            found.append(product.product_id)
+            break
+    return sorted(found)

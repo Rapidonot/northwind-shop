@@ -174,8 +174,23 @@ def test_live_retrieval_passes_each_items_region_as_a_shopper(
 
     monkeypatch.setattr(cli, "retrieve_context", fake)
     items = [item("EV-1", query="a", region="UK"), item("EV-2", query="b", region="EU")]
-    cli._live(None, None, items)  # type: ignore[arg-type]
+    # Row #11: RAG-03's arms read the plain search (`_live_plain`); the gate's shopper path
+    # (`_live`) runs each item's query plan through `retrieve_planned`. Both bind the item's region
+    # and the shopper audience.
+    cli._live_plain(None, None, items)  # type: ignore[arg-type]
     assert calls == [("a", "UK", "shopper"), ("b", "EU", "shopper")]
+
+    planned: list[tuple[Any, Any, Any]] = []
+
+    def fake_planned(
+        conn: Any, embedder: Any, parts: Any, *, region: Any, audience: Any, k: int
+    ) -> list[RetrievedChunk]:
+        planned.append((parts[0][0], region, audience))
+        return []
+
+    monkeypatch.setattr(cli, "retrieve_planned", fake_planned)
+    cli._live(None, None, items)  # type: ignore[arg-type]
+    assert planned == [("a", "UK", "shopper"), ("b", "EU", "shopper")]
 
 
 # ---- the criterion, on a real index -----------------------------------------------------------

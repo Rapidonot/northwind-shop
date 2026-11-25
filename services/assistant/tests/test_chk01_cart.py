@@ -30,6 +30,7 @@ from northwind_assistant.prompt import system_prompt
 from northwind_assistant.rag_client import RagEndpoint
 from northwind_assistant.tools import ToolState, record_live
 from northwind_assistant.turn import TextDelta, stream_answer
+from northwind_assistant.understand import MARKER as UNDERSTAND_MARKER
 from northwind_common import catalog_tool
 from northwind_common.llm import agent_runtime
 from northwind_llm_replay.scripted import ScriptedLLM
@@ -388,6 +389,12 @@ def test_no_recorded_red_team_turn_writes_a_cart() -> None:
     assert cassettes
     for path in cassettes:
         cassette = json.loads(path.read_text(encoding="utf-8"))
+        body = (cassette.get("match") or {}).get("body") or {}
+        if UNDERSTAND_MARKER in json.dumps(body.get("system", "")):
+            # Row #11 (approved under stop 5): the query-understanding call offers no tools at
+            # all, so it can write no cart.
+            assert "tools" not in body and cart_writes(cassette) == set(), path.name
+            continue
         # Stale by design until W2 re-records the suite with the cart tools offered (F3).
         assert offered_cart_writes(cassette), f"{path.name}: recorded before the cart tools"
         assert cart_writes(cassette) == set(), path.name

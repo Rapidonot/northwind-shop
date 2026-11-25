@@ -335,7 +335,10 @@ ORDER_WORDS = ("order", "checkout", "pay", "purchase", "refund", "capture", "ass
 
 
 def test_the_registry_holds_the_catalog_reads_and_the_four_cart_tools_and_nothing_else() -> None:
-    assert set(TOOLS) == set(tool_scopes.CATALOG_READ_TOOLS) | set(CART_TOOLS)
+    # Row #11 (approved under stop 5): plus the server-only live filter, read-only.
+    assert set(TOOLS) == set(tool_scopes.CATALOG_READ_TOOLS) | set(CART_TOOLS) | {
+        tool_scopes.ELIGIBLE_PRODUCTS
+    }
     assert tool_scopes.CART_TOOLS == frozenset(CART_TOOLS)
     for name in TOOLS:
         assert not any(word in name for word in ORDER_WORDS), name
@@ -441,7 +444,8 @@ def test_a_token_minted_without_a_session_has_no_sid_claim() -> None:
     bearer, claims = minted(None)
     assert claims.sid is None
     assert verify_for(bearer, key=KEY, server=CATALOG_SERVER).sid is None
-    assert OPTIONAL_CLAIMS == frozenset({"sid"})
+    # Row #11 (RAG-04) adds `qf`, a query plan for northwind-rag only (decision 0022).
+    assert OPTIONAL_CLAIMS == frozenset({"sid", "qf"})
 
 
 @pytest.mark.parametrize(

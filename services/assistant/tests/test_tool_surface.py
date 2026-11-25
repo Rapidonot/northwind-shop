@@ -20,6 +20,7 @@ import pytest
 from northwind_assistant.caller import Caller
 from northwind_assistant.rag_client import RagEndpoint
 from northwind_assistant.turn import assistant_options, stream_answer
+from northwind_assistant.understand import MARKER as UNDERSTAND_MARKER
 from northwind_common.llm import agent_runtime
 from northwind_llm_replay.scripted import ScriptedLLM
 from northwind_mcp_rag.testing import KEY, serve_retriever
@@ -145,6 +146,10 @@ def test_every_recorded_request_offers_the_frozen_surface(suite: str) -> None:
     for path in cassettes:
         raw = json.loads(path.read_text(encoding="utf-8"))["match"]["body"]
         body = json.loads(raw) if isinstance(raw, str) else raw
+        if UNDERSTAND_MARKER in json.dumps(body.get("system", "")):
+            # Row #11 (approved under stop 5): the query-understanding call offers no tools at all.
+            assert "tools" not in body, path.name
+            continue
         assert surface(body["tools"]) == ATTACHED, path.name
 
 
