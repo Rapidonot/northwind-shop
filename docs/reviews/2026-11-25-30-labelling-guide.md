@@ -84,18 +84,25 @@ About 20 of the hardest items across both files go on one sheet for the user. Th
 
 ## Clarifications from drafting (2026-11-25, before any scorer, prompt change or measurement)
 
-The drafting subagent found these gaps. Items marked **user** are on the review sheet for the user's decision. The session
+The drafting subagent found these gaps. The user decided 3 and 4 on the review sheet. The session
 writing them had read recorded answers made with the old prompt, on eval items, so these are not blind.
 
 1. **Matching is by whole words:** a wording that starts or ends with a letter or digit must not touch another one
    ("XL" is not in "2XL", "500" is not in "2500"). Curly and straight apostrophes and inch marks fold together.
 2. **`accepts`** holds every slot that splits the fitting set and is not already given. A use that is given (walking to
    work, skiing, travel, a birthday) is left out.
-3. **SA-04 slot words added. User:**
+3. **SA-04 slot words added** (the user's answer A, yes, 2026-11-25):
    - `size`: how long, length, seat, guest, people, bath towel, bath sheet, hand towel
    - `use`: warm, warmth, cold, sleep
 4. **A live count says "in stock".** An answer that gives the variant's live count ("7 units", "7 left") counts as above
-   zero. **User.**
+   zero (the user's answer B, yes, 2026-11-25).
 5. **Fit** is named in availability messages for every product with a fit, single-fit ones included.
 6. **"Men's" and "women's"** include unisex. "Duvet" in IC-030 covers comforters, which share its subcategory.
 7. **Recommendation sets ignore stock**, so P0008 stays in IC-021 though its relaxed fit is out of stock.
+
+## Changes at the user's review (2026-11-25)
+- **IC-009** (answer C): `absent` gains "not machine-washable", "do not machine wash", "don't machine wash".
+- **IC-039, IC-040:** `absent` gains "out of stock", "sold out", "back in stock", "restock", "currently unavailable", "not
+  in stock": calling a combination that does not exist out of stock fails.
+- **IC-045:** `absent` is "is final sale", "are final sale", "final sale and", "final-sale items can't", so "clearance
+  isn't final sale" does not trip it. Two are the user's phrasings, not literal text in another region's document.
