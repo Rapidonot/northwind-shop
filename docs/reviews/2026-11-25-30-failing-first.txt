@@ -73,3 +73,19 @@ ERROR services/assistant/tests/test_30_citations.py
  FAIL  src/citations.test.tsx > [SA-02] a citation group is read as the server reads it > [P0011;]
  Test Files  1 failed (1)
       Tests  5 failed | 8 passed (13)
+
+# SA scorers, failing first, at b5f08e9
+E   ModuleNotFoundError: No module named 'northwind_evals.intents'
+=========================== short test summary info ============================
+ERROR evals/tests/test_sa_scorers.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in 0.13s
+
+# Prompt, failing first, at b5f08e9 (prompt.py untouched)
+FFFF.....                                                                [100%]
+=========================== short test summary info ============================
+FAILED services/assistant/tests/test_30_prompt.py::test_the_prompt_asks_before_recommending
+FAILED services/assistant/tests/test_30_prompt.py::test_the_prompt_says_when_not_to_ask
+FAILED services/assistant/tests/test_30_prompt.py::test_a_clarifying_question_is_not_an_offer_and_the_d8_rule_is_unchanged
+FAILED services/assistant/tests/test_30_prompt.py::test_the_prompt_counts_nothing_and_adds_no_policy_conclusion
+4 failed, 5 passed in 0.15s
