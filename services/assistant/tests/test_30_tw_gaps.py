@@ -1,6 +1,6 @@
 """Row #30 gap tests (test-writer): H3, M2, M1 and the offer patterns of the output check, written
 from the plan's table, decision 0015's "Row #30 note" and the criteria, not from the code's logic.
-Synthetic text only; no model. The strict xfails are findings the user logged, not loosened tests."""
+Synthetic text only; no model. The strict xfails are findings the user logged."""
 
 from __future__ import annotations
 

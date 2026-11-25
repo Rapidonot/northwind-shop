@@ -19,14 +19,14 @@ _ASKS = re.compile(r"(?:please\s+)?tell me\b|let me know\b|could you\b|can you\b
 _GROUP = re.compile(r"\[([^\[\]]+)\]")
 _PRODUCT_ID = re.compile(r"P\d{4}(?:-.*)?")
 
-# The guide's words, with the user's answer A.
+# The guide's words, with the user's answer A and clarification 8.
 SLOT_WORDS: Mapping[str, tuple[str, ...]] = {
     "size": tuple(
         "size,fit,dimension,measurement,measure,twin,full,queen,king,chest,waist,inseam,mattress,"
         "how big,how large,how tall,wide,inches,feet,how long,length,seat,guest,people,bath towel,"
         "bath sheet,hand towel".split(",")
     ),
-    "budget": ("budget", "price range", "spend", "price limit"),
+    "budget": ("budget", "price range", "spend", "spending", "price limit"),
     "use": tuple(
         "use,using,used,activity,activities,occasion,weather,conditions,climate,season,temperature,"
         "where,what for,indoor,outdoor,hiking,travel,everyday,layering,room,warm,warmth,cold,"
@@ -121,22 +121,47 @@ def sa04_problems(item: Mapping[str, Any], answer: str) -> list[str]:
 _NEGATED = r"(?:n't|\bnot|\bno longer|\bnever)\s+(?:currently\s+|still\s+|yet\s+)?"
 _OUT = re.compile(
     rf"\bout of stock\b|\bsold out\b|\bunavailable\b|{_NEGATED}(?:in stock|available)\b"
+    r"|\bnone left\b|(?<![\d.,])0 left\b|\bno stock left\b"
 )
+# The out-of-stock wordings of IC-039's and IC-040's `absent`, read as the live answer is, so a
+# hyphen hides neither (clarification 8).
+_STOCK_WORDINGS = frozenset(
+    (
+        "out of stock",
+        "sold out",
+        "back in stock",
+        "restock",
+        "currently unavailable",
+        "not in stock",
+    )
+)
+
+
+def _stock_text(text: str) -> str:
+    """Folded, with hyphens as spaces: "out-of-stock" (clarification 8)."""
+    return " ".join(fold(text).replace("-", " ").split())
+
+
+def _says(answer: str, wording: str) -> bool:
+    if has_wording(answer, wording):
+        return True
+    return wording in _STOCK_WORDINGS and has_wording(_stock_text(answer), wording)
+
+
 _IN = re.compile(r"\b(?:in stock|available)\b")
 
 
 def _says_out(answer: str) -> bool:
-    return _OUT.search(fold(answer)) is not None
+    return _OUT.search(_stock_text(answer)) is not None
 
 
 def _says_in(answer: str, units: int) -> bool:
-    text = fold(answer)
-    if _IN.search(re.sub(_OUT, " ", text)):
+    if _IN.search(re.sub(_OUT, " ", _stock_text(answer))):
         return True
     count = (
         rf"(?<![\d.,]){units}\s+(?:(?:units?|items?|pieces?|pairs?)\b|(?:left|remaining|on hand)\b)"
     )
-    return re.search(count, text) is not None
+    return re.search(count, fold(answer)) is not None
 
 
 def sa03_problems(
@@ -160,7 +185,7 @@ def sa03_problems(
         for group in item["facts"]
         if not any(has_wording(answer, wording) for wording in group)
     ]
-    problems += [f"says: {wording}" for wording in item["absent"] if has_wording(answer, wording)]
+    problems += [f"says: {wording}" for wording in item["absent"] if _says(answer, wording)]
     if item["intent"] == "recommendation" and all(asks for _, asks in _pieces(answer)):
         problems.append("only a question")
     for variant in item["variants"]:

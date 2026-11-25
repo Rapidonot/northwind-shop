@@ -201,6 +201,66 @@ def test_a_variant_at_zero_needs_an_out_of_stock_answer(answer: str) -> None:
     assert sa03_problems(AV, answer, (), {V: 7}, 7) == ["does not say it is in stock"]
 
 
+# The user's wording decision, 2026-11-25, before any measurement (guide, clarification 8).
+
+
+@pytest.mark.req("SA-04")
+@pytest.mark.parametrize(
+    "answer",
+    ["How much are you planning on spending?", "What is your spending limit?", "Your spend?"],
+)
+def test_spending_is_a_budget_word(answer: str) -> None:
+    assert sa04_problems(CL, answer) == []
+
+
+@pytest.mark.req("SA-03")
+@pytest.mark.parametrize(
+    "answer",
+    [
+        "It is out-of-stock.",
+        "It is sold-out.",
+        "It isn't in-stock.",
+        "There are none left.",
+        "There are 0 left.",
+        "0 left in that size.",
+        "There is no stock left.",
+    ],
+)
+def test_more_wordings_say_out_of_stock(answer: str) -> None:
+    assert sa03_problems(AV, answer, (), {V: 0}, 0) == []
+    assert sa03_problems(AV, answer, (), {V: 7}, 7) == ["does not say it is in stock"]
+
+
+@pytest.mark.req("SA-03")
+def test_in_stock_with_a_hyphen_is_in_stock() -> None:
+    assert sa03_problems(AV, "It is in-stock.", (), {V: 7}, 7) == []
+    assert sa03_problems(AV, "It is in-stock.", (), {V: 0}, 0) == [
+        "does not say it is out of stock"
+    ]
+
+
+@pytest.mark.req("SA-03")
+@pytest.mark.parametrize(
+    "answer", ["There are 10 left.", "There are 100 left.", "None of it is wool."]
+)
+def test_those_wordings_are_whole_words(answer: str) -> None:
+    assert sa03_problems(AV, answer, (), {V: 0}, 0) == ["does not say it is out of stock"]
+
+
+@pytest.mark.req("SA-03")
+@pytest.mark.parametrize("answer", ["It's out-of-stock.", "It's sold-out.", "It's not-in-stock."])
+def test_a_hyphen_does_not_hide_a_stock_wording_from_absent(answer: str) -> None:
+    item = ic(intent="availability", absent=["out of stock", "sold out", "not in stock"])
+    assert len(sa03_problems(item, answer, (), {}, None)) == 1
+
+
+@pytest.mark.req("SA-03")
+def test_other_absent_wordings_keep_their_hyphens() -> None:
+    item = ic(intent="policy", absent=["are final sale", "60-day"])
+    answer = "Few are final-sale. It takes 60 day-trips."
+    assert sa03_problems(item, answer, (), {}, None) == []
+
+
 @pytest.mark.req("SA-03")
 def test_a_wrong_count_is_not_the_live_one() -> None:
     assert sa03_problems(AV, "There are 70 left.", (), {V: 7}, 7) == ["does not say it is in stock"]

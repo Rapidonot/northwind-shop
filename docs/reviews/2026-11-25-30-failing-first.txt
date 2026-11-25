@@ -89,3 +89,22 @@ FAILED services/assistant/tests/test_30_prompt.py::test_the_prompt_says_when_not
 FAILED services/assistant/tests/test_30_prompt.py::test_a_clarifying_question_is_not_an_offer_and_the_d8_rule_is_unchanged
 FAILED services/assistant/tests/test_30_prompt.py::test_the_prompt_counts_nothing_and_adds_no_policy_conclusion
 4 failed, 5 passed in 0.15s
+
+# Scorer wording (the user's decision 2), failing first, at 8797377
+.....................................................FF.FFFFFFFF...FFF.. [ 97%]
+..                                                                       [100%]
+=========================== short test summary info ============================
+FAILED evals/tests/test_sa_scorers.py::test_spending_is_a_budget_word[How much are you planning on spending?]
+FAILED evals/tests/test_sa_scorers.py::test_spending_is_a_budget_word[What is your spending limit?]
+FAILED evals/tests/test_sa_scorers.py::test_more_wordings_say_out_of_stock[It is out-of-stock.]
+FAILED evals/tests/test_sa_scorers.py::test_more_wordings_say_out_of_stock[It is sold-out.]
+FAILED evals/tests/test_sa_scorers.py::test_more_wordings_say_out_of_stock[It isn't in-stock.]
+FAILED evals/tests/test_sa_scorers.py::test_more_wordings_say_out_of_stock[There are none left.]
+FAILED evals/tests/test_sa_scorers.py::test_more_wordings_say_out_of_stock[There are 0 left.]
+FAILED evals/tests/test_sa_scorers.py::test_more_wordings_say_out_of_stock[0 left in that size.]
+FAILED evals/tests/test_sa_scorers.py::test_more_wordings_say_out_of_stock[There is no stock left.]
+FAILED evals/tests/test_sa_scorers.py::test_in_stock_with_a_hyphen_is_in_stock
+FAILED evals/tests/test_sa_scorers.py::test_a_hyphen_does_not_hide_a_stock_wording_from_absent[It's out-of-stock.]
+FAILED evals/tests/test_sa_scorers.py::test_a_hyphen_does_not_hide_a_stock_wording_from_absent[It's sold-out.]
+FAILED evals/tests/test_sa_scorers.py::test_a_hyphen_does_not_hide_a_stock_wording_from_absent[It's not-in-stock.]
+13 failed, 61 passed in 0.12s
