@@ -22,7 +22,7 @@ from claude_agent_sdk.types import StreamEvent, ToolResultBlock, ToolUseBlock
 
 from northwind_assistant.caller import Caller
 from northwind_assistant.catalog_client import CatalogEndpoint
-from northwind_assistant.orders_client import OrdersEndpoint
+from northwind_assistant.orders_client import OrdersEndpoint, PolicyEndpoint
 from northwind_assistant.output_check import OutputCheck, citation_parts
 from northwind_assistant.prompt import system_prompt, user_prompt
 from northwind_assistant.rag_client import McpRagSearcher, RagEndpoint
@@ -45,7 +45,7 @@ from northwind_assistant.understand import (
     query_ok,
 )
 from northwind_assistant.usage import TurnUsage
-from northwind_common import catalog_tool, order_tool
+from northwind_common import catalog_tool, order_tool, policy_tool
 from northwind_common.llm import ASSISTANT_MODEL, AgentRuntime, agent_options
 from northwind_common.mcp_token import bearer
 
@@ -120,6 +120,7 @@ def assistant_options(
     runtime: AgentRuntime,
     catalog: tuple[str, str] | None = None,
     orders: tuple[str, str] | None = None,
+    policy: tuple[str, str] | None = None,
 ) -> Any:
     """mcp-rag over HTTP with this turn's token, `retrieve_context` its one tool; and, given
     `catalog` (URL, token), mcp-catalog with its five read-only tools (row #12, RAG-09; PRD §7,
@@ -129,7 +130,10 @@ def assistant_options(
 
     Row #27 (CHK-06): given `orders` (URL, token), a signed-in turn also gets mcp-orders with
     `get_order`, and the prompt's order section. Without it, the options are the anonymous turn's,
-    unchanged."""
+    unchanged. PR 2 (CHK-07, decision 0024): mcp-orders also has `request_return`, and `policy`
+    (URL, token) adds mcp-policy with its one read-only tool, only ever beside `orders`."""
+    if policy is not None and orders is None:
+        raise ValueError("a policy server needs a signed-in turn's order server")
     servers: dict[str, Any] = {SERVER_NAME: {"type": "http", "url": url, "headers": bearer(token)}}
     allowed = [ALLOWED_TOOL]
     if catalog is not None:
@@ -148,6 +152,14 @@ def assistant_options(
             "headers": bearer(orders_token),
         }
         allowed.extend(order_tool.ALLOWED_TOOLS)
+    if policy is not None:
+        policy_url, policy_token = policy
+        servers[policy_tool.SERVER_NAME] = {
+            "type": "http",
+            "url": policy_url,
+            "headers": bearer(policy_token),
+        }
+        allowed.extend(policy_tool.ALLOWED_TOOLS)
     return agent_options(
         system_prompt=system_prompt(caller.region, signed_in=orders is not None),
         model=ASSISTANT_MODEL,
@@ -348,6 +360,7 @@ async def stream_answer(
     catalog: CatalogEndpoint | None = None,
     understand: Understander | None = None,
     orders: OrdersEndpoint | None = None,
+    policy: PolicyEndpoint | None = None,
 ) -> AsyncIterator[TurnEvent]:
     """`catalog` attaches mcp-catalog (row #12). The gateway and the eval answerer always pass one
     (pinned by tests); `None` is the one-server surface that tests written before #12 use.
@@ -357,7 +370,8 @@ async def stream_answer(
     holds the planned search (`make eval-snapshot`).
 
     `orders` (row #27, CHK-06) attaches mcp-orders, only for a signed-in caller: the gateway passes
-    one; the eval answerer does not, and its caller is never signed in."""
+    one; the eval answerer does not, and its caller is never signed in. `policy` (PR 2, CHK-07)
+    attaches mcp-policy beside it, on the same turns only."""
     state = ToolState(region=caller.region)
     token, turn = rag.mint_turn(caller)
     understood: Understood | None = None
@@ -384,7 +398,9 @@ async def stream_answer(
     attached = None if catalog is None else (catalog.url, catalog.mint(caller))
     orders_token = None if orders is None else orders.mint(caller)
     signed_in = None if orders is None or orders_token is None else (orders.url, orders_token)
-    options = assistant_options(caller, rag.url, token, runtime, attached, signed_in)
+    policy_token = None if policy is None or signed_in is None else policy.mint(caller)
+    returns = None if policy is None or policy_token is None else (policy.url, policy_token)
+    options = assistant_options(caller, rag.url, token, runtime, attached, signed_in, returns)
     usage = _turn_usage(understood, deferred=True)
     check = OutputCheck(state.seen, state.sources, live=state.live)
     try:

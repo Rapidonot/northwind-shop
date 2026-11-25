@@ -1,7 +1,7 @@
 # Row #27 PR 2 (CHK-07): record texts, drafted before the window
 
-Drafts only. Nothing here is applied: #30 edits decision 0015, and `PROGRESS.md` and `COVERAGE.md` follow at `/req-done`. `____`
-is filled from a run, never from memory. Applied after the merge of main.
+Drafts, except where a section says applied. `PROGRESS.md` and `COVERAGE.md` follow at `/req-done`. `____` is filled from a run, never
+from memory.
 
 ## PROGRESS row #27 (status cell, then appended to the evidence cell)
 Status: `____` (`done` only if CHK-07's recorded scenarios pass; else `partial`).
@@ -38,19 +38,5 @@ Log line:
 CC-10's status cell: `____` (the PRD's acceptance is "contract tests pass; policy catalog is exposed as a resource"; the user
 decides whether Q3's two resources keep it `partial`).
 
-## Decision 0015, row #27 note: replaces the last two sentences of "What the class does not catch"
-> Owner (the user, 2026-11-25): row #27's PR 2 (CHK-07). **PR 2 outcome, the user's decision (2026-11-25): the gap stays
-> at runtime.** It is live-only and prompt-held: a live turn could still say "Order O000418 has been confirmed". After Dec 22
-> the app replays only. A runtime check was planned (closed sentence shapes) and not built. Instead every recorded
-> `assistant-orders` answer is tested (`services/assistant/tests/test_chk07_recorded_status.py`): a sentence that states an
-> order's status with its number must match that order's `get_order` status or scan history, and no answer shows a status
-> code. On PR 1's recordings that test failed on exactly the two answers with a raw code. The confirmation class is
-> unchanged. `get_order` now gives plain words (`status_text`) and `ORDERS_RULES` asks for them (D9).
-
-## Threat model, the "order's status or delivery date" open row: owner cell
-> The user, 2026-11-25: accepted as live-only and prompt-held; recorded answers are tested (row #27 PR 2, decision 0015). The
-> N1-R option (B) decision stands: no confirmation-class exemption.
-
-Two threat-model rows to add: a model or injected text asks for a return (own orders only, non-monetary, decided again by the
-server; a write with untrusted text in context, the cart's residual), and a false policy claim ("90 days") changes an outcome
-(it cannot: no argument carries policy or date).
+## Decision 0015 and the threat model: applied 2026-11-25, with stage B
+In `docs/decisions/0015-output-control.md` (row #27 note) and `docs/governance/threat-model.md` (boundary 3, Owners).

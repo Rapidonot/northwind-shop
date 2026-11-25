@@ -421,10 +421,21 @@ The changed shown answers are re-judged in W6. Tests: `services/assistant/tests/
   has been confirmed" and "O000418 has been confirmed" are not: with the order number between them, the claim is held
   by the prompt only. Three recorded answers in `cassettes/assistant-orders/` say "Order <number> was placed on <date>",
   truthfully. The gap is older than this row, but this row's answers name order numbers. It was found after the decision
-  above. Owner (the user, 2026-11-25): row #27's PR 2 (CHK-07), with D9: a stated order status must match this
-  turn's `get_order` result. Not NFR-03, which decision 0021 cut.
-- **What the assistant does instead.** `ORDERS_RULES` tells it to give an order's status in the `get_order`
-  result's own words with the order number (for example `<order number> was delivered on <date>`; placeholders,
+  above. Owner (the user, 2026-11-25): row #27's PR 2 (CHK-07), with D9. Not NFR-03, which decision 0021 cut.
+- **PR 2 outcome, the user's decision (2026-11-25): the gap stays at runtime.** It is live-only and prompt-held: a live
+  turn could still say "Order O000418 has been confirmed". After Dec 22 the app replays only. A runtime check (closed
+  sentence shapes) was planned and not built, and the confirmation class and `output_check.py` are unchanged (step 0: 0
+  of 442 recorded calls differ, `docs/reviews/2026-11-25-27b-step0.md`). Instead every recorded `assistant-orders` answer
+  is tested (`services/assistant/tests/test_chk07_recorded_status.py`): a sentence that states an order's status with
+  its number must match that order's `get_order` status or scan history, and no answer may show a status code. The
+  matcher knows a fixed list of status words; a status in other words is not seen.
+- **Return answers (PR 2).** "Your return has been confirmed" and "your return request was placed" pass the check; the
+  prompt forbids saying a return is approved, accepted or confirmed, and the recorded return scenarios test it
+  (`services/assistant/tests/test_returns_journey_e2e.py`). "I've placed a return request" and any "90 days", even
+  a denial, are replaced.
+- **What the assistant does instead.** `ORDERS_RULES` tells it to give an order's status in the plain words
+  `get_order` returns beside each code (`status_text`, D9; PR 1 said "in the result's own words"), never the code, with
+  the order number (for example `<order number> was delivered on <date>`; placeholders,
   so the prompt holds no order data, hard rule 2). That phrasing
   carries no confirmation claim.
 - **The cost.** If the model still writes "your order was placed", the shopper sees `CONFIRMATION_SENTENCE`. That

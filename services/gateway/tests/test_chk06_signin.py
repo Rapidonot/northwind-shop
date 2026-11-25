@@ -186,7 +186,9 @@ class Captured:
     def __init__(self) -> None:
         self.calls: list[tuple[Caller, Any]] = []
 
-    def stream(self, message: str, caller: Caller, *args: Any, orders: Any = None) -> Any:
+    def stream(
+        self, message: str, caller: Caller, *args: Any, orders: Any = None, policy: Any = None
+    ) -> Any:  # `policy` (PR 2, CHK-07): test_chk07_policy_endpoint.py
         self.calls.append((caller, orders))
 
         async def nothing() -> Any:

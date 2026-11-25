@@ -186,7 +186,7 @@ REASONS: Mapping[str, tuple[Outcome, str, str, tuple[str, ...]]] = {
     ),
     "damaged_on_arrival": (
         "ambiguous",
-        "The returns policy does not cover items that arrived damaged.",
+        "The returns policy does not say what happens to an item damaged on arrival.",
         "A person needs to review it.",
         ("wear",),
     ),

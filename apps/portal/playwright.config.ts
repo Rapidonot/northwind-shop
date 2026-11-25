@@ -50,7 +50,7 @@ const ordersEnv = {
   MCP_ORDERS_URL: `http://127.0.0.1:${ordersPort}/mcp`,
 };
 
-// mcp-policy (row #27 PR 2, CHK-07): as mcp-orders. The gateway does not attach it yet (stage B).
+// mcp-policy (row #27 PR 2, CHK-07): as mcp-orders.
 const policyPort = 18435;
 const policyEnv = {
   NORTHWIND_MCP_TOKEN_KEY: tokenKey,

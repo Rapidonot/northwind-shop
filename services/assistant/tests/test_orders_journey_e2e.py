@@ -1,7 +1,8 @@
 """Order status and tracking through the real assistant and mcp-orders (row #27, CHK-06).
 
-`make record SUITE=assistant-orders` runs the six recorded scenarios through the user's runner
-window and creates the cassettes they replay. As in `test_cart_journey_e2e`, the `e2e` marker keeps
+`make record SUITE=assistant-orders` runs the six recorded scenarios here, and the return scenarios
+in `test_returns_journey_e2e.py` (PR 2, CHK-07), through the user's runner window and creates the
+cassettes they replay. As in `test_cart_journey_e2e`, the `e2e` marker keeps
 them out of `make test` and `make test-integration`, the first search is a fixed retriever and there
 is no understander: no index, no frozen query vector and no query-understanding call. The assistant,
 its signed-in prompt, mcp-rag's protocol, mcp-catalog and mcp-orders are all real. Each scenario is
@@ -18,10 +19,11 @@ The checks themselves run at $0 in `make test` on a scripted model, good answers
 from __future__ import annotations
 
 import asyncio
+import importlib.util
 import json
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date
 from functools import cache
 from pathlib import Path
@@ -31,17 +33,21 @@ import pytest
 
 from northwind_assistant.caller import Caller
 from northwind_assistant.catalog_client import CatalogEndpoint
-from northwind_assistant.orders_client import OrdersEndpoint
+from northwind_assistant.orders_client import OrdersEndpoint, PolicyEndpoint
 from northwind_assistant.output_check import FIXED_SENTENCES
 from northwind_assistant.rag_client import RagEndpoint
 from northwind_assistant.turn import Citations, TextDelta, TurnError, TurnEvent, stream_answer
 from northwind_common import order_tool
 from northwind_common.errors import ToolError
 from northwind_common.llm import AgentRuntime, agent_runtime
+from northwind_common.tool_scopes import EVALUATE_RETURN
 from northwind_llm_replay.scripted import ScriptedLLM
 from northwind_mcp_catalog import testing as catalog_testing
 from northwind_mcp_orders import testing as orders_testing
 from northwind_mcp_orders.book import OrderBook
+from northwind_mcp_orders.wording import STATUS_WORDING
+from northwind_mcp_policy import testing as policy_testing
+from northwind_mcp_policy.tools import TOOLS as POLICY_SPECS
 from northwind_mcp_rag.testing import KEY, serve_retriever
 from northwind_rag.retrieval import RetrievedChunk, ShopperRegion
 
@@ -147,14 +153,16 @@ class WatchedBook(OrderBook):
 
 
 class PolicySource:
-    """The first search's one source: the shopper's own public shipping policy."""
+    """The first search's one source: the shopper's own public policy, shipping unless another is
+    named; `extra` chunks (PR 2's planted review) follow it."""
 
-    def __init__(self) -> None:
+    def __init__(self, policy: str = POLICY, extra: tuple[RetrievedChunk, ...] = ()) -> None:
         text = (REPO / "data/fixtures/documents.jsonl").read_text(encoding="utf-8")
-        [doc] = [d for d in map(json.loads, text.splitlines()) if d["doc_id"] == POLICY]
+        [doc] = [d for d in map(json.loads, text.splitlines()) if d["doc_id"] == policy]
         assert (doc["visibility"], doc["region"]) == ("public", REGION)  # hard rule 7
         self.chunks = [
-            RetrievedChunk(f"document:{POLICY}:0", "document", POLICY, REGION, doc["body"])
+            RetrievedChunk(f"document:{policy}:0", "document", policy, REGION, doc["body"]),
+            *extra,
         ]
 
     def search(self, query: str, caller: Caller) -> list[RetrievedChunk]:
@@ -166,14 +174,29 @@ class Turn:
     answer: str
     reads: list[tuple[str, str, str | None, Any]]
     tool_calls: int  # every call that reached mcp-orders, refused ones included
+    # PR 2 (CHK-07): the open return requests, every evaluation's arguments, and the citations.
+    returns: list[dict[str, Any]] = field(default_factory=list)
+    evaluations: list[dict[str, Any]] = field(default_factory=list)
+    cited: tuple[str, ...] = ()
 
 
-def run_turn(message: str, runtime: AgentRuntime) -> Turn:
+def run_turn(message: str, runtime: AgentRuntime, source: PolicySource | None = None) -> Turn:
     real = OrderBook.from_data()
     book = WatchedBook(real.orders, real.carrier, real.tracking_numbers, real.placed_on)
     orders_server = orders_testing.server(book, key=KEY)
+    evaluations: list[dict[str, Any]] = []
+    spec = POLICY_SPECS[EVALUATE_RETURN]
 
-    async def collect(rag: RagEndpoint, catalog_url: str, orders_url: str) -> list[TurnEvent]:
+    async def evaluate(server: Any, claims: Any, args: Mapping[str, Any]) -> Any:
+        evaluations.append(dict(args))
+        return await spec.handler(server, claims, args)
+
+    watched = {EVALUATE_RETURN: replace(spec, handler=evaluate)}
+    policy_server = policy_testing.server(OrderBook.from_data(), key=KEY, tools=watched)
+
+    async def collect(
+        rag: RagEndpoint, catalog_url: str, orders_url: str, policy_url: str
+    ) -> list[TurnEvent]:
         return [
             e
             async for e in stream_answer(
@@ -183,19 +206,23 @@ def run_turn(message: str, runtime: AgentRuntime) -> Turn:
                 runtime,
                 CatalogEndpoint(catalog_url, KEY),
                 orders=OrdersEndpoint(orders_url, KEY),
+                policy=PolicyEndpoint(policy_url, KEY),
             )
         ]
 
     with (
-        serve_retriever(PolicySource(), Caller, key=KEY) as (url, _),
+        serve_retriever(source or PolicySource(), Caller, key=KEY) as (url, _),
         catalog_testing.running(catalog_testing.server(key=KEY)) as catalog_url,
         orders_testing.running(orders_server) as orders_url,
+        policy_testing.running(policy_server) as policy_url,
     ):
-        events = asyncio.run(collect(RagEndpoint(url, KEY), catalog_url, orders_url))
+        events = asyncio.run(collect(RagEndpoint(url, KEY), catalog_url, orders_url, policy_url))
     assert not [e for e in events if isinstance(e, TurnError)], events
     assert isinstance(events[-1], Citations)
     answer = "".join(e.text for e in events if isinstance(e, TextDelta))
-    return Turn(answer, book.reads, orders_server.calls)
+    requests = list(orders_server.desk.open.values())
+    cited = events[-1].source_ids
+    return Turn(answer, book.reads, orders_server.calls, requests, evaluations, cited)
 
 
 @dataclass(frozen=True)
@@ -346,6 +373,18 @@ BAD = [
     ("no_order_number", "What's your order number? The last scan is picked_up."),
     ("no_order_number", "What's your order number? It is label_created."),
 ]
+# PR 2 (CHK-07, D9): an answer that states each status, as its code and in its plain words, for the
+# order in transit and for the other shopper's. Every one is false, except the one that is true.
+_OTHERS = sorted(code for code in STATUS_WORDING if code != "in_transit")
+ONE_PER_STATUS = [
+    (name, f"{order} is in transit. It is now {words}." if name == "in_transit" else answer)
+    for code in _OTHERS
+    for words in (code, STATUS_WORDING[code])
+    for name, order, answer in (
+        ("in_transit", IN_TRANSIT, ""),
+        ("another_shoppers_order", NOT_THEIRS, f"I couldn't find {NOT_THEIRS}, but it is {words}."),
+    )
+]
 
 
 def scripted(name: str, answer: str, root: Path, *, call: str | None) -> Turn:
@@ -387,6 +426,41 @@ def test_a_wrong_answer_fails_its_scenario(name: str, answer: str, tmp_path: Pat
     turn = scripted(name, answer, tmp_path, call=scenario.order_id)
     with pytest.raises(AssertionError):
         check(scenario, turn)
+
+
+@pytest.fixture(scope="module")
+def real_turns(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Turn]:
+    """One real scripted turn per scenario below: the reads are real, only the words change."""
+    return {
+        name: scripted(
+            name, GOOD[name], tmp_path_factory.mktemp(name), call=SCENARIOS[name].order_id
+        )
+        for name in ("in_transit", "another_shoppers_order")
+    }
+
+
+@pytest.mark.req("CHK-07")
+@pytest.mark.parametrize(("name", "answer"), ONE_PER_STATUS)
+def test_a_wrong_status_is_caught_by_the_scenario_or_the_recorded_status_test(
+    name: str, answer: str, real_turns: dict[str, Turn]
+) -> None:
+    """Both run on every recorded answer. The scenario's own check sees most; a status before the
+    real one ("being processed") only the status matcher sees, because it did happen."""
+    matcher = status_matcher()
+    try:
+        check(SCENARIOS[name], replace(real_turns[name], answer=answer))
+    except AssertionError:
+        return
+    assert matcher.problems(answer) or matcher.codes_in(answer), answer
+
+
+def status_matcher() -> Any:
+    path = Path(__file__).with_name("test_chk07_recorded_status.py")
+    spec = importlib.util.spec_from_file_location("chk07_recorded_status", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 @pytest.mark.parametrize("name", [n for n, s in SCENARIOS.items() if s.order_id])

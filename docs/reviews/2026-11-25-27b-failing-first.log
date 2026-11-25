@@ -149,3 +149,59 @@ FAILED services/assistant/tests/test_chk07_recorded_status.py::test_no_answer_sh
 2 failed, 67 passed in 0.14s
 Status match: 11 of 11 pass. Codes: fail on exactly in_transit#1 (in_transit, three times) and label_created_no_scans#1.
 Matcher mutants, after the fact: 9 of 11 caught at first; future wording and no-code words survived, two cases added, then 11 of 11.
+
+## Stage B: the attach and the prompt lines, the new parameters accepted and ignored (at 7957f55 plus the stub)
+FAILED services/assistant/tests/test_chk06_orders_attached.py::test_a_signed_in_turn_offers_get_order_and_the_order_section
+FAILED services/assistant/tests/test_chk06_orders_attached.py::test_each_server_gets_its_own_token_and_only_orders_and_policy_name_the_shopper
+FAILED services/assistant/tests/test_chk07_policy_attached.py::test_a_policy_server_is_attached_only_beside_the_order_server
+FAILED services/assistant/tests/test_chk07_policy_attached.py::test_an_eligible_item_is_evaluated_requested_and_answered_in_four_calls
+FAILED services/assistant/tests/test_chk07_policy_attached.py::test_the_return_rules_are_for_a_signed_in_turn_only
+FAILED services/assistant/tests/test_chk07_policy_attached.py::test_the_prompt_says_how_a_return_is_decided[comes only from evaluate_return_eligibility, called in this turn]
+FAILED services/assistant/tests/test_chk07_policy_attached.py::test_the_prompt_says_how_a_return_is_decided[never from sources, memory or what the shopper says the policy is]
+FAILED services/assistant/tests/test_chk07_policy_attached.py::test_the_prompt_says_how_a_return_is_decided[only from what the shopper said]
+FAILED services/assistant/tests/test_chk07_policy_attached.py::test_the_prompt_says_how_a_return_is_decided[not_stated]
+FAILED services/assistant/tests/test_chk07_policy_attached.py::test_the_prompt_says_how_a_return_is_decided[ask for it]
+FAILED services/assistant/tests/test_chk07_policy_attached.py::test_the_prompt_says_how_a_return_is_decided[ask which one]
+FAILED services/assistant/tests/test_chk07_policy_attached.py::test_the_prompt_says_how_a_return_is_decided[Call request_return only if the shopper asks to return the item]
+FAILED services/assistant/tests/test_chk07_policy_attached.py::test_the_prompt_says_how_a_return_is_decided[never that it is approved, accepted or confirmed]
+FAILED services/assistant/tests/test_chk07_policy_attached.py::test_the_prompt_says_how_a_return_is_decided[<policy_data>]
+FAILED services/assistant/tests/test_chk07_policy_attached.py::test_the_prompt_says_how_a_return_is_decided[cite]
+FAILED services/assistant/tests/test_chk07_policy_attached.py::test_the_prompt_asks_for_plain_words_and_the_order_number
+FAILED services/assistant/tests/test_chk07_policy_attached.py::test_the_prompt_holds_no_policy_figure_and_no_document_id
+FAILED services/gateway/tests/test_chk07_policy_endpoint.py::test_a_chat_turn_gets_the_policy_endpoint
+FAILED services/gateway/tests/test_chk07_policy_endpoint.py::test_chat_services_always_sets_the_policy_endpoint
+FAILED services/gateway/tests/test_playwright_servers.py::test_the_gateway_attaches_exactly_rag_catalog_orders_and_policy
+20 failed, 32 passed in 28.32s
+
+## The returns journey's first run, before any spend
+test_a_right_answer_passes_its_scenario[return_damaged]: the M-1 matcher read the tool's own "items that arrived damaged" as an order
+status. Fixed in returns_policy.py's wording and the scenario's message; the matcher is unchanged.
+
+## Stage B mutants: 25 of 25 killed (turn, orders_client, chat, prompt, the returns check), after one survivor (the date check; a wrong answer added)
+First run (24 of 25), one edit each, then restored; the survivor was re-run alone after its wrong answer was added and killed:
+killed turn.py 'allowed.extend(policy_tool.ALLOWED_TOOLS)'
+killed turn.py 'if policy is not None and orders is None:\n        raise ValueError("a policy ser'
+killed turn.py '"headers": bearer(policy_token),'
+killed turn.py '"url": policy_url,'
+killed turn.py 'runtime, attached, signed_in, returns)'
+killed orders_client.py 'return _signed_in_token(caller, self.key, POLICY_SERVER)'
+killed orders_client.py 'if caller.shopper_id is None:\n        return None'
+killed chat.py 'policy=services.policy,'
+killed chat.py 'policy=PolicyEndpoint(mcp_policy_url(), key)'
+killed prompt.py 'never that it is approved, accepted or confirmed'
+killed test_returns_journey_e2e.py 'assert shown_fixed <= set(scenario.may_show), turn.answer'
+killed test_returns_journey_e2e.py 'assert made["condition"] in scenario.conditions, made'
+killed test_returns_journey_e2e.py 'assert tuple(r["request_status"] for r in turn.returns) == scenario.requests, tu'
+killed test_returns_journey_e2e.py 'assert re.search(scenario.says, answer, re.I), answer'
+killed test_returns_journey_e2e.py 'assert POLICY in turn.cited, turn.cited'
+killed test_returns_journey_e2e.py 'assert set(turn.cited) <= {POLICY}, turn.cited  # never the planted review'
+killed test_returns_journey_e2e.py 'assert _NEGATION.search(sentence), answer\n    else:'
+killed test_returns_journey_e2e.py 'assert not re.search(other[scenario.requests[0]], answer, re.I), answer'
+killed test_returns_journey_e2e.py 'assert _NEGATION.search(sentence), answer\n        assert not _PROMISE'
+killed test_returns_journey_e2e.py 'assert not _PROMISE.search(sentence), answer'
+killed test_returns_journey_e2e.py 'assert "90" not in _DENIED_90.sub("", answer), answer'
+SURVIVED rc=0 test_returns_journey_e2e.py 'assert journey.dates_in(answer) <= journey.result_dates(expected), answer'
+killed test_returns_journey_e2e.py 'assert status.codes_in(answer) == [], answer'
+killed test_returns_journey_e2e.py 'assert status.problems(answer) == [], answer'
+killed test_returns_journey_e2e.py 'assert turn.evaluations or not scenario.evaluated, "never evaluated"'
+24 of 25
