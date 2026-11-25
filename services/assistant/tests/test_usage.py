@@ -50,6 +50,8 @@ FIELDS = {
     "output_tokens",
     "cost_usd",
     "cache_hit_rate",
+    "qu_path",  # row #11 (RAG-04): how the first search was planned; a name, no text
+    "qu_ms",
 }
 M = 1_000_000
 

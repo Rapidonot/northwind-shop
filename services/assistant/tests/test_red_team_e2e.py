@@ -41,6 +41,7 @@ from northwind_assistant.catalog_client import CatalogEndpoint
 from northwind_assistant.output_check import CONFIRMATION_SENTENCE, Source, hits
 from northwind_assistant.prompt import system_prompt
 from northwind_assistant.rag_client import RagEndpoint
+from northwind_assistant.understand import Understander
 from northwind_common.llm import agent_runtime
 from northwind_gateway.app import app
 from northwind_gateway.chat import ChatServices, chat_services
@@ -168,6 +169,13 @@ class SpyRetriever:
 
     def search(self, query: str, caller: Caller) -> Sequence[RetrievedChunk]:
         found: Sequence[RetrievedChunk] = self.inner.search(query, caller)
+        self.searches += 1
+        self.returned.extend(found)
+        return found
+
+    def search_planned(self, parts: Any, caller: Caller) -> Sequence[RetrievedChunk]:
+        """Row #11 (RAG-04): a first search run as its query plan counts as one search too."""
+        found: Sequence[RetrievedChunk] = self.inner.search_planned(parts, caller)
         self.searches += 1
         self.returned.extend(found)
         return found
@@ -300,7 +308,10 @@ def test_a_red_team_query_surfaces_nothing_internal(
         catalog_testing.running(catalog_testing.server(key=KEY)) as catalog_url,
     ):
         app.dependency_overrides[chat_services] = lambda: ChatServices(
-            RagEndpoint(url, KEY), agent_runtime(root=tmp_path), CatalogEndpoint(catalog_url, KEY)
+            RagEndpoint(url, KEY),
+            agent_runtime(root=tmp_path),
+            CatalogEndpoint(catalog_url, KEY),
+            Understander(),  # row #11: the gateway's surface, query understanding included
         )
         try:
             response = TestClient(app).post("/api/chat", json={"message": item["query"]})

@@ -255,9 +255,54 @@ def main() -> None:
     parser.add_argument(
         "--pace", type=float, default=0.05, help="seconds between the fake's deltas"
     )
+    # Row #11 (RAG-04, plan (1)): the query-understanding arm. Live mode (the 700 ms deadline; a
+    # timed-out plan is never cached, so every routed turn pays it), a fake Haiku that answers after
+    # `--haiku-ms` (W1's p95 by default), and three message kinds: plain (the smoke questions),
+    # rules-filtered (a live filter and the planned search) and Haiku-routed.
+    parser.add_argument("--qu", action="store_true", help="measure the query-understanding arm")
+    parser.add_argument("--haiku-ms", type=float, default=3510.0)
     args = parser.parse_args()
     repo = Path(__file__).resolve().parents[3]
-    questions = list(json.loads((repo / "apps/portal/e2e/questions.json").read_text()).values())
+    smoke = list(json.loads((repo / "apps/portal/e2e/questions.json").read_text()).values())
+    kinds: list[tuple[str, str]] = [("plain", q) for q in smoke]
+    understand = None
+    if args.qu:
+        from types import SimpleNamespace
+
+        from northwind_assistant.understand import Understander
+
+        class SlowHaiku:
+            """Answers after `--haiku-ms`; in live mode the 700 ms deadline cuts it off."""
+
+            def __init__(self) -> None:
+                self.messages = self
+
+            def create(self, **_: Any) -> Any:
+                time.sleep(args.haiku_ms / 1000)
+                text = json.dumps({"parts": []})
+                block = SimpleNamespace(type="text", text=text)
+                return SimpleNamespace(
+                    stop_reason="end_turn", model="m", usage=None, content=[block]
+                )
+
+        understand = Understander(live=True, client_for=lambda _: SlowHaiku())
+        filtered = [
+            "Queen sheet sets in white, please.",
+            "Pants under $50",
+            "Show me rain jackets that are in stock",
+            "A navy fleece in M",
+            "Wool rugs in 5x8",
+        ]
+        routed = [
+            "A black fleece in M and a queen duvet under $200",
+            "A white bath sheet and a navy throw?",
+            "What sizes does the rug come in? And is it machine washable?",
+            "Charcoal fleeces and base layers in small",
+            "A sage cardigan, plus a queen duvet",
+        ]
+        kinds = [("plain", q) for q in smoke] + [("rules_filtered", q) for q in filtered]
+        kinds += [("haiku_routed", q) for q in routed]
+    questions = [q for _, q in kinds]
 
     def connect() -> psycopg.Connection:
         return psycopg.connect(os.environ["DATABASE_URL"], autocommit=True)
@@ -274,6 +319,7 @@ def main() -> None:
             RagEndpoint(rag_url, KEY),
             agent_runtime(base_url=model_url, root=Path(root) / "rt"),
             CatalogEndpoint(catalog_url, KEY),
+            understand,
         )
         app.dependency_overrides[chat_services] = lambda: services
         try:
@@ -287,6 +333,7 @@ def main() -> None:
                     turns.append(
                         {
                             "question": n % len(questions),
+                            "kind": kinds[n % len(kinds)][0],
                             "first_token_ms": timing.first_token_ms,
                             "before_model_ms": (arrived - timing.started) * 1000,
                             "after_first_delta_ms": None
@@ -318,6 +365,14 @@ def main() -> None:
         ],
         "turns": turns,
     }
+    if args.qu:
+        report["by_kind_first_token_ms_p50_p95"] = {
+            kind: [
+                percentile([t["first_token_ms"] for t in turns if t["kind"] == kind], q)
+                for q in (50, 95)
+            ]
+            for kind in ("plain", "rules_filtered", "haiku_routed")
+        }
     print(json.dumps(report, indent=2))
 
 

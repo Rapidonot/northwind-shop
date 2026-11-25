@@ -21,12 +21,21 @@ from mcp.client.streamable_http import streamable_http_client
 from mcp.shared._httpx_utils import MCP_DEFAULT_SSE_READ_TIMEOUT, MCP_DEFAULT_TIMEOUT
 
 from northwind_assistant.caller import Caller
-from northwind_common.mcp_token import RAG_SERVER, bearer, mint
+from northwind_common.mcp_token import RAG_SERVER, bearer, mint, verify_for
 from northwind_common.rag_tool import TOOL_NAME
 
 AGENT = "shopper-assistant"
 # Every logger under these names stays at WARNING or above, whatever the root level.
-QUIET_LOGGERS = ("mcp.client", "mcp.shared", "httpx", "httpcore", "httpx2", "httpcore2")
+# Row #11: `anthropic` too, since query understanding sends the shopper's message to Haiku.
+QUIET_LOGGERS = (
+    "mcp.client",
+    "mcp.shared",
+    "httpx",
+    "httpcore",
+    "httpx2",
+    "httpcore2",
+    "anthropic",
+)
 
 
 def quiet_client_logs() -> None:
@@ -52,6 +61,13 @@ class RagEndpoint:
             server=RAG_SERVER,
         )
         return token
+
+    def mint_turn(self, caller: Caller) -> tuple[str, str]:
+        """A fresh token for one turn of this caller, and the turn's id (row #11: the planned first
+        search's token keeps it, so RAG-10's cap counts that search). Minted through `mint`, the
+        one place a turn's token is made, so anything that wraps `mint` sees it."""
+        token = self.mint(caller)
+        return token, verify_for(token, key=self.key, server=RAG_SERVER).turn
 
 
 @dataclass(frozen=True)

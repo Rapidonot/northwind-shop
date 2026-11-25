@@ -1,0 +1,4 @@
+eval-answers (starter set, 308): 308 messages; routed to Haiku 7 (2.3%); rules filter only (planned search, no model) 41; plain 260; injected (never to model) 3; reasons {'size_question': 2, 'multi_part': 5}
+assistant-smoke: 5 messages; routed to Haiku 0 (0.0%); rules filter only (planned search, no model) 0; plain 5; injected (never to model) 0; reasons {}
+assistant-redteam: 28 messages; routed to Haiku 2 (7.1%); rules filter only (planned search, no model) 0; plain 26; injected (never to model) 5; reasons {'multi_part': 2}
+labelled (100): 100 messages; routed to Haiku 10 (10.0%); rules filter only (planned search, no model) 44; plain 46; injected (never to model) 8; reasons {'size_question': 2, 'follow_up': 2, 'multi_part': 6}

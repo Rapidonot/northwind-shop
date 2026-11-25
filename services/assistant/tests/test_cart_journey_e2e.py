@@ -29,6 +29,7 @@ from northwind_assistant.caller import Caller
 from northwind_assistant.catalog_client import CatalogEndpoint
 from northwind_assistant.rag_client import RagEndpoint
 from northwind_assistant.turn import Citations, TextDelta, TurnError, TurnEvent, stream_answer
+from northwind_assistant.understand import Understander
 from northwind_common.llm import agent_runtime
 from northwind_mcp_catalog import testing as catalog_testing
 from northwind_mcp_catalog.cart import alternatives
@@ -100,7 +101,13 @@ def test_add_refused_add_change_quantity_remove(llm_proxy: Any, tmp_path: Path) 
             runtime = agent_runtime(root=tmp_path / f"turn{n}")
 
             async def collect() -> list[TurnEvent]:
-                return [e async for e in stream_answer(message, caller, rag, runtime, catalog)]
+                # Row #11 (RAG-04): the gateway's surface, query understanding included.
+                return [
+                    e
+                    async for e in stream_answer(
+                        message, caller, rag, runtime, catalog, Understander()
+                    )
+                ]
 
             events = asyncio.run(collect())
             assert not [e for e in events if isinstance(e, TurnError)], events

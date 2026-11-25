@@ -36,6 +36,14 @@ from northwind_assistant.tools import (
     record_live,
     search_sources,
 )
+from northwind_assistant.understand import (
+    LiveFilter,
+    Understander,
+    Understood,
+    mint_planned,
+    plan_claim,
+    query_ok,
+)
 from northwind_assistant.usage import TurnUsage
 from northwind_common import catalog_tool, order_tool
 from northwind_common.llm import ASSISTANT_MODEL, AgentRuntime, agent_options
@@ -299,24 +307,68 @@ async def run_turn(
     yield Citations(cited_ids("".join(parts), state.seen))
 
 
+def _turn_usage(understood: Understood | None, *, deferred: bool = False) -> TurnUsage:
+    usage = TurnUsage(deferred=deferred)
+    if understood is not None:
+        usage.understanding(understood.path, understood.ms, understood.model, understood.usage)
+    return usage
+
+
+async def _first_searcher(
+    message: str,
+    caller: Caller,
+    rag: RagEndpoint,
+    runtime: AgentRuntime,
+    catalog: CatalogEndpoint | None,
+    understand: Understander,
+    token: str,
+    turn: str,
+) -> tuple[McpRagSearcher, Understood | None]:
+    """Row #11 (RAG-04): the first search's searcher, with the query plan as a claim on a token for
+    that one search when the plan narrows anything. A message the first search would refuse never
+    reaches the model (hard rule 1); any failure keeps the plain search."""
+    plain = McpRagSearcher(rag.url, token)
+    if caller.region is None or not query_ok(message):
+        return plain, None
+    base_url = runtime.env["ANTHROPIC_BASE_URL"]  # the turn's own proxy and suite
+    understood = await understand.plan(message, caller.region, base_url)
+    live = None if catalog is None else LiveFilter(catalog.url, catalog.key)
+    claim = await plan_claim(understood.plan, message, caller, live)
+    if claim is None:
+        return plain, understood
+    planned = mint_planned(rag.key, caller, turn, claim)
+    return (plain if planned is None else McpRagSearcher(rag.url, planned)), understood
+
+
 async def stream_answer(
     message: str,
     caller: Caller,
     rag: RagEndpoint,
     runtime: AgentRuntime,
     catalog: CatalogEndpoint | None = None,
+    understand: Understander | None = None,
     orders: OrdersEndpoint | None = None,
 ) -> AsyncIterator[TurnEvent]:
     """`catalog` attaches mcp-catalog (row #12). The gateway and the eval answerer always pass one
     (pinned by tests); `None` is the one-server surface that tests written before #12 use.
 
+    `understand` (row #11, RAG-04): query understanding for the first search. The gateway passes
+    one; the eval answerer does not, because its first search is the saved context, which already
+    holds the planned search (`make eval-snapshot`).
+
     `orders` (row #27, CHK-06) attaches mcp-orders, only for a signed-in caller: the gateway passes
     one; the eval answerer does not, and its caller is never signed in."""
     state = ToolState(region=caller.region)
-    token = rag.mint(caller)
-    found = await search_sources(message, McpRagSearcher(rag.url, token), state)
+    token, turn = rag.mint_turn(caller)
+    understood: Understood | None = None
+    searcher = McpRagSearcher(rag.url, token)
+    if understand is not None:
+        searcher, understood = await _first_searcher(
+            message, caller, rag, runtime, catalog, understand, token, turn
+        )
+    found = await search_sources(message, searcher, state)
     if isinstance(found, SearchFailure):
-        usage = TurnUsage()
+        usage = _turn_usage(understood)
         if found.category == "validation":
             # The gateway refuses these first, but no caller gets to rely on that: a message the
             # search will not take must not reach the model either (hard rule 1).
@@ -333,7 +385,7 @@ async def stream_answer(
     orders_token = None if orders is None else orders.mint(caller)
     signed_in = None if orders is None or orders_token is None else (orders.url, orders_token)
     options = assistant_options(caller, rag.url, token, runtime, attached, signed_in)
-    usage = TurnUsage(deferred=True)
+    usage = _turn_usage(understood, deferred=True)
     check = OutputCheck(state.seen, state.sources, live=state.live)
     try:
         async for event in run_turn(user_prompt(message, found), options, state, usage):

@@ -45,6 +45,10 @@ class TurnUsage:
     # `stream_answer` reports once its output check has released the last text, so the line can
     # hold the check's counts: `report` then only keeps the outcome until `flush`.
     deferred: bool = False
+    # Row #11 (RAG-04): how the first search's plan was made, and how long it took. A path name and
+    # a duration only, never the message or the plan (NFR-04).
+    qu_path: str = "off"
+    qu_ms: int = 0
     _outcome: str | None = field(default=None, repr=False)
     _model: str = ""
     _open: dict[str, Any] | None = field(default=None, repr=False)
@@ -55,6 +59,15 @@ class TurnUsage:
         usage = details.get("usage")
         self._model = str(details.get("model") or "")
         self._open = dict(usage) if isinstance(usage, Mapping) else {}
+
+    def understanding(self, path: str, ms: int, model: str = "", usage: Any = None) -> None:
+        """Row #11: query understanding's path and time; a Haiku call counts as a call, with its
+        cost."""
+        self.qu_path, self.qu_ms = path, ms
+        if model:
+            details = {"model": model, "usage": usage if isinstance(usage, Mapping) else {}}
+            self.call_started(details)
+            self._close_call()
 
     def call_updated(self, usage: Any) -> None:
         """`message_delta` holds the final figures, as in the proxy's `parse_sse_usage`."""
@@ -112,6 +125,8 @@ class TurnUsage:
                     "cost_usd": self.cost_usd,
                     "cache_hit_rate": self.cache_hit_rate,
                     "blocked": dict(sorted(self.blocked.items())),
+                    "qu_path": self.qu_path,
+                    "qu_ms": self.qu_ms,
                 },
                 sort_keys=True,
             )

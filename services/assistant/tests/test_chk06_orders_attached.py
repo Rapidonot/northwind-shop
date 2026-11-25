@@ -77,7 +77,7 @@ def ask(message: str, caller: Caller, runtime: AgentRuntime, orders_url: str | N
         return [
             e
             async for e in stream_answer(
-                message, caller, rag, runtime, CatalogEndpoint(catalog_url, KEY), orders
+                message, caller, rag, runtime, CatalogEndpoint(catalog_url, KEY), orders=orders
             )
         ]
 

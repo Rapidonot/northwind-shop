@@ -1,0 +1,280 @@
+{
+  "runs": 30,
+  "pace_s": 0.05,
+  "chunks": [
+    "The Larchpell Larch Area Rug is a ",
+    "flatweave rug [P0178]. ",
+    "It lies flat."
+  ],
+  "warm_up_first_token_ms": 1102.6799170067534,
+  "first_token_ms": {
+    "p50": 398.50837498670444,
+    "p95": 1111.8997920129914,
+    "max": 1124.2795000143815,
+    "mean": 626.5127263681885
+  },
+  "before_model_ms_p50_p95": [
+    345.8115829853341,
+    1059.6092499908991
+  ],
+  "after_first_delta_ms_p50_p95": [
+    52.259957999922335,
+    52.90774998138659
+  ],
+  "turns": [
+    {
+      "question": 0,
+      "kind": "plain",
+      "first_token_ms": 401.5023750253022,
+      "before_model_ms": 349.6484580100514,
+      "after_first_delta_ms": 51.67575000086799,
+      "model_requests": 1
+    },
+    {
+      "question": 1,
+      "kind": "plain",
+      "first_token_ms": 397.6021670096088,
+      "before_model_ms": 345.0681250251364,
+      "after_first_delta_ms": 52.33754200162366,
+      "model_requests": 1
+    },
+    {
+      "question": 2,
+      "kind": "plain",
+      "first_token_ms": 410.19437499926426,
+      "before_model_ms": 357.75891700177453,
+      "after_first_delta_ms": 52.247999992687255,
+      "model_requests": 1
+    },
+    {
+      "question": 3,
+      "kind": "plain",
+      "first_token_ms": 398.50837498670444,
+      "before_model_ms": 345.8115829853341,
+      "after_first_delta_ms": 52.405208989512175,
+      "model_requests": 1
+    },
+    {
+      "question": 4,
+      "kind": "plain",
+      "first_token_ms": 390.82183298887685,
+      "before_model_ms": 338.3486660022754,
+      "after_first_delta_ms": 52.283333003288135,
+      "model_requests": 1
+    },
+    {
+      "question": 5,
+      "kind": "rules_filtered",
+      "first_token_ms": 386.81625001481734,
+      "before_model_ms": 334.70666699577123,
+      "after_first_delta_ms": 51.91999999806285,
+      "model_requests": 1
+    },
+    {
+      "question": 6,
+      "kind": "rules_filtered",
+      "first_token_ms": 390.35816700197756,
+      "before_model_ms": 337.5513330101967,
+      "after_first_delta_ms": 52.58041698834859,
+      "model_requests": 1
+    },
+    {
+      "question": 7,
+      "kind": "rules_filtered",
+      "first_token_ms": 405.8128329925239,
+      "before_model_ms": 353.3314169908408,
+      "after_first_delta_ms": 52.29145800694823,
+      "model_requests": 1
+    },
+    {
+      "question": 8,
+      "kind": "rules_filtered",
+      "first_token_ms": 388.88166699325666,
+      "before_model_ms": 336.30724999238737,
+      "after_first_delta_ms": 52.37829199177213,
+      "model_requests": 1
+    },
+    {
+      "question": 9,
+      "kind": "rules_filtered",
+      "first_token_ms": 386.0487919882871,
+      "before_model_ms": 335.02662499086,
+      "after_first_delta_ms": 50.714666984276846,
+      "model_requests": 1
+    },
+    {
+      "question": 10,
+      "kind": "haiku_routed",
+      "first_token_ms": 1075.6233329884708,
+      "before_model_ms": 1022.5285830092616,
+      "after_first_delta_ms": 52.90774998138659,
+      "model_requests": 1
+    },
+    {
+      "question": 11,
+      "kind": "haiku_routed",
+      "first_token_ms": 1076.4435830060393,
+      "before_model_ms": 1023.9923330082092,
+      "after_first_delta_ms": 52.19712501275353,
+      "model_requests": 1
+    },
+    {
+      "question": 12,
+      "kind": "haiku_routed",
+      "first_token_ms": 1111.8997920129914,
+      "before_model_ms": 1059.6092499908991,
+      "after_first_delta_ms": 52.033084008144215,
+      "model_requests": 1
+    },
+    {
+      "question": 13,
+      "kind": "haiku_routed",
+      "first_token_ms": 1084.5717909978703,
+      "before_model_ms": 1031.8721249932423,
+      "after_first_delta_ms": 52.4474999983795,
+      "model_requests": 1
+    },
+    {
+      "question": 14,
+      "kind": "haiku_routed",
+      "first_token_ms": 1102.4123750103172,
+      "before_model_ms": 1049.8599169950467,
+      "after_first_delta_ms": 52.34400002518669,
+      "model_requests": 1
+    },
+    {
+      "question": 0,
+      "kind": "plain",
+      "first_token_ms": 417.24516701651737,
+      "before_model_ms": 365.2269169979263,
+      "after_first_delta_ms": 51.82195801171474,
+      "model_requests": 1
+    },
+    {
+      "question": 1,
+      "kind": "plain",
+      "first_token_ms": 408.6410000163596,
+      "before_model_ms": 355.5354590062052,
+      "after_first_delta_ms": 52.608625002903864,
+      "model_requests": 1
+    },
+    {
+      "question": 2,
+      "kind": "plain",
+      "first_token_ms": 391.8676250032149,
+      "before_model_ms": 339.8176670016255,
+      "after_first_delta_ms": 51.86654199496843,
+      "model_requests": 1
+    },
+    {
+      "question": 3,
+      "kind": "plain",
+      "first_token_ms": 395.2704999828711,
+      "before_model_ms": 343.5777499980759,
+      "after_first_delta_ms": 51.465374999679625,
+      "model_requests": 1
+    },
+    {
+      "question": 4,
+      "kind": "plain",
+      "first_token_ms": 393.55595799861476,
+      "before_model_ms": 341.1858750041574,
+      "after_first_delta_ms": 52.16195801040158,
+      "model_requests": 1
+    },
+    {
+      "question": 5,
+      "kind": "rules_filtered",
+      "first_token_ms": 376.0538750211708,
+      "before_model_ms": 323.63050000276417,
+      "after_first_delta_ms": 52.233624999644235,
+      "model_requests": 1
+    },
+    {
+      "question": 6,
+      "kind": "rules_filtered",
+      "first_token_ms": 391.8645829835441,
+      "before_model_ms": 338.63354098866694,
+      "after_first_delta_ms": 52.95783298788592,
+      "model_requests": 1
+    },
+    {
+      "question": 7,
+      "kind": "rules_filtered",
+      "first_token_ms": 393.3331250154879,
+      "before_model_ms": 341.6237920173444,
+      "after_first_delta_ms": 51.5102079953067,
+      "model_requests": 1
+    },
+    {
+      "question": 8,
+      "kind": "rules_filtered",
+      "first_token_ms": 387.7086669963319,
+      "before_model_ms": 335.6375000148546,
+      "after_first_delta_ms": 51.82954197516665,
+      "model_requests": 1
+    },
+    {
+      "question": 9,
+      "kind": "rules_filtered",
+      "first_token_ms": 385.16199999139644,
+      "before_model_ms": 332.5715420069173,
+      "after_first_delta_ms": 52.36662499373779,
+      "model_requests": 1
+    },
+    {
+      "question": 10,
+      "kind": "haiku_routed",
+      "first_token_ms": 1124.2795000143815,
+      "before_model_ms": 1071.6613749973476,
+      "after_first_delta_ms": 52.42491699755192,
+      "model_requests": 1
+    },
+    {
+      "question": 11,
+      "kind": "haiku_routed",
+      "first_token_ms": 1069.800249999389,
+      "before_model_ms": 1018.0158330185805,
+      "after_first_delta_ms": 51.53595798765309,
+      "model_requests": 1
+    },
+    {
+      "question": 12,
+      "kind": "haiku_routed",
+      "first_token_ms": 1099.1772080014925,
+      "before_model_ms": 1046.6332920186687,
+      "after_first_delta_ms": 52.259957999922335,
+      "model_requests": 1
+    },
+    {
+      "question": 13,
+      "kind": "haiku_routed",
+      "first_token_ms": 1088.1349580013193,
+      "before_model_ms": 1035.5542080069426,
+      "after_first_delta_ms": 52.32433299534023,
+      "model_requests": 1
+    },
+    {
+      "question": 14,
+      "kind": "haiku_routed",
+      "first_token_ms": 1065.789666987257,
+      "before_model_ms": 1013.1947919726372,
+      "after_first_delta_ms": 52.33483400661498,
+      "model_requests": 1
+    }
+  ],
+  "by_kind_first_token_ms_p50_p95": {
+    "plain": [
+      397.6021670096088,
+      417.24516701651737
+    ],
+    "rules_filtered": [
+      387.7086669963319,
+      405.8128329925239
+    ],
+    "haiku_routed": [
+      1084.5717909978703,
+      1124.2795000143815
+    ]
+  }
+}

@@ -20,8 +20,10 @@ CONFIG = (Path(__file__).resolve().parents[3] / "apps/portal/playwright.config.t
 def test_the_gateway_attaches_exactly_mcp_rag_mcp_catalog_and_mcp_orders() -> None:
     # A new server here must also be started in playwright.config.ts: this pin fails first.
     # Row #27 (CHK-06): mcp-orders joins, for signed-in turns. Still exact.
+    # Row #11 (approved under stop 5): `understand` is not a server; it calls Haiku through the
+    # runtime's own proxy, so playwright.config.ts starts nothing new for it.
     fields = {f.name for f in dataclasses.fields(ChatServices)}
-    assert fields == {"rag", "runtime", "catalog", "orders"}
+    assert fields == {"rag", "runtime", "catalog", "understand", "orders"}
 
 
 @pytest.mark.parametrize(

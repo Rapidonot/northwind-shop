@@ -224,7 +224,8 @@ def run_command(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Any:
         monkeypatch.setattr(cli, "_index_problems", index_problems)
         identities = iter(same_index or [("northwind", "p1"), ("northwind_enriched", "e1")])
         monkeypatch.setattr(cli, "_index_identity", lambda _c: next(identities))
-        monkeypatch.setattr(cli, "_live", lambda _c, _e, _i: next(lives))
+        # Row #11: the enrichment report reads the plain search, `_live_plain` (E1 was fixed on it).
+        monkeypatch.setattr(cli, "_live_plain", lambda _c, _e, _i: next(lives))
         monkeypatch.setattr(cli, "load_contexts", lambda _p: {})
         monkeypatch.setattr(cli, "load_baseline", lambda _p: type("B", (), {"retrieval": {}})())
         monkeypatch.setattr(cli, "retriever_id", lambda _e: "fake")
