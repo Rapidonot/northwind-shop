@@ -8,8 +8,9 @@ body. Scoring: the exact set of indexes (the guide).
 
 from __future__ import annotations
 
+import ast
 import json
-import re
+import subprocess
 from collections import Counter
 from pathlib import Path
 from typing import Any
@@ -59,18 +60,45 @@ def test_at_least_54_of_60_are_routed_exactly() -> None:
     assert correct >= NEEDED, report
 
 
+def uses(source: str) -> list[str]:
+    """Every way a module can touch the router other than defining it."""
+    found = []
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Name) and node.id == "route_indexes":
+            found.append("name")
+        elif isinstance(node, ast.Attribute) and node.attr == "route_indexes":
+            found.append("attribute")
+        elif isinstance(node, ast.alias) and node.name.split(".")[-1] == "route_indexes":
+            found.append("import")
+        elif isinstance(node, ast.Constant) and node.value == "route_indexes":
+            found.append("string")
+    return found
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "_router = route_indexes",
+        "map(route_indexes, parts)",
+        "query.route_indexes(m)",
+        "from northwind_rag.query import route_indexes as r",
+        "getattr(query, 'route_indexes')",
+    ],
+)
+def test_the_use_finder_sees_each_kind_of_use(source: str) -> None:
+    assert uses(source)
+
+
 def test_nothing_calls_the_router() -> None:
     """Report-only: wiring it is the user's decision (plan, stops)."""
-    callers = [
-        path.relative_to(REPO).as_posix()
-        for root in ("services", "evals/src", "data", "apps", "agents-external")
-        if (REPO / root).is_dir()
-        for path in (REPO / root).rglob("*.py")
-        if "/tests/" not in path.as_posix()
-        and ".venv" not in path.parts
-        and "node_modules" not in path.parts
-        and re.search(r"\broute_indexes\b", path.read_text(encoding="utf-8"))
-    ]
-    assert callers == ["services/rag/src/northwind_rag/query.py"]
-    source = (REPO / callers[0]).read_text(encoding="utf-8")
-    assert len(re.findall(r"\broute_indexes\(", source)) == 1, "only its own definition"
+    tracked = subprocess.run(  # noqa: S603 - fixed arguments
+        ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard", "*.py"],  # noqa: S607
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.split("\0")
+    paths = [p for p in tracked if p and "tests/" not in p and (REPO / p).is_file()]
+    assert "services/rag/src/northwind_rag/query.py" in paths and len(paths) > 100
+    callers = {p: u for p in paths if (u := uses((REPO / p).read_text(encoding="utf-8")))}
+    assert callers == {}

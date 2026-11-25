@@ -893,7 +893,8 @@ def _cue(table: str) -> re.Pattern[str]:
 # Text aimed at the system. Stricter than `strip_injection`, whose command words alone also match
 # "don't forget" and "ignore the care label": here a command needs something of the system's.
 _SYSTEM_TEXT = re.compile(
-    r"<!--|<\|?/?(?:system|im_start|tool|script)|\[/?(?:system|inst)\b|\b\w{3,30}=\S"
+    r"<!--|<\|?/?(?:system|im_start|tool|script)|\[/?(?:system|inst)\b|\b\w{3,30} ?= ?\S"
+    r"|\breveal (?:your|the (?:system|hidden|prompt)|all|every)\b"
     r"|\b(?:system|assistant|developer|admin|ai|bot)\]?\s?:|\b(?:ignore|disregard|override|bypass|"
     r"forget|break) (?:(?:your|all|any|of|the|previous|prior|above|earlier|system|safety) ){0,5}"
     r"(?:instructions?|prompts?|guidelines|guardrails|restrictions|rules|filters?)\b"

@@ -44,13 +44,20 @@ ASSISTANT_SUITES = {
 
 
 def _request(cassette: dict[str, Any]) -> dict[str, Any]:
-    raw = (cassette.get("match") or {}).get("body")
+    raw = cassette["match"]["body"]
     parsed = json.loads(raw) if isinstance(raw, str) else raw
-    return parsed if isinstance(parsed, dict) else {}
+    assert isinstance(parsed, dict)
+    return parsed
 
 
 def _is_assistant(request: dict[str, Any]) -> bool:
-    return ALLOWED_TOOL in {tool.get("name") for tool in request.get("tools", [])}
+    """It offers the search tool, or its history holds a search. Both, or it is not a turn."""
+    offers = ALLOWED_TOOL in {tool.get("name") for tool in request.get("tools", [])}
+    searched = any(
+        _is_search(block) for message in request["messages"] for block in _blocks(message)
+    )
+    assert offers or not searched, "a turn that searched without offering the tool"
+    return offers
 
 
 def _blocks(message: dict[str, Any]) -> list[dict[str, Any]]:
@@ -93,12 +100,13 @@ def searches(cassette: dict[str, Any]) -> int:
 def _recorded() -> dict[str, dict[str, Any]]:
     found = {}
     for path in sorted((REPO / "cassettes").glob("*/*.json")):
+        text = path.read_text(encoding="utf-8")
         if path.parent.name not in ASSISTANT_SUITES:
-            if not path.parent.name.startswith("backend-"):
-                assert not _is_assistant(_request(json.loads(path.read_text("utf-8")))), path
+            assert ALLOWED_TOOL not in text, f"{path}: an assistant turn in another suite"
             continue
-        cassette = json.loads(path.read_text(encoding="utf-8"))
+        cassette = json.loads(text)
         if _is_assistant(_request(cassette)):
+            assert cassette["status"] == 200 and cassette["kind"] == "sse", path
             found[f"{path.parent.name}/{path.name}"] = cassette
     return found
 
