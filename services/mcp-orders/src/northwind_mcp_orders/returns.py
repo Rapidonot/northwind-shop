@@ -4,7 +4,7 @@
 facts. northwind-policy's `evaluate_return_eligibility` and `ReturnDesk.request` below both use it,
 so a request never rests on what a model says was decided: the desk decides again itself.
 
-`ReturnDesk.request` is the core of `request_return` (its MCP handler comes with PR 2's stage B). It
+`ReturnDesk.request` is the core of `request_return` (its MCP handler is in `tools`). It
 records the shopper's own request and nothing else: no label, refund or case. Eligible is stored as
 `requested`, ambiguous as `needs_review`; ineligible is a business error and stores nothing.
 

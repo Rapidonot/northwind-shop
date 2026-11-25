@@ -58,7 +58,7 @@ SCAN_PYTHON := $(RUNNER_PYTHON)
 MODEL_PYTHON := .venv-model/bin/python -I
 endif
 
-.PHONY: help setup up down dev dev-mcp-rag dev-mcp-catalog dev-mcp-orders dev-gateway dev-portal data model ingest ingest-enriched enrich fmt lint test check \
+.PHONY: help setup up down dev dev-mcp-rag dev-mcp-catalog dev-mcp-orders dev-mcp-policy dev-gateway dev-portal data model ingest ingest-enriched enrich fmt lint test check \
 	test-integration ci scan-cassettes llm-spend llm-proxy llm-runner runner-sync runner-check \
 	ship finish review-diff record eval-live eval-rescore eval-gate eval-integrity eval-gate-stale-ok eval-promote \
 	eval-snapshot eval-review-list eval-enrichment-report eval-compare-retrievers embed-cache e2e e2e-scripted
@@ -90,10 +90,10 @@ down: ## Stop the local stack (data volume is kept)
 
 # A fresh token signing key per run (CC-10), in the environment only: never echoed or written.
 # Row #27: the demo sign-in is on in dev (NORTHWIND_DEMO_SIGNIN=1; decision 0023).
-dev: ## Run mcp-rag, mcp-catalog, mcp-orders (this worktree's ports), gateway (:8000), portal (:5173)
+dev: ## Run mcp-rag, mcp-catalog, mcp-orders, mcp-policy (this worktree's ports), gateway (:8000), portal (:5173)
 	@NORTHWIND_MCP_TOKEN_KEY="$$(uv run python -c 'import secrets; print(secrets.token_urlsafe(48))')" \
 		NORTHWIND_DEMO_SIGNIN=1 \
-		$(MAKE) -j5 dev-mcp-rag dev-mcp-catalog dev-mcp-orders dev-gateway dev-portal
+		$(MAKE) -j6 dev-mcp-rag dev-mcp-catalog dev-mcp-orders dev-mcp-policy dev-gateway dev-portal
 
 dev-mcp-rag:
 	uv run python -m northwind_mcp_rag.app
@@ -105,6 +105,10 @@ dev-mcp-catalog:
 # Row #27: the signed-in shopper's order status and tracking (CHK-06).
 dev-mcp-orders:
 	uv run python -m northwind_mcp_orders.app
+
+# Row #27 PR 2: return eligibility and the public policies (CHK-07).
+dev-mcp-policy:
+	uv run python -m northwind_mcp_policy.app
 
 dev-gateway:
 	uv run uvicorn northwind_gateway.app:app --reload --port 8000

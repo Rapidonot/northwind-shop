@@ -27,7 +27,13 @@ def test_the_gateway_attaches_exactly_mcp_rag_mcp_catalog_and_mcp_orders() -> No
 
 
 @pytest.mark.parametrize(
-    "module", ["northwind_mcp_rag.app", "northwind_mcp_catalog.app", "northwind_mcp_orders.app"]
+    "module",
+    [
+        "northwind_mcp_rag.app",
+        "northwind_mcp_catalog.app",
+        "northwind_mcp_orders.app",
+        "northwind_mcp_policy.app",  # row #27 PR 2 (CHK-07)
+    ],
 )
 def test_playwright_starts_each_attached_server(module: str) -> None:
     assert f"uv run python -m {module}" in CONFIG
@@ -38,7 +44,9 @@ def test_the_gateway_is_told_where_both_servers_are() -> None:
     [gateway_env] = re.findall(r"env: \{([^\n]*)", block)
     assert "...ragEnv" in gateway_env and "...catalogEnv" in gateway_env
     assert "...ordersEnv" in gateway_env  # row #27
+    assert "...policyEnv" in gateway_env  # row #27 PR 2
     assert "MCP_RAG_URL" in CONFIG and "MCP_CATALOG_URL" in CONFIG and "MCP_ORDERS_URL" in CONFIG
+    assert "MCP_POLICY_URL" in CONFIG
 
 
 def test_playwright_never_sets_the_database_itself() -> None:

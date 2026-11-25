@@ -201,7 +201,10 @@ def test_the_statuses_split_into_confirmed_and_not() -> None:
         "out_for_delivery",
         "delivered",
     }
-    assert order_tool.ALLOWED_TOOLS == ("mcp__northwind-orders__get_order",)
+    assert order_tool.ALLOWED_TOOLS == (  # PR 2 (CHK-07) adds request_return, exactly
+        "mcp__northwind-orders__get_order",
+        "mcp__northwind-orders__request_return",
+    )
 
 
 def test_the_orders_port_is_its_own_and_can_be_set(monkeypatch: pytest.MonkeyPatch) -> None:

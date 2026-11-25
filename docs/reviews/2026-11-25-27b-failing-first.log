@@ -91,3 +91,32 @@ caught   rules: window before damaged | test_the_evaluator_matches_the_label[RC-
 caught   wording: code shown | test_every_status_has_exactly_one_plain_wording
 caught   wording: confirms | test_no_wording_confirms_an_order_or_gives_a_reason[confirmed]
 26 of 26 caught
+
+## 3. request_return's handler, get_order's wording, the start-up check: before the code
+FAILED services/mcp-orders/tests/test_chk07_request_return.py::test_an_eligible_return_is_recorded_once_and_labelled
+FAILED services/mcp-orders/tests/test_chk07_request_return.py::test_the_key_is_per_turn_and_a_line_has_one_request
+FAILED services/mcp-orders/tests/test_chk07_request_return.py::test_a_refusal_is_a_structured_error_and_writes_nothing[changes0-not_delivered-business
+FAILED services/mcp-orders/tests/test_chk07_request_return.py::test_a_refusal_is_a_structured_error_and_writes_nothing[changes1-wear_and_tear-business
+FAILED services/mcp-orders/tests/test_chk07_request_return.py::test_a_refusal_is_a_structured_error_and_writes_nothing[changes2-not_found-validation]
+FAILED services/mcp-orders/tests/test_chk07_request_return.py::test_a_refusal_is_a_structured_error_and_writes_nothing[changes3-not_found-validation]
+FAILED services/mcp-orders/tests/test_chk07_request_return.py::test_a_refusal_is_a_structured_error_and_writes_nothing[changes4-item_not_in_order-vali
+FAILED services/mcp-orders/tests/test_chk07_request_return.py::test_a_refusal_is_a_structured_error_and_writes_nothing[changes5-invalid_condition-vali
+FAILED services/mcp-orders/tests/test_chk07_request_return.py::test_a_refusal_is_a_structured_error_and_writes_nothing[changes6-invalid_idempotency_ke
+FAILED services/mcp-orders/tests/test_chk07_request_return.py::test_a_refusal_is_a_structured_error_and_writes_nothing[changes7-invalid_idempotency_ke
+FAILED services/mcp-orders/tests/test_chk07_request_return.py::test_a_refusal_is_a_structured_error_and_writes_nothing[changes8-unknown_argument-valid
+FAILED services/mcp-orders/tests/test_chk07_request_return.py::test_a_refusal_is_a_structured_error_and_writes_nothing[changes9-unknown_argument-valid
+FAILED services/mcp-orders/tests/test_chk07_request_return.py::test_a_refusal_is_a_structured_error_and_writes_nothing[changes10-unknown_argument-vali
+FAILED services/mcp-orders/tests/test_chk07_request_return.py::test_a_refusal_is_a_structured_error_and_writes_nothing[changes11-unknown_argument-vali
+FAILED services/mcp-orders/tests/test_chk07_request_return.py::test_card_data_anywhere_is_refused_before_any_read[order_id]
+FAILED services/mcp-orders/tests/test_chk07_request_return.py::test_card_data_anywhere_is_refused_before_any_read[variant_id]
+FAILED services/mcp-orders/tests/test_chk07_request_return.py::test_card_data_anywhere_is_refused_before_any_read[condition]
+FAILED services/mcp-orders/tests/test_chk07_request_return.py::test_card_data_anywhere_is_refused_before_any_read[idempotency_key]
+FAILED services/mcp-orders/tests/test_chk07_request_return.py::test_card_data_anywhere_is_refused_before_any_read[note]
+FAILED services/mcp-orders/tests/test_chk07_request_return.py::test_no_sign_in_and_another_agent_get_nothing
+FAILED services/mcp-orders/tests/test_chk07_request_return.py::test_the_server_has_exactly_a_read_and_a_request
+FAILED services/mcp-orders/tests/test_chk07_request_return.py::test_get_order_gives_the_plain_words_beside_every_code
+FAILED services/mcp-orders/tests/test_chk07_request_return.py::test_the_server_does_not_start_on_policy_that_lost_a_fact
+23 failed, 1 passed in 5.39s
+
+## 3b. With the code
+24 passed in 5.71s

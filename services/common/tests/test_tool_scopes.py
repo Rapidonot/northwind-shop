@@ -29,7 +29,8 @@ def test_the_assistant_gets_exactly_retrieve_context_and_no_resource() -> None:
             }
         ),
         # Row #27 (CHK-06): `get_order` (own orders), as PRD §7 lists it. Still exact.
-        "northwind-orders": frozenset({"get_order"}),
+        # PR 2 (CHK-07, decision 0024): `request_return`, outside PRD §7 (the user's D6).
+        "northwind-orders": frozenset({"get_order", "request_return"}),
         # Row #27 PR 2 (CHK-07): as PRD §7 lists it. Still exact.
         "northwind-policy": frozenset({"evaluate_return_eligibility"}),
     }
@@ -68,18 +69,19 @@ def test_only_staff_may_read_the_index_manifest() -> None:
 @pytest.mark.req("CHK-06")
 def test_get_order_is_the_assistants_alone() -> None:
     """Row #27: no other agent has `get_order` or any northwind-orders tool, and no agent has an
-    order write: no list, refund, cancel or return tool exists on the server."""
+    order write: no list, refund or cancel tool exists on the server. PR 2: its one write is
+    `request_return`, the shopper's own request."""
     holders = {
         agent
         for agent in tool_scopes.agents()
         if tool_scopes.allowed_tools(agent, "northwind-orders")
     }
     assert holders == {"shopper-assistant"}
-    assert tool_scopes.ORDER_TOOLS == frozenset({"get_order"})
+    assert tool_scopes.ORDER_TOOLS == frozenset({"get_order", "request_return"})
     for agent in tool_scopes.agents():
         for server, tools in tool_scopes.AGENT_TOOLS[agent].items():
             if server != "northwind-orders":
-                assert "get_order" not in tools
+                assert not {"get_order", "request_return"} & tools
 
 
 @pytest.mark.req("CHK-07")

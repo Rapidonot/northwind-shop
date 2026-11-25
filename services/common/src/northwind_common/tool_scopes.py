@@ -54,9 +54,12 @@ ELIGIBLE_PRODUCTS = "eligible_products"
 # Each region's own currency: a price filter in another currency is never converted.
 REGION_CURRENCY: Mapping[str, str] = {"US": "USD", "CA": "CAD", "UK": "GBP", "EU": "EUR"}
 
-# Row #27 (CHK-06). One read of the signed-in shopper's own order; no write, no list.
+# Row #27 (CHK-06). One read of the signed-in shopper's own order; no list.
 GET_ORDER = "get_order"
-ORDER_TOOLS = frozenset({GET_ORDER})
+# PR 2 (CHK-07, decision 0024): the shopper's own return request. Outside PRD §7's list, by the
+# user's decision (D6): non-monetary, and no label, refund or case.
+REQUEST_RETURN = "request_return"
+ORDER_TOOLS = frozenset({GET_ORDER, REQUEST_RETURN})
 
 # Row #27 PR 2 (CHK-07). One read: is one line of the shopper's own order returnable.
 EVALUATE_RETURN = "evaluate_return_eligibility"

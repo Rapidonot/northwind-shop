@@ -55,7 +55,11 @@ READ_ONLY_TOOLS = frozenset(
 # caller's own cart. They are the only shopper-facing tools that are not read-only. Exact sets.
 CART_READ_TOOLS = frozenset({"get_cart"})
 CART_WRITE_TOOLS = frozenset({"add_to_cart", "remove_from_cart", "set_cart_quantity"})
-SHOPPER_TOOLS = READ_ONLY_TOOLS | CART_READ_TOOLS | CART_WRITE_TOOLS
+# Row #27 PR 2 (CHK-07, decision 0024; the user's D6 and D8): one write outside PRD §7, the
+# shopper's own return request. An exact one-tool set.
+RETURN_WRITE_TOOLS = frozenset({"request_return"})
+WRITE_TOOLS = CART_WRITE_TOOLS | RETURN_WRITE_TOOLS
+SHOPPER_TOOLS = READ_ONLY_TOOLS | CART_READ_TOOLS | WRITE_TOOLS
 # Row #11 (RAG-04, decision 0022; approved by the user under stop 5): one server-only tool, outside
 # PRD §7's shopper set, granted to exactly one agent that no model holds. Read-only, IDs only.
 SERVER_ONLY_TOOLS: dict[str, str] = {"eligible_products": "shopper-query"}
@@ -137,9 +141,9 @@ def test_tools_list_is_within_the_agents_scope_and_read_only(server: str, agent:
     # Row #11: a server-only tool is listed to its one agent and to nobody else.
     server_only = {name for name, owner in SERVER_ONLY_TOOLS.items() if owner == agent}
     assert names <= SHOPPER_TOOLS | server_only
-    for tool in listed:  # read-only, except exactly the cart writes (row #16)
+    for tool in listed:  # read-only, except exactly the cart writes (row #16) and request_return
         assert tool.annotations is not None
-        assert tool.annotations.read_only_hint is (tool.name not in CART_WRITE_TOOLS)
+        assert tool.annotations.read_only_hint is (tool.name not in WRITE_TOOLS)
 
 
 @pytest.mark.req("NFR-01")
