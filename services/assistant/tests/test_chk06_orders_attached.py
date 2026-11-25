@@ -52,12 +52,15 @@ SIGNED_IN = Caller(region="US", session=SESSION, shopper_id="S0188")
 SOURCE = RetrievedChunk("c1", "document", "POL-001", None, "Orders ship within 2 business days.")
 GET_ORDER = order_tool.GET_ORDER_TOOL
 
-# sha256 of `system_prompt(region)` on origin/main f84f97d, before row #27 (D3's byte-identity).
+# sha256 of `system_prompt(region)`. Row #27 pinned origin/main f84f97d's here (D3's byte-identity:
+# row #27 changed no anonymous prompt). Row #30 (SA-04 and D8's remainder) changes the prompt for
+# every shopper, anonymous and signed in, so these are re-pinned on purpose at its merge of row #27.
+# Re-pinned once more for row #30's one prompt fix round (the user's option (b), 2026-11-25).
 MAIN_PROMPTS = {
-    "US": "3d15477ff461e40ca8684869c28dcdb584efe4d7a73061dce0764a307e378e32",
-    "CA": "bdd3f29a007c44135f8f031ae9e055eae0f627ceff40e846bc9e46f2bb414772",
-    "UK": "0ef47204a52a093aca9a5b37c59b712a082195e19552893dd542670a260413f3",
-    "EU": "7ef9cded818ffeeec285381086d970c0f073d925c13b480f04839b6323d4bb09",
+    "US": "fbb0200f5c09a66097ac39baa7b5c804d0b878cb92d9effa662bfb29f6786b18",
+    "CA": "57b5d8c701eb3b4442ef131a5f2c83f5ac01ef70c165cd06135e43ffb5f1d462",
+    "UK": "87f2bacc269530dc73e6f194e82122b00f5b4de12104151a04ceb435e3706a2f",
+    "EU": "d1c797ce5de97265e5bd6eaadf192c5aab32830a177dfeab4deaf7ac754e3148",
 }
 
 
