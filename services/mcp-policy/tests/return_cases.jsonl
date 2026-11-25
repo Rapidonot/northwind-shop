@@ -58,7 +58,7 @@
 {"condition": "unused", "days": 20, "id": "RC-058", "outcome": "ambiguous", "reason": "packaging_not_stated", "region": "EU", "reviewed_by": "model", "subcategory": "duvet"}
 {"condition": "worn_or_washed", "days": 10, "id": "RC-059", "outcome": "ineligible", "reason": "worn_or_washed", "region": "CA", "reviewed_by": "model", "subcategory": "duvet"}
 {"condition": "unused", "days": 10, "id": "RC-060", "lines": 2, "outcome": "ambiguous", "reason": "more_than_one_line", "region": "US", "reviewed_by": "model", "subcategory": "pants"}
-{"condition": "unused", "days": 90, "id": "RC-061", "lines": 2, "outcome": "ambiguous", "reason": "more_than_one_line", "region": "EU", "reviewed_by": "model", "subcategory": "pants"}
+{"condition": "unused", "days": 90, "id": "RC-061", "lines": 2, "outcome": "ineligible", "reason": "out_of_window", "region": "EU", "reviewed_by": "model", "subcategory": "pants"}
 {"condition": "unused", "days": null, "id": "RC-062", "lines": 2, "outcome": "ineligible", "reason": "not_delivered", "region": "UK", "reviewed_by": "model", "subcategory": "pants"}
 {"clearance": true, "condition": "unused", "days": 3, "id": "RC-063", "outcome": "ineligible", "reason": "clearance_final_sale", "region": "US", "reviewed_by": "model", "subcategory": "pants"}
 {"clearance": true, "condition": "sealed", "days": 3, "id": "RC-064", "outcome": "ineligible", "reason": "clearance_final_sale", "region": "CA", "reviewed_by": "model", "subcategory": "pants"}

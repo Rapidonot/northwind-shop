@@ -136,3 +136,9 @@ aliasing back; key not passed; turn fixed; wording not applied to scans.
 
 ## Red on purpose until stage B (the user: do not touch this file)
 services/assistant/tests/test_chk06_orders_attached.py: 2 failed, 16 passed, the exact signed-in tool list.
+
+## 5. RC-061 relabelled ineligible (the user), before the rule moves
+FAILED services/mcp-policy/tests/test_chk07_cases.py::test_the_evaluator_matches_the_label[RC-061]
+1 failed, 94 passed in 0.11s
+
+## 5b. With the rule moved: test_chk07_cases.py 95 passed; every other CHK-07 file passes unchanged

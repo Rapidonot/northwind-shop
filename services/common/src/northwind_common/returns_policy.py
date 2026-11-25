@@ -247,8 +247,6 @@ def _reason(
     """The ordered rules; the first that applies decides."""
     if days is None:
         return "not_delivered"
-    if lines > 1:
-        return "more_than_one_line"
     statutory = region in STATUTORY_REGIONS and days <= STATUTORY_DAYS
     if condition == "wear_and_tear":
         return "wear_in_cancellation_period" if statutory else "wear_and_tear"
@@ -256,6 +254,8 @@ def _reason(
         return "damaged_on_arrival"  # before the window: no policy text settles it at any age
     if days > WINDOW_DAYS[region]:
         return "out_of_window"
+    if lines > 1:
+        return "more_than_one_line"  # after the window: both lines have the same delivery date
     if clearance and region not in STATUTORY_REGIONS:
         return "clearance_final_sale"
     if clearance and not statutory:

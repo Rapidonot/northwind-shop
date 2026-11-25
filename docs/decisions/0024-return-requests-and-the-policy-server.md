@@ -19,8 +19,9 @@ gives the assistant `evaluate_return_eligibility` on a read-only `northwind-poli
    refuses to start if a sentence is missing. Only public documents of the token's region are served.
 4. **The date is fixed at 2026-11-15 (D5),** never the wall clock or an argument, so recordings replay after the credit ends.
 5. **The "pillows and duvet inserts" rule applies to subcategory `duvet` (D11).** All 12 are filled duvets or comforters.
-6. **Where the policy text does not settle it, the outcome is `ambiguous`,** never a guess: damage on arrival, a line held
-   twice, and, in the UK and EU inside the 14-day no-reason period, worn items, wear and tear and opened inserts.
+6. **Where the policy text does not settle it, the outcome is `ambiguous`,** never a guess: damage on arrival (at any age);
+   a line held twice inside the window (after it both lines are out, so ineligible: the user's RC-061); and, in the UK and
+   EU inside the 14-day no-reason period, worn items, wear and tear and opened inserts.
 
 ## Consequences
 - mcp-policy and mcp-orders each seed their own in-memory store, so a scan added in one is not seen by the other.

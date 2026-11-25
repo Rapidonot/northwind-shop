@@ -1,7 +1,8 @@
 """CHK-07: "Eligible, ineligible and ambiguous returns each handled correctly on labelled cases."
 
 The cases were written from the POL documents before the evaluator and are pinned: a case the
-evaluator disagrees with is a bug or a question for the user (stop 7), never a label edit."""
+evaluator disagrees with is a bug or a question for the user (stop 7), never a label edit. RC-061 is
+the one label changed since, by the user (2026-11-25, `docs/reviews/2026-11-25-27b-label-review.md`)."""
 
 from __future__ import annotations
 
@@ -19,7 +20,7 @@ from northwind_common import returns_policy as rp
 pytestmark = pytest.mark.req("CHK-07")
 
 CASES_FILE = Path(__file__).with_name("return_cases.jsonl")
-CASES_SHA256 = "758e39492963bb4defd9ac3bb6e51dfd2cea30b7390b10291c7d237750142df3"
+CASES_SHA256 = "37e65b7944d2c348a1a96c5df0206e285759d7d1e2901c08742ed02b2908d1aa"
 CASES: list[dict[str, Any]] = [
     json.loads(line) for line in CASES_FILE.read_text().splitlines() if line.strip()
 ]

@@ -48,3 +48,8 @@ which line and how many units is a real question.
 
 ## What you answer
 A keep / change, B keep / change (RC-035 and RC-036; RC-037), C (RC-060; RC-061).
+
+## The user's answers (2026-11-25)
+- **A: keep** (RC-014 to RC-017, RC-062 stay ineligible). **B: keep** (RC-035, RC-036, RC-037 stay ambiguous).
+- **C: RC-060 keep; RC-061 changed to `ineligible`,** the two-lines rule after the window rule, with the evaluator, the sha256
+  pin and decision 0024 item 6 in one commit, failing first. It stays `reviewed_by: model`: only the user marks one `human`.
