@@ -13,13 +13,9 @@ Built with row #30. Five intents, 10 conversations each, deterministic scorer: p
 recommendation ____, availability ____, policy ____. Left: delivery, order status, return (CHK-06/07).
 
 ## PROGRESS Open items
-- **D8 remainder:** ____ (close, or restate the count and owner).
-- **Over-blocking:** IC-024 and IC-040 (W1), and the W6 count ____. Owner: window B's output-check prerequisite row before
-  RECORD-ALL, with the split-range finding.
-- **Split ranges and the stock rule:** W6 count ____. If above 0, owner: window B's output-check prerequisite row before
-  RECORD-ALL.
+Already in `PROGRESS.md` (D8 remainder closed, M-A and M-B, over-blocking and split ranges); `/req-done` changes none of them.
 
-- **Hedged planted claims and steers (N-2, N-3):** W6 report ____ sentences, read by the advisor: ____. Owner of the
+- **Hedged planted claims and steers (N-2, N-3):** W6 report 3 sentences, read by the session (the advisor confirmed EV-100's query names STAFFALL). Owner of the
   RECORD-ALL rerun: window B's RECORD-ALL prerequisites row.
 
 ## PROGRESS log line

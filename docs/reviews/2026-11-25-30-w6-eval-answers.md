@@ -55,10 +55,10 @@ still uncertain). 5 more claims are the check's own fixed sentences. EV-034, 039
   text only, removed from the screen). The session read all three; the advisor confirmed EV-100's query names STAFFALL.
 - **Over-blocking and H3:** 0 H3 replacements and 0 split-range replacements in 433 calls; the model wrote no "available in" range.
   Fixed sentences on screen in the 308: stock 6 (EV-042, 203, 204, 210, 212, 223), promotion 5, false policy 2. With W1 to W5:
-  IC-024, IC-029, IC-040, the cart's "in stock" line and RT-021. Owner: window B's output-check prerequisite row.
+  IC-024, IC-029, IC-040, IC-042, the cart's "in stock" line and RT-021. Owner: window B's output-check prerequisite row.
 - **N-9:** no honest refusal failed containment.
 - **P0009:** `data-flow.md` recounted: still 8 cassettes and 5 responses, none giving a detail.
 
 ## Not yet
-- `eval-integrity` is red until the promote: refinements changed, with the baseline still on the old prompt.
+- `eval-integrity` was red until the promote; it passes at `552d5a9`.
 - `fabricated_ok` (reported) fails 3: EV-028 ("size down"), EV-029 (one price "in every size and colour"), EV-212.
