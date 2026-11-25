@@ -211,13 +211,20 @@ def test_frozen_queries_include_the_eval_and_red_team_part_texts() -> None:
 
 
 def test_every_new_frozen_vector_is_the_key_of_a_frozen_query() -> None:
-    base = subprocess.run(  # noqa: S603 - read-only git, fixed arguments
+    shown = subprocess.run(  # noqa: S603 - read-only git, fixed arguments
         ["git", "show", f"origin/main:{VECTORS}"],  # noqa: S607
         cwd=REPO,
         capture_output=True,
         text=True,
-        check=True,
-    ).stdout
+    )
+    if shown.returncode != 0:
+        # The repo's convention (test_rag08b_citations.py): GitHub's python job has no origin/main;
+        # only the integrity jobs fetch history. In CI the same check runs there, against main:
+        # `Guard / eval-integrity-main` (main's code) refuses a changed or removed frozen vector,
+        # and `CI / eval-gate`'s "Eval integrity" step vouches that every added one is a frozen
+        # query's vector.
+        pytest.skip("origin/main is not available in this checkout")
+    base = shown.stdout
     old = {json.loads(line)["key"] for line in base.splitlines() if line.strip()}
     now = [
         json.loads(line)["key"]

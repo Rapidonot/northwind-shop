@@ -266,3 +266,31 @@ stopped under stop 5, and the user replied "re-pin approved".
 - **`d0c0bb2`:** `MACOS_HASH` is `b5bc42db…`.
 - **The next commit:** `MACOS_HASH_PLAIN` (`168c823b…`) is asserted on `cli._live_plain`, so the plain path keeps its
   own pin (the advisor's suggestion). This adds a check.
+
+## GitHub's python job at `92530a6`: `git show origin/main` with no history (fixed with the user's approval under stop 5)
+
+GitHub's `CI / python` job checks out without history, so `origin/main` does not exist there.
+`test_rag04_post_review_tw.py::test_every_new_frozen_vector_is_the_key_of_a_frozen_query` ran
+`git show origin/main:…` with `check=True` and failed every time.
+
+**Reproduced locally.** A clone without that ref: `git clone --no-checkout --single-branch --branch req/11-query-understanding`,
+where `git rev-parse --verify origin/main` exits 1. The test then ran with `GIT_DIR` set to that clone:
+
+**Before the fix:**
+```
+E               subprocess.CalledProcessError: Command '['git', 'show', 'origin/main:data/embeddings/fastembed-BAAI-bge-small-en-v1.5-384.jsonl']' returned non-zero exit status 128.
+1 failed in 1.57s
+```
+
+**After the fix.** It follows `test_rag08b_citations.py`: the test calls `pytest.skip` when the ref cannot be resolved. A comment names
+the CI jobs that run the same check against main: `Guard / eval-integrity-main` for add-only, and the
+`CI / eval-gate` integrity step for vouching.
+```
+SKIPPED [1] evals/tests/test_rag04_post_review_tw.py:226: origin/main is not available in this checkout
+1 skipped in 1.06s
+```
+
+**With origin/main present** (this checkout), the whole file passes: 23 passed.
+
+No other test this row added or changed reads git history. A grep of the added test files and of the row's
+hunks in the changed ones for `origin/main`, `subprocess`, `git`, `rev-parse` and `merge-base` found only this test.
