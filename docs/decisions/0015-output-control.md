@@ -413,8 +413,13 @@ The changed shown answers are re-judged in W6. Tests: `services/assistant/tests/
   claim to a different order than the one named: M1, then N1, then N1-R (an abbreviation's dot or a newline taken
   for a sentence start). See `docs/reviews/2026-11-24-27-security-review.raw.md`, `…-security-rereview.raw.md` and
   `…-security-rereview-2.raw.md`.
-- **The user's decision (N1-R, option B).** No exemption, so the confirmation class blocks those claims on every
-  turn, signed in or not.
+- **The user's decision (N1-R, option B).** No exemption, so the confirmation class treats every turn the same, signed
+  in or not.
+- **What the class does not catch (main's pattern, found by the advisor's row review, 2026-11-25).** The verb must follow
+  the noun directly. "Your order has been confirmed" is blocked. "Order O000418 has been confirmed", "Your order O000418
+  has been confirmed" and "O000418 has been confirmed" are not: with the order number between them, the claim is held
+  by the prompt only. Three recorded answers in `cassettes/assistant-orders/` say "Order <number> was placed on <date>",
+  truthfully. The gap is older than this row, but this row's answers name order numbers. Owner: Window B P6, NFR-03.
 - **What the assistant does instead.** `ORDERS_RULES` tells it to give an order's status in the `get_order`
   result's own words with the order number (for example `<order number> was delivered on <date>`; placeholders,
   so the prompt holds no order data, hard rule 2). That phrasing

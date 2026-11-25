@@ -1,0 +1,83 @@
+"""Row #27, after the fact (advisor M-2): each mutant breaks one control in a scratch copy, and the tests named must fail.
+Usage: python <this> <scratch copy of the repo, from `git archive HEAD`> <the checkout's .venv/bin/python>
+It edits only the scratch copy, restores each file, and checks that the code under test is the copy's."""
+import os, pathlib, re, subprocess, sys
+
+ROOT, PY = pathlib.Path(sys.argv[1]).resolve(), sys.argv[2]
+SRC = [str(p) for p in sorted(ROOT.glob("services/*/src"))] + [str(ROOT / "evals/src"), str(ROOT / "data/src")]
+ENV = {**os.environ, "PYTHONPATH": os.pathsep.join(SRC), "LLM_MODE": "replay"}
+BOOK = "services/mcp-orders/src/northwind_mcp_orders/book.py"
+TOOLS = "services/mcp-orders/src/northwind_mcp_orders/tools.py"
+TOKEN = "services/common/src/northwind_common/mcp_token.py"
+LABEL = "services/common/src/northwind_common/order_tool.py"
+SCOPES = "services/common/src/northwind_common/tool_scopes.py"
+SESSION = "services/gateway/src/northwind_gateway/session.py"
+SETTINGS = "services/gateway/src/northwind_gateway/settings.py"
+PROMPT = "services/assistant/src/northwind_assistant/prompt.py"
+CLIENT = "services/assistant/src/northwind_assistant/orders_client.py"
+T_ORD = "services/mcp-orders/tests/test_chk06_get_order.py"
+T_EDGE = "services/mcp-orders/tests/test_chk06_tw_edges.py"
+T_CLAIM = "services/common/tests/test_chk06_shopper_claim.py"
+T_SIGN = "services/gateway/tests/test_chk06_signin.py"
+T_GAPS = "services/assistant/tests/test_chk06_tw_gaps.py"
+T_ATT = "services/assistant/tests/test_chk06_orders_attached.py"
+T_SCOPE = "services/common/tests/test_tool_scopes.py"
+M = [
+    ("own orders: the owner check is gone", BOOK, "order.shopper_id != shopper or ", "", [T_ORD, T_EDGE]),
+    ("own orders: the region check is gone", BOOK, " or order.region != region", "", [T_ORD, T_EDGE]),
+    ("same bytes: a malformed number gets another message", BOOK, "        if not ORDER_ID.fullmatch(order_id):\n            raise not_found()", "        if not ORDER_ID.fullmatch(order_id):\n            raise ToolError('validation', False, 'not_found', 'Malformed.')", [T_ORD]),
+    ("allow-list: the payment token is returned", BOOK, '            "order_id": order.order_id,\n', '            "order_id": order.order_id,\n            "payment_token": order.payment_token,\n', [T_ORD]),
+    ("allow-list: the escalation reason is returned", BOOK, '            "order_id": order.order_id,\n', '            "order_id": order.order_id,\n            "reason": order.escalation,\n', [T_ORD]),
+    ("live reads: a view is kept after the first read", BOOK, "        tracking = self._tracking(order_id)\n", "        kept = self.__dict__.setdefault('_kept', {})\n        order, tracking = kept.setdefault(order_id, (order, self._tracking(order_id)))\n", [T_ORD]),
+    ("errors: an unavailable carrier looks like no shipment", BOOK, "        if isinstance(found, BackendError):\n            raise tracking_unavailable()", "        if isinstance(found, BackendError):\n            return None", [T_ORD]),
+    ("status: escalated is called processing", BOOK, 'return "on_hold"', 'return "processing"', [T_ORD]),
+    ("status: no scans is an error", BOOK, '    if not tracking.events:\n        return "label_created"', "    if not tracking.events:\n        raise tracking_unavailable()", [T_ORD]),
+    ("card data: not refused", TOOLS, "    if holds_card_data(args):\n        raise card_data_refused()\n", "", [T_ORD, T_EDGE]),
+    ("unknown keys: not refused", TOOLS, "    if any(not isinstance(key, str) or key != \"order_id\" for key in args):\n        raise unknown_argument()\n", "", [T_ORD, T_EDGE]),
+    ("sign-in: a token with no shopper is served", TOOLS, "    if claims.shp is None or claims.aud != \"shopper\":\n        raise sign_in_required()\n", "", [T_ORD, T_EDGE]),
+    ("shp: any server may carry it", TOKEN, "        and srv == ORDERS_SERVER\n        and isinstance(shp, str)", "        and isinstance(shp, str)", [T_CLAIM]),
+    ("shp: a staff token may carry it", TOKEN, '        aud == "shopper"\n        and srv == ORDERS_SERVER\n        and isinstance(shp, str)', "        srv == ORDERS_SERVER\n        and isinstance(shp, str)", [T_CLAIM]),
+    ("shp: its shape is not checked", TOKEN, "        and SHOPPER_ID.fullmatch(shp) is not None\n", "", [T_CLAIM]),
+    ("shp: verify does not check it", TOKEN, '        or ("shp" in body and not _shopper_ok(aud, srv, shp))\n', "", [T_CLAIM]),
+    ("shp: mint does not check it", TOKEN, "    if shopper is not None and not _shopper_ok(audience, server, shopper):\n        raise ValueError", "    if False:\n        raise ValueError", [T_CLAIM]),
+    ("both claims: qf is taken on any server", TOKEN, '"qf" in body and not (srv == RAG_SERVER and plan_ok(qf))', '"qf" in body and not plan_ok(qf)', [T_CLAIM]),
+    ("label: angle brackets are not escaped", LABEL, '.replace("<", "\\\\u003c").replace(">", "\\\\u003e")', "", [T_CLAIM, T_EDGE]),
+    ("cookie: the mac does not cover the session", SESSION, 'SHOPPER_LABEL, session.encode("ascii"), shopper', 'SHOPPER_LABEL, b"", shopper', [T_SIGN]),
+    ("cookie: any mac is accepted", SESSION, "return shopper if hmac.compare_digest(_shopper_mac(key, session, shopper), mac) else None", "return shopper", [T_SIGN]),
+    ("cookie: the first of two values is taken", SESSION, 'return values[0] if len(values) == 1 else ""', 'return values[0] if values else ""', [T_SIGN]),
+    ("flag: the cookie counts with the flag off", SESSION, '    return os.environ.get(DEMO_SIGNIN_ENV) == "1"', "    return True", [T_SIGN]),
+    ("flag: any value turns it on", SESSION, 'os.environ.get(DEMO_SIGNIN_ENV) == "1"', "bool(os.environ.get(DEMO_SIGNIN_ENV))", [T_SIGN]),
+    ("sign-in: any signed shopper, not only the demo one", SETTINGS, " or shopper not in DEMO_SHOPPERS", " or shopper is None", [T_SIGN]),
+    ("sign-in: the region stays the server's", SETTINGS, "dataclasses.replace(caller, region=region, shopper_id=shopper)", "dataclasses.replace(caller, shopper_id=shopper)", [T_SIGN]),
+    ("scope: another agent gets get_order", SCOPES, '"northwind-catalog": frozenset({GET_CART})},', '"northwind-catalog": frozenset({GET_CART}), "northwind-orders": ORDER_TOOLS},', [T_SCOPE, T_GAPS]),
+    ("anonymous: the order section is in every prompt", PROMPT, "signed_in: bool = False", "signed_in: bool = True", [T_ATT, T_GAPS]),
+    ("anonymous: the endpoint mints without a shopper", CLIENT, "        if caller.shopper_id is None:\n            return None\n", "", [T_ATT, T_GAPS]),
+]
+
+
+def run(tests):
+    out = subprocess.run([PY, "-m", "pytest", "-p", "no:cacheprovider", "-q", "-ra", "--rootdir", str(ROOT), "-c", str(ROOT / "pyproject.toml"), *[str(ROOT / t) for t in tests]], cwd=ROOT, env=ENV, capture_output=True, text=True).stdout
+    failed = sorted({re.sub(r"\[.*", "", m).split("::")[-1] for m in re.findall(r"^(?:FAILED|ERROR) (\S+)", out, re.M)})
+    tail = [line for line in out.splitlines() if re.search(r"\d+ (passed|failed|error)", line)]
+    return failed, (tail or [out[-300:]])[-1]
+
+
+where = subprocess.run([PY, "-c", "import northwind_mcp_orders,northwind_common,northwind_gateway,northwind_assistant as a;print(northwind_mcp_orders.__file__,northwind_common.__file__,northwind_gateway.__file__,a.__file__)"], cwd=ROOT, env=ENV, capture_output=True, text=True).stdout
+assert where and all(p.startswith(str(ROOT)) for p in where.split()), where
+every = sorted({t for m in M for t in m[4]})
+print("unmutated:", run(every)[1])
+survived = 0
+for name, path, old, new, tests in M:
+    file = ROOT / path
+    text = file.read_text()
+    if text.count(old) < 1:
+        print("NOT APPLIED |", name)
+        survived += 1
+        continue
+    file.write_text(text.replace(old, new, 1))
+    failed, tail = run(tests)
+    file.write_text(text)
+    survived += not failed
+    print("KILLED  " if failed else "SURVIVED", "|", name, "|", tail, "|", ", ".join(failed[:3]) + (" ..." if len(failed) > 3 else ""))
+print("restored:", run(every)[1])
+print(len(M), "mutants,", survived, "not killed")

@@ -1,9 +1,9 @@
 """The order tool's output contract between mcp-orders and the assistant (row #27, CHK-06; hard
 rules 2, 6 and 7).
 
-The server (`northwind_mcp_orders`) labels every successful result, and the assistant reads the
-order's status back with the same code, so neither depends on the other (as with `catalog_tool`).
-What the model sees for a success is
+The server (`northwind_mcp_orders`) labels every successful result, and the assistant takes the
+tool's name from here, so neither depends on the other (as with `catalog_tool`). Only tests and the
+server's test helpers read a result back (`unlabel`). What the model sees for a success is
 
     <order_data tool="get_order">
     {"order_id":"O000064","status":"delivered",...}
@@ -15,8 +15,8 @@ the fixed structured envelope, which holds no free text.
 
 `STATUSES` are the shopper-facing statuses `get_order` can return, split into the store's
 unconfirmed and confirmed ones. Nothing reads a status back for the output check: by the user's
-decision (row #27, N1-R option B) there is no order exemption there, so "your order has been
-confirmed" stays blocked and the assistant states the status in the result's own words.
+decision (row #27, N1-R option B) there is no order exemption there. "Your order has been
+confirmed" stays blocked; with the order number between noun and verb it does not (decision 0015).
 """
 
 from __future__ import annotations

@@ -26,6 +26,7 @@ from northwind_common.mcp_token import (
 pytestmark = [pytest.mark.req("CHK-06"), pytest.mark.req("NFR-01")]
 
 KEY = b"k" * 40
+PLAN = {"parts": [{"c": ["Navy"], "s": ["M"]}]}  # a well-formed `qf` (row #11)
 NOW = 1_800_000_000.0
 
 
@@ -124,6 +125,21 @@ def test_the_well_formed_forged_body_verifies_so_the_cases_above_fail_for_their_
 
 
 # ---- the order tool's contract ------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("srv", sorted(SERVERS))
+def test_a_token_carrying_both_claims_verifies_nowhere(srv: str) -> None:
+    """`qf` (row #11) is northwind-rag's and `shp` northwind-orders'; `srv` is one value. Each alone
+    verifies on its own server, so the pair is what is refused."""
+    base = json.loads(base64.urlsafe_b64decode(orders_token(None)[0].split(".")[1] + "=="))
+    plan = {"qf": PLAN}
+    alone: dict[str, dict[str, Any]] = {RAG_SERVER: plan, ORDERS_SERVER: {"shp": "S0031"}}
+    for server, claim in alone.items():
+        verify_for(forge({**base, "srv": server, **claim}), key=KEY, server=server, now=NOW)
+    both = forge({**base, "srv": srv, **plan, "shp": "S0031"})
+    for server in SERVERS:
+        with pytest.raises(TokenError):
+            verify_for(both, key=KEY, server=server, now=NOW)
 
 
 def test_a_result_is_labelled_escaped_data_and_reads_back() -> None:

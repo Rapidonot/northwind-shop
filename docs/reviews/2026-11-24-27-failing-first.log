@@ -322,3 +322,38 @@ $ LLM_MODE=replay uv run pytest -p no:cacheprovider -q -ra -m "" --llm-suite ass
 6 passed, 51 deselected in 9.28s
 $ LLM_MODE=replay uv run pytest -p no:cacheprovider -q -ra -m "" --llm-suite assistant-orders services/assistant/tests/test_orders_journey_e2e.py
 6 passed, 51 deselected in 9.17s
+
+## 2026-11-25 advisor M-2, AFTER THE FACT: no failing run was logged for the feature's first security tests, so each control was broken in a scratch copy
+$ uv run python -I docs/reviews/2026-11-25-27-mutants.py.txt <scratch copy> .venv/bin/python
+unmutated: 176 passed in 22.81s
+KILLED   | own orders: the owner check is gone | 2 failed, 64 passed in 9.01s | test_another_shoppers_an_unknown_and_a_malformed_order_get_the_same_bytes, test_toolerror_is_what_the_book_raises_for_a_wrong_shopper
+KILLED   | own orders: the region check is gone | 1 failed, 65 passed in 8.81s | test_the_region_in_the_token_must_be_the_orders
+KILLED   | same bytes: a malformed number gets another message | 1 failed, 43 passed in 4.65s | test_another_shoppers_an_unknown_and_a_malformed_order_get_the_same_bytes
+KILLED   | allow-list: the payment token is returned | 3 failed, 41 passed in 4.44s | test_all_1000_orders_match_the_store_and_the_carrier_as_their_owner, test_no_result_carries_a_forbidden_field_over_all_1000_orders, test_over_http_the_owner_gets_each_order_as_the_files_state_it
+KILLED   | allow-list: the escalation reason is returned | 3 failed, 41 passed in 4.46s | test_all_1000_orders_match_the_store_and_the_carrier_as_their_owner, test_no_result_carries_a_forbidden_field_over_all_1000_orders, test_over_http_the_owner_gets_each_order_as_the_files_state_it
+KILLED   | live reads: a view is kept after the first read | 1 failed, 43 passed in 4.95s | test_a_status_or_scan_changed_while_the_server_runs_shows_in_the_next_result
+KILLED   | errors: an unavailable carrier looks like no shipment | 1 failed, 43 passed in 4.71s | test_a_carrier_timeout_is_transient_and_distinct_from_a_label_with_no_scans
+KILLED   | status: escalated is called processing | 7 failed, 37 passed in 4.70s | test_a_status_or_scan_changed_while_the_server_runs_shows_in_the_next_result, test_all_1000_orders_match_the_store_and_the_carrier_as_their_owner, test_every_store_status_and_last_scan_maps_to_one_shopper_status ...
+KILLED   | status: no scans is an error | 6 failed, 38 passed in 4.51s | test_a_carrier_timeout_is_transient_and_distinct_from_a_label_with_no_scans, test_all_1000_orders_match_the_store_and_the_carrier_as_their_owner, test_every_store_status_and_last_scan_maps_to_one_shopper_status ...
+KILLED   | card data: not refused | 4 failed, 62 passed in 8.96s | test_card_data_in_any_argument_is_refused_before_the_store_is_read
+KILLED   | unknown keys: not refused | 1 failed, 65 passed in 8.79s | test_an_unknown_argument_is_refused
+KILLED   | sign-in: a token with no shopper is served | 1 failed, 65 passed in 8.96s | test_a_token_with_no_signed_in_shopper_gets_no_order
+KILLED   | shp: any server may carry it | 5 failed, 26 passed in 0.10s | test_a_signed_token_with_a_bad_shp_is_refused_by_every_server, test_a_token_carrying_both_claims_verifies_nowhere, test_minting_a_shopper_into_another_servers_token_raises
+KILLED   | shp: a staff token may carry it | 2 failed, 29 passed in 0.10s | test_a_signed_token_with_a_bad_shp_is_refused_by_every_server, test_a_staff_token_cannot_carry_a_shopper
+KILLED   | shp: its shape is not checked | 8 failed, 23 passed in 0.11s | test_a_malformed_shopper_is_refused_at_mint, test_a_signed_token_with_a_bad_shp_is_refused_by_every_server
+KILLED   | shp: verify does not check it | 8 failed, 23 passed in 0.13s | test_a_signed_token_with_a_bad_shp_is_refused_by_every_server, test_a_token_carrying_both_claims_verifies_nowhere
+KILLED   | shp: mint does not check it | 11 failed, 20 passed in 0.12s | test_a_malformed_shopper_is_refused_at_mint, test_a_staff_token_cannot_carry_a_shopper, test_minting_a_shopper_into_another_servers_token_raises
+KILLED   | both claims: qf is taken on any server | 1 failed, 30 passed in 0.10s | test_a_token_carrying_both_claims_verifies_nowhere
+KILLED   | label: angle brackets are not escaped | 3 failed, 50 passed in 4.57s | test_a_hostile_scan_date_cannot_close_or_forge_the_label, test_a_result_is_labelled_escaped_data_and_reads_back, test_label_escapes_angle_brackets_and_ampersands_in_any_value
+KILLED   | cookie: the mac does not cover the session | 1 failed, 25 passed in 0.79s | test_anything_but_this_sessions_signed_demo_shopper_is_anonymous
+KILLED   | cookie: any mac is accepted | 3 failed, 23 passed in 0.72s | test_anything_but_this_sessions_signed_demo_shopper_is_anonymous
+KILLED   | cookie: the first of two values is taken | 1 failed, 25 passed in 0.73s | test_two_shopper_cookies_are_no_sign_in
+KILLED   | flag: the cookie counts with the flag off | 12 failed, 14 passed in 0.79s | test_n2_with_the_flag_off_no_method_tells_the_route_exists, test_only_exactly_1_turns_the_flag_on, test_turning_the_flag_off_signs_everyone_out ...
+KILLED   | flag: any value turns it on | 4 failed, 22 passed in 0.71s | test_only_exactly_1_turns_the_flag_on
+KILLED   | sign-in: any signed shopper, not only the demo one | 1 failed, 25 passed in 0.84s | test_anything_but_this_sessions_signed_demo_shopper_is_anonymous
+KILLED   | sign-in: the region stays the server's | 2 failed, 24 passed in 0.70s | test_a_chat_turn_gets_the_orders_endpoint_and_the_caller_as_signed_in, test_sign_in_binds_the_demo_shopper_to_the_session
+KILLED   | scope: another agent gets get_order | 2 failed, 33 passed in 0.62s | test_get_order_is_the_assistants_alone, test_get_order_is_the_assistants_alone_in_the_scopes
+KILLED   | anonymous: the order section is in every prompt | 9 failed, 38 passed in 13.85s | test_an_anonymous_turn_has_no_orders_server_tool_or_prompt_section, test_the_anonymous_prompt_is_mains_byte_for_byte, test_the_order_section_appears_once_and_just_before_the_last_rule
+KILLED   | anonymous: the endpoint mints without a shopper | 2 failed, 45 passed in 13.56s | test_an_anonymous_caller_gets_no_orders_token, test_an_anonymous_turn_sends_the_same_request_with_or_without_an_orders_endpoint
+restored: 176 passed in 22.60s
+29 mutants, 0 not killed
