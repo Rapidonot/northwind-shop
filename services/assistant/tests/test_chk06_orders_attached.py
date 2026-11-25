@@ -14,6 +14,7 @@ import asyncio
 import base64
 import hashlib
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -123,6 +124,23 @@ def _system(request: dict[str, Any]) -> str:
 def test_the_anonymous_prompt_is_mains_byte_for_byte(region: Any) -> None:
     assert hashlib.sha256(system_prompt(region).encode()).hexdigest() == MAIN_PROMPTS[region]
     assert ORDERS_RULES not in system_prompt(region)
+
+
+@pytest.mark.parametrize("region", sorted(MAIN_PROMPTS))
+def test_the_signed_in_prompt_holds_no_order_data(region: Any) -> None:
+    """Hard rule 2: an example in the prompt must not be an order the assistant could repeat as
+    read (it was the demo shopper's own O000800, with its real status and date)."""
+    prompt = system_prompt(region, signed_in=True)
+    assert ORDERS_RULES in prompt
+    assert not re.search(r"\bO\d{3,}", prompt, re.I)
+    assert not re.search(r"\d", ORDERS_RULES)  # no order number, day, year or scan date
+    assert not re.search(
+        r"\b(january|february|march|april|june|july|august|september|october|november|december|"
+        r"jan|feb|mar|apr|jun|jul|aug|sept?|oct|nov|dec)\b",
+        ORDERS_RULES,
+        re.I,
+    )
+    assert "<order number> was delivered on <date>" in ORDERS_RULES
 
 
 def test_an_anonymous_turn_sends_the_same_request_with_or_without_an_orders_endpoint(

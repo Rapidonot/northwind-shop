@@ -256,3 +256,30 @@ $ LLM_MODE=replay uv run pytest -p no:cacheprovider -q services/assistant/tests/
 $ LLM_MODE=replay uv run pytest -p no:cacheprovider -q -m "" --llm-suite assistant-orders
 6 failed, 9227 deselected, 6 errors: 6 first requests missed, one per scenario, suite assistant-orders, no cassette yet.
 # Each miss answers HTTP 400, and the CLI then retries twice with fewer beta headers, so each test reports 3 missed requests. Only anthropic-beta and thinking.display differ. The first-request hashes were the same in three runs.
+
+## 2026-11-25T05:06:03Z ORDERS_RULES holds S0188's real O000800, its status and date (hard rule 2; the user's decision: placeholders). Test first
+$ LLM_MODE=replay uv run pytest -p no:cacheprovider -q services/assistant/tests/test_chk06_orders_attached.py -k holds_no_order_data
+FAILED services/assistant/tests/test_chk06_orders_attached.py::test_the_signed_in_prompt_holds_no_order_data[CA]
+FAILED services/assistant/tests/test_chk06_orders_attached.py::test_the_signed_in_prompt_holds_no_order_data[EU]
+FAILED services/assistant/tests/test_chk06_orders_attached.py::test_the_signed_in_prompt_holds_no_order_data[UK]
+FAILED services/assistant/tests/test_chk06_orders_attached.py::test_the_signed_in_prompt_holds_no_order_data[US]
+4 failed, 14 deselected in 0.53s
+## 2026-11-25T05:06:19Z after the placeholders; one file at a time
+$ LLM_MODE=replay uv run pytest -p no:cacheprovider -q services/assistant/tests/test_orders_journey_e2e.py
+36 passed, 6 deselected in 46.35s
+$ LLM_MODE=replay uv run pytest -p no:cacheprovider -q services/assistant/tests/test_chk06_orders_attached.py
+18 passed in 13.59s
+$ LLM_MODE=replay uv run pytest -p no:cacheprovider -q services/assistant/tests/test_chk06_tw_gaps.py
+29 passed in 0.60s
+$ LLM_MODE=replay uv run pytest -p no:cacheprovider -q services/assistant/tests/test_source_types.py
+21 passed in 1.08s
+$ LLM_MODE=replay uv run pytest -p no:cacheprovider -q services/assistant/tests/test_tool_loop.py
+33 passed in 42.50s
+$ LLM_MODE=replay uv run pytest -p no:cacheprovider -q services/assistant/tests/test_chk01_cart.py
+26 passed in 4.21s
+$ LLM_MODE=replay uv run pytest -p no:cacheprovider -q services/assistant/tests/test_sa02_source_card_edges.py
+12 passed in 0.13s
+$ LLM_MODE=replay uv run pytest -p no:cacheprovider -q services/llm-replay/tests/test_scripted_routes.py
+4 passed in 0.99s
+$ LLM_MODE=replay uv run pytest -p no:cacheprovider -q tests/nfr08/test_prompt_disclosure.py
+5 passed in 0.48s

@@ -416,7 +416,8 @@ The changed shown answers are re-judged in W6. Tests: `services/assistant/tests/
 - **The user's decision (N1-R, option B).** No exemption, so the confirmation class blocks those claims on every
   turn, signed in or not.
 - **What the assistant does instead.** `ORDERS_RULES` tells it to give an order's status in the `get_order`
-  result's own words with the order number (for example "O000800 was delivered on 26 October"). That phrasing
+  result's own words with the order number (for example `<order number> was delivered on <date>`; placeholders,
+  so the prompt holds no order data, hard rule 2). That phrasing
   carries no confirmation claim.
 - **The cost.** If the model still writes "your order was placed", the shopper sees `CONFIRMATION_SENTENCE`. That
   fails closed.
