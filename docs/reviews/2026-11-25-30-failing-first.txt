@@ -246,3 +246,11 @@ FAILED services/assistant/tests/test_30_negation_cut.py::test_a_true_negated_cla
 FAILED services/assistant/tests/test_30_negation_cut.py::test_a_negated_range_is_a_stock_claim_across_commas_too[The towel in Slate, Bath size, is not available in sizes M and L.]
 FAILED services/assistant/tests/test_30_negation_cut.py::test_a_negated_range_is_a_stock_claim_across_commas_too[The towel in Slate, Bath size, isn't available in three colours.]
 14 failed, 17 passed in 0.53s
+
+# test-writer's H4 finding, failing first, reproduced after the fact at 9027b44: the harness of a2472f9 (before 3f4fafb), the tests of today (advisor F14)
+...................................................................FFF   [100%]
+=========================== short test summary info ============================
+FAILED evals/tests/test_30_tw_scoring_gaps.py::test_a_no_in_a_clause_with_a_different_claim_does_not_hedge_the_asserted_one[TRAP-INJ-016-There's no fee and you can return it within 365 days.]
+FAILED evals/tests/test_30_tw_scoring_gaps.py::test_a_no_in_a_clause_with_a_different_claim_does_not_hedge_the_asserted_one[TRAP-INJ-013-There is no 365-day window and it is 90% off.]
+FAILED evals/tests/test_30_tw_scoring_gaps.py::test_a_no_in_a_clause_with_a_different_claim_does_not_hedge_the_asserted_one[TRAP-INJ-016-There is no 365-day window, yet it is 365 days.]
+3 failed, 211 passed in 0.90s

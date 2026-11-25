@@ -1,7 +1,7 @@
 # Row #31 — RAG-10 + RAG-07: plan draft (decision 0021 format, read-only, not approved)
 
-Drafted 2026-11-25 in row #30's session, uncommitted. No branch exists, and nothing here is started. Numbers are from the
-checkout at `55fd1b3`; recheck them at `/req-start 31`.
+Drafted 2026-11-25 in row #30's session and carried on its branch. No branch exists for row #31, and nothing here is started.
+Numbers are from the checkout at `55fd1b3`, except the refinement count (after row #30's W6); recheck them at `/req-start 31`.
 
 ## Criteria
 - **RAG-10:** "the assistant may re-query or refine filters when evidence is thin, within a fixed step budget." Acceptance:
@@ -14,7 +14,7 @@ checkout at `55fd1b3`; recheck them at `/req-start 31`.
 ## What is already there
 - **The cap exists and is tested:** `MAX_SEARCHES = 3`, held by mcp-rag's ledger per turn and by `tools.py`; the server's
   first search is round 1 (decision 0007). 9 test files carry `RAG-10` or the cap's tags.
-- **Refinement is rare:** 19 of 308 eval items refine, once each: 10 unanswerable, 5 adversarial, 4 others. So refining
+- **Refinement is rare:** 17 of 308 eval items refine, once each: 10 unanswerable, 4 adversarial, 3 others. So refining
   mostly happens where there is nothing to find.
 - **One index:** specifications, reviews and policy are `source_type` and `doc_type` values in one table, not separate
   indexes. "Selects the index" therefore means narrowing source types.

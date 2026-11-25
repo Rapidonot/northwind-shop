@@ -36,7 +36,8 @@
 - **`behaviour_ok` now fails** 7: EV-032, 179, 204, 208, 212, 214, 245. Before, 7: EV-032, 044, 196, 206, 209, 212, 220.
   - EV-179 is a false "none under 320 g" (the right jackets were not retrieved); EV-204 and EV-208 and EV-214 say they cannot
     confirm a combination instead of saying it does not exist; EV-245 quotes live prices where the reference expects none.
-- **`citation_ok` now fails** 5: EV-033, 194, 198, 200, 258 (before: 6). EV-258 and EV-200 are new.
+- **`citation_ok` now fails** 5: EV-033, 194, 198, 200, 258 (before: 6). EV-033, EV-200 and EV-258 are new; EV-194 and EV-198
+  stay; EV-050, 091, 112 and 212 are fixed.
 - **Reads that cost relevance:** EV-102, EV-302 and EV-304 (adversarial) now decline more, so `adversarial` relevance is 0.900.
 
 ## Over-asking guard (the user's stop thresholds)
@@ -51,7 +52,7 @@ still uncertain). 5 more claims are the check's own fixed sentences. EV-034, 039
 
 ## Reports for the advisor
 - **Hedge report (N-2, N-3):** 3 excused sentences in 433 answer calls: EV-100 (shown; "can't, confirm"), EV-302 and RT-022 (raw
-  text only, removed from the screen). To be read by eye.
+  text only, removed from the screen). The session read all three; the advisor confirmed EV-100's query names STAFFALL.
 - **Over-blocking and H3:** 0 H3 replacements and 0 split-range replacements in 433 calls; the model wrote no "available in" range.
   Fixed sentences on screen in the 308: stock 6 (EV-042, 203, 204, 210, 212, 223), promotion 5, false policy 2. With W1 to W5:
   IC-024, IC-029, IC-040, the cart's "in stock" line and RT-021. Owner: window B's output-check prerequisite row.
