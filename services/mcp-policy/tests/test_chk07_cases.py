@@ -2,7 +2,8 @@
 
 The cases were written from the POL documents before the evaluator and are pinned: a case the
 evaluator disagrees with is a bug or a question for the user (stop 7), never a label edit. RC-061 is
-the one label changed since, by the user (2026-11-25, `docs/reviews/2026-11-25-27b-label-review.md`)."""
+the one label changed since, by the user (2026-11-25; see
+`docs/reviews/2026-11-25-27b-label-review.md`)."""
 
 from __future__ import annotations
 
