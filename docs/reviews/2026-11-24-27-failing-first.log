@@ -249,3 +249,10 @@ $ uv run pytest -p no:cacheprovider -q services/backend/tests/care/test_27_model
 84 passed in 0.51s
 $ uv run pytest -p no:cacheprovider -q services/backend/tests/orders_place/test_be05_place_scripted.py
 30 passed in 24.06s
+
+## 2026-11-25 the six recorded scenarios (test_orders_journey_e2e.py), before the window
+$ LLM_MODE=replay uv run pytest -p no:cacheprovider -q services/assistant/tests/test_orders_journey_e2e.py
+36 passed, 6 deselected (the checks at $0 on a scripted model: 6 right answers pass, 17 wrong answers fail, 5 answers with no tool call fail)
+$ LLM_MODE=replay uv run pytest -p no:cacheprovider -q -m "" --llm-suite assistant-orders
+6 failed, 9227 deselected, 6 errors: 6 first requests missed, one per scenario, suite assistant-orders, no cassette yet.
+# Each miss answers HTTP 400, and the CLI then retries twice with fewer beta headers, so each test reports 3 missed requests. Only anthropic-beta and thinking.display differ. The first-request hashes were the same in three runs.
