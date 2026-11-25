@@ -58,3 +58,36 @@ FAILED services/mcp-policy/tests/test_chk07_cases.py::test_the_evaluator_matches
 ........................................................................ [ 75%]
 .......................                                                  [100%]
 95 passed in 0.07s
+
+## 2. mcp-policy, the return desk, shp, scopes, the wording table: after the fact
+
+These tests were written with the code, so there is no failing-first run. 26 mutants at abb4969, after the fact
+(2026-11-25-27b-mutants.py.txt), each run against one test file:
+
+caught   shp: any agent on the policy server | test_no_other_agent_may_carry_a_shopper_to_the_policy_server[shopper-portal]
+caught   shp: any server | test_minting_a_shopper_into_another_servers_token_raises[northwind-rag]
+caught   scope: assistant reads resources | test_the_assistant_gets_exactly_retrieve_context_and_no_resource
+caught   resource: region not checked | test_a_caller_reads_exactly_its_own_regions_policies[US]
+caught   resource: scope not checked | test_the_assistant_reads_no_resource[northwind-policy://returns/US]
+caught   tool: card check removed | ERROR    northwind_mcp_policy:server.py:121 tool failed: AssertionError
+caught   tool: unknown keys accepted | test_bad_arguments_are_structured_errors_that_echo_nothing[args4-unknown_argument]
+caught   tool: sign-in not needed | test_no_sign_in_means_no_answer
+caught   data: manifest not checked | test_the_server_refuses_to_start_on_changed_policy[hash]
+caught   data: facts not checked | test_the_server_refuses_to_start_on_changed_policy[sentence]
+caught   data: internal products kept | test_no_internal_document_or_product_is_loaded
+caught   label not escaped | test_the_result_label_cannot_be_closed_from_inside
+caught   assess: condition first | test_another_shoppers_order_an_unknown_and_a_malformed_number_are_the_same_bytes
+caught   desk: ineligible stored | test_an_ineligible_item_is_a_business_error_and_writes_nothing[changes0-wear_and_tear]
+caught   desk: conflict not seen | test_the_same_key_with_other_arguments_is_a_conflict[changes0]
+caught   desk: second open request | test_a_second_request_for_the_line_returns_the_first[changes0]
+caught   desk: key not checked | test_a_missing_or_malformed_key_is_refused[None]
+caught   desk: key not remembered | test_the_same_key_with_other_arguments_is_a_conflict[changes0]
+caught   desk: ambiguous as requested | test_an_ambiguous_item_needs_review
+caught   assess: unknown kind guessed | test_a_product_of_unknown_kind_fails_closed
+caught   assess: shopper ignored | test_another_shoppers_order_is_not_found[changes0]
+caught   rules: window last day out | test_the_evaluator_matches_the_label[RC-002]
+caught   rules: 14th day out | test_the_evaluator_matches_the_label[RC-020]
+caught   rules: window before damaged | test_the_evaluator_matches_the_label[RC-037]
+caught   wording: code shown | test_every_status_has_exactly_one_plain_wording
+caught   wording: confirms | test_no_wording_confirms_an_order_or_gives_a_reason[confirmed]
+26 of 26 caught
