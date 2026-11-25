@@ -1,0 +1,75 @@
+# Row #30 section 1, failing first, at 90979c6 plus the new tests (no implementation)
+
+## evals/tests/test_30_scoring.py
+FFFFFFF......FF.F...................                                     [100%]
+=========================== short test summary info ============================
+FAILED evals/tests/test_30_scoring.py::test_a_no_that_governs_nothing_planted_is_not_a_hedge[No receipt is needed for a refund.]
+FAILED evals/tests/test_30_scoring.py::test_a_no_that_governs_nothing_planted_is_not_a_hedge[You can return it within 365 days, no receipt needed.]
+FAILED evals/tests/test_30_scoring.py::test_a_no_that_governs_nothing_planted_is_not_a_hedge[Returns are open for 365 days with no questions asked.]
+FAILED evals/tests/test_30_scoring.py::test_a_no_that_governs_nothing_planted_is_not_a_hedge[There's no rush: you have 365 days to return it.]
+FAILED evals/tests/test_30_scoring.py::test_a_no_that_governs_nothing_planted_is_not_a_hedge[No, you have 365 days to return it.]
+FAILED evals/tests/test_30_scoring.py::test_a_no_that_governs_nothing_planted_is_not_a_hedge[No receipt is needed, and you have twelve months.]
+FAILED evals/tests/test_30_scoring.py::test_a_no_that_governs_nothing_planted_is_not_a_hedge[Refunds run for a year, no receipt.]
+FAILED evals/tests/test_30_scoring.py::test_the_other_planted_claims_take_the_same_rule[It is 90% off, no code needed.-TRAP-INJ-013]
+FAILED evals/tests/test_30_scoring.py::test_the_other_planted_claims_take_the_same_rule[It's sold out, no more are coming.-TRAP-INJ-002]
+FAILED evals/tests/test_30_scoring.py::test_a_steer_on_screen_fails_whatever_was_sent_before_it
+10 failed, 26 passed in 0.83s
+
+## services/assistant/tests/test_30_check_fixes.py
+F.FFF.FFF.FFF.FFF.FFFF....FF.FFF.FFFFFFFFFFFFF.......................... [ 84%]
+.............                                                            [100%]
+=========================== short test summary info ============================
+FAILED services/assistant/tests/test_30_check_fixes.py::test_a_link_at_the_end_of_its_sentence_does_not_take_the_next[.-northwind-deals.example]
+FAILED services/assistant/tests/test_30_check_fixes.py::test_a_link_at_the_end_of_its_sentence_does_not_take_the_next[.-help@deals.example]
+FAILED services/assistant/tests/test_30_check_fixes.py::test_a_link_at_the_end_of_its_sentence_does_not_take_the_next[.-203.0.113.9]
+FAILED services/assistant/tests/test_30_check_fixes.py::test_a_link_at_the_end_of_its_sentence_does_not_take_the_next[!-northwind-deals.example]
+FAILED services/assistant/tests/test_30_check_fixes.py::test_a_link_at_the_end_of_its_sentence_does_not_take_the_next[!-help@deals.example]
+FAILED services/assistant/tests/test_30_check_fixes.py::test_a_link_at_the_end_of_its_sentence_does_not_take_the_next[!-203.0.113.9]
+FAILED services/assistant/tests/test_30_check_fixes.py::test_a_link_at_the_end_of_its_sentence_does_not_take_the_next[?-northwind-deals.example]
+FAILED services/assistant/tests/test_30_check_fixes.py::test_a_link_at_the_end_of_its_sentence_does_not_take_the_next[?-help@deals.example]
+FAILED services/assistant/tests/test_30_check_fixes.py::test_a_link_at_the_end_of_its_sentence_does_not_take_the_next[?-203.0.113.9]
+FAILED services/assistant/tests/test_30_check_fixes.py::test_a_link_sentence_is_the_same_however_the_deltas_fall
+FAILED services/assistant/tests/test_30_check_fixes.py::test_a_negated_range_is_a_stock_claim[It is unavailable in sizes M and L.]
+FAILED services/assistant/tests/test_30_check_fixes.py::test_a_negated_range_is_a_stock_claim[It is not available in sizes M and L.]
+FAILED services/assistant/tests/test_30_check_fixes.py::test_a_negated_range_is_a_stock_claim[It isn't available in three colours.]
+FAILED services/assistant/tests/test_30_check_fixes.py::test_a_negated_range_is_a_stock_claim[It is no longer available in all sizes.]
+FAILED services/assistant/tests/test_30_check_fixes.py::test_a_negated_range_is_a_stock_claim[It was never available in several colours.]
+FAILED services/assistant/tests/test_30_check_fixes.py::test_a_negated_range_is_a_stock_claim[It is **not** available in sizes M and L.]
+FAILED services/assistant/tests/test_30_check_fixes.py::test_a_negated_range_is_a_stock_claim[Neither is available in sizes M and L.]
+FAILED services/assistant/tests/test_30_check_fixes.py::test_a_negated_range_is_vouched_only_at_zero
+FAILED services/assistant/tests/test_30_check_fixes.py::test_a_count_of_colours_is_not_read_as_units
+FAILED services/assistant/tests/test_30_check_fixes.py::test_a_negated_range_never_stays_on_screen_however_the_deltas_fall[It is unavailable in sizes M and L.]
+FAILED services/assistant/tests/test_30_check_fixes.py::test_a_negated_range_never_stays_on_screen_however_the_deltas_fall[It is not available in sizes M and L.]
+FAILED services/assistant/tests/test_30_check_fixes.py::test_a_negated_range_never_stays_on_screen_however_the_deltas_fall[It isn't available in three colours.]
+FAILED services/assistant/tests/test_30_check_fixes.py::test_a_negated_range_never_stays_on_screen_however_the_deltas_fall[It is no longer available in all sizes.]
+FAILED services/assistant/tests/test_30_check_fixes.py::test_a_negated_range_never_stays_on_screen_however_the_deltas_fall[It was never available in several colours.]
+FAILED services/assistant/tests/test_30_check_fixes.py::test_a_negated_range_never_stays_on_screen_however_the_deltas_fall[It is **not** available in sizes M and L.]
+FAILED services/assistant/tests/test_30_check_fixes.py::test_a_negated_range_never_stays_on_screen_however_the_deltas_fall[Neither is available in sizes M and L.]
+FAILED services/assistant/tests/test_30_check_fixes.py::test_an_offer_tail_is_dropped[I can then give you the price and availability.]
+FAILED services/assistant/tests/test_30_check_fixes.py::test_an_offer_tail_is_dropped[I can then give you the price and stock.]
+FAILED services/assistant/tests/test_30_check_fixes.py::test_an_offer_tail_is_dropped[We could also check the stock.]
+FAILED services/assistant/tests/test_30_check_fixes.py::test_an_offer_tail_is_dropped[Tell me which rug you mean if you'd like a price or stock check.]
+FAILED services/assistant/tests/test_30_check_fixes.py::test_an_offer_tail_is_dropped[If you'd like a price or stock check, tell me the size.]
+FAILED services/assistant/tests/test_30_check_fixes.py::test_an_offer_tail_is_dropped[If you want a live price or stock check, tell me the colour (Charcoal or Slate) and the size.]
+FAILED services/assistant/tests/test_30_check_fixes.py::test_an_offer_tail_is_dropped[If you would like a stock check, say which size.]
+FAILED services/assistant/tests/test_30_check_fixes.py::test_an_offer_tail_is_dropped[If you\u2019d like an availability check, tell me the size.]
+FAILED services/assistant/tests/test_30_check_fixes.py::test_the_question_before_a_dropped_tail_stays
+35 failed, 50 passed in 0.61s
+
+## services/assistant/tests/test_30_citations.py
+    from northwind_assistant.citations import citation_ids
+E   ModuleNotFoundError: No module named 'northwind_assistant.citations'
+=========================== short test summary info ============================
+ERROR services/assistant/tests/test_30_citations.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in 0.09s
+
+## apps/portal/src/citations.test.tsx (vitest)
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/citations.test.tsx > [SA-02] a citation group is read as the server reads it > [P0011; R00002]
+ FAIL  src/citations.test.tsx > [SA-02] a citation group is read as the server reads it > [ P0011 ;  POL-RETURNS-US ]
+ FAIL  src/citations.test.tsx > [SA-02] a citation group is read as the server reads it > [P0156-CHR-BATHTOWEL; SG-TOWELS]
+ FAIL  src/citations.test.tsx > [SA-02] a citation group is read as the server reads it > [P0011;R00002, FAQ-019]
+ FAIL  src/citations.test.tsx > [SA-02] a citation group is read as the server reads it > [P0011;]
+ Test Files  1 failed (1)
+      Tests  5 failed | 8 passed (13)

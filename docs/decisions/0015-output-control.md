@@ -404,3 +404,18 @@ The changed shown answers are re-judged in W6. Tests: `services/assistant/tests/
 ## Row #17 note (2026-11-24)
 
 `REPLACED_IN_RECORDING` is now `{"RT-003"}`. See decision 0018, "Row #17 amendment".
+
+## Row #30 note (2026-11-25)
+
+Approved by the user with the row #30 plan (`docs/reviews/2026-11-25-30-plan.md`, Q3 and the M1 and M2 fixes). All only
+tighten, and change 6 of 356 recorded answers (`docs/reviews/2026-11-25-30-step0.md`).
+
+- **H3, class `stock`:** "available in" a plural range is the range offered only when nothing negates it. "Unavailable in
+  sizes M and L" and "isn't available in three colours" are stock claims, vouched by `check_stock` as any other (exemption
+  `offered_range`; the range's own number is never read as units).
+- **Class `offer`:** "I can then/also give…" and "if you'd like/want a … price or stock check" join it.
+- **Not loosened (the user's Q2):** a question built on the assistant's own lookup ("Which size should I check the price
+  for?") is still dropped whole. SA-04's questions are steered by the prompt instead.
+- **Links (M2):** the match ends before the punctuation that ends its sentence, so the next sentence is checked on its own.
+- **Citation groups (M1):** `citation_parts` and `citation_ids` are the one reading (`,` and `;`) for the check, `turn.py`
+  and the evals, mirrored in the portal. They live in `output_check.py` so the check's identity hash covers them.

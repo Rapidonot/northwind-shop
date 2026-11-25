@@ -22,7 +22,7 @@ from claude_agent_sdk.types import StreamEvent, ToolResultBlock, ToolUseBlock
 
 from northwind_assistant.caller import Caller
 from northwind_assistant.catalog_client import CatalogEndpoint
-from northwind_assistant.output_check import OutputCheck
+from northwind_assistant.output_check import OutputCheck, citation_parts
 from northwind_assistant.prompt import system_prompt, user_prompt
 from northwind_assistant.rag_client import McpRagSearcher, RagEndpoint
 from northwind_assistant.source_cards import SourceCard, source_cards
@@ -104,7 +104,7 @@ TurnEvent = TextDelta | Reset | Citations | TurnError
 
 def cited_ids(answer: str, seen: set[str]) -> tuple[str, ...]:
     """Source IDs cited in `answer` that were really returned, first mention first."""
-    marked = [part.strip() for group in _MARKER.findall(answer) for part in group.split(",")]
+    marked = [part for group in _MARKER.findall(answer) for part in citation_parts(group)]
     cited = tuple(dict.fromkeys(source_id for source_id in marked if source_id in seen))
     invented = len(set(marked) - seen)
     if invented:
