@@ -4,8 +4,8 @@ spend: the real CLI, a scripted model, a real mcp-rag, mcp-catalog and mcp-order
 - A signed-in turn offers `get_order` and carries the prompt's order section; an anonymous turn's
   request is byte for byte the one it was before row #27 (D3), even with an orders endpoint passed.
 - The orders token carries the shopper (`shp`); no other token does, and no other server takes it.
-- A `get_order` result reaches the model as labelled data, and its status vouches for "your order
-  was placed" only for that order (the output check, decision 0015's row #27 amendment).
+- A `get_order` result reaches the model as labelled data. It vouches for nothing in the output
+  check: "your order was placed" stays blocked on every turn (decision 0015's row #27 note).
 """
 
 from __future__ import annotations
