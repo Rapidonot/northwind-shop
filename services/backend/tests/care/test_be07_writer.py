@@ -63,7 +63,7 @@ def digits_of(text: str) -> str:
 
 
 def bodies_of(llm: ScriptedLLM) -> str:
-    """What the model reads, not the CLI's random `metadata.user_id` (row #27, bundled)."""
+    """The whole body but the CLI's random `metadata` (row #27, bundled)."""
     return model_text(llm.requests)
 
 
@@ -658,7 +658,7 @@ def test_every_event_of_a_run_has_the_same_correlation_id_and_no_text(tmp_path: 
     with ScriptedLLM() as llm:
         script_care(llm, order["order_id"], refused, final)
         result = run(world, task, llm, tmp_path, correlation_id="run-care-8")
-        model_text = bodies_of(llm)
+        bodies = bodies_of(llm)
     events = world.events()
     assert events and result.case is not None
     assert {e.correlation_id for e in events} == {"run-care-8"}
@@ -667,7 +667,7 @@ def test_every_event_of_a_run_has_the_same_correlation_id_and_no_text(tmp_path: 
     for secret in (*transcript_text, refused, final, "example.test", "billed twice"):
         assert secret not in text, secret
     # A correlation ID is for the audit; it is never text the model can read or repeat.
-    assert "run-care-8" not in model_text
+    assert "run-care-8" not in bodies
     # Every attempt has its outcome.
     attempts = {e.action_id for e in events if e.phase == "attempt"}
     outcomes = {e.action_id for e in events if e.phase == "outcome"}

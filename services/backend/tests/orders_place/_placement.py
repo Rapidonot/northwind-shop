@@ -99,3 +99,26 @@ class World:
         for state in (self.payment, self.fraud, self.orders):
             for effect in state.effects:
                 yield effect.operation, effect.reference
+
+
+def _strings_in(value: Any) -> list[str]:
+    """Every string, key and number in a JSON value, unescaped, in order."""
+    if isinstance(value, dict):
+        return [s for k, v in value.items() for s in (str(k), *_strings_in(v))]
+    if isinstance(value, list):
+        return [s for v in value for s in _strings_in(v)]
+    return [str(value)]
+
+
+def model_text(requests: Any) -> str:
+    """Everything in the recorded request bodies except the top-level `metadata`, one piece per
+    line. `metadata.user_id` is the CLI's random device hash and session UUID, which a whole-body
+    search mistook for card digits (row #27, bundled; it failed #11's `make ci`); it is the only
+    random field. Nothing else is left out, so a new block type or field is searched too."""
+    return "\n".join(
+        s
+        for request in requests
+        for key, value in request["body"].items()
+        if key != "metadata"
+        for s in (key, *_strings_in(value))
+    )

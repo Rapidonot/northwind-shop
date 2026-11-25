@@ -16,6 +16,14 @@ prompt, a tool argument, a tool result or a log, so no random value reaches the 
 - Only `SESSION_PATHS` get a session, so the health check needs no key.
 - Without the key, a request gets no session, which fails closed: the cart tools refuse
   (`session_required`) and GET /api/cart answers 503. The key is read again on the next request.
+
+Row #27 (CHK-06, decision 0023): the demo sign-in. Only with `NORTHWIND_DEMO_SIGNIN=1` (dev, tests
+and e2e) does `POST /api/session/shopper` bind the one fixed synthetic shopper to the session, in a
+second cookie, `nw_shopper`: `<shopper>.<mac>`, where the mac is HMAC-SHA256 under the same derived
+key over the label `northwind-shopper-v1`, the session id and the shopper ID. So it is valid only
+with the session it was issued for: a new session drops it, and it cannot be moved to another one.
+The middleware reads it only while the flag is on, so turning the flag off signs everyone out. The
+shopper ID goes into the northwind-orders token only (`shp`), never into a prompt or a log.
 """
 
 from __future__ import annotations
@@ -23,10 +31,10 @@ from __future__ import annotations
 import hashlib
 import hmac
 import logging
+import os
 import re
 import secrets
 from collections.abc import Callable
-from http.cookies import CookieError, SimpleCookie
 from typing import Any
 
 from northwind_common.mcp_gate import ASGIApp, Message, Receive, Scope, Send
@@ -36,8 +44,15 @@ log = logging.getLogger(__name__)
 
 COOKIE = "nw_session"
 STATE_KEY = "northwind_session"
-SESSION_PATHS = ("/api/chat", "/api/cart")
+SIGNIN_PATH = "/api/session/shopper"  # row #27
+SESSION_PATHS = ("/api/chat", "/api/cart", SIGNIN_PATH)
 LABEL = b"northwind-session-v1"
+# Row #27 (CHK-06): the demo sign-in.
+SHOPPER_COOKIE = "nw_shopper"
+SHOPPER_STATE_KEY = "northwind_shopper"
+SHOPPER_LABEL = b"northwind-shopper-v1"
+DEMO_SIGNIN_ENV = "NORTHWIND_DEMO_SIGNIN"
+_SHOPPER = re.compile(r"S\d{4}", re.ASCII)
 _ID = re.compile(r"[0-9a-f]{32}", re.ASCII)
 _MAC = re.compile(r"[0-9a-f]{64}", re.ASCII)
 
@@ -63,18 +78,59 @@ def verified(key: bytes, value: str) -> str | None:
     return session if hmac.compare_digest(_mac(key, session), mac) else None
 
 
-def _cookie_value(scope: Scope) -> str:
-    for name, value in scope.get("headers") or ():
-        if bytes(name) != b"cookie":
+def demo_signin_enabled() -> bool:
+    """Read on every request, so the flag never sticks."""
+    return os.environ.get(DEMO_SIGNIN_ENV) == "1"
+
+
+def _shopper_mac(key: bytes, session: str, shopper: str) -> str:
+    message = b"|".join((SHOPPER_LABEL, session.encode("ascii"), shopper.encode("ascii")))
+    return hmac.new(key, message, hashlib.sha256).hexdigest()
+
+
+def sign_shopper(key: bytes, session: str, shopper: str) -> str:
+    if not _ID.fullmatch(session) or not _SHOPPER.fullmatch(shopper):
+        raise ValueError("not a session and a shopper")
+    return f"{shopper}.{_shopper_mac(key, session, shopper)}"
+
+
+def verified_shopper(key: bytes, session: str, value: str) -> str | None:
+    """The shopper in an `nw_shopper` value, if it was signed for this session; else None."""
+    shopper, _, mac = value.partition(".")
+    if not _SHOPPER.fullmatch(shopper) or not _MAC.fullmatch(mac):
+        return None
+    return shopper if hmac.compare_digest(_shopper_mac(key, session, shopper), mac) else None
+
+
+def shopper_cookie_header(key: bytes, session: str, shopper: str) -> tuple[bytes, bytes]:
+    signed = sign_shopper(key, session, shopper)
+    value = f"{SHOPPER_COOKIE}={signed}; HttpOnly; SameSite=Strict; Path=/api"
+    return (b"set-cookie", value.encode("ascii"))
+
+
+def cookie_values(scope: Scope, name: str) -> list[str]:
+    """Every value sent for cookie `name`, in header order. Lenient on purpose (H10, row #27): each
+    `;`-separated pair is read on its own, so a valueless cookie (`flag`), a name with a space or an
+    unclosed quote from another localhost app no longer hides ours, as `SimpleCookie` did by
+    dropping the whole jar. A value is taken as sent, with no unquoting: only the exact bytes the
+    gateway signed verify (`verified`)."""
+    found: list[str] = []
+    for header, value in scope.get("headers") or ():
+        if bytes(header) != b"cookie":
             continue
-        try:
-            jar: SimpleCookie = SimpleCookie(bytes(value).decode("latin-1"))
-        except CookieError:
-            continue
-        morsel = jar.get(COOKIE)
-        if morsel is not None:
-            return morsel.value
-    return ""
+        for pair in bytes(value).decode("latin-1").split(";"):
+            key, sep, item = pair.partition("=")
+            if sep and key.strip() == name:
+                found.append(item.strip())
+    return found
+
+
+def _cookie_value(scope: Scope, name: str = COOKIE) -> str:
+    """The one value sent for cookie `name`, or "" for none or more than one. Two values mean
+    another localhost app planted one (browsers scope cookies by host, not port, and send a longer
+    path first), so neither is trusted (security review pass 1, L3): fail closed."""
+    values = cookie_values(scope, name)
+    return values[0] if len(values) == 1 else ""
 
 
 def set_cookie_header(key: bytes, session: str) -> tuple[bytes, bytes]:
@@ -94,6 +150,18 @@ def session_middleware(app: ASGIApp, key: Callable[[], bytes] | None = None) -> 
         if scope["type"] != "http" or scope.get("path") not in SESSION_PATHS:
             await app(scope, receive, send)
             return
+        if scope.get("path") == SIGNIN_PATH and not demo_signin_enabled():
+            # Row #27: the flag is off, so for every method this is a missing path's 404, with no
+            # session cookie and no `Allow` header (scoped re-review N2).
+            await send(
+                {
+                    "type": "http.response.start",
+                    "status": 404,
+                    "headers": [(b"content-type", b"application/json"), (b"content-length", b"22")],
+                }
+            )
+            await send({"type": "http.response.body", "body": b'{"detail":"Not Found"}'})
+            return
         try:
             cookie_key = current_key()
         except TokenKeyError:
@@ -106,6 +174,11 @@ def session_middleware(app: ASGIApp, key: Callable[[], bytes] | None = None) -> 
             session = secrets.token_hex(16)
         state: dict[str, Any] = dict(scope.get("state") or {})
         state[STATE_KEY] = session
+        if not issue and demo_signin_enabled():  # row #27: a new session has no sign-in yet
+            sent = _cookie_value(scope, SHOPPER_COOKIE)
+            shopper = verified_shopper(cookie_key, session, sent) if sent else None
+            if shopper is not None:
+                state[SHOPPER_STATE_KEY] = shopper
 
         async def send_with_cookie(message: Message) -> None:
             if issue and message["type"] == "http.response.start":

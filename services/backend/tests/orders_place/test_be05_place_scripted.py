@@ -30,7 +30,7 @@ from northwind_backend.recovery import RetryPolicy
 from northwind_common.llm import agent_runtime
 from northwind_llm_replay.scripted import ScriptedLLM
 
-from ._placement import World, first_of, total_for
+from ._placement import World, first_of, model_text, total_for
 from ._replay import SHOPPER_TEXT
 
 pytestmark = pytest.mark.req("BE-05")
@@ -87,12 +87,6 @@ def keys(world: World) -> list[str]:
     ]
 
 
-def model_text(llm: ScriptedLLM) -> str:
-    return "\n".join(
-        json.dumps(r["body"]) if not isinstance(r["body"], str) else r["body"] for r in llm.requests
-    )
-
-
 # ---- the flow and the routine resolutions --------------------------------------------------
 
 
@@ -131,8 +125,8 @@ def test_an_address_typo_is_resolved_from_the_address_on_file(tmp_path: Path) ->
     order = world.orders.orders[row["order_id"]]
     assert order.address_on_file and not order.shipping_postal_code.startswith("XX")
     # The model never saw either address.
-    assert row["shipping_postal_code"] not in model_text(llm)
-    assert order.shipping_postal_code not in model_text(llm)
+    assert row["shipping_postal_code"] not in model_text(llm.requests)
+    assert order.shipping_postal_code not in model_text(llm.requests)
 
 
 def test_a_soft_decline_is_resolved_by_one_more_authorization(tmp_path: Path) -> None:
@@ -305,7 +299,7 @@ def test_the_model_sees_no_amount_id_token_address_or_reference(
     with ScriptedLLM() as llm:
         script(llm, row["order_id"], tools)
         result = place(llm, tmp_path, world, task, ports=ports, correlation_id="run-secret-1")
-    seen = model_text(llm)
+    seen = model_text(llm.requests)
     order = world.orders.orders[row["order_id"]]
     hidden = [
         task.confirmation_ref,
@@ -425,7 +419,7 @@ def test_a_write_timeout_reaches_the_model_as_tool_specific_text(tmp_path: Path)
     with ScriptedLLM() as llm:
         script(llm, row["order_id"], HAPPY[:4] + ["escalate_order"])
         place(llm, tmp_path, world, world.task(row), ports=ports)
-    seen = model_text(llm)
+    seen = model_text(llm.requests)
     assert "The payment capture did not finish and may have taken effect" in seen
     assert "same key" not in seen
 

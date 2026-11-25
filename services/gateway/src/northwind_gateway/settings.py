@@ -9,7 +9,8 @@ from typing import Annotated, cast
 from fastapi import Depends, Request
 
 from northwind_assistant.caller import Caller
-from northwind_gateway.session import STATE_KEY
+from northwind_gateway.session import SHOPPER_STATE_KEY, STATE_KEY, demo_signin_enabled
+from northwind_gateway.signin import DEMO_SHOPPERS
 from northwind_rag.retrieval import SHOPPER_REGIONS, ShopperRegion
 
 DEFAULT_DATABASE_URL = "postgresql://northwind:northwind-local@localhost:5432/northwind"
@@ -33,4 +34,11 @@ def shopper_caller(request: Request, caller: Annotated[Caller, Depends(current_c
     Only the middleware sets it, from a cookie it signed; no header, body or query value can. With
     no session, the cart tools refuse (`session_required`), which fails closed."""
     session = getattr(request.state, STATE_KEY, None)
-    return dataclasses.replace(caller, session=session if isinstance(session, str) else None)
+    caller = dataclasses.replace(caller, session=session if isinstance(session, str) else None)
+    # Row #27 (CHK-06): the demo sign-in, set only by the middleware from a cookie it signed for
+    # this session, and only while the flag is on. The region becomes the shopper's own (RAG-11).
+    shopper = getattr(request.state, SHOPPER_STATE_KEY, None)
+    if caller.session is None or not demo_signin_enabled() or shopper not in DEMO_SHOPPERS:
+        return caller
+    region = cast(ShopperRegion, DEMO_SHOPPERS[shopper])
+    return dataclasses.replace(caller, region=region, shopper_id=shopper)

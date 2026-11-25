@@ -34,6 +34,7 @@ from ._driver import (
     context,
     first_of,
     load_jsonl,
+    model_text,
     orders,
     run_order,
     setup_captured,
@@ -345,7 +346,7 @@ def test_the_model_sees_no_personal_data_token_or_correlation_id(tmp_path: Path)
     with ScriptedLLM() as llm:
         script_both(llm, s)
         s.run(llm, tmp_path)
-    sent = json.dumps([r["body"] for r in llm.requests])
+    sent = model_text(llm.requests)  # the whole body but the CLI's random metadata (row #27)
     for secret in (s.row["payment_token"], s.row["shipping_postal_code"], "corr-", "run-1"):
         assert secret not in sent
     for value in _strings(shopper):
