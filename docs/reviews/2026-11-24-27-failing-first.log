@@ -172,3 +172,68 @@ $ uv run pytest -p no:cacheprovider -q services/backend/tests/orchestrator/test_
 16 passed in 14.18s
 $ uv run pytest -p no:cacheprovider -q services/backend/tests/orchestrator/test_be01_units.py
 30 passed in 1.14s
+
+## 2026-11-25T04:51:29Z model_text Medium (after merge 3b6aa19): the allow-list misses a card in any other part of the request; backend_audit has no copy yet. Tests first
+$ uv run pytest -p no:cacheprovider -q -ra services/backend/tests/care/test_27_model_text.py
+ERROR test_27_model_text.py::test_a_1111_only_in_the_clis_metadata_is_not_model_input[backend_audit]
+ERROR test_27_model_text.py::test_a_card_fragment_in_a_message_is_still_found[backend_audit]
+ERROR test_27_model_text.py::test_a_string_body_or_plain_tool_result_is_read_too[backend_audit]
+ERROR test_27_model_text.py::test_a_card_anywhere_but_the_top_level_metadata_is_found[backend_audit-document_block]
+ERROR test_27_model_text.py::test_a_card_anywhere_but_the_top_level_metadata_is_found[backend_audit-nested_metadata]
+ERROR test_27_model_text.py::test_a_card_anywhere_but_the_top_level_metadata_is_found[backend_audit-new_top_level_field]
+ERROR test_27_model_text.py::test_a_card_anywhere_but_the_top_level_metadata_is_found[backend_audit-stop_sequence]
+ERROR test_27_model_text.py::test_a_card_anywhere_but_the_top_level_metadata_is_found[backend_audit-thinking_block]
+ERROR test_27_model_text.py::test_a_card_anywhere_but_the_top_level_metadata_is_found[backend_audit-tool_description]
+ERROR test_27_model_text.py::test_a_card_anywhere_but_the_top_level_metadata_is_found[backend_audit-tool_schema_enum]
+ERROR test_27_model_text.py::test_a_card_anywhere_but_the_top_level_metadata_is_found[backend_audit-tool_use_id]
+ERROR test_27_model_text.py::test_a_card_anywhere_but_the_top_level_metadata_is_found[backend_audit-tool_use_input_key]
+ERROR test_27_model_text.py::test_a_card_anywhere_but_the_top_level_metadata_is_found[backend_audit-tool_use_name]
+ERROR test_27_model_text.py::test_a_card_anywhere_but_the_top_level_metadata_is_found[backend_audit-unknown_block]
+ERROR test_27_model_text.py::test_a_card_anywhere_but_the_top_level_metadata_is_found[backend_audit-unknown_block_in_a_tool_result]
+ERROR test_27_model_text.py::test_a_bare_number_is_found[backend_audit]
+ERROR test_27_model_text.py::test_text_is_searched_as_the_model_reads_it_not_json_escaped[backend_audit-4111 1111\n1111 1111]
+ERROR test_27_model_text.py::test_text_is_searched_as_the_model_reads_it_not_json_escaped[backend_audit-say "4111"]
+ERROR test_27_model_text.py::test_text_is_searched_as_the_model_reads_it_not_json_escaped[backend_audit-\uff14\uff11\uff11\uff11 \uff11\uff11\uff11\uff11]
+ERROR test_27_model_text.py::test_text_is_searched_as_the_model_reads_it_not_json_escaped[backend_audit-4111\u200b1111]
+ERROR test_27_model_text.py::test_the_request_itself_is_not_changed[backend_audit]
+FAILED test_27_model_text.py::test_a_card_anywhere_but_the_top_level_metadata_is_found[care-document_block]
+FAILED test_27_model_text.py::test_a_card_anywhere_but_the_top_level_metadata_is_found[care-new_top_level_field]
+FAILED test_27_model_text.py::test_a_card_anywhere_but_the_top_level_metadata_is_found[care-stop_sequence]
+FAILED test_27_model_text.py::test_a_card_anywhere_but_the_top_level_metadata_is_found[care-thinking_block]
+FAILED test_27_model_text.py::test_a_card_anywhere_but_the_top_level_metadata_is_found[care-tool_description]
+FAILED test_27_model_text.py::test_a_card_anywhere_but_the_top_level_metadata_is_found[care-tool_schema_enum]
+FAILED test_27_model_text.py::test_a_card_anywhere_but_the_top_level_metadata_is_found[care-tool_use_id]
+FAILED test_27_model_text.py::test_a_card_anywhere_but_the_top_level_metadata_is_found[care-tool_use_name]
+FAILED test_27_model_text.py::test_a_card_anywhere_but_the_top_level_metadata_is_found[care-unknown_block]
+FAILED test_27_model_text.py::test_a_card_anywhere_but_the_top_level_metadata_is_found[care-unknown_block_in_a_tool_result]
+FAILED test_27_model_text.py::test_a_card_anywhere_but_the_top_level_metadata_is_found[orchestrator-document_block]
+FAILED test_27_model_text.py::test_a_card_anywhere_but_the_top_level_metadata_is_found[orchestrator-new_top_level_field]
+FAILED test_27_model_text.py::test_a_card_anywhere_but_the_top_level_metadata_is_found[orchestrator-stop_sequence]
+FAILED test_27_model_text.py::test_a_card_anywhere_but_the_top_level_metadata_is_found[orchestrator-thinking_block]
+FAILED test_27_model_text.py::test_a_card_anywhere_but_the_top_level_metadata_is_found[orchestrator-tool_description]
+FAILED test_27_model_text.py::test_a_card_anywhere_but_the_top_level_metadata_is_found[orchestrator-tool_schema_enum]
+FAILED test_27_model_text.py::test_a_card_anywhere_but_the_top_level_metadata_is_found[orchestrator-tool_use_id]
+FAILED test_27_model_text.py::test_a_card_anywhere_but_the_top_level_metadata_is_found[orchestrator-tool_use_name]
+FAILED test_27_model_text.py::test_a_card_anywhere_but_the_top_level_metadata_is_found[orchestrator-unknown_block]
+FAILED test_27_model_text.py::test_a_card_anywhere_but_the_top_level_metadata_is_found[orchestrator-unknown_block_in_a_tool_result]
+20 failed, 22 passed, 21 errors in 0.65s
+## 2026-11-25T04:51:44Z after model_text searches the whole body minus top-level metadata (three copies), BE-02 on it, the shadowed name renamed; one file at a time
+$ uv run pytest -p no:cacheprovider -q services/backend/tests/care/test_27_model_text.py
+FAILED services/backend/tests/care/test_27_model_text.py::test_a_1111_only_in_the_clis_metadata_is_not_model_input[care]
+FAILED services/backend/tests/care/test_27_model_text.py::test_a_1111_only_in_the_clis_metadata_is_not_model_input[orchestrator]
+FAILED services/backend/tests/care/test_27_model_text.py::test_a_1111_only_in_the_clis_metadata_is_not_model_input[backend_audit]
+3 failed, 60 passed in 0.55s
+$ uv run pytest -p no:cacheprovider -q services/backend/tests/care/test_be07_criteria.py
+20 passed in 24.50s
+$ uv run pytest -p no:cacheprovider -q services/backend/tests/care/test_be07_writer.py
+73 passed in 38.85s
+$ uv run pytest -p no:cacheprovider -q services/backend/tests/orchestrator/test_be01_criteria.py
+20 passed in 14.09s
+$ uv run pytest -p no:cacheprovider -q services/backend/tests/orchestrator/test_be01_scripted.py
+12 passed in 21.82s
+$ uv run pytest -p no:cacheprovider -q services/backend/tests/backend_audit/test_be02_agent_scripted.py
+21 passed in 17.00s
+# note: the 3 failures above are the helper test's own fixture, whose tool ID toolu_1111 asserted that IDs are not searched (the allow-list's behaviour). The user's instruction searches IDs too, so the fixture's ID is now toolu_a; the assertion is unchanged, and the tool_use_id case requires a card in an ID to be found.
+## 2026-11-25T04:53:54Z after the fixture's ID
+$ uv run pytest -p no:cacheprovider -q services/backend/tests/care/test_27_model_text.py
+63 passed in 0.49s

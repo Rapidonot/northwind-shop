@@ -165,7 +165,7 @@ def test_the_same_request_twice_makes_the_same_model_input(tmp_path: Path) -> No
             script_returns(llm, world)
             run(world, world.request(refund=True), llm, tmp_path / run_id, run_id=run_id)
             agents = by_agent(llm)
-            bodies = model_text(llm.requests)  # what the model reads (row #27, bundled)
+            bodies = model_text(llm.requests)  # all but the CLI's metadata (row #27)
         out = {
             marker: [
                 request_hash(match_key("POST", r["path"], r["headers"], scrub(r["body"])))

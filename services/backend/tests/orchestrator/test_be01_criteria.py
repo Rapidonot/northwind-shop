@@ -298,7 +298,7 @@ def test_no_run_id_time_or_deadline_reaches_a_model(tmp_path: Path) -> None:
             run_id="run-zzzzzzzzzzzz",
             deadline_seconds=137.25,
         )
-        bodies = model_text(llm.requests)  # what the model reads (row #27, bundled)
+        bodies = model_text(llm.requests)  # all but the CLI's metadata (row #27)
     assert llm.requests
     for banned in ("run-zzzzzzzzzzzz", "137.25", "2026-11-23", ".t1", ".plan"):
         assert banned not in bodies
