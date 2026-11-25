@@ -447,7 +447,9 @@ checked on its own, as it already was without a link before it (security review 
   stock" is. "none" is held until the phrase is decided, and is never read as "one".
 - **Negation across two commas (the user, 2026-11-25; on main since row #12):** `_negated` cut the clause at each comma but
   reused the original positions, so "…, …, is not in stock" lost its "not": it passed with units in stock (hard rule 2) and
-  was blocked when true. It now cuts once, at the last one. One of 522 recorded calls changes (IC-032, freed).
+  was blocked when true. It now cuts once, at the last one. One of 522 recorded calls changes (IC-032, freed). Besides a
+  true negated claim at zero, it now also shows a negated negative phrase at units above zero ("…, …, is not out of stock")
+  and text where the old offset made a false "not" inside a word; "…, …, is never out of stock" is newly shown too (low).
 - **Links (M2):** the match ends before the punctuation that ends its sentence, so the next sentence is checked on its own.
 - **Citation groups (M1):** `citation_parts` and `citation_ids` are the one reading (`,` and `;`) for the check, `turn.py`
   and the evals, mirrored in the portal. They live in `output_check.py` so the check's identity hash covers them.
