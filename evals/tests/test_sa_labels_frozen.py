@@ -22,8 +22,8 @@ GUIDE = REPO / "docs/reviews/2026-11-25-30-labelling-guide.md"
 
 PINS = {
     PROMPTS: "023f4178618fcd333f511518b8dfa0776c469d7d6dfa9e6df7edb9e64c03fba8",
-    CONVERSATIONS: "587b33654b66d9aa1e9d6b8f37a616f01250258217adf5b789e3ceb240263e36",
-    GUIDE: "e84f219940b6b60f077cd4d7224f75179e1ad218fdac13f5f35c2ba3b70fddb8",
+    CONVERSATIONS: "a420b12db0ac74dc6cfb292ab53363eb7d8851f0f2303fbbb78df6d553f355cf",
+    GUIDE: "f08af03b070e0d4b1372b448210bb544e5329e40950beb256adce5a74d0e2272",
 }
 INTENTS = ("product_question", "comparison", "recommendation", "availability", "policy")
 

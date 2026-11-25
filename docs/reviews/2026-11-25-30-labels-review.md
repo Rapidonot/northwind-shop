@@ -20,7 +20,9 @@ doesn't trip it. Then human. Rule questions: A yes, B yes, C yes."
 21 items are `human` (the 20 rows and IC-039), written at the user's instruction. Labels below are as drafted; the
 changes are in the guide.
 
-**Known limit:** "UK clearance isn't final sale and can go back" still trips IC-045's "final sale and".
+**After the freeze, the user's decision, verbatim (2026-11-25):** "drop "final sale and" from IC-045's `absent` (it fails
+the correct "isn't final sale and can go back"; "is final sale"/"are final sale" already catch the wrong claim). Re-pin
+the sha256 in its own commit, before any scorer runs on it".
 
 ## Rule questions
 
