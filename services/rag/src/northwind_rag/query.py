@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import json
 import re
+import unicodedata
 from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
@@ -876,3 +877,387 @@ def validate_plan(raw: Any, region: str, vocab: Vocabulary | None = None) -> Que
     if any(part is None for part in checked):
         return None
     return QueryPlan(parts=tuple(p for p in checked if p is not None), source="model")
+
+
+# ---- which indexes a message asks about (RAG-07) -------------------------------------------------
+
+Index = Literal["policy", "reviews", "specifications"]
+ALL_INDEXES: frozenset[Index] = frozenset({"policy", "reviews", "specifications"})
+
+
+def _cue(table: str) -> re.Pattern[str]:
+    """Whole words or phrases, one or more alternatives per line. Every gap is bounded."""
+    return re.compile(rf"\b(?:{'|'.join(table.split(chr(10)))})\b", re.IGNORECASE)
+
+
+# Text aimed at the system. Stricter than `strip_injection`, whose command words alone also match
+# "don't forget" and "ignore the care label": here a command needs something of the system's.
+_SYSTEM_TEXT = re.compile(
+    r"<!--|<\|?/?(?:system|im_start|tool|script)|\[/?(?:system|inst)\b|\b\w{3,30}=\S"
+    r"|\b(?:system|assistant|developer|admin|ai|bot)\]?\s?:|\b(?:ignore|disregard|override|bypass|"
+    r"forget|break) (?:(?:your|all|any|of|the|previous|prior|above|earlier|system|safety) ){0,5}"
+    r"(?:instructions?|prompts?|guidelines|guardrails|restrictions|rules|filters?)\b"
+    r"|\b(?:ignore|disregard|override|bypass|forget) (?:your|previous|prior|the above|"
+    r"everything|what you)\b|\byour (?:system |hidden |initial |original |secret )?(?:prompt|"
+    r"instructions(?! (?:for|on)))\b"
+    r"|\bsystem (?:prompt|message|note|override)\b|\bnew instructions\b|\byou are now\b|jailbreak"
+    r"|\b(?:developer|debug|admin|god) mode\b|\bpretend (?:to be|you)\b|\bfrom now on you\b"
+    r"|\b(?:note to|attention,?) (?:the )?(?:ai|assistant|bot|model|system)\b"
+    r"|\b(?:assistant|model|ai|system|bot) (?:must|shall|is now)\b|(?:^|[.!?;:,] )act as an? \w"
+    r"|(?:^|[.!?;:] )set (?:the |your )?(?:max |min )?(?:price|visibility|audience|role|filter)",
+    re.IGNORECASE,
+)
+# Who asks, from where and in what currency never changes the answer (guide, rule 9).
+_CALLER_WORDS = re.compile(
+    r"\b(?i:united states|united kingdom|european union|canada|canadian|internal|public|staff|"
+    r"employees?|confidential|visibility)\b|\b(?:USA?|UK|EU|CA|USD|CAD|GBP|EUR)\b"
+)
+# Words typical of one index, used for something else.
+_NEUTRAL = re.compile(
+    r"\bheavy[- ]duty\b|\breturning (?:customer|shopper|favou?rite)\b|\breturn (?:trip|flight)\b|"
+    r"\bin order to\b|\bsoft[- ]?shell\b|\bsweat[- ]wick\w*|\bfeel free\b|\bworth (?=paying)",
+    re.IGNORECASE,
+)
+_RATED = re.compile(
+    r"\b(?:waterproof\w*|water|warmth|temp\w*|upf|uv|sun|fill|mm|wind\w*)(?:[- ][^,.;?!]{0,40})?"
+    r"\b(?:rating|rated)\b|\brated (?:to|for|at|waterproof)\b",
+    re.IGNORECASE,
+)
+
+_GOODS = _cue(
+    "|".join(sorted(_PRODUCT_NOUNS - set("one ones option options set sets cover covers".split())))
+    + "|bedding|linens|comforters?|coverlet|outerwear|merino|cashmere|sherpa|clothes|raincoat"
+    "|overshirts?|pullovers?|crewneck|thermals?"
+)
+_POLICY = _cue(
+    r"""return(?:s|ed|ing|able)?|refund\w*|exchang\w*|swap\w*|money[- ]back|store credit
+(?:send|sent|sending|ship|take|post)\b[^,.;?!]{0,30}\bback|final sale|change (?:of|my) mind
+unworn|(?:go|take|give|bring|get) (?:it |them |this |one )?back|ship(?:s|ped|ping|ments?)?
+deliver\w*|postage|couriers?|parcels?|packages?|dispatch\w*|arriv(?:e|es|ed|ing|al)|tracking
+track (?:my|an?)|how soon|(?:get|come) (?:it |them )?(?:here|to me|by|in time)|in time for|here by
+po box(?:es)?|express|next[- ]day|send to|address|(?:my|an|the|your|our|last|placed) orders?
+orders? (?:number|status)|ordered|cancel\w*|where(?:'s|s| is) my|checkout
+pay(?:ing|ments?|pal)?|paid|klarna|instal+ments?|what cards|invoices?
+(?:gift|credit|debit)[- ](?:cards?|receipts?|wrap\w*)|receipt|vouchers?|coupons?|promo\w*
+discounts?|clearance|sales|sale (?:ends?|starts?|items?|price)|(?:next|your|big) sale
+black friday|redeem|(?:what(?:'s|s| is)|anything) on sale|tax(?:es|ed)?|vat|duty|duties
+customs|import fees?|fees?|charged?|billing|warrant\w*|guarantees?|repair\w*
+price[- ]?(?:match|adjust)\w*|match (?:a |the )?price
+polic(?:y|ies)(?! (?:on|for|about) (?:wash|clean|dry|iron))
+(?:your|current|all|see|online) prices|prices (?:change|differ|vary|include)
+terms and conditions|loyalty|newsletter|my account|log ?in
+(?:things?|items?|something|stuff|products) [^,.;?!]{0,20}\b(?:costs?|price[sd]?|stock)
+password|privacy|contact (?:you|customer|someone|support|us|details)
+customer (?:care|service|support)|phone number|live chat|opening hours|in[- ]store
+(?:visit|collect)\b[^,.;?!]{0,30}\b(?:stores?|shops?)|shop i can visit
+(?:speak|talk|chat) (?:to|with)|real (?:person|human)|a (?:human|robot|bot)|your team
+are you (?:an? )?(?:ai|bot|human|person)|faulty|defective|damaged
+replac(?:e|ed|ement)|(?:doesn't|don't) suit
+(?:hasn't|haven't|never|not) (?:come|turned up|shown up)|missing (?:item|part|button|parcel)
+wrong (?:item|one|size|colou?r|product)"""
+)
+# Reviews as a feature of the shop, "review" as a verb, a formal complaint.
+_REVIEW_POLICY = _cue(
+    r"""(?:leave|write|post|submit|edit|delete|remove|add)\b[^,.;?!]{0,20}\breviews?
+review (?:my|our|this|the|an?) (?:order|refund|return|request|case|claim|product|item)
+my reviews?|reviews? (?:policy|real|fake|verified|moderated|checked|appear|published)
+under review|(?:i|i've) reviewed|(?:make|file|raise) a complaint"""
+)
+_WHO = (
+    r"(?:people|customers?|shoppers?|buyers?|owners?|wearers?|users|folks?|others|every(?:one|body)|"
+    r"any(?:one|body)|they|families|parents)\b[^,.;?!]{0,30}?\b"
+)
+_VOICES = _cue(
+    rf"""reviews?|reviewers?|reviewed|testimonials?|feedback|ratings?|rated|stars?|opinions?
+complaints?|thoughts|consensus|verdict|according to|(?:has|have) any(?:one|body)
+how (?:happy|satisfied) (?:are|were)|(?:best|most|well|highly)[- ]?(?:loved|liked|recommended)
+{_WHO}(?:say|said|saying|think|thinks|thought|find|finds|found|complain\w*|mention\w*
+report\w*|notic\w*|feel|felt|rate|recommend\w*|prefer|regret\w*|experienc\w*|tried|happy
+unhappy|satisfied|disappointed|impressed|pleased|reckon|rave|love|hate|agree)"""
+)
+# Only when nothing in the clause is about the shop ("do customers have to pay for returns").
+_WEAK_VOICES = _cue(
+    rf"""{_WHO}(?:likes?|liked|had|has|have(?! to)|owns?|owned|bought|buy|wears?|wore|worn|uses?
+used|washed|enjoy\w*|actually|stay\w*)"""
+)
+_OPINION_PICK = _cue(
+    r"(?:best|top|highest|well|better|most|highly)[- ]?(?:reviewed|rated|loved|liked)"
+)
+_RUNS = _cue(
+    r"""run(?:s|ning)? (?:(?:a|bit|little|slightly|quite|very|too|on|the) ){0,5}(?:small|smaller
+large|larger|big|bigger|tight|short|narrow|wide|long|loose|snug|true)
+com(?:e|es|ing) up (?:a bit |quite |very |too )?(?:small|large|big|short|long)
+fits? (?:a bit |quite )?(?:small|large|big|true)(?= ?(?:$|[?.!,]|or\b))|true[- ]to[- ]size|tts
+sizing (?:off|accurate|run|runs|true)"""
+)
+_EXPERIENCE = _cue(
+    r"""com(?:fy|fier|fiest)|(?:un)?comfort(?:able|ably)?|co[sz](?:y|ier|iest|iness)|itch\w*
+scratch(?:y|ier|iest|iness)|soft(?:er|est|ness)?|soften\w*|smell\w*|odou?rs?|stink\w*
+nois(?:e|y|ier)|quiet\w*|loud|swish\w*|rustl\w*|crinkl\w*|crunch\w*|crispy|stiff\w*|bobbl\w*
+pill(?:s|ed|ing)?|lint|(?:hold|holds|holding|held|stand|stands) up
+shed(?:s|ding)?(?! (?:water|rain|light))|sweat(?:y|s|ing)?|clammy|overheat\w*|see[- ]through
+sheer|opaque|jam(?:s|med|ming)?|snag\w*|fray\w*|unravel\w*|sag(?:s|gy|ging)?
+zip\w*\b[^,.;?!]{0,30}\b(?:stick\w*|catch\w*|break\w*|broke|smooth\w*|fail\w*)
+(?:lose|loses|keep|keeps|hold|holds) (?:its|their) shape|stretch(?:es)? out|fad(?:e|es|ed|ing)
+wears? (?:well|out|over|thin|down)|how (?!old)[^,.;?!]{0,40}\b(?:wears?|ages?)
+ag(?:e|es) (?:well|badly)
+(?:go|goes|get|gets|turn|turns) (?:all )?(?:baggy|lumpy|hard|limp|flat|fuzzy|thin)|age?ing
+durab\w*|hard[- ]wearing|sturd\w*|flims\w*|last long
+lasts?(?= ?(?:$|[?.!]|long|for\b|a\b|more\b|years|through))|lasts? (?:several|before|well)
+worth (?:it|the|buying|paying|getting|spending)|overpriced|value|any good|quality|feels?
+static|lump\w*|clump\w*|(?:sleep|sleeps|run|runs) (?:hot|cold|cool|warm)|fluff\w*|fuzz\w*
+flattering|like to (?:wear|sleep|walk|use)|against (?:the |my |your |bare )?skin|over time
+real[- ]world|real use|in real life|irl|in practice|slip(?:s|pery)?|slid(?:e|es|ing)|curl\w*
+bleed\w*"""
+)
+# An adjective in front of the goods describes the item wanted; nobody asks about it.
+_ATTRIBUTIVE = re.compile(
+    r"\b(?:non[- ])?(?:soft|comfy|comfortable|co[sz]y|durable|sturdy|quiet|stiff|scratchy|itchy|"
+    r"sheer|noisy|smelly|good quality|hard[- ]wearing),? (?:(?!(?:and|or|is|are|the|this|these|"
+    r"that|does|do|on|in|of|for|to|with|when|if|your)\b)[\w-]+,? ){0,3}"
+    + _GOODS.pattern
+    + r"|\b(?:any|some)thing (?:soft|comfy|comfortable|co[sz]y|durable|sturdy|quiet)\b",
+    re.IGNORECASE,
+)
+_IS_A = re.compile(r"\b(?:is|are)\b[^,.;?!]{0,60}\ban? $", re.IGNORECASE)
+# Attributes that are an ask of their own beside another one ("reviews and sizing for …").
+_FACTS = _cue(
+    r"""materials?|fabric|made (?:of|from|in)|waterproof\w*|water[- ]?(?:resist|repell)\w*|windproof
+breathab\w*|warm|warmth|warmer|warmest|weigh\w*|weights?|heavy|light(?:er|weight)?|thick\w*
+thread count|gsm|upf|insulat\w*|fill(?:ing|ed)?|packable|stretchy|sizing|size (?:guide|chart)
+washing|machine[- ]wash\w*|washable|wash instructions|care (?:guide|instructions?|label)
+dry[- ]?clean\w*|dimensions|measurements|absorben\w*|inseam|seams?|price|cost|stock"""
+)
+_SPECS = _cue(
+    rf"""{_FACTS.pattern}|pockets?|hood\w*|zip\w*|down|membrane|sizes?|fits?|fitting|wash(?:ed|es)?
+clean\w*|iron\w*|tumble\w*|dryer|dry|bleach|colou?rs?|how much|availab\w*|sold out|on sale
+cheap\w*|expensive|compare\w*|difference\w*|versus|vs|shrink\w*|origin|vegan|organic|recycled
+lined|lining|pile|deep|length|long|wide|width|tall|stretch|wrinkl\w*|creas\w*|stain\w*|leak\w*
+dwr|hot|cold|rain|layer\w*|(?:how|keep|keeps|stay) cool|measure\w*|small|medium|large|xs|xl|xxl
+[2-4]xl|size up|style|features?|spec\w*|something (?:for|to|warm|light\w*|soft|that)|gifts?
+what should i (?:get|buy|wear)
+(?:any|some)thing (?:soft|comfy|co[sz]y|comfortable)
+cooler|percale|sateen|cotton|wool|jute|alpaca|polyester|anything for
+in (?:black|navy|grey|gray|blue|green|red|white|beige|brown|sage|rust)"""
+)
+_CARE_HOW = _cue(
+    r"""how (?:do|can|should|would|to) ?(?:i|you|we)? (?:stop|prevent|keep|get|remove|wash|clean
+care|dry|iron|store|restore|soften|avoid)|way to (?:wash|clean|dry|iron|store|keep|stop|care)"""
+)
+_PICK = re.compile(
+    r"\b(?:rec+om+end\w*|suggest\w*|(?:looking|searching|shopping) for|find me|show me|after|"
+    r"(?:want|need|like)(?= (?:an?|some|new|warm)\b)|help me (?:find|choose|pick)|which|best|any|"
+    r"what(?:'s| is) (?:a|the best|the \w+est)|do you (?:have|sell)|"
+    r"what(?= (?!do|did)\w+ \w* ?(?:do|did|are)\b))"
+    r"\b(?! (?:one|of|is|are|this|that|the|these|those|it|my|your)\b(?! best))"
+    r"(?P<gap>[^,.;?!]{0,45}?)\b" + _GOODS.pattern,
+    re.IGNORECASE,
+)
+_COMPLAINT = _cue(
+    r"""broke|broken|ripped|torn|tore|fell apart|falling apart|came (?:apart|undone|with)|hole|late
+lost|disappoint\w*|unhappy|not (?:very |at all )?(?:happy|impressed)|furious|annoy\w*|fed up
+terrible|awful|ridiculous|unacceptable|rubbish|worst|useless|let down
+never (?:came|got|received)|still (?:waiting|not|hasn't|haven't)|faulty|damaged|complain\w*
+ruined|waste of money|not good enough|no(?:body| one) (?:answers|replied|replies)
+has (?:gone|split|come off)|turned up with|stained|poor"""
+)
+
+# A clause ends at a sentence end, or at a comma or joiner before the start of a new ask.
+_INVERTED = (
+    r"(?:(?:what|how|which|when|where|why|who)(?:'?s|'?re| (?:is|are|do|does|did|can|will|would|"
+    r"should|long|much|big|heavy|warm|about|size))|(?:can|could|do|does|is|are|will|would|should|"
+    r"did) (?:i|it|they|you|the|this|that|these|those|we|your|my|anyone|people|customers|there|"
+    r"reviewers|buyers|shoppers|returns)|(?:has|have) (?:anyone|anybody|people|customers)|any)\b"
+)
+_STARTER = (
+    rf"(?:{_INVERTED}|(?:what|how|which|when|where|why|is|are|do|does|can|could|will|tell|show|"
+    r"give|find|recommend|suggest|compare|just|now|if|need|want|looking|i|i'm|i'd|i've|we|my|also|"
+    r"plus|thanks)\b)"
+)
+_BOUNDARY = re.compile(
+    rf"(?<=[.!?;])\s+|(?<=[!?;])(?=\w)|\s[-–—]+\s|;|"
+    rf",? (?:and|but|so|then|also|plus|&|\+)(?: also| then)? (?={_STARTER})|, (?={_STARTER})",
+    re.IGNORECASE,
+)
+_STARTS = re.compile(_STARTER, re.IGNORECASE)
+_INVERTED_START = re.compile(rf"\b{_INVERTED}", re.IGNORECASE)
+_REQUEST = _cue(
+    r"""tell|show|give|help|explain|compare|let me know|please|pls|(?:to|you|me) find|find me
+rec+om+end\w*|suggest\w*|how (?:do|does|can|is|are|long|much|many)
+i (?:want|need|would like|wonder)|i'd (?:like|love)|wonder\w*|looking for|i'm after|need|want
+wanna|worried|concerned|curious|not sure|unsure|can't (?:find|decide)|don't know|question"""
+)
+_PERSONAL = re.compile(
+    r"(?:(?:hi|hey|hello|ok|so|well|and|but|also|yes|because|as)[ ,]+)?"
+    r"(?:i|i'm|i've|we|we've|it|they|he|she|my|our|the last|last \w+|this is|thinking|"
+    r"the (?:parcel|order|delivery)|"
+    r"the (?:\w+ )?(?:label|page|description|site|size chart|size guide) (?:says|said|states))\b",
+    re.IGNORECASE,
+)
+_KNOWN = _cue(
+    r"(?:i|we)(?:'ve| have)? (?:already|know|read|saw|seen|checked|understand|love|like|find)"
+)
+_LEADING_IF = _cue(r"if|when i\w*|once|since|because|although|even though|while")
+_THANKS = re.compile(
+    r"\b(?:thanks|thank you|thx|cheers)\b[^?.!,;]{0,60}(?=[.!,;]|$)", re.IGNORECASE
+)
+_NEGATED = re.compile(
+    r"\b(?:don'?t (?:really )?(?:care|mind|worry)|don'?t need (?:to know|the|any)|no need|"
+    r"never ?mind|not (?:asking|interested|bothered|talking)|forget (?:about|the|what)|skip|"
+    r"ignore|regardless of|(?:apart|aside) from|other than|besides|(?:instead|rather) (?:of|than)|"
+    r"leaving aside)\b[^,.;?!]{0,80}?(?=[,.;?!]|$|\bbut\b|\bjust\b)",
+    re.IGNORECASE,
+)
+# "… if the zip breaks" is a condition, not the ask; "what happens if …" is the ask.
+_SUBORDINATE = re.compile(
+    r"(?<!happens)(?<!what)(?<!know)(?<!wonder)(?<!wondering)(?<!me)(?<!see)(?<!sure)(?<!check)"
+    r"(?<!ask)(?<!say)(?<!mention)(?<!look)(?<!looking)(?<!i'm) "
+    r"(?:if|when|because|since|after|once|unless|although|even though|while|in case)\b",
+    re.IGNORECASE,
+)
+_GOVERNED = _cue(r"about|on|regarding|say|mention|think|find")
+_FRAGMENT = re.compile(r" (?:and|plus|&|\+) |[,/+&]", re.IGNORECASE)
+_NAMED_ITEM = re.compile(r"\bthe [A-Z][a-z]+ [A-Z][a-z]+")
+
+# One-letter typos of common cue words: both sides lose one letter and meet.
+_TYPO_WORDS = frozenset(
+    """return returns refund exchange shipping delivery delivered review reviews reviewers
+    waterproof material comfortable scratchy washable washing machine breathable recommend
+    jacket jackets fleece sweater blanket available discount payment warranty customers""".split()
+)
+_TYPO_KEEP = frozenset("shopping slipping skipping snipping".split())
+
+
+def _deletions(word: str) -> list[str]:
+    return [word, *(word[:i] + word[i + 1 :] for i in range(len(word)))]
+
+
+_TYPO_KEYS = {key: word for word in sorted(_TYPO_WORDS) for key in _deletions(word)}
+_TYPO_TOKEN = re.compile(r"\b[A-Za-z]{5,13}\b")
+
+
+def _fix_typo(m: re.Match[str]) -> str:
+    word = m.group(0).lower()
+    if word in _TYPO_WORDS or word in _TYPO_KEEP or word.rstrip("s") in _TYPO_WORDS:
+        return m.group(0)
+    hits = (_TYPO_KEYS.get(key, "") for key in _deletions(word))
+    return next((hit for hit in hits if hit[:1] == word[0]), m.group(0))
+
+
+def _asks(clauses: Sequence[str]) -> list[str]:
+    """The clauses that ask, without what the shopper tells ("I already read the reviews")."""
+    asks: list[str] = []
+    for clause in clauses:
+        question = clause.endswith("?")
+        known = bool(_KNOWN.match(clause))
+        if known and not question:
+            continue
+        told = _PERSONAL.match(clause) and not question and not _REQUEST.search(clause)
+        if known or told or _LEADING_IF.match(clause):
+            inverted = _INVERTED_START.search(clause)
+            if inverted is None:
+                continue
+            clause = clause[inverted.start() :]
+        asks.append(clause)
+    return asks
+
+
+def _asked_experience(clause: str) -> bool:
+    def described(m: re.Match[str]) -> str:
+        asked = _IS_A.search(clause[max(0, m.start() - 70) : m.start()])
+        return m.group(0) if asked else " "
+
+    return bool(_EXPERIENCE.search(_ATTRIBUTIVE.sub(described, clause)))
+
+
+def _read_clause(clause: str) -> set[Index]:
+    """What one clause asks. Other people's views come first, then the shop, then fit and
+    experience, then attributes, which are mostly how a shopper points at an item. A second index
+    needs a fragment of its own, or a pick."""
+    if _REVIEW_POLICY.search(clause):
+        return {"policy"}
+    fragments = _FRAGMENT.split(clause)
+    policy = bool(_POLICY.search(clause))
+    pick = _PICK.search(clause)
+    found: set[Index] = set()
+    if _VOICES.search(clause) or (not policy and _WEAK_VOICES.search(clause)):
+        found.add("reviews")
+        if _OPINION_PICK.search(clause) or (pick and not _VOICES.search(pick.group("gap"))):
+            found.add("specifications")
+        others = [f for f in fragments if not _VOICES.search(f)]
+        if _GOVERNED.search(clause):
+            return found
+        if any(_POLICY.search(f) for f in others):
+            found.add("policy")
+        elif any(_FACTS.search(f) for f in others):
+            found.add("specifications")
+    elif policy:
+        found.add("policy")
+        others = [f for f in fragments if not _POLICY.search(f)]
+        if any(_FACTS.search(f) for f in others):
+            found.add("specifications")
+        elif pick and not _POLICY.search(clause[: pick.end()]):
+            found.add("specifications")
+        if any(_asked_experience(f) for f in others):
+            found.add("reviews")
+    elif _CARE_HOW.search(clause):
+        found.add("specifications")
+    elif _RUNS.search(clause):
+        found |= {"reviews", "specifications"}
+    elif _asked_experience(clause):
+        found.add("reviews")
+        others = [f for f in re.split(r" (?:and|or) |,", clause) if not _asked_experience(f)]
+        picked = pick and _asked_experience(clause[pick.end() :])
+        if picked or any(_FACTS.search(f) for f in others):
+            found.add("specifications")
+    elif _SPECS.search(clause) or _GOODS.search(clause):
+        found.add("specifications")
+    return found
+
+
+def _topic(clause: str) -> bool:
+    """A bare noun phrase naming what the next ask is about ("zipper on the fleece, does it …")."""
+    if clause.endswith("?") or _STARTS.match(clause) or _INVERTED_START.search(clause):
+        return False
+    return not (_REQUEST.search(clause) or _FACTS.search(clause) or _PICK.search(clause))
+
+
+def _read(clauses: Sequence[str]) -> set[Index]:
+    found: set[Index] = set()
+    topics: set[Index] = set()
+    for clause in clauses:
+        cut = _SUBORDINATE.search(clause)
+        read = (_read_clause(clause[: cut.start()]) if cut else set()) or _read_clause(clause)
+        if read == {"specifications"} and _topic(clause):
+            topics |= read
+        else:
+            found |= read
+    return found or topics
+
+
+def route_indexes(message: str) -> frozenset[Index]:
+    """The indexes a message asks about (RAG-07): code only, from the message alone, never empty.
+
+    Nothing calls this yet. It is report-only by the user's decision (plan 2026-11-25): narrowing a
+    search to these indexes is not wired. If it were, a route could only narrow: filters never
+    widen access, and audience, region and visibility come from the caller (hard rule 7).
+
+    Unsure, or text aimed at the system, is every index. The rules follow the labelling guide,
+    `docs/reviews/2026-11-25-RAG-10-labelling-guide.md`.
+    """
+    text = unicodedata.normalize("NFKC", message).replace("’", "'")
+    text = "".join(ch for ch in text if unicodedata.category(ch) != "Cf")
+    text = " ".join(re.sub(r"[\r\n]+", " ; ", text).split())
+    if _SYSTEM_TEXT.search(text):
+        return ALL_INDEXES
+    text = _NEUTRAL.sub(" ", _RATED.sub(" waterproof ", _CALLER_WORDS.sub(" ", text)))
+    text = _NEGATED.sub(" ", _THANKS.sub(" ", _TYPO_TOKEN.sub(_fix_typo, text)))
+    text = " ".join(text.split())
+    clauses = [c.strip() for c in _BOUNDARY.split(text) if c.strip()]
+    asked = any(c.endswith("?") for c in clauses) or _REQUEST.search(text)
+    if not asked and _COMPLAINT.search(text) and not _VOICES.search(text):
+        return frozenset({"policy"})  # a complaint with no question
+    found = _read(_asks(clauses)) or _read(clauses)
+    if not found and _NAMED_ITEM.search(text):
+        found.add("specifications")
+    return frozenset(found) or ALL_INDEXES
