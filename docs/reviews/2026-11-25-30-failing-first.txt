@@ -173,3 +173,10 @@ FAILED services/assistant/tests/test_30_none_left.py::test_it_never_stays_on_scr
 FAILED services/assistant/tests/test_30_none_left.py::test_it_never_stays_on_screen_however_the_deltas_fall[There's **no stock left** in Navy.]
 FAILED services/assistant/tests/test_30_none_left.py::test_it_never_stays_on_screen_however_the_deltas_fall[We have none  left.]
 15 failed, 6 passed in 0.30s
+
+# L-5's hyphen reading, failing first, at 859ae28
+.......................................................................F [ 94%]
+....                                                                     [100%]
+=========================== short test summary info ============================
+FAILED evals/tests/test_sa_scorers.py::test_is_in_stock_fails_a_combination_that_does_not_exist[It is in-stock.]
+1 failed, 75 passed in 0.14s

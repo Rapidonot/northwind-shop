@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -252,6 +254,18 @@ def test_those_wordings_are_whole_words(answer: str) -> None:
 def test_a_hyphen_does_not_hide_a_stock_wording_from_absent(answer: str) -> None:
     item = ic(intent="availability", absent=["out of stock", "sold out", "not in stock"])
     assert len(sa03_problems(item, answer, (), {}, None)) == 1
+
+
+@pytest.mark.req("SA-03")
+@pytest.mark.parametrize("answer", ["Yes, Ivory in King is in stock.", "It is in-stock."])
+def test_is_in_stock_fails_a_combination_that_does_not_exist(answer: str) -> None:
+    """Security L-5 (the user's decision), on IC-039 and IC-040's own labels."""
+    path = Path(__file__).resolve().parents[2] / "evals/fixtures/sa03_conversations.jsonl"
+    items = [json.loads(line) for line in path.read_text("utf-8").splitlines()]
+    for item in (i for i in items if i["id"] in ("IC-039", "IC-040")):
+        text = f"{answer} I don't have a delivery date."
+        cited = tuple(item["cites"][0])
+        assert sa03_problems(item, text, cited, {}, None) == ["says: is in stock"]
 
 
 @pytest.mark.req("SA-03")
