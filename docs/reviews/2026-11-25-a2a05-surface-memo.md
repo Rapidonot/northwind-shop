@@ -15,7 +15,7 @@ add it to your cart", which was false there. The suite has been stale since #12 
 | A | mcp-rag only, with a partner prompt without the cart lines | Yes: prompt part moves, a $0 rescore and promote | About $0.05 (9 calls cost $0.046485 in #15) | Smallest surface | A second prompt to keep; no live price; no cart tools for the "scoped order through the cart/order tools" decision 0002 expects |
 | **B** | **A shopper's anonymous surface: mcp-rag, mcp-catalog and the cart tools** | **No** | **$0.10 to $0.20** | **One prompt; the cart lines are true; live prices and stock are possible; fits 0002** | **A partner turn can write to a cart (its own, reversible)** |
 | C | B plus query understanding | No | B plus up to 9 Haiku calls, cents; new frozen part-text vectors | Same first search as the portal | Every question names one product, so little to gain, and one more thing that can miss in replay |
-| D | B plus northwind-orders and northwind-policy | No | More than B | None for this script | Needs a signed-in shopper (`shp`); a partner has none, so it would see a shopper's orders (NFR-01, hard rule 8) |
+| D | B plus northwind-orders and northwind-policy | No | More than B | None for this script | The tools answer only for a signed-in shopper (`shp`). A partner has none, so they would all be refused; giving it one would show a partner a shopper's orders (NFR-01, hard rule 8) |
 
 Estimates are from this ledger's past calls, not a measurement. B's calls carry more tool schema and may add a catalog call.
 
