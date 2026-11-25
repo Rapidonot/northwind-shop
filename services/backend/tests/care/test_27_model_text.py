@@ -1,5 +1,5 @@
-"""Bundled into row #27 (decision 0021 rule 6): the BE-07, BE-01 and BE-02 checks of what the model
-reads search the whole request body except its top-level `metadata`. The CLI puts a random
+"""Bundled into row #27 (decision 0021 rule 6): the BE-07, BE-01, BE-02 and BE-05 checks of what the
+model reads search the whole request body except its top-level `metadata`. The CLI puts a random
 `metadata.user_id` (a device hash and a session UUID) in every request, so a check like
 `"1111" not in json.dumps(bodies)` failed at random (it failed #11's `make ci`). It is the only
 field left out: an allow-list of block types would miss a card in any other part of the request.
@@ -23,7 +23,15 @@ TESTS = Path(__file__).resolve().parents[1]
 ModelText = Callable[[Any], str]
 
 
-@pytest.fixture(params=["care", "orchestrator", "backend_audit"])
+DRIVERS = {
+    "care": "_driver",
+    "orchestrator": "_driver",
+    "backend_audit": "_driver",
+    "orders_place": "_placement",
+}
+
+
+@pytest.fixture(params=sorted(DRIVERS))
 def model_text(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> ModelText:
     """Each folder's own copy, loaded by path as its own package (the drivers import siblings)."""
     name = f"model_text_{request.param}"
@@ -34,7 +42,7 @@ def model_text(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) 
     assert spec is not None
     monkeypatch.setitem(sys.modules, name, importlib.util.module_from_spec(spec))
     try:
-        found: ModelText = importlib.import_module(f"{name}._driver").model_text
+        found: ModelText = importlib.import_module(f"{name}.{DRIVERS[request.param]}").model_text
     finally:
         for loaded in [m for m in sys.modules if m.startswith(f"{name}.")]:
             del sys.modules[loaded]

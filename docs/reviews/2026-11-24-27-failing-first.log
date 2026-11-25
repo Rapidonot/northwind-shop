@@ -237,3 +237,15 @@ $ uv run pytest -p no:cacheprovider -q services/backend/tests/backend_audit/test
 ## 2026-11-25T04:53:54Z after the fixture's ID
 $ uv run pytest -p no:cacheprovider -q services/backend/tests/care/test_27_model_text.py
 63 passed in 0.49s
+
+## 2026-11-25T04:56:54Z BE-05 (test_be05_place_scripted.py:90): same flake class. Before: the old search on a body whose only match is in metadata.user_id (throwaway file), then the helper test with orders_place added
+$ uv run pytest -p no:cacheprovider -q <throwaway>/test_old_be05.py
+1 failed in 0.12s
+$ uv run pytest -p no:cacheprovider -q services/backend/tests/care/test_27_model_text.py
+  21 E           AttributeError: module 'model_text_orders_place._placement' has no attribute 'model_text'
+63 passed, 21 errors in 0.63s
+## 2026-11-25T04:57:04Z after: BE-05 on the same model_text (fourth copy, in _placement.py)
+$ uv run pytest -p no:cacheprovider -q services/backend/tests/care/test_27_model_text.py
+84 passed in 0.51s
+$ uv run pytest -p no:cacheprovider -q services/backend/tests/orders_place/test_be05_place_scripted.py
+30 passed in 24.06s
