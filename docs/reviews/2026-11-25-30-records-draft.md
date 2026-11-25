@@ -41,7 +41,9 @@ Base `____`, head `____`; `make review-diff REVIEW_DIFF=$TMPDIR/northwind-review
 `make ci` ____ at ____ ; added cassettes ____ ; failing-first `docs/reviews/2026-11-25-30-failing-first.txt`; security ____;
 advisor ____.
 ### Open findings
-____. Control surface: as in the PR body. Needs `gate-change` and `baseline-change`; green means only the PR's own gate.
+____. Control surface: as in the PR body, including `services/rag/tests/test_frozen_vectors.py`, **approved by the user on
+2026-11-25 after the edit** (F1: it only adds the 70 messages and 5 part texts to the allowed list; no assertion loosened;
+runner-sync, so `ship` asks for the runner fast-forward). Needs `gate-change` and `baseline-change`; green means only the PR's own gate.
 ### Terminal commands
 Read each command before pasting it. `make e2e-scripted` and `make e2e` (`DATABASE_URL=…/northwind_16`), `/req-done`, then
 `make -C ~/.northwind/runner finish CHECKOUT=$HOME/Projects/northwind-shop SHA=____ BODY=docs/reviews/2026-11-25-30-pr-body.md`
