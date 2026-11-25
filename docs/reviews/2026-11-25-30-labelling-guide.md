@@ -110,6 +110,8 @@ writing them had read recorded answers made with the old prompt, on eval items, 
 - **IC-009** (answer C): `absent` gains "not machine-washable", "do not machine wash", "don't machine wash".
 - **IC-039, IC-040:** `absent` gains "out of stock", "sold out", "back in stock", "restock", "currently unavailable", "not
   in stock": calling a combination that does not exist out of stock fails.
+- **IC-039, IC-040, again (security L-5, the user, 2026-11-25, before any measurement):** `absent` gains "is in stock",
+  which the scorer reads with a hyphen as a space, as it does the other stock wordings there (clarification 8).
 - **IC-045:** `absent` is "is final sale", "are final sale", "final-sale items can't", so "clearance isn't final sale" does
   not trip it. Two are the user's phrasings, not literal text in another region's document. "final sale and", in the
   first freeze (`90979c6`), was dropped by the user before any scorer ran: it failed "isn't final sale and can go back".
