@@ -407,8 +407,10 @@ The changed shown answers are re-judged in W6. Tests: `services/assistant/tests/
 
 ## Row #30 note (2026-11-25)
 
-Approved by the user with the row #30 plan (`docs/reviews/2026-11-25-30-plan.md`, Q3 and the M1 and M2 fixes). All only
-tighten, and change 6 of 356 recorded answers (`docs/reviews/2026-11-25-30-step0.md`).
+Approved by the user with the row #30 plan (`docs/reviews/2026-11-25-30-plan.md`, Q3 and the M1 and M2 fixes). They change
+6 of 356 recorded answers (`docs/reviews/2026-11-25-30-step0.md`). H3 and the offer class only tighten. M2 shows a
+sentence the check used to drop: the one after a link that ended its own sentence, when it matches no class itself. It is
+checked on its own, as it already was without a link before it (security review L-2).
 
 - **H3, class `stock`:** "available in" a plural range is the range offered only when nothing negates it. "Unavailable in
   sizes M and L" and "isn't available in three colours" are stock claims, vouched by `check_stock` as any other (exemption

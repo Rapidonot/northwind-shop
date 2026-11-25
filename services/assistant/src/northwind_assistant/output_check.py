@@ -552,7 +552,7 @@ def citation_ids(group: str) -> list[str]:
 
 
 # A citation marker, every part ID-shaped: `[FAQ-019, POL-RETURNS-US]`.
-_CITATION = re.compile(rf"\[\s*{ID}(?:\s*{SEPARATOR}\s*{ID})*\s*\]")
+_CITATION = re.compile(rf"\[\s*{ID}(?:\s*,\s*{ID})*\s*\]")
 _ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 
 

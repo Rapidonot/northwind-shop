@@ -17,10 +17,12 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 from collections import Counter
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -34,6 +36,8 @@ from northwind_assistant.turn import Citations, Reset, TextDelta, TurnError, str
 from northwind_assistant.understand import Understander
 from northwind_common.llm import agent_runtime
 from northwind_evals.answerers import CatalogLog, eval_session, live_of, serve_catalog
+from northwind_evals.cli import _chunk_guard
+from northwind_evals.contexts import ContextChunk, internal_sources
 from northwind_evals.intents import sa03_problems, sa04_problems
 from northwind_llm_replay.scripted import ScriptedLLM
 from northwind_mcp_catalog.live import FixtureCatalog
@@ -64,10 +68,49 @@ def labelled(name: str) -> list[dict[str, Any]]:
     return [json.loads(line) for line in text.splitlines()]
 
 
+@lru_cache(maxsize=1)
+def _internal_terms() -> re.Pattern[str]:
+    """Internal products' names (brand and model, as `names_catalog_product` keys a public one) and
+    every internal source ID, which that detector leaves out on purpose (hard rule 7)."""
+    terms = []
+    for line in (REPO / "data/fixtures/products.jsonl").read_text("utf-8").splitlines():
+        product = json.loads(line)
+        if product["visibility"] == "internal":
+            brand, name = product["brand"], product["name"]
+            terms.append(" ".join([*brand.split(), name[len(brand) :].split()[0]]))
+    terms += sorted(internal_sources(REPO / "data/fixtures"))
+    words = "|".join(r"\s+".join(map(re.escape, term.split())) for term in terms)
+    return re.compile(rf"\b(?:{words})\b", re.IGNORECASE)
+
+
+def internal_content(text: str) -> list[str]:
+    return _internal_terms().findall(re.sub(r"[*_`]", "", text))
+
+
+class Guarded:
+    """The index, refusing a search that returned internal content before the model or a cassette
+    sees it: the guard `eval-answers` refinements get (security review M-1)."""
+
+    def __init__(self, index: Any) -> None:
+        self._index = index
+        self._leaks = _chunk_guard()
+
+    def search(self, query: str, caller: Any) -> list[RetrievedChunk]:
+        found: list[RetrievedChunk] = self._index.search(query, caller)
+        chunks = [ContextChunk(c.chunk_id, c.source_id, c.source_type, c.text) for c in found]
+        if self._leaks(chunks):
+            raise RuntimeError("a search returned internal content")
+        return found
+
+
 @contextmanager
 def surface(index: Any) -> Iterator[tuple[RagEndpoint, CatalogEndpoint, CatalogLog]]:
     log = CatalogLog()
-    with serve_retriever(index, Caller) as (url, _), serve_catalog(KEY, log) as catalog_url:
+    guard = _chunk_guard()
+    with (
+        serve_retriever(Guarded(index), Caller) as (url, _),
+        serve_catalog(KEY, log, guard) as catalog_url,
+    ):
         yield RagEndpoint(url, KEY), CatalogEndpoint(catalog_url, KEY), log
 
 
@@ -104,6 +147,45 @@ def ask(
     return Turn("".join(shown), cited, dict(live.stock), error)
 
 
+def preflight(embedder: Any, connect: Callable[[], Any]) -> None:
+    """Before either test's first model call: every message of both files has a frozen vector, and
+    the database answers (security review L-7: nothing is spent on a run that cannot finish)."""
+    for name, key in (("sa04_prompts", "prompt"), ("sa03_conversations", "query")):
+        embedder.embed([item[key] for item in labelled(name)])
+    assert embedder.misses == 0, "a message has no frozen vector: run make embed-cache before W1"
+    connect()
+
+
+def run_turns(
+    items: Sequence[Mapping[str, Any]],
+    key: str,
+    runtime_of: Callable[[Mapping[str, Any]], Any],
+    rag: Any,
+    catalog: Any,
+    log: Any,
+    after: Callable[[Mapping[str, Any]], None],
+) -> dict[str, Turn]:
+    """One turn per item, stopping at the first that ends in an error or holds internal content."""
+    turns: dict[str, Turn] = {}
+    for item in items:
+        turn = ask(
+            item[key],
+            item["region"],
+            eval_session(item["id"]),
+            runtime_of(item),
+            rag,
+            catalog,
+            log,
+            Understander(),
+        )
+        assert turn.error is None, f"{item['id']}: {turn.error}"
+        assert not log.leak, f"{item['id']}: a catalog result held internal content"
+        assert internal_content(turn.shown) == [], f"{item['id']}: internal content on screen"
+        after(item)
+        turns[item["id"]] = turn
+    return turns
+
+
 def run_recorded(
     items: Sequence[Mapping[str, Any]], key: str, llm_proxy: Any, root: Path
 ) -> dict[str, Turn]:
@@ -112,27 +194,21 @@ def run_recorded(
         return psycopg.connect(url, autocommit=True)
 
     embedder = CachedEmbedder(FastEmbedEmbedder())
-    embedder.embed([item[key] for item in items])
-    assert embedder.misses == 0, "a message has no frozen vector: run make embed-cache before W1"
-    turns: dict[str, Turn] = {}
+    preflight(embedder, lambda: connect().close())
+    hits = embedder.hits
+
+    def frozen(item: Mapping[str, Any]) -> None:
+        nonlocal hits
+        routed = rules_plan(item[key], item["region"]).needs_model
+        if llm_proxy.mode == "replay" or not routed:
+            assert embedder.hits > hits, f"{item['id']}: the first search is not frozen"
+        hits = embedder.hits
+
+    def runtime_of(item: Mapping[str, Any]) -> Any:
+        return agent_runtime(base_url=llm_proxy.base_url, root=root / item["id"])
+
     with surface(CallerIndex(connect, embedder)) as (rag, catalog, log):
-        for item in items:
-            runtime = agent_runtime(base_url=llm_proxy.base_url, root=root / item["id"])
-            before = embedder.hits
-            turns[item["id"]] = ask(
-                item[key],
-                item["region"],
-                eval_session(item["id"]),
-                runtime,
-                rag,
-                catalog,
-                log,
-                Understander(),
-            )
-            routed = rules_plan(item[key], item["region"]).needs_model
-            if llm_proxy.mode == "replay" or not routed:
-                assert embedder.hits > before, f"{item['id']}: the first search is not frozen"
-    return turns
+        return run_turns(items, key, runtime_of, rag, catalog, log, frozen)
 
 
 def write_report(name: str, turns: Mapping[str, Turn], problems: Mapping[str, list[str]]) -> None:
@@ -149,7 +225,6 @@ def test_the_assistant_asks_first_on_at_least_18_of_20(llm_proxy: Any, tmp_path:
     turns = run_recorded(items, "prompt", llm_proxy, tmp_path)
     problems = {i["id"]: sa04_problems(i, turns[i["id"]].shown) for i in items}
     write_report("sa04", turns, problems)
-    assert {i: t.error for i, t in turns.items() if t.error} == {}
     # The user's Q2: an empty answer is a stop, whatever the pass mark says.
     assert [i for i, t in turns.items() if not t.shown.strip()] == []
     failed = {i: p for i, p in problems.items() if p}
@@ -170,7 +245,6 @@ def test_every_intent_has_ten_scored_conversations(llm_proxy: Any, tmp_path: Pat
         units = store.stock(item["variants"][0], item["region"]) if item["variants"] else None
         problems[item["id"]] = sa03_problems(item, turn.shown, turn.cited, turn.checked, units)
     write_report("sa03", turns, problems)
-    assert {i: t.error for i, t in turns.items() if t.error} == {}
     assert [i for i, t in turns.items() if not t.shown.strip()] == []
     asked = Counter(i["intent"] for i in items)
     passed = Counter(i["intent"] for i in items if not problems[i["id"]])
