@@ -69,3 +69,12 @@ Each index is then in at least 20 labels.
 
 ## Review sheet
 About 20 of the hardest items go on one sheet for the user. The rest stay `model`.
+
+## Clarifications (the user's answers to the review sheet, 2026-11-25, before any router; no label changed)
+- **A, rule 2:** marketing words in a description ("cosy", "comfortable", "softens") do not count as the catalog stating an
+  experience. Asking whether an item is soft or comfortable stays `reviews`.
+- **B, rule 2:** the list also holds shedding, sweaty or clammy, see-through, stiff or crunchy, and a zip that jams.
+- **C, rule 8:** text aimed at the system means all three even beside a clear ask. Asking for staff or internal text alone
+  does not (rule 9).
+- **D, rule 4:** `policy` also covers a complaint with no question, how to leave a review, and when a named item arrives.
+- **E, rules 3 and 4:** one item's own price or stock is `specifications`. Prices, tax and promotions in general are `policy`.
