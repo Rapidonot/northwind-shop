@@ -133,6 +133,10 @@ ADDRESS_UNDELIVERABLE = "address_undeliverable"
 OUT_OF_STOCK = "out_of_stock"
 NOT_SOLD = "not_sold_here"
 MIXED_CURRENCY = "mixed_currency"
+# M12 (row #25): a line with a quantity below 1, or a variant on two lines. Checked before any stock
+# read, so duplicate lines can't each pass a stock check their sum would fail, and a negative
+# quantity can't lower the total. The prompt's "any other issue" step escalates it.
+INVALID_LINE = "invalid_line"
 
 SYSTEM_PROMPT = """You are the Orders subagent of Northwind Outfitters, a fictional retailer. \
 You are an AI system. You place exactly one order: the one named in the task.
@@ -223,6 +227,7 @@ Reason = Literal[
     "duplicate_in_progress",
     "fraud_review",
     "out_of_stock",
+    "invalid_line",
     "not_sold_here",
     "address_unresolved",
     "payment_declined",
@@ -467,7 +472,12 @@ class _Handlers:
         issues: list[str] = []
         total = 0
         currencies: set[str] = set()
-        for line in order.lines:
+        variants = [line.variant_id for line in order.lines]
+        if len(set(variants)) != len(variants) or any(
+            isinstance(line.quantity, bool) or line.quantity < 1 for line in order.lines
+        ):
+            issues.append(INVALID_LINE)
+        for line in () if issues else order.lines:
             variant = line.variant_id
             stock = await self._read(partial(self.catalog.stock, variant, order.region))
             price = await self._read(partial(self.catalog.price, variant, order.region))
@@ -864,6 +874,8 @@ def reason_for(p: Placement, by: Literal["agent", "code"]) -> str:
     issues = set(p.issues or ())
     if OUT_OF_STOCK in issues:
         return "out_of_stock"
+    if INVALID_LINE in issues:
+        return "invalid_line"
     if NOT_SOLD in issues or MIXED_CURRENCY in issues:
         return "not_sold_here"
     if ADDRESS_UNDELIVERABLE in issues or "no_usable_address_on_file" in p.codes:

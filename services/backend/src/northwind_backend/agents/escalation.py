@@ -9,6 +9,7 @@ escalated."""
 from __future__ import annotations
 
 NOT_ESCALATED = "not_escalated"
+INVALID_LINE = "invalid_line"
 UNKNOWN_CAUSE = "agent_requested"
 
 RECOMMENDED: dict[str, str] = {
@@ -29,6 +30,8 @@ RECOMMENDED: dict[str, str] = {
     "agent_requested": "check the order; the agent escalated without a known cause",
     # Not "rerun": a later run makes no write on an escalated order (security review F1).
     "not_finished": "read the order and payment state, then finish the order by hand",
+    # Row #25 (M12): an order line with a quantity below 1, or a variant on two lines.
+    INVALID_LINE: "correct the order lines with the shopper, or cancel",
     # Row #26 (BE-07): a case for an order nobody escalated.
     NOT_ESCALATED: "read the order and the case summary, then answer the shopper or escalate it",
 }
