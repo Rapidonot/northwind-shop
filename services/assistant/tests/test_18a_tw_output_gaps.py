@@ -154,21 +154,12 @@ def test_a_negation_after_a_long_aside_is_blocked_at_zero_or_unchecked(
     assert hits(LONG_ASIDE, live=stock(**units)) == {"stock": 1}
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="18a tw: a negation about 120+ characters before 'in stock' in the same sentence "
-    "is vouched by 5 units on hand (the reach stops near 100 characters)",
-)
 def test_a_negation_after_a_long_aside_is_never_vouched_by_units_on_hand() -> None:
     live = stock(a=5)
     assert hits(LONG_ASIDE, live=live) == {"stock": 1}
     assert all(STOCK in shown for shown in every_way(LONG_ASIDE, live))
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="18a tw: 'None of them are left.' is no stock claim (only 'none of them left' is)",
-)
 def test_none_of_them_are_left_is_a_stock_claim() -> None:
     assert hits("None of them are left.") == {"stock": 1}
     assert hits("None of them are left.", live=stock(a=0)) == {}
@@ -176,8 +167,8 @@ def test_none_of_them_are_left_is_a_stock_claim() -> None:
 
 @pytest.mark.xfail(
     strict=True,
-    reason="18a tw: 'None left on the reviews page.' is blocked; the plan keeps "
-    "'none left on the reviews' shown",
+    reason="18a tw: 'None left on the reviews page.' is blocked by row #30's M-4 pattern (the "
+    "user's); the plan named it a near-miss that stays shown. Decision D4",
 )
 def test_none_left_on_the_reviews_stays_shown() -> None:
     assert hits("None left on the reviews page.") == {}

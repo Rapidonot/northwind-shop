@@ -57,10 +57,6 @@ def test_other_text_stays_clean(text: str) -> None:
     assert not contains_cvv(text)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="18a tw: a slash with a space either side ('cvv 7 / 3 / 7') is not read as a code",
-)
 @pytest.mark.parametrize("name", ["CVV", "security code"])
 def test_a_slash_with_spaces_either_side_is_card_data(name: str) -> None:
     assert contains_cvv(f"{name} 7 / 3 / 7")

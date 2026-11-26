@@ -478,6 +478,13 @@ PATTERNS: tuple[Pattern, ...] = (
         rf"(?:{_S}of{_S}(?:them|those|these|it))?{_S}(?:left|remaining)\b(?![-‐‑])",
         "live_stock",
     ),
+    #    "None of them are left." (test-writer's gap): a verb between them.
+    _p(
+        "stock",
+        rf"\b(?:zero|none)(?:{_S}of{_S}(?:them|those|these|it))?{_S}(?:are|is|were|was){_S}"
+        rf"(?:left|remaining)\b(?![-‐‑])",
+        "live_stock",
+    ),
     #    "aren't any left", "don't have any left": the negation before it is read as for "in stock".
     _p(
         "stock",
@@ -848,22 +855,26 @@ _RESTART = re.compile(
 _RESTART_SPOILED = re.compile(r"[,()\n]")
 # A sentence adverb closed by commas: "It is, not surprisingly, available in three colours."
 _NEGATED_ADVERB = re.compile(r",\s{0,3}(?:not|no)\s{1,3}[^\W\d_]{2,20}\s{0,3},")
-NEGATION_REACH = 2 * L  # view characters looked back for a negation in the sentence
+# View characters looked back for a negation in the sentence. A sentence that starts further back
+# is unread, so its claim is unvouched (test-writer's gap, a negation 160 characters back).
+NEGATION_REACH = 4 * L
 
 
-def negated_in_sentence(before: str) -> bool:
+def negated_in_sentence(before: str, *, whole: bool = True) -> bool:
     """Whether `before`, the text ahead of a stock phrase, holds a negation in the phrase's
     sentence: from its start, or from a new clause the phrase is in, with a reply word that opens
-    it and a negated sentence adverb left out."""
+    it and a negated sentence adverb left out. With `whole` False, `before` may begin inside the
+    sentence: if neither its start nor a new clause is in it, it counts as negated (fail closed)."""
     ends = list(_SENTENCE_END.finditer(before))
+    started = whole or bool(ends)
     sentence = before[ends[-1].end() :] if ends else before
-    reply = _REPLY_NO.match(sentence)
+    reply = _REPLY_NO.match(sentence) if started else None
     sentence = sentence[reply.end() :] if reply else sentence
     for restart in reversed(list(_RESTART.finditer(sentence))):
         if not _RESTART_SPOILED.search(sentence, restart.end()):
-            sentence = sentence[restart.end() :]
+            sentence, started = sentence[restart.end() :], True
             break
-    return bool(_NEGATION.search(_NEGATED_ADVERB.sub(",", sentence)))
+    return not started or bool(_NEGATION.search(_NEGATED_ADVERB.sub(",", sentence)))
 
 
 # Row 18a, part 4 (the user's decision, 2026-11-26: any listed over-blocking item, failing first,
@@ -1245,16 +1256,19 @@ class OutputCheck:
     def _stock_negation(self, view: View, found: re.Match[str]) -> bool | None:
         """`_negated`, then the sentence it does not reach (row 18a, M-B): None when a negation sits
         earlier in the sentence. The text before comes from the whole raw stream when there is one,
-        as the view may start after a newline or 2L back; `live_backed` passes its whole text."""
+        as the view may start after a newline or 2L back; `live_backed` passes its whole text. A
+        sentence that starts more than `NEGATION_REACH` back is unread: None."""
         negated = _negated(view.text, found.start())
         if negated is not False:
             return negated
         if self._raw:
             lo = view.raw_span(found.start(), found.end())[0]
-            before = self._view(self._back(lo, NEGATION_REACH), lo).text
+            origin = self._back(lo, NEGATION_REACH)
+            before, whole = self._view(origin, lo).text, origin == 0
         else:
-            before = view.text[max(0, found.start() - NEGATION_REACH) : found.start()]
-        return None if negated_in_sentence(before) else False
+            origin = max(0, found.start() - NEGATION_REACH)
+            before, whole = view.text[origin : found.start()], origin == 0
+        return None if negated_in_sentence(before, whole=whole) else False
 
     def _blocking_class(self, start: int, end: int) -> str | None:
         """The class of the earliest blocking match in raw [start, end), dropped classes left out,

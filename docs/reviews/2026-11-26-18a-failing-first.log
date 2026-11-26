@@ -132,3 +132,11 @@ branch: passes (the data is the same on base, so it cannot fail first). Mutant, 
 base: 16 failed, 5 passed; branch: 21 passed (with test_a2a05_partner.py and _criteria.py: 140 passed, 9 skipped, the stale suite)
 Passing on base: the positive cases (an agreeing cart turn is served; each cart tool counts as used), which the old loose check also accepted.
 Mutants: 7 of 7 killed. A1 offered but not used 2; A2 any cart tool offered 1; A3 a denial agrees 2; A4 no variant equality 2; A5 artifact of any product 1 (first survived: the other-product-cited case was added); A6 recorder without the catalog 2; A7 one fixed session 1
+
+## test-writer's gaps (271 cases, 5 strict xfails as found) and their fixes
+Fixed, each xfail then passed (strict, so it failed until the mark was removed):
+  a negation 160 characters back was missed: reach 2L -> 4L, and a sentence whose start lies past the reach is unread, so unvouched. Two tests added to test_18a_output_check.py separate the two (a negation 300 characters back; a true claim 200 characters into one sentence); mutants started=True and reach 2L, each 1 failed
+  'None of them are left.' / 'None are left.': a verb form of the M-A pattern
+  'CVV 7 / 3 / 7': a space either side of the punctuation
+Left as a strict xfail: 'None left on the reviews page.' is blocked by row #30's M-4 pattern (decision D4).
+After the fixes: step 0 0 of 448 calls differ from part 4's state; the card check over every recorded message and tool call 0 differ; assistant and common unit suites 3,173 passed, 22 xfailed.

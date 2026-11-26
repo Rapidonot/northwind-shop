@@ -213,3 +213,24 @@ def test_the_claim_is_either_shown_whole_or_replaced_at_every_stock_level() -> N
         for live in (None, stock(a=0), stock(a=5), stock(a=0, b=5)):
             shown = check_text(text, live=live)
             assert shown in (text, STOCK, head + STOCK), (text, shown)
+
+
+# ---- the reach (test-writer's gap: a negation 160 characters back was missed) ------------------
+
+ASIDE = ", as far as I can tell from the pages I read and the notes I was given last week"
+
+
+def test_a_negation_past_the_reach_leaves_the_sentence_unread_and_the_claim_unvouched() -> None:
+    text = "The towel is not" + ASIDE * 4 + ", currently in stock."
+    assert len(text) > 4 * 64 + 40
+    assert hits(text, live=stock(a=5)) == {"stock": 1}
+    assert hits(text, live=stock(a=0)) == {"stock": 1}
+
+
+def test_a_long_sentence_with_no_negation_is_read_whole_within_the_reach() -> None:
+    """About 200 characters before the claim, all in one sentence: read whole, so a true claim
+    shows."""
+    text = "The towel" + ASIDE.replace(",", "") * 2 + " and on the label, is in stock."
+    assert 150 < text.index("in stock") < 4 * 64
+    assert check_text(text, live=stock(a=5)) == text
+    assert hits(text) == {"stock": 1}
