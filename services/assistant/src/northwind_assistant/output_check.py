@@ -488,10 +488,24 @@ PATTERNS: tuple[Pattern, ...] = (
     #    "aren't any left", "don't have any left": the negation before it is read as for "in stock".
     _p(
         "stock",
-        rf"\b(?:(?:have|got){_S})?any{_S}(?:more{_S})?"
+        rf"\b(?:(?:hardly|barely|scarcely){_S})?(?:(?:have|got){_S})?any{_S}(?:more{_S})?"
         rf"(?:(?:units?|items?|pieces?|pairs?|stock){_S})?(?:left|remaining)\b(?![-‐‑])",
         "live_stock",
     ),
+    #    Row 18a, security L3: "nothing left in size M", "we've run out of the M", "they're all
+    #    gone", vouched as "out of stock" is. "Nothing left to add" and "nothing left me cold" are
+    #    no stock claim; only "we" or "they" runs out, so "you won't run out of warmth" is none.
+    _p(
+        "stock",
+        rf"\bnothing{_S}(?:left|remaining)\b(?![-‐‑])(?!{_S}(?:to|me|us|you|him|her|them|it)\b)",
+        "live_stock",
+    ),
+    _p(
+        "stock",
+        rf"\b(?:we|they)(?:['’]ve|{_S}have|{_S}had)?{_S}(?:just{_S})?(?:run|ran){_S}out\b",
+        "live_stock",
+    ),
+    _p("stock", rf"\b(?:all|they['’]re|they{_S}are|it['’]s|it{_S}is){_S}gone\b", "live_stock"),
     #    More member-price wordings (#13b R4 left these to #12), class 1: no exemption.
     _p("promotion", rf"\bmembers?[\s-]{{1,3}}only{_S}(?:rates?|prices?|pricing|deals?|offers?)\b"),
     _p("promotion", rf"\bmember{_S}(?:rates?|deals?|offers?|savings?|exclusives?)\b"),
@@ -533,7 +547,8 @@ TRIGGER = re.compile(
     r"\$|£|€|avail|currently|still|loyal|usd|gbp|eur|aud|cad|price|cost|pound|grand|thousand|"
     r"million|few|handful|several|plenty|lots|loads|many|some|tons|limited|"
     r"look|give|check|want|like|shall|should|"
-    rf"code|\d|\bi['’\s]|\bwe['’\s]|\[|\+|\(|\b(?:{_SPELLED_WORDS}|hundred|dozen|night|out|only|low|half|clearance|none)\b"
+    rf"code|\d|\bi['’\s]|\bwe['’\s]|\[|\+|\(|\b(?:{_SPELLED_WORDS}|hundred|dozen|night|out|only|low|half|clearance|none|"
+    r"zero|no|nothing|any|gone|hardly|barely|scarcely)\b"
 )
 # A duration is a policy term only in a sentence that holds one of these stems (the user's list,
 # row #13): a reviewer's "after an hour of steady rain" is an experience, not a policy.
@@ -770,9 +785,9 @@ _OPEN_TAIL = re.compile(r"[*_`]*[.,]?[*_`]*")
 _COUNT_IN = re.compile(rf"\d[\d,]*|\b{_SPELLED_COUNT}")  # \b: "none" holds no "one"
 _NEGATIVE = re.compile(
     rf"\bout{_J}of{_J}stock\b|\bsold{_J}out\b|\bunavailable\b|\b(?:none|no{_S}stock){_S}left\b"
-    r"|\b(?:zero|none|no)\b"  # row 18a, M-A: every such span says there is none
+    r"|\b(?:zero|none|no|nothing)\b|\b(?:run|ran)\s{1,3}out\b|\bgone\b"  # row 18a: there is none
 )
-_LOW = re.compile(r"\blow\b")
+_LOW = re.compile(r"\blow\b|\b(?:hardly|barely|scarcely)\b")  # row 18a, L3: "hardly any left"
 
 
 def stock_vouched(span: str, live: LiveValues, negated: bool | None = False) -> bool:
@@ -840,6 +855,9 @@ def _negated(view: str, start: int) -> bool | None:
 # claim unvouched (fail closed). A sentence ends at `[.!?]` before whitespace or at a blank line:
 # one newline does not end it ("is not" newline "in stock").
 _SENTENCE_END = re.compile(r"[.!?](?=\s)|\n[^\S\n]*\n")
+# Security L1: an abbreviation's full stop does not end the sentence ("None of the towels (e.g. Bath
+# or Hand) is in stock"). "No." is left out: as a reply it does end one.
+_SENTENCE_ABBREVIATION = re.compile(r"\b(?:e\.g|i\.e|etc|approx|vs|incl|cf|esp)\.$")
 # A reply word that opens the sentence answers the shopper and negates nothing after it: "No, the
 # Charcoal L is out of stock right now" (two recorded `assistant-intents` answers, step 0).
 _REPLY_NO = re.compile(r"\s*[*_]{0,4}(?:no|nope)[*_]{0,4}\s{0,3}(?:,|[-‐‑‒–—―])")
@@ -852,9 +870,14 @@ _RESTART = re.compile(
     r"|,\s{0,3}(?:but|and|so|yet)\s"
     r"|,\s{0,3}(?:it|they|we|i|you|there|this|these|those)(?=\s|['’])"
 )
-_RESTART_SPOILED = re.compile(r"[,()\n]")
+_RESTART_SPOILED = re.compile(r"[,()\n]|\s[-‐‑]\s|[‒–—―]")
+_DASH = re.compile(r"\s[-‐‑]\s|[‒–—―]")
 # A sentence adverb closed by commas: "It is, not surprisingly, available in three colours."
-_NEGATED_ADVERB = re.compile(r",\s{0,3}(?:not|no)\s{1,3}[^\W\d_]{2,20}\s{0,3},")
+# Security L2: an attitude word only; "not yet", "no longer" and the like keep their negation.
+_NEGATED_ADVERB = re.compile(
+    r",\s{0,3}(?:not|no)\s{1,3}(?:surprisingly|unexpectedly|unusually|coincidentally|oddly|"
+    r"strangely|ironically|incidentally|doubt)\s{0,3},"
+)
 # View characters looked back for a negation in the sentence. A sentence that starts further back
 # is unread, so its claim is unvouched (test-writer's gap, a negation 160 characters back).
 NEGATION_REACH = 4 * L
@@ -865,12 +888,20 @@ def negated_in_sentence(before: str, *, whole: bool = True) -> bool:
     sentence: from its start, or from a new clause the phrase is in, with a reply word that opens
     it and a negated sentence adverb left out. With `whole` False, `before` may begin inside the
     sentence: if neither its start nor a new clause is in it, it counts as negated (fail closed)."""
-    ends = list(_SENTENCE_END.finditer(before))
+    ends = [
+        end
+        for end in _SENTENCE_END.finditer(before)
+        if not _SENTENCE_ABBREVIATION.search(before[: end.start() + 1])
+    ]
     started = whole or bool(ends)
     sentence = before[ends[-1].end() :] if ends else before
     reply = _REPLY_NO.match(sentence) if started else None
     sentence = sentence[reply.end() :] if reply else sentence
     for restart in reversed(list(_RESTART.finditer(sentence))):
+        # Security M1: a dash with another before it closes an aside ("None of the towels — Bath
+        # or Hand — is in stock"), and one with another after it opens one: neither restarts.
+        if _DASH.fullmatch(restart.group()) and _DASH.search(sentence, 0, restart.start()):
+            continue
         if not _RESTART_SPOILED.search(sentence, restart.end()):
             sentence, started = sentence[restart.end() :], True
             break
