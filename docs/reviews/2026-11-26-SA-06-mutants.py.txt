@@ -1,0 +1,142 @@
+"""Row #23 (SA-06): failing-first evidence for the fix and phase B tests (advisor finding 1), by mutants.
+
+Each mutant undoes one fix in the source at the head, then runs only the named tests, which must fail.
+The file is then restored with `git checkout -- <file>`. No test is edited. Phase B's two files are
+reverted whole to the merge base `06713f1` (before phase B). $0: scripted model and replay only.
+
+Run from the repository root, in the sandbox, with a clean tree:
+    python3 docs/reviews/2026-11-26-SA-06-mutants.py.txt
+"""
+
+import subprocess
+import sys
+
+B = "services/backend/src/northwind_backend/handoff.py"
+F = "services/backend/src/northwind_backend/fakes/handoffs.py"
+C = "services/backend/src/northwind_backend/agents/care.py"
+G = "services/gateway/src/northwind_gateway/handoff.py"
+CHAT = "services/gateway/src/northwind_gateway/chat.py"
+SCOPES = "services/common/src/northwind_common/tool_scopes.py"
+TH = "services/backend/tests/care/test_sa06_handoff.py"
+TE = "services/gateway/tests/test_sa06_endpoint.py"
+CHATS = "apps/portal/src/Chat.tsx"
+STREAM = "apps/portal/src/chatStream.ts"
+
+# (id, finding, file, old, new, kind, tests). kind "py": pytest node IDs; "vitest": (file, -t pattern).
+MUTANTS = [
+    ("m01", "M1 JSON only", G, 'return kind == "application/json"', "return True", "py",
+     [f"{TE}::test_only_a_json_request_is_taken"]),
+    ("m02", "M1 open cap", B,
+     "        if len(self._opened) >= self._max_open or (\n"
+     "            anonymous and self._sessions >= self._max_sessions\n        ):",
+     "        if False:", "py",
+     [f"{TH}::test_over_the_open_cap_a_new_identity_is_refused_and_a_known_one_is_not"]),
+    ("m03", "M1 Care-run cap", B, "busy = self._active >= self._max_runs", "busy = False", "py",
+     [f"{TH}::test_with_every_care_slot_taken_the_case_is_built_by_code_at_once"]),
+    ("m04", "M1 close at shutdown", B,
+     "_done, late = await asyncio.wait(pending, timeout=timeout)", "_done, late = set(pending), set()",
+     "py", [f"{TH}::test_close_cancels_a_build_that_outlives_its_timeout"]),
+    ("m05", "L2 repeat audited", B, "                self._note_repeat(known)", "                pass", "py",
+     [f"{TH}::test_a_repeat_is_audited_and_merges_nothing"]),
+    ("m06", "L3/N9 dry run predicts", F, "        if dry_run:\n            # Security review L3",
+     "        if False:\n            # Security review L3", "py",
+     [f"{TH}::test_a_dry_run_predicts_the_reference_the_real_call_returns",
+      f"{TH}::test_a_dry_run_predicts_a_conflict_too"]),
+    ("m07", "L4 transcript label", B, '            f"Transcript: {TRANSCRIPT_LABEL}",\n', "", "py",
+     [f"{TH}::test_the_case_says_the_transcript_and_its_roles_are_unverified"]),
+    ("m08", "L6 identity inside the try", G,
+     '    except ValueError:\n        log.error("handoff failed: identity")',
+     '    except KeyError:\n        log.error("handoff failed: identity")', "py",
+     [f"{TE}::test_a_malformed_identity_is_the_fixed_503_not_a_500"]),
+    ("m09", "N3 503, not 422", G,
+     '        log.error("handoff failed: identity")\n        return _envelope(503, "transient", True, UNAVAILABLE)',
+     '        log.error("handoff failed: identity")\n        return _envelope(422, "validation", False, INVALID_MESSAGE)',
+     "py", [f"{TE}::test_a_malformed_identity_is_the_fixed_503_not_a_500"]),
+    ("m10", "N1 session cap", B, "            anonymous and self._sessions >= self._max_sessions",
+     "            False", "py", [f"{TH}::test_anonymous_sessions_cannot_take_the_signed_in_places"]),
+    ("m11", "N1 full audited once", B, "        if self._full_noted:\n            return\n", "", "py",
+     [f"{TH}::test_anonymous_sessions_cannot_take_the_signed_in_places"]),
+    ("m12", "N2 one repeat record", B, "        if count:\n            return\n", "", "py",
+     [f"{TH}::test_repeats_write_one_audit_record_per_reference"]),
+    ("m13", "N2 no cart read on a repeat", G,
+     "cart = None if desk.known(identity) else await _cart(reader, caller)",
+     "cart = await _cart(reader, caller)", "py", [f"{TE}::test_a_repeat_makes_no_cart_read"]),
+    ("m14", "N5 code steps before the slot", B,
+     "            order_id = await self._owned_order(request, run)\n"
+     "            task = CareTask(order_id, request.turns, from_browser=True)\n"
+     "            screened = task.transcript\n"
+     "            busy = self._active >= self._max_runs\n",
+     "            busy = self._active >= self._max_runs\n"
+     "            if busy:\n                raise _CareBusy\n"
+     "            order_id = await self._owned_order(request, run)\n"
+     "            task = CareTask(order_id, request.turns, from_browser=True)\n"
+     "            screened = task.transcript\n", "py",
+     [f"{TH}::test_a_busy_case_still_has_its_intent_and_the_shoppers_own_order"]),
+    ("m15", "N7 BE-07 case flagged", C, '["transcript_unverified"] if from_browser else []', "[]", "py",
+     [f"{TH}::test_be07s_case_from_a_handoff_says_its_transcript_is_unverified"]),
+    ("m16", "phase B: chat.py at 06713f1", CHAT, None, "06713f1", "py",
+     ["services/gateway/tests/test_sa06_chat_trigger.py",
+      "services/gateway/tests/test_sa06_phase_b_tw.py"]),
+    ("m17", "phase B: tool_scopes.py at 06713f1", SCOPES, None, "06713f1", "py",
+     ["services/gateway/tests/test_sa06_scopes_tw.py",
+      "services/assistant/tests/test_sa06_no_case_tool.py::test_case_is_a_forbidden_fragment_for_every_shopper_agent"]),
+    ("m18", "N4 keep in-flight turns", CHATS,
+     "history.current = history.current.filter((t) => !sent.includes(t));", "history.current = [];",
+     "vitest", ("src/HandoffNotice.test.tsx", "keeps a turn sent while")),
+    ("m19", "L1 drop refused turns", CHATS,
+     "      if (result.turnsRefused) history.current = history.current.filter((t) => !sent.includes(t));\n",
+     "", "vitest", ("src/HandoffNotice.test.tsx", "drops refused turns")),
+    ("m20", "L7 string message only", STREAM,
+     'typeof body.message === "string" ? body.message : GENERIC_REFUSAL',
+     "(body.message as string) ?? GENERIC_REFUSAL", "vitest",
+     ("src/HandoffNotice.test.tsx", "only when it is a string")),
+]
+
+
+def run(cmd, cwd=None):
+    p = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=600)
+    return p.returncode, (p.stdout + p.stderr)
+
+
+def summary_line(out):
+    for line in reversed(out.splitlines()):
+        s = line.strip()
+        if any(w in s for w in (" passed", " failed", " error", "Tests ")):
+            return s
+    return out.strip().splitlines()[-1] if out.strip() else "(no output)"
+
+
+def main():
+    code, status = run(["git", "status", "--porcelain", "--untracked-files=no"])
+    if status.strip():
+        sys.exit("tree not clean: stop")
+    head = run(["git", "rev-parse", "--short", "HEAD"])[1].strip()
+    print(f"SA-06 mutants at {head} (tests unchanged; each mutant restored with git checkout)")
+    caught = 0
+    for mid, finding, path, old, new, kind, tests in MUTANTS:
+        if old is None:
+            run(["git", "checkout", new, "--", path])
+        else:
+            text = open(path, encoding="utf-8").read()
+            if text.count(old) != 1:
+                print(f"{mid} {finding}: ANCHOR NOT FOUND ({text.count(old)}) - not run")
+                continue
+            open(path, "w", encoding="utf-8").write(text.replace(old, new))
+        try:
+            if kind == "py":
+                code, out = run(["uv", "run", "--quiet", "pytest", *tests, "-q", "-p", "no:cacheprovider"])
+            else:
+                vfile, pattern = tests
+                code, out = run(["corepack", "pnpm", "exec", "vitest", "run", vfile, "-t", pattern],
+                                cwd="apps/portal")
+        finally:
+            run(["git", "checkout", "HEAD", "--", path])
+        verdict = "CAUGHT" if code != 0 else "SURVIVED"
+        caught += code != 0
+        print(f"{mid} {finding}: {verdict} - {summary_line(out)}")
+    left = run(["git", "status", "--porcelain", "--untracked-files=no"])[1].strip()
+    print(f"{caught} of {len(MUTANTS)} caught; tree after: {'clean' if not left else left}")
+
+
+if __name__ == "__main__":
+    main()

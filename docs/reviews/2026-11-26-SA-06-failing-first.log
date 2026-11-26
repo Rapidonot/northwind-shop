@@ -56,3 +56,40 @@ Reading (the session, 2026-11-26):
 - AiDisclosure.test.tsx passes on the base: its new `handoff` entry is harmless there. On this row's code it is
   required by tsc (the exhaustive event map, #14).
 - An earlier attempt at this log was discarded: zsh did not split the path list, so nothing was reverted.
+
+## Fix and phase B tests, by mutants (advisor finding 1, 2026-11-26)
+
+Script: docs/reviews/2026-11-26-SA-06-mutants.py.txt. Each mutant undoes one fix in the source at the head and runs only the named tests. Each file is then restored with git checkout; no test is edited. Phase B's two files are reverted whole to 06713f1.
+
+    SA-06 mutants at fd66fb5 (tests unchanged; each mutant restored with git checkout)
+    m01 M1 JSON only: SURVIVED - 3 passed in 0.65s
+    m02 M1 open cap: CAUGHT - 1 failed in 0.68s
+    m03 M1 Care-run cap: CAUGHT - 1 failed in 1.39s
+    m04 M1 close at shutdown: CAUGHT - 1 failed in 0.96s
+    m05 L2 repeat audited: CAUGHT - 1 failed in 1.18s
+    m06 L3/N9 dry run predicts: CAUGHT - 2 failed in 0.44s
+    m07 L4 transcript label: CAUGHT - 1 failed in 1.19s
+    m08 L6 identity inside the try: CAUGHT - 1 failed in 0.78s
+    m09 N3 503, not 422: CAUGHT - 1 failed in 0.65s
+    m10 N1 session cap: CAUGHT - 1 failed in 0.67s
+    m11 N1 full audited once: CAUGHT - 1 failed in 0.67s
+    m12 N2 one repeat record: CAUGHT - 1 failed in 1.19s
+    m13 N2 no cart read on a repeat: CAUGHT - 1 failed in 0.67s
+    m14 N5 code steps before the slot: CAUGHT - 1 failed in 0.68s
+    m15 N7 BE-07 case flagged: CAUGHT - 1 failed in 1.21s
+    m16 phase B: chat.py at 06713f1: CAUGHT - 13 failed, 10 passed in 19.86s
+    m17 phase B: tool_scopes.py at 06713f1: CAUGHT - 4 failed, 10 passed in 0.55s
+    m18 N4 keep in-flight turns: CAUGHT - ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+    m19 L1 drop refused turns: CAUGHT - ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+    m20 L7 string message only: CAUGHT - - the error was thrown after the test completed, and this was the most recent test at that point.
+    19 of 20 caught; tree after: clean
+
+m01 SURVIVED the first run. Its test sent only content types that FastAPI's body parsing already refuses: no Content-Type, text/plain and form bodies all get 422 without the check (probed with and without it). The check's own effect is to refuse +json subtypes (application/vnd.api+json, application/merge-patch+json), which FastAPI parses as JSON. Two cases were added for them. That strengthens the test and loosens nothing. m01 then ran again at the same head:
+
+    m01 M1 JSON only: CAUGHT - 2 failed, 3 passed
+
+The M1 record is corrected: the cross-site concern was already met by FastAPI's own parsing, and the check is defence in depth for +json.
+
+## The recorded test (phase C)
+
+Before the window, test_sa06_recorded.py missed 3 times in replay (the session's run at 4690481, three 'LLM cassette miss' errors). After the window, with phase C's 5 cassettes moved aside: 3 failed, 3 errors. Restored from git: 3 passed.

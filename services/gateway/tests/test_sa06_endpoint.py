@@ -205,9 +205,22 @@ def test_the_handoff_path_gets_a_session_from_the_middleware(client: TestClient)
 # ---- security review M1 and L6 ------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("kind", ["text/plain", "application/x-www-form-urlencoded", None])
+@pytest.mark.parametrize(
+    "kind",
+    [
+        "text/plain",
+        "application/x-www-form-urlencoded",
+        None,
+        # Advisor finding 1 (mutant m01): FastAPI's body parsing already refuses the three above,
+        # the ones a cross-site page can send without a preflight. It takes a `+json` subtype as
+        # JSON, though, so only the gateway's own check refuses these.
+        "application/vnd.api+json",
+        "application/merge-patch+json",
+    ],
+)
 def test_only_a_json_request_is_taken(client: TestClient, kind: str | None) -> None:
-    """A cross-site page can send a text or form body without a preflight, never a JSON one."""
+    """Only `application/json`. A cross-site page can send a text or form body without a
+    preflight, never a JSON one; FastAPI refuses those bodies, and the check refuses `+json`."""
     desk = SpyDesk()
     use(desk, Caller(region="US", session=SESSION))
     headers = {} if kind is None else {"content-type": kind}
