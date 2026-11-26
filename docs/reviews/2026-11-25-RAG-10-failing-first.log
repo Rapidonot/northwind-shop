@@ -86,3 +86,30 @@ sed: 1: "s/^_CALLER_WORDS = re.c ...": RE error: parentheses not balanced
    7 FAILED services/rag/tests/test_rag07_router.py::test_unsure_is_every_index
    7 failed, 98 passed in 1.80s
    The caller mutant survives: no region, currency or visibility word is a cue in the frozen router, so the test holds the property (such words change nothing) but cannot see the stripping removed. Recorded, not tuned (the router is frozen).
+
+== Advisor re-read N1 (2026-11-26): mutants against test_rag07_tw.py, and a caller-word mutant for both files (copies only; the router is frozen)
+-- mutant system (changed: yes)
+   services/rag/tests/test_rag07_tw.py:
+       11 FAILED services/rag/tests/test_rag07_tw.py::test_injected_text_alone_is_every_index
+       63 FAILED services/rag/tests/test_rag07_tw.py::test_injected_text_around_a_clear_ask_is_every_index
+     74 failed, 115 passed, 5 xfailed in 2.79s
+   services/rag/tests/test_rag07_router.py:
+       40 FAILED services/rag/tests/test_rag07_router.py::test_text_aimed_at_the_system_is_every_index
+     40 failed, 65 passed in 1.72s
+-- mutant unsure (changed: yes)
+   services/rag/tests/test_rag07_tw.py:
+        6 FAILED services/rag/tests/test_rag07_tw.py::test_blank_or_control_only_is_every_index
+        1 FAILED services/rag/tests/test_rag07_tw.py::test_clear_asks_follow_the_guide
+        7 FAILED services/rag/tests/test_rag07_tw.py::test_greeting_thanks_or_vague_is_every_index
+     14 failed, 176 passed, 4 xfailed in 1.98s
+   services/rag/tests/test_rag07_router.py:
+        7 FAILED services/rag/tests/test_rag07_router.py::test_unsure_is_every_index
+     7 failed, 98 passed in 1.80s
+-- mutant callercue (changed: yes)
+   services/rag/tests/test_rag07_tw.py:
+       12 FAILED services/rag/tests/test_rag07_tw.py::test_caller_words_in_many_positions_change_nothing
+     12 failed, 177 passed, 5 xfailed in 2.10s
+   services/rag/tests/test_rag07_router.py:
+       20 FAILED services/rag/tests/test_rag07_router.py::test_region_and_visibility_words_change_nothing
+     20 failed, 85 passed in 1.86s
+-- note on the earlier line '-- restored: 3 files differ from HEAD' (advisor L5): they were this row's records then being written, as git status showed at the time: docs/reviews/2026-11-25-RAG-10-failing-first.log (modified), docs/reviews/2026-11-26-RAG-10-advisor-review.raw.md and docs/reviews/2026-11-26-RAG-10-commit-evidence.txt (untracked). No pinned file differed.

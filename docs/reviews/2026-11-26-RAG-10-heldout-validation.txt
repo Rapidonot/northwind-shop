@@ -1,0 +1,8 @@
+Row #31: this session's validator over evals/fixtures/rag07_heldout.jsonl (pinned at 529e32d), re-run 2026-11-26 for the record (advisor L2).
+
+categories {'specifications': 16, 'reviews': 14, 'policy': 14, 'multi': 12, 'all': 4}
+multi pairs {'reviews+specifications': 4, 'policy+specifications': 4, 'policy+reviews': 4}
+reviewed_by {'model': 60} regions {'US': 16, 'UK': 16, 'EU': 15, 'CA': 13}
+named product mentions checked (public, sold in region): 42
+near match with set 1 (>0.6): RH7-005 0.7
+errors: 0

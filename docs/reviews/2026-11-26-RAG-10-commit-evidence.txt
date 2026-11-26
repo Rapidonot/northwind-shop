@@ -85,3 +85,28 @@ evals/tests/test_rag07_heldout_frozen.py:"9173691e47a31250a0d27544b335808f9ffb0e
 services/rag/tests/test_rag07_router_frozen.py:"0caf738cd812c9913ec4cf9dc6e36ce1d8f6a9496389aff47caaa5eced0ff213"
 evals/tests/test_rag07_labels_frozen.py:"ba0c4f5ffa74aaefb4fa6978424c4a9f51788d840f86b985f8b8a906627eecd6"
 evals/tests/test_rag07_labels_frozen.py:"645fe72b545f1406b70a2469d986fa3a69d09ee9fbea8de07def5066bb1e7ce5"
+
+== Appended 2026-11-26 after the advisor's re-read: commits since f2dad0f, with files
+--- 54ce765 RAG-07: advisor's review at f2dad0f: records fixes F1 (five control-surface files), F5, F6, F7; F3 failing-first and mutants; per-commit evidence (row 31)
+
+M	docs/reviews/2026-11-25-RAG-10-failing-first.log
+M	docs/reviews/2026-11-25-RAG-10-pr-body.md
+A	docs/reviews/2026-11-26-RAG-10-advisor-review.raw.md
+A	docs/reviews/2026-11-26-RAG-10-commit-evidence.txt
+--- b762749 RAG-07: test-writer's raw report (5 of 193 fail against the frozen router; the tests stay uncommitted pending the user) (row 31)
+
+A	docs/reviews/2026-11-26-RAG-10-test-writer.raw.md
+--- d1bcc0c RAG-07: test-writer's 193 router tests; 4 colon-directive cases and the not-sold tent case strict xfail, tent replaced by a catalog product (the user's decision, stop 5, option A) (row 31)
+
+A	services/rag/tests/test_rag07_tw.py
+--- 19c3ec5 RAG-07: test_rag07_tw.py comment wrapped to 100 columns (ruff) (row 31)
+
+M	services/rag/tests/test_rag07_tw.py
+--- 695c025 RAG-07: records: F1 accepted (six control-surface files), test-writer outcome and the user's option A (row 31)
+
+M	PROGRESS.md
+M	docs/reviews/2026-11-25-RAG-10-pr-body.md
+== router section diff, 9c42876 to 695c025 (lines):
+       0
+== router section sha256 at 695c025:
+0caf738cd812c9913ec4cf9dc6e36ce1d8f6a9496389aff47caaa5eced0ff213

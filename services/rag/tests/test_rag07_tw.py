@@ -211,6 +211,7 @@ GUIDE_CASES: list[object] = [
     ("Which size should I pick if my chest is 40 inches?", {SPECS}),  # rule 3
     ("How do I wash the merino socks?", {SPECS}),  # rule 3 care
     ("Which throw is best for a cold living room?", {SPECS}),  # rule 3 pick, a catalog product
+    ("Which throw is best for two people?", {SPECS}),  # the tent case's shape, no attribute cue
     pytest.param(
         "Which tent is best for two people?",
         {SPECS},
