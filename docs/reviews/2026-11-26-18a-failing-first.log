@@ -163,3 +163,8 @@ D5 (d) (5e1397b): both 've not run out forms fail first. Step 0 after all of it:
 
 ## D6 (the user, 2026-11-26)
 F3: 6-digit limit on every request_return argument; order number refused as the same not_found bytes (lookalike pin). 4 fail first; mutant 3. F4: U.S./U.K./E.U. abbreviations, 3 fail first; the rest a residual. Step 0: 0 of 448.
+
+## Mutants that survived at first (5 of 71)
+P5 (part 4, an equivalent mutant: the flag was removed), S8 (part 1, the decoded walk: a tool-result test added), A5 (part 6, the
+artifact of another product: a test added), and test-writer's gap round: started=True and reach 2L (each closed by one of the two
+reach tests added to test_18a_output_check.py).
