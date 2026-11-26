@@ -147,11 +147,23 @@ def _cart_tool_names() -> frozenset[str]:
 
 # Row 18a (the user's answer 5, 2026-11-25): the order narrative goes beside its artifact only when
 # it plainly agrees with it; otherwise A2A-05 returns the artifact alone. Fails closed.
-ORDER_DENIAL = re.compile(
-    r"\b(?:can(?:no|['’])t|cannot|unable\s+to|not\s+able\s+to|won['’]t|no\s+way\s+to)\b"
-    r"[^.?!\n]{0,60}\b(?:order|place|add|cart|buy|purchase|checkout|check\s+out)",
-    re.IGNORECASE,
+# Security L6: any negating word in a sentence that names an order or cart action, not a list of
+# denials (which "I couldn't add it" passed).
+NEGATING = re.compile(
+    r"\b(?:not|no|never|cannot|unable|fail(?:ed|s)?|nor|without)\b|n['’]t\b", re.I
 )
+ORDER_ACTION = re.compile(
+    r"\b(?:order|place|add|cart|buy|bought|purchase|checkout|check\s+out)", re.IGNORECASE
+)
+
+
+def order_denied(text: str) -> bool:
+    return any(
+        NEGATING.search(sentence) and ORDER_ACTION.search(sentence)
+        for sentence in re.split(r"[.!?\n]+", text)
+    )
+
+
 VARIANT_ID = re.compile(r"\bP\d{4}(?:-[A-Z0-9]{1,16}){1,4}\b")
 
 
@@ -159,7 +171,7 @@ def narrative_agrees(text: str, artifact: Mapping[str, Any], product_id: str) ->
     """Whether the order narrative plainly agrees with the order's artifact: it denies no order or
     cart action, cites the turn's product, and cites exactly the variants the artifact names, which
     must be that product's. An artifact that names no variant cannot be agreed with."""
-    if ORDER_DENIAL.search(text):
+    if order_denied(text):
         return False
     cited = set(CITATION.findall(text))
     named = set(VARIANT_ID.findall(json.dumps(artifact, sort_keys=True)))

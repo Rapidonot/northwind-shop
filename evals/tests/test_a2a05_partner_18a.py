@@ -218,3 +218,35 @@ def test_each_partner_turn_gets_its_own_cart_session(
         assert SESSION_ID.fullmatch(caller.session)
         sessions.append(caller.session)
     assert len(set(sessions)) == 2
+
+
+# ---- security review L6: any negation of the action, not a list of them -------------------------
+
+
+@pytest.mark.parametrize(
+    "shown",
+    [
+        f"I couldn't add the shell to your cart [{VARIANT}].",
+        f"I didn't add the shell [{VARIANT}].",
+        f"I wasn't able to add the shell [{VARIANT}].",
+        f"I can not place an order for the shell [{VARIANT}].",
+        f"I failed to add the shell [{VARIANT}].",
+        f"I have not added the shell [{VARIANT}] yet.",
+        f"The shell [{VARIANT}] was never added to the cart.",
+    ],
+)
+def test_any_denial_of_the_order_leaves_the_artifact_alone(tmp_path: Path, shown: str) -> None:
+    text, artifact = served(*order_setup(tmp_path, shown=shown))
+    assert text is None and artifact is ARTIFACT
+
+
+@pytest.mark.parametrize(
+    "shown",
+    [
+        AGREEING,
+        f"I'm an AI assistant. Your cart now holds one Corvane Breakwater Shell [{VARIANT}].",
+    ],
+)
+def test_a_plain_confirmation_of_the_cart_is_still_served(tmp_path: Path, shown: str) -> None:
+    text, _artifact = served(*order_setup(tmp_path, shown=shown))
+    assert text == shown
