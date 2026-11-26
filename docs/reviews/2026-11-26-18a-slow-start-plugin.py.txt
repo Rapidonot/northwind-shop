@@ -1,0 +1,16 @@
+"""Row 18a failing-first: stall the event loop 2 s when the second agent runtime is made (the
+orders subagent's), as a loaded CI machine does. Test-time only."""
+import time
+
+def pytest_runtest_setup(item):
+    module = item.module
+    real = getattr(module, "agent_runtime", None)
+    if real is None:
+        return
+    calls = {"n": 0}
+    def slowed(*args, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == 2:
+            time.sleep(2.0)
+        return real(*args, **kwargs)
+    module.agent_runtime = slowed

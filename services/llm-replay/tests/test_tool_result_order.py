@@ -779,10 +779,22 @@ def test_a_replay_miss_reports_the_diff_against_the_same_tests_cassette(tmp_path
 # -- 9. end to end: the real CLI, a scripted model, a recording proxy --------------------------
 
 E2E_DELAY = 1.5  # seconds one tool is held back so that the other finishes first
+# Row 18a, N-1: the turn's tokens live 120 s, from when the turn mints them. Under load (3 failures
+# in 47 runs) both gates refused the token before any tool ran. The servers' token gates read this
+# clock instead of the machine's: it stands still `STILL_AFTER` seconds after the turn starts, so a
+# token minted in that time is valid however long the CLI takes. The 120 s lifetime is unchanged.
+STILL_AFTER = 60.0
+
+
+def still_clock(after: float = STILL_AFTER) -> Callable[[], float]:
+    start = time.time()
+    return lambda: start + after
 
 
 def e2e_catalog(
-    delays: Mapping[str, Callable[[Mapping[str, Any]], float]], finished: list[str]
+    delays: Mapping[str, Callable[[Mapping[str, Any]], float]],
+    finished: list[str],
+    clock: Callable[[], float],
 ) -> Any:
     """A real mcp-catalog whose handlers wait (without blocking the server's loop) before they
     answer, so tool calls started together finish in an order the test chooses."""
@@ -802,7 +814,7 @@ def e2e_catalog(
     tools = dict(TOOLS)
     for name, delay in delays.items():
         tools[name] = ToolSpec(TOOLS[name].tool, wrap(name, TOOLS[name].handler, delay))
-    return CatalogServer(FixtureCatalog(), key=KEY, tools=tools)
+    return CatalogServer(FixtureCatalog(), key=KEY, tools=tools, clock=clock)
 
 
 @dataclass
@@ -817,6 +829,7 @@ def record_turn(
     *,
     catalog: Any,
     retriever: Any,
+    clock: Callable[[], float],
 ) -> TurnRun:
     """One shopper turn through the real CLI -> recording proxy -> ScriptedLLM, where the model
     asks for `blocks` in one assistant message and then answers."""
@@ -861,7 +874,7 @@ def record_turn(
                 ):
                     pass
 
-            with serve_retriever(retriever, Caller, key=KEY) as (url, _):
+            with serve_retriever(retriever, Caller, key=KEY, clock=clock) as (url, _):
                 asyncio.run(go(RagEndpoint(url, KEY)))
     # In request order: a cassette's file name is its request hash, so sorting by name orders
     # the turn's calls by hash, which any prompt change can flip (row #17's make ci). Each call
@@ -924,18 +937,22 @@ def test_the_model_sees_the_same_second_request_whichever_tool_finishes_first(
     run the retriever is slow (b finishes first, so the CLI appends b, a); in the other the catalog
     is slow (a, b). The proxy must hand the model the same request both times."""
     finished_rag_slow: list[str] = []
+    clock = still_clock()
     rag_slow = record_turn(
         tmp_path / "rag-slow",
         two_tool_blocks(),
-        catalog=e2e_catalog({"get_product": lambda args: 0.0}, finished_rag_slow),
+        catalog=e2e_catalog({"get_product": lambda args: 0.0}, finished_rag_slow, clock),
         retriever=e2e_retriever(slow=True),
+        clock=clock,
     )
     finished_catalog_slow: list[str] = []
+    clock = still_clock()
     catalog_slow = record_turn(
         tmp_path / "catalog-slow",
         two_tool_blocks(),
-        catalog=e2e_catalog({"get_product": lambda args: E2E_DELAY}, finished_catalog_slow),
+        catalog=e2e_catalog({"get_product": lambda args: E2E_DELAY}, finished_catalog_slow, clock),
         retriever=e2e_retriever(slow=False),
+        clock=clock,
     )
     first, second = second_request_body(rag_slow), second_request_body(catalog_slow)
     assert result_ids(first) == ["toolu_a", "toolu_b"]
@@ -969,11 +986,13 @@ def test_five_parallel_prices_finishing_in_reverse_are_forwarded_in_tool_use_ord
         for i, v in enumerate(variants)
     ]
     finished: list[str] = []
+    clock = still_clock()
     run = record_turn(
         tmp_path,
         blocks,
-        catalog=e2e_catalog({"get_price": lambda args: delay[args["variant_id"]]}, finished),
+        catalog=e2e_catalog({"get_price": lambda args: delay[args["variant_id"]]}, finished, clock),
         retriever=e2e_retriever(slow=False),
+        clock=clock,
     )
     # the precondition: the tools really did finish in the reverse of tool_use order
     assert finished == [f"get_price:{v}" for v in reversed(variants)]

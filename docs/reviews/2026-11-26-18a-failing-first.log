@@ -102,3 +102,22 @@ Passing on base: CVV near-misses and the codes found before; Makefile and EVAL_R
 Mutants: 6 of 6 killed. C1 no new CVV form 7; C2 no mid-list guard 1; C3 no end guard 2; C4 multi-digit groups 2; E1 *.jsonl only 1; E2 no canaries 1
 Over-blocking at $0: old and new card checks over every recorded shopper message (7,185) and tool call (15,163): 0 differ.
 Shared cards.py: services/common, mcp-orders, mcp-catalog, mcp-rag, mcp-policy, gateway and backend unit tests (backend-care replay, test_be07_recorded.py, among them): 2,931 passed, 1 xfailed.
+
+## Part 3: the two timing flakes, fixed in the tests (the 120 s token lifetime and the orchestrator's deadline code unchanged)
+N-1, services/llm-replay/tests/test_tool_result_order.py: both MCP servers' token gates read a clock that stands still 60 s after the turn starts (serve_retriever gains a clock argument).
+  branch: the two record_turn tests pass. With the clock past expiry (STILL_AFTER = 200) the N-1 test fails as the captured failure did, both gates refusing before any tool ran:
+    E       AssertionError: []
+    E       assert 0 >= 2
+    E        +  where 0 = len([])
+    E        +    where [] = TurnRun(upstream_requests=[], cassette_bodies=[]).upstream_requests
+    ERROR    northwind_assistant.tools:tools.py:279 search failed: ExceptionGroup
+    ERROR    northwind_assistant.turn:turn.py:394 first search failed: transient
+    ERROR    northwind_assistant.tools:tools.py:279 search failed: ExceptionGroup
+    ERROR    northwind_assistant.turn:turn.py:394 first search failed: transient
+BE-01 (Addendum A change 1), services/backend/tests/orchestrator/test_be01_review_fixes.py::test_a_deadline_that_cancels_a_subagent_still_closes_its_run_in_the_audit:
+  the run's deadline is 600 s on a loop whose clock the test moves past it once the orders section has closed and the carrier read is hung; the hang is let go when the run is over.
+  Load simulated by docs/reviews/2026-11-26-18a-slow-start-plugin.py.txt (the event loop stalls 2 s when the orders runtime is made):
+    old test, base, loaded: FAILED, orders (run-cut.t1) FAILED with a deadline timeout: the flake
+    old test, base, not loaded: passed
+    new test, branch, loaded: passed
+  Mutant (jump as soon as the read hangs, before orders closes), loaded: 3 of 3 runs fail. Orchestrator folder under -n 4: 83 passed, 3 runs of 3.
