@@ -67,6 +67,7 @@ from northwind_backend.confirmations import check_reference
 from northwind_backend.errors import (
     AUDIT_UNAVAILABLE,
     AgentResult,
+    ErrorCategory,
     Ok,
     Result,
     ToolError,
@@ -256,6 +257,9 @@ Reason = Literal[
 ]
 _DECLINES = frozenset({"soft_decline", "hard_decline"})
 _LIMITS = frozenset({"over_order_limit", "no_order_limit"})
+# Re-review N3: a stock hold that is gone, or a key whose lines changed, has its own reason, never
+# `port_failure` ("retry later" can't help: the key comes from the order).
+_HOLD_LOST = frozenset({"hold_expired", "hold_released"})
 _CONFIRMATION = frozenset(
     {"confirmation_required", "confirmation_mismatch", "confirmation_used", "idempotency_conflict"}
 )
@@ -303,6 +307,9 @@ class Placement:
     captured: PaymentIntent | None = None
     reservation: Reservation | None = None  # row #25: this run's stock hold
     committed: bool = False
+    commit_unknown: bool = False  # a commit failed other than by a business refusal (N2)
+    released: bool = False
+    seen: Reservation | None = None  # a same-key reservation that was no longer live (N3)
     confirmed: Order | None = None
     escalated: Order | None = None
     reason: str | None = None
@@ -821,16 +828,32 @@ class _Handlers:
     # ---- stock (row #25, BE-04) ---------------------------------------------------------------
 
     def _stock_view(self) -> dict[str, Any] | None:
+        """What the order holds in stock, from what this run observed (re-review N2).
+        `restock_needed` is None when it can't be known: a commit or a capture that may have taken
+        effect, or a committed hold found by a rerun."""
         p = self.placement
-        if p.reservation is None:
+        reservation = p.reservation or p.seen
+        if reservation is None:
             return None
-        # Built for an escalation, which releases a hold that isn't committed right after it is
-        # written; a hold left by a failed escalation expires on its own (`HOLD`).
-        state = "committed" if p.committed else "released"
+        capture_doubtful = any(action == "payment.capture" for action, _ in p.uncertain)
+        restock: bool | None
+        if p.committed:
+            state = "committed"
+            restock = None if capture_doubtful else p.captured is None
+        elif p.commit_unknown:
+            state, restock = "commit_unknown", None
+        elif p.seen is not None:
+            state = p.seen.status.value
+            restock = None if p.seen.status is HoldStatus.COMMITTED else False
+        else:
+            # The handoff is built before the escalation is written, and the hold is released
+            # just after it; one whose release fails expires on its own (`HOLD`).
+            state = "released" if p.released else "release_pending"
+            restock = False
         return {
             "reservation": state,
-            "lines": len(p.reservation.allocations),
-            "restock_needed": p.committed and p.captured is None,
+            "lines": len(reservation.allocations),
+            "restock_needed": restock,
         }
 
     def _stock_key(self) -> str:
@@ -860,6 +883,7 @@ class _Handlers:
         if isinstance(done.result, Ok):
             # Security review L1: a rerun's same key found a hold that is no longer live (expired,
             # released or committed). It holds nothing, so nothing is authorized against it.
+            p.seen = done.result.value
             p.codes.append(f"hold_{done.result.value.status.value}")
             escalated = await self.escalate("code")
             if not isinstance(escalated.result, Ok):
@@ -882,6 +906,8 @@ class _Handlers:
             CAPTURE, "inventory.commit", key, lambda: self.inventory.commit(idempotency_key=key)
         )
         if not isinstance(done.result, Ok):
+            if done.result.error_category is not ErrorCategory.BUSINESS:
+                p.commit_unknown = True  # it may have taken effect (L4)
             self._step(CAPTURE, done)
             return self._error(CAPTURE, done)
         p.committed = True
@@ -894,9 +920,10 @@ class _Handlers:
         if p.reservation is None or p.committed:
             return
         key = self._stock_key()
-        await self._write(
+        done = await self._write(
             ESCALATE, "inventory.release", key, lambda: self.inventory.release(idempotency_key=key)
         )
+        p.released = isinstance(done.result, Ok)
 
     def handoff(self, stored: Order | None = None) -> dict[str, Any]:
         """What a person needs to act without the transcript. Values come from step results,
@@ -994,9 +1021,9 @@ def reason_for(p: Placement, by: Literal["agent", "code"]) -> str:
     if p.fraud is not None and p.fraud.decision is FraudDecision.REVIEW:
         return "fraud_review"
     issues = set(p.issues or ())
-    if OUT_OF_STOCK in issues or OUT_OF_STOCK in p.codes:
+    if OUT_OF_STOCK in issues or OUT_OF_STOCK in p.codes or set(p.codes) & _HOLD_LOST:
         return "out_of_stock"
-    if INVALID_LINE in issues:
+    if INVALID_LINE in issues or "reservation_conflict" in p.codes:
         return "invalid_line"
     if NOT_SOLD in issues or MIXED_CURRENCY in issues:
         return "not_sold_here"
@@ -1009,6 +1036,8 @@ def reason_for(p: Placement, by: Literal["agent", "code"]) -> str:
         return "confirmation_problem"
     if codes & _DECLINES:
         return "payment_declined"
+    if "hold_committed" in codes:
+        return "not_finished"
     if codes:
         return "port_failure"
     return "agent_requested" if by == "agent" else "not_finished"

@@ -634,3 +634,13 @@ def test_a_released_expired_hold_is_never_committed_later(h: Harness) -> None:
     ok(h.inv.release(idempotency_key="key-1"))
     err(h.inv.commit(idempotency_key="key-1"), "hold_released", "business")
     assert avail(h) == 5
+
+
+def test_a_commit_refused_on_the_two_clock_path_is_never_reported_held_again(
+    build: Build,
+) -> None:
+    """Re-review N1: after `hold_expired`, a same-key repeat must not look like a live hold."""
+    h, _late = _late_sweep(build)
+    err(h.inv.commit(idempotency_key="x"), "hold_expired", "business")
+    again = ok(reserve(h, key="x", order_id="O000001", lines=[Line(A, 1)]))
+    assert again.status is not HoldStatus.HELD

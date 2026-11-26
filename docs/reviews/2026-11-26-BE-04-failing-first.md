@@ -62,3 +62,19 @@ After the fix: 59 passed on the fake. The release test passed before too, becaus
 ## After the security fixes
 - The three recorded replays pass again, with 0 misses: 12 + 5 + 2, plus the rule-driven replay. The cassettes still hash identical, 5,989 of 5,989.
 - `_replay.py`'s `CONTEXT_KEYS` gained `stock` (M2): an exact-set pin that grew, stop 5, awaiting the user's approval.
+
+## Re-review N1, N2 and N3, on the code at 6643236 (before the fix)
+
+```
+FAILED services/backend/tests/orders_place/test_be04_wiring.py::test_an_escalated_order_that_held_stock_reports_the_release_pending_then_releases_it
+FAILED services/backend/tests/orders_place/test_be04_wiring.py::test_a_commit_that_may_have_taken_effect_reports_the_stock_as_unknown
+FAILED services/backend/tests/orders_place/test_be04_wiring.py::test_a_lost_hold_or_a_conflict_never_escalates_as_retry_later[codes0-out_of_stock]
+FAILED services/backend/tests/orders_place/test_be04_wiring.py::test_a_lost_hold_or_a_conflict_never_escalates_as_retry_later[codes1-out_of_stock]
+FAILED services/backend/tests/orders_place/test_be04_wiring.py::test_a_lost_hold_or_a_conflict_never_escalates_as_retry_later[codes2-not_finished]
+FAILED services/backend/tests/orders_place/test_be04_wiring.py::test_a_lost_hold_or_a_conflict_never_escalates_as_retry_later[codes3-invalid_line]
+FAILED services/backend/tests/orders_place/test_be04_wiring.py::test_a_rerun_that_finds_a_committed_hold_reports_it_with_restock_unknown
+FAILED services/backend/tests/inventory/test_be04_contract.py::test_a_commit_refused_on_the_two_clock_path_is_never_reported_held_again[fake]
+8 failed, 3 passed, 128 deselected in 0.77s
+```
+
+After the fix: 20 wiring and 60 contract (fake) tests pass. The recorded replays pass again with 0 misses (17 + 3, including the rule-driven replay), and the cassettes are identical.

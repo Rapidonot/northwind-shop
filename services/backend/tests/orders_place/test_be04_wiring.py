@@ -25,8 +25,9 @@ from northwind_backend.agents.orders_place import (
     PlacementResult,
     build_handlers,
     finish,
+    reason_for,
 )
-from northwind_backend.errors import AgentResult, Ok, RunStatus, business
+from northwind_backend.errors import AgentResult, Ok, RunStatus, business, transient
 from northwind_backend.inventory import HoldStatus, InventoryState, Line
 from northwind_backend.ports import OrderStatus
 
@@ -337,7 +338,7 @@ def test_a_capture_that_fails_after_the_commit_says_the_stock_needs_restocking()
     }
 
 
-def test_an_escalated_order_that_held_stock_reports_it_released() -> None:
+def test_an_escalated_order_that_held_stock_reports_the_release_pending_then_releases_it() -> None:
     world = World.make(soft_decline_retry_approves=False)
     row = first_of("soft_decline")
     h = _handlers(world, row)
@@ -351,8 +352,11 @@ def test_an_escalated_order_that_held_stock_reports_it_released() -> None:
 
     asyncio.run(go())
     context = world.orders.escalations[row["order_id"]]
-    assert context["stock"]["reservation"] == "released"
+    # Built before the escalation is written; the hold is released just after it (re-review N2).
+    assert context["stock"]["reservation"] == "release_pending"
     assert context["stock"]["restock_needed"] is False
+    record = world.inventory.records[f"{row['order_id']}:inventory.reserve"]
+    assert record.status is HoldStatus.RELEASED
 
 
 def test_a_stock_view_never_reaches_the_model() -> None:
@@ -370,3 +374,76 @@ def test_a_stock_view_never_reaches_the_model() -> None:
 
     body = asyncio.run(go())
     assert set(body["value"]) == {"status", "reason"}
+
+
+# ---- re-review N2, N3 ------------------------------------------------------------------------
+
+
+def test_a_commit_that_may_have_taken_effect_reports_the_stock_as_unknown() -> None:
+    """N2: a transient commit error after a COMMIT that took effect must not say "no restock"."""
+    world, row = World.make(), first_of("clean")
+    h = _handlers(world, row)
+    arg = {"order_id": row["order_id"]}
+    h.inventory.commit = lambda **_: transient("inventory_unavailable", "gone")
+
+    async def go() -> None:
+        await _to_authorize(h, arg)
+        await h.authorize_payment(arg)
+        assert _body(await h.capture_payment(arg))["isError"]
+        await h.escalate_order(arg)
+
+    asyncio.run(go())
+    stock = world.orders.escalations[row["order_id"]]["stock"]
+    assert stock["reservation"] == "commit_unknown" and stock["restock_needed"] is None
+    assert all(i.captured_minor == 0 for i in world.payment.intents.values())
+
+
+@pytest.mark.parametrize(
+    ("codes", "reason"),
+    [
+        (["hold_expired"], "out_of_stock"),
+        (["hold_released"], "out_of_stock"),
+        (["hold_committed"], "not_finished"),
+        (["reservation_conflict"], "invalid_line"),
+    ],
+)
+def test_a_lost_hold_or_a_conflict_never_escalates_as_retry_later(
+    codes: list[str], reason: str
+) -> None:
+    """N3: none of these can succeed on a retry, so none is `port_failure`."""
+    world, row = World.make(), first_of("clean")
+    h = _handlers(world, row)
+    h.placement.codes.extend(codes)
+    assert reason_for(h.placement, "code") == reason
+    assert RECOMMENDED[reason] != RECOMMENDED["port_failure"]
+
+
+def test_a_rerun_that_finds_a_committed_hold_reports_it_with_restock_unknown() -> None:
+    """N3: the stock field is built from the reservation the rerun found."""
+    world, row = World.make(), first_of("clean")
+    key = f"{row['order_id']}:inventory.reserve"
+    inventory = world.ports().inventory
+    lines = [Line(line["variant_id"], line["quantity"]) for line in row["lines"]]
+    assert isinstance(
+        inventory.reserve(
+            idempotency_key=key,
+            order_id=row["order_id"],
+            region=row["region"],
+            postal_code=row["shipping_postal_code"],
+            lines=lines,
+        ),
+        Ok,
+    )
+    assert isinstance(inventory.commit(idempotency_key=key), Ok)
+    h = _handlers(world, row)
+    arg = {"order_id": row["order_id"]}
+
+    async def go() -> None:
+        await _to_authorize(h, arg)
+        await h.authorize_payment(arg)
+
+    asyncio.run(go())
+    stock = world.orders.escalations[row["order_id"]]["stock"]
+    assert stock["reservation"] == "committed" and stock["restock_needed"] is None
+    assert world.orders.orders[row["order_id"]].escalation == "not_finished"
+    assert world.payment.intents == {}

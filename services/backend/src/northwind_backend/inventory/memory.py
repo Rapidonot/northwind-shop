@@ -4,7 +4,7 @@ oversells within a process. Across processes only `PostgresInventory` holds (con
 
 Same contract as `PostgresInventory` (`tests/inventory/test_be04_contract.py`):
 - `reserve` is all or nothing. A same-key repeat returns the first result; the same key for another
-  request is `idempotency_conflict`. A refusal stores nothing under the key, so a later retry
+  request is `reservation_conflict`. A refusal stores nothing under the key, so a later retry
   with the same key tries again. `dry_run` checks against current stock, changes nothing, and
   neither reads nor records the key (hard rule 9).
 - Each hold expires `HOLD` after its reservation. An expired hold never counts against stock on any
@@ -232,6 +232,7 @@ class InventoryFake:
                 self._sweep_record(record)
                 wanted = [hold.allocation for hold in record.holds]
                 if any(self._available(a.variant_id, a.node, now) < a.quantity for a in wanted):
+                    record.expires_at = min(record.expires_at, now)  # re-review N1: spent
                     return EXPIRED
                 for allocation in wanted:
                     self.state.rows[

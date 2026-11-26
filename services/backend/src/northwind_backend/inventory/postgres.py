@@ -311,6 +311,12 @@ class PostgresInventory:
             else:
                 # Take the units again from the same nodes, if they are still free.
                 if any(free.get((v, n), 0) < q for v, n, q, _ in holds):
+                    # Re-review N1: spent, so a same-key repeat never reports it as held.
+                    conn.execute(
+                        "UPDATE inventory_reservations SET expires_at = LEAST(expires_at, %s) "
+                        "WHERE idempotency_key = %s",
+                        (now, key),
+                    )
                     return EXPIRED
                 for variant, node, quantity, _swept in holds:
                     conn.execute(
