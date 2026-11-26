@@ -77,3 +77,9 @@ def test_a_code_with_other_spacing_or_separators_is_card_data(text: str) -> None
 )
 def test_a_near_miss_with_other_separators_is_no_card_data(text: str) -> None:
     assert not contains_cvv(text)
+
+
+@pytest.mark.parametrize("text", ["Security code 7, 3, 7 - 2, 4", "CVV 1 - 2 - 7, 3, 7"])
+def test_a_code_found_at_28e07ef_is_still_found(text: str) -> None:
+    """Re-review N4: the wider guards of L5 rejected these, which the head before L5 caught."""
+    assert contains_cvv(text)

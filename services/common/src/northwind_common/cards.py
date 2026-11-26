@@ -40,7 +40,9 @@ _CODE_SEP = "[,.;:/\\-\u2010-\u2015]"
 _CVV_DIGITS = (
     r"(?:(?<!\d)\d(?:[ -]?\d){2,3}(?!\d)"
     rf"|(?<!\d)(?<!\d{_CODE_SEP})(?<!\d{_CODE_SEP} )(?<!\d {_CODE_SEP})(?<!\d {_CODE_SEP} )"
-    rf"\d(?: ?{_CODE_SEP} ?\d){{2,3}}(?!\d| ?{_CODE_SEP} ?\d| \d))"
+    rf"\d(?: ?{_CODE_SEP} ?\d){{2,3}}(?!\d| ?{_CODE_SEP} ?\d| \d)"
+    # Re-review N4: the form before L5, verbatim, so its wider guards lose nothing it found.
+    r"|(?<!\d)(?<!\d[,.;/])(?<!\d[,.;/] )\d(?:[,.;/] ?\d){2,3}(?!\d|[,.;/] ?\d| \d))"
 )
 MAX_CVV_GAP = 40
 _CVV = re.compile(
