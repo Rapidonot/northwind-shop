@@ -42,14 +42,14 @@ from northwind_backend.agents.care import (
     CarePorts,
     CareTask,
     Turn,
+    read_order,
     run_care,
     run_summary,
 )
 from northwind_backend.audit import AuditContext, AuditWriteError, card_data
 from northwind_backend.cases import NO_SUMMARY, SUMMARY_LABEL, Case, CaseAmounts, SummarySource
 from northwind_backend.errors import Ok, Result, transient
-from northwind_backend.recovery import RetryPolicy, call_with_recovery
-from northwind_backend.views import CARE_READ, AuditedOrderStore
+from northwind_backend.recovery import RetryPolicy
 from northwind_common.llm import AgentRuntime
 
 log = logging.getLogger(__name__)
@@ -566,9 +566,8 @@ class HandoffDesk:
         found = _ORDER_ID.search(text)
         if found is None:
             return None
-        orders = AuditedOrderStore(self._care.orders, run, allowed=CARE_READ)
-        done = await call_with_recovery(lambda: orders.get(found.group()), self._policy)
-        if not isinstance(done.result, Ok) or done.result.value.shopper_id != request.identity.ref:
+        read = await read_order(self._care.orders, run, found.group(), self._policy)
+        if not isinstance(read, Ok) or read.value.shopper_id != request.identity.ref:
             return None
         return found.group()
 

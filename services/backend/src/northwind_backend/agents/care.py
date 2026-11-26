@@ -61,6 +61,7 @@ from northwind_backend.errors import (
     AgentResult,
     FailureType,
     Ok,
+    Result,
     RunStatus,
     ToolError,
     alternatives_for,
@@ -704,6 +705,17 @@ class SummaryResult:
     agent: AgentResult | None = None
 
 
+async def read_order(
+    orders: OrderStorePort, audit: AuditContext, order_id: str, policy: RetryPolicy = DEFAULT_POLICY
+) -> Result[Order]:
+    """One audited read of an order through the Care agent's read-only view (`CARE_READ`), for code
+    only, never a model. Row #23: the handoff desk checks a shopper's own order with it, so every
+    `CARE_READ` view is built in this module (BE-08's pin, `test_be08_views.py`)."""
+    view = AuditedOrderStore(orders, audit, allowed=CARE_READ)
+    done = await call_with_recovery(lambda: view.get(order_id), policy)
+    return done.result
+
+
 async def run_summary(
     task: CareTask,
     *,
@@ -772,6 +784,7 @@ __all__ = [
     "check_summary",
     "run_care",
     "run_summary",
+    "read_order",
     "SummaryResult",
     "SYSTEM_PROMPT_NO_ORDER",
     "screen_transcript",
