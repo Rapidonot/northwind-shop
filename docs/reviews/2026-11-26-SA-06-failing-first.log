@@ -1,0 +1,58 @@
+SA-06 failing-first: the row's tests run against the base's source (5d74f0a); tests as at d233898
+Modified source put back to the base: services/backend/src/northwind_backend/agents/care.py services/gateway/src/northwind_gateway/session.py services/gateway/src/northwind_gateway/app.py apps/portal/src/Chat.tsx apps/portal/src/chatStream.ts
+New source removed: services/backend/src/northwind_backend/handoff.py services/backend/src/northwind_backend/fakes/handoffs.py services/gateway/src/northwind_gateway/handoff.py services/gateway/src/northwind_gateway/handoff_trigger.py apps/portal/src/HandoffNotice.tsx
+
+== services/backend/tests/care/test_sa06_care_no_order.py
+ERROR services/backend/tests/care/test_sa06_care_no_order.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in 0.47s
+== services/backend/tests/care/test_sa06_handoff.py
+ERROR services/backend/tests/care/test_sa06_handoff.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in 0.46s
+== services/backend/tests/care/test_sa06_acceptance_tw.py
+ERROR services/backend/tests/care/test_sa06_acceptance_tw.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in 0.45s
+== services/gateway/tests/test_sa06_trigger.py
+ERROR services/gateway/tests/test_sa06_trigger.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in 0.07s
+== services/gateway/tests/test_sa06_endpoint.py
+ERROR services/gateway/tests/test_sa06_endpoint.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in 0.25s
+== services/gateway/tests/test_sa06_acceptance_tw.py
+ERROR services/gateway/tests/test_sa06_acceptance_tw.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in 0.08s
+== services/gateway/tests/test_chk01_gateway_criteria.py
+FAILED services/gateway/tests/test_chk01_gateway_criteria.py::test_the_session_paths_are_the_chat_the_cart_the_sign_in_and_the_handoff
+1 failed, 21 passed in 1.12s
+== services/assistant/tests/test_sa06_no_case_tool.py
+FAILED services/assistant/tests/test_sa06_no_case_tool.py::test_the_gateways_handoff_runs_no_model_of_its_own[handoff.py]
+FAILED services/assistant/tests/test_sa06_no_case_tool.py::test_the_gateways_handoff_runs_no_model_of_its_own[handoff_trigger.py]
+FAILED services/assistant/tests/test_sa06_no_case_tool.py::test_the_care_agent_never_gets_a_write_tool
+3 failed, 4 passed in 0.59s
+== apps/portal/src/HandoffNotice.test.tsx
+Error: Failed to resolve import "./HandoffNotice" from "src/HandoffNotice.test.tsx". Does the file exist?
+ Test Files  1 failed (1)
+== apps/portal/src/Handoff.tw.test.tsx
+Error: Failed to resolve import "./HandoffNotice" from "src/Handoff.tw.test.tsx". Does the file exist?
+ Test Files  1 failed (1)
+== apps/portal/src/AiDisclosure.test.tsx
+ Test Files  1 passed (1)
+      Tests  16 passed (16)
+
+Reading (the session, 2026-11-26):
+- Every new SA-06 test file fails against the base. Most are collection errors, because the modules they test do
+  not exist yet. That is weaker than an assertion failing, and it is the honest state: the tests were written
+  alongside the code, not before it. The exception is the labelled phrase set, pinned before the matcher
+  (680b36c).
+- The test-writer's one assertion-level failing-first is in the history: at c9e6d7a, 'sends turns the gateway will
+  accept: at most 2000 characters each' failed (2600 > 2000) on this row's own code; d233898 fixed it.
+- test_sa06_no_case_tool.py: 4 tests pass on the base by design. They pin invariants that already held (the
+  assistant had no case tool before this row either), so passing there is correct, not a gap.
+- AiDisclosure.test.tsx passes on the base: its new `handoff` entry is harmless there. On this row's code it is
+  required by tsc (the exhaustive event map, #14).
+- An earlier attempt at this log was discarded: zsh did not split the path list, so nothing was reverted.
