@@ -35,6 +35,7 @@ CONTEXT_KEYS = {
     "total",
     "payment",
     "error_codes",
+    "stock",  # row #25 (security review M2; stop 5, awaiting the user's approval)
     "uncertain",
     "steps_done",
     "failures",
