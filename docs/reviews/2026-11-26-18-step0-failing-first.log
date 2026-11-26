@@ -1,6 +1,6 @@
 # Row #18 step 0: failing-first log (branch req/18-record-all from bcc135b; 2026-11-26)
 # Each mutant was applied to the working tree, its tests run as one file, and the file restored (cmp against the pre-mutant copy).
-# Entries after the security review (M-m1, M-a2, the M-a1 rerun), the re-review (M-n1, M-n3) and the advisor review (M-r1, M-r1b, M-l4, M-l5a, M-l5b, M-t1, M-l6, the CPU-hog run, the base hash) are against the fixed tests.
+# Entries after the security review (M-m1, M-a2, the M-a1 rerun), the re-review (M-n1, M-n3) and the advisor reviews (M-r1, M-r1b, M-l4, M-l5a, M-l5b, M-t1, M-l6, the CPU-hog runs, the base hash, F8, R1's 6x/30 s runs, the "ignore " measurement) are against the fixed tests.
 == (a) mutant M-a1: _back always returns 0 (look back to the start)
  services/assistant/src/northwind_assistant/output_check.py | 2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)
@@ -135,3 +135,43 @@ fc86e9e8ab4944583a460d96de5d091fde2728dba3c282fa75ac90b3a8a87756
 == the guard on the northwind DB (read only), 2026-11-26T19:34:45Z:
 live holds: none possible, BE-04's tables do not exist in database 'northwind'
 exit 3
+== advisor R1: the router test back at L3's 6x and 30 s, with the median of 3 kept: quiet, then under 10 busy-loop processes, 3 runs each
+6 passed, 189 deselected in 5.76s
+6 passed, 189 deselected in 5.75s
+6 passed, 189 deselected in 5.74s
+hog pids: 10
+6 passed, 189 deselected in 7.86s
+6 passed, 189 deselected in 7.86s
+6 passed, 189 deselected in 8.25s
+hog stopped
+== advisor R1: router mutant, str.find over each prefix at stride 8, against 6x/30 s with the median of 3
+6 passed, 189 deselected in 6.97s
+restored
+== advisor R1: router mutant, str.find over each prefix at stride 1, against 6x/30 s with the median of 3
+FAILED services/rag/tests/test_rag07_tw.py::test_huge_input_is_fast[x]
+FAILED services/rag/tests/test_rag07_tw.py::test_huge_input_is_fast[reviewers say ]
+FAILED services/rag/tests/test_rag07_tw.py::test_huge_input_is_fast[can I return ]
+FAILED services/rag/tests/test_rag07_tw.py::test_huge_input_is_fast[SYSTEM:]
+FAILED services/rag/tests/test_rag07_tw.py::test_huge_input_is_fast[<!--]
+5 failed, 1 passed, 189 deselected in 14.90s
+restored
+== advisor R5: the base tool-list digest, with its command
+$ git archive bcc135b services/mcp-catalog/src services/common/src | tar -x -C $TMPDIR/base
+$ uv run --no-sync python -I $TMPDIR/basehash.py $TMPDIR/base   # -I: no cwd or user site on sys.path; the export is put first
+# basehash.py: sys.path[:0] = [<export>/services/mcp-catalog/src, <export>/services/common/src]; import tools, cart;
+#   sha256(json.dumps([TOOLS[n].tool.model_dump(mode="json") for n in sorted(TOOLS)], sort_keys=True))
+tools from <export>/services/mcp-catalog/src/northwind_mcp_catalog/tools.py
+cart from <export>/services/mcp-catalog/src/northwind_mcp_catalog/cart.py
+model_dump digest fc86e9e8ab4944583a460d96de5d091fde2728dba3c282fa75ac90b3a8a87756
+== advisor R6: F8, the journey's alternatives under BE-04's rules, with its command
+$ uv run --no-sync python $TMPDIR/f8.py   # FixtureCatalog; set_stock(IN_STOCK, REGION, 5), set_stock(OUT_OF_STOCK, REGION, 0), as test_cart_journey_e2e.py does; cart.alternatives(server, shopper claims, REGION, OUT_OF_STOCK, 1)
+region US variant P0008-CHR-REL-M -> [('P0001-BLK-REL-M', True), ('P0003-SLT-REL-M', True), ('P0004-BLK-REL-M', True)]
+== scoped read's low: why the "ignore " unit survives the stride-1 mutant ($ uv run --no-sync python $TMPDIR/ign.py: the median of 3 CPU readings per size, as the test takes them)
+-- clean
+'ignore ': median 50K 0.204 s, 200K 0.814 s, ratio 3.99
+'x': median 50K 0.037 s, 200K 0.147 s, ratio 3.99
+-- stride-1 mutant
+'ignore ': median 50K 0.234 s, 200K 1.285 s, ratio 5.50
+'x': median 50K 0.066 s, 200K 0.610 s, ratio 9.24
+restored
+# Not an early exit: "ignore " has the router's largest linear cost (about 5.5x "x"'s), so the same quadratic pass lifts its ratio only to 5.5. That is the ratio test's stated limit (the first pass's L3 and the scoped read).

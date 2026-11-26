@@ -1,6 +1,6 @@
 # RECORD-ALL (#18): runbook draft
 
-Status: a **draft** for the user, written 2026-11-26 from the repository read-only; revised the same day with the user's settled points (the hold guard, the freeze's catalog files; row #18 step 0, advisor F7). It is uncommitted until the user
+Status: a **draft** for the user, written 2026-11-26 from the repository read-only; revised the same day with the user's settled points (the hold guard, the freeze's catalog files; row #18 step 0, advisor F7). **The approved plan's window table supersedes §3's table and §8 item 3:** W12b `eval-answers-r2` and W12c `eval-answers-r3` run after W12 ($3.55 each, `RUN_BUDGET` 6.00), so the run budgets sum to $28.75, and the stop is $25 of real spend for the row (advisor R7). It is uncommitted until the user
 approves it. Nothing here has run. Row #18 is planned for about Dec 13–16 (the user's decision, 2026-11-22). The
 credit runs out around 2026-12-22 (decision 0013).
 

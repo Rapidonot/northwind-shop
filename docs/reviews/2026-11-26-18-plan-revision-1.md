@@ -13,11 +13,10 @@ before the user (CLAUDE.md, "Running a row"; step 0's advisor review F7).
    - Every window starts with the hold guard (`python -m northwind_backend.inventory.live_holds`). Exit 0 lets
      the window open. Exit 1 or 2 stops it. Exit 3 means the tables are absent.
    - Its output line goes in the window record (runbook §2 and §4, item 4a).
-2. **The dependency.** mcp-catalog → northwind-backend for the substitutes module only.
-   - A test pins the import closure: none of the modules the user named, no `psycopg`, no `claude_agent_sdk`.
-   - Backend modules may come only from today's 13 pure ones, which load through
-     `northwind_backend.inventory.__init__`.
-   - The pyproject and `uv.lock` change only by the workspace entry.
+2. **The dependency.** mcp-catalog → northwind-backend for the substitutes module only, with an
+   import-closure test: none of the modules the user named. The pyproject and `uv.lock` change only by the
+   workspace entry. How "only the substitutes module" is read is the session's choice, put to the user
+   below.
 3. **The stale cassette.** It is not in `make ci` (`e2e` only), but GitHub's browser job runs it, so nothing is
    pushed before W7. `P0008-CHR-REL-M` still gets 3 alternatives in US, so W7's recorded expectation can hold.
 4. **The spend stop** is $25 of real spend for the row.
@@ -43,20 +42,25 @@ still be short at checkout. Checkout then escalates `out_of_stock`, which is saf
   change only where a region has more than one node and the split matters. Cost: about half a day, plus a
   re-review.
 
-### (a), the router test (advisor F1)
-The router is all regexes, so there is no operation count to take. It is built as the plan says: the median of
-3 CPU-time readings at n and 4n, ratio under 8, and a 60 s CPU backstop. All three tests pass under 10
-busy-loop processes.
+### (a), the router test (advisor F1 and R1)
+The router is all regexes, so there is no operation count to take. Its test went through three versions:
+- **`3666dd8`:** one CPU reading per size, ratio at most 6, 30 s CPU backstop. 6x and 30 s were the security
+  review's L3 fix, and the re-review closed L3 on them.
+- **`7c27ebf`:** built "as the plan says": the median of 3, ratio under 8, 60 s. That loosened L3's fix (advisor
+  R1), and the user was not told.
+- **Now:** the median of 3 **and** L3's 6x and 30 s, stricter than both earlier versions. It passes in 3 quiet
+  runs and in 3 runs under 10 busy-loop processes.
 
 Limit: the test catches a quadratic pass only when the pass is large next to the router's linear cost.
-- A stride-1 `str.find` mutant fails 3 of 6 units.
+- At 6x, a stride-1 `str.find` mutant fails 5 of 6 units (at 8x it failed 3).
 - A stride-8 one passes all 6.
 
-The output check's two tests do count operations (match-view reads and boundary scans), plus a CPU-time ratio
-and a 60 s limit.
+The output check's two tests do count operations (match-view reads and boundary scans). They add a CPU-time
+ratio (8x) and a 60 s limit on **one** reading per size (advisor R8). The counts are the main bound there.
 
-**Recommendation: accept the limit.** The user asked for counts "or a far larger margin". A closer bound on the
-router would need the router rewritten to count its regex work, which is out of scope.
+**For the user:** keep the median of 3 with 6x and 30 s (the current code, and the recommendation), or the
+plan's 8x and 60 s (looser than L3). A closer bound would need the router rewritten to count its regex work,
+which is out of scope. `security-reviewer` reads the current version (scoped).
 
 ### The hold reader (stop 5)
 - **B (recommended):** allow `psycopg` in exactly `holds.py`, with a new test that its SQL names only
@@ -65,6 +69,15 @@ router would need the router rewritten to count its regex work, which is out of 
 - **C:** keep the port, with no runtime wiring.
 
 With A or B, the guard's exit 3 then blocks a window (Open items, "From #18 step 0, re-review N2").
+
+### How "only the pure substitutes module" is read (advisor F5 and R2)
+Importing `northwind_backend.inventory.substitutes` runs the package's `__init__`, which loads 13 backend
+modules, all pure today: `InventoryFake`, `fakes._base`, `fakes.catalog`, `recovery`, `idempotency` and
+others. The test asserts that the loaded `northwind_backend.*` modules are a **subset of** those 13 and that
+none of the forbidden modules loads. This reading is the session's choice, not the user's.
+- **Option 1 (recommended):** accept the 13-module allow-list.
+- **Option 2:** read the condition literally. Load `substitutes` without running the package `__init__`,
+  either by moving the module or by importing it by file path, so only it and its own imports load.
 
 ### Exit 3 today
 On `northwind` the guard exits 3: "BE-04's tables do not exist in database 'northwind'". While no reader is
