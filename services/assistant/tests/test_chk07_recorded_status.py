@@ -5,8 +5,10 @@ order's `get_order` status or scan history, and no answer shows a status code (D
 At runtime this is held by the prompt only (decision 0015, row #27 note): nothing here runs in a
 turn. It reads the cassettes, so it costs nothing and needs no model. The matcher is stricter than
 the words above where that is cheap: "its" and "it" carry the last order named, and a dated scan
-line must be a scan of an order the answer names. It knows the words listed here; a status in other
-words is not seen. The matcher is tested on wrong answers first.
+line must be a scan of an order the answer names. "Arrived" followed at once by a condition
+("arrived damaged", "arrived with a tear") states the item's condition and is not read as a status
+(the user, 2026-11-26); plain "arrived" still is, and is never true. It knows the words listed
+here; a status in other words is not seen. The matcher is tested on wrong answers first.
 """
 
 from __future__ import annotations
@@ -31,6 +33,11 @@ REPO = Path(__file__).resolve().parents[3]
 CASSETTES = REPO / "cassettes" / "assistant-orders"
 SHOPPER, REGION = "S0188", "US"
 
+# "Arrived damaged" and the like is the item's condition, not a status (the user, 2026-11-26).
+_AS_CONDITION = (
+    r"(?!\s+(?:damaged|broken|faulty|torn|defective|ripped|cracked|stained|scratched|dented|"
+    r"with (?:a |some )?(?:defect|damage|tear|hole|stain|fault)s?))"
+)
 # What an answer may call each status. `None`: no status the tool returns, so never true.
 WORDS: tuple[tuple[str, str | None], ...] = (
     (r"out for delivery", "out_for_delivery"),
@@ -43,8 +50,9 @@ WORDS: tuple[tuple[str, str | None], ...] = (
     (r"not yet with the carrier", "confirmed"),
     (r"confirmed", "confirmed"),
     (r"placed", "placed"),
-    (r"(?:shipped|dispatched|delayed|cancell?ed|lost|arrived|packed|on its way|on the way)", None),
-)
+    (rf"(?:shipped|dispatched|delayed|cancell?ed|lost|arrived{_AS_CONDITION}|packed|on its way|"
+     r"on the way)", None),
+)  # fmt: skip
 _CODE = re.compile(r"\b[a-z]+(?:_[a-z]+)+\b")
 _ORDER = re.compile(r"\bO\d{6}\b")
 _DATE = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
@@ -173,6 +181,12 @@ RIGHT = [
     "Tracking scans for O000800:\n- 2026-10-21: picked up\n- 2026-10-26: delivered",
     "I couldn't find order O000001 on your account.",
     "What is your order number?",
+    # The item's condition, not the order's status (the user, 2026-11-26).
+    "The return for order O000800 needs review because the item arrived damaged.",
+    "Your boots from O000800 arrived broken, so a person needs to review it.",
+    "O000800: the jacket arrived faulty.",
+    "Order O000800's scarf arrived torn and a person will review the return.",
+    "O000800's item arrived defective.",
 ]
 WRONG = [
     "Order O000418 has been confirmed.",  # M-1: it is on hold
@@ -200,6 +214,11 @@ WRONG = [
     "O000928 is in transit and O000418 is in transit.",
     "Scans for O000928:\n- 2026-10-26: delivered",
     "Order O000928's status is delivered.",
+    # Plain "arrived" stays a status word with no code, so it is never true.
+    "Order O000928 has arrived.",
+    "O000800 arrived on 2026-10-26.",
+    "O000928 arrived, but the jacket was damaged.",
+    "O000928 arrived and is damaged.",
 ]
 
 

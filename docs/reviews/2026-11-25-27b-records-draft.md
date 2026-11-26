@@ -20,6 +20,9 @@ Open items: the M-1 entry (line 166 at `7f0f8d9`) is replaced by:
 
 > **Row #27's M-1 (Medium): live-only, prompt-held, by the user's decision (2026-11-25).** Recorded answers are tested
 > (`services/assistant/tests/test_chk07_recorded_status.py`). No owner: after Dec 22 the app replays only.
+>
+> **Row #27 PR 2: untrusted content can steer a return request.** Accepted residual by the user's decision (2026-11-26), with no
+> owner: own orders only, non-monetary, re-evaluated by the server, idempotency keys (threat model, Residuals).
 
 Log line:
 
@@ -40,3 +43,5 @@ decides whether Q3's two resources keep it `partial`).
 
 ## Decision 0015 and the threat model: applied 2026-11-25, with stage B
 In `docs/decisions/0015-output-control.md` (row #27 note) and `docs/governance/threat-model.md` (boundary 3, Owners).
+2026-11-26, the user: "untrusted content can steer a return request" is an accepted residual (threat model, Residuals),
+with no P6 or NFR-03 owner; its Owners row is gone.

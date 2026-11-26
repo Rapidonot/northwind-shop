@@ -205,3 +205,12 @@ killed test_returns_journey_e2e.py 'assert status.codes_in(answer) == [], answer
 killed test_returns_journey_e2e.py 'assert status.problems(answer) == [], answer'
 killed test_returns_journey_e2e.py 'assert turn.evaluations or not scenario.evaluated, "never evaluated"'
 24 of 25
+
+== 2026-11-26: M-1 matcher, "arrived damaged" is the item's condition (the user's decision 1) ==
+Before the change, at b1b4360, with 5 condition examples added to RIGHT and 4 plain-"arrived" guards to WRONG:
+  test_chk07_recorded_status.py -k matcher: 5 failed, 40 passed (each of the 5 condition examples; the 4 guards pass)
+After `_AS_CONDITION` (a negative lookahead on "arrived" only; plain "arrived" stays a status with no code):
+  test_chk07_recorded_status.py: 3 failed, 77 passed; the 3 are the expected codes in #30's recordings
+  (in_transit#1, label_created_no_scans#1, on_hold#1), replaced by this window's recording
+Mutants: lookahead removed -> 5 failed; "arrived" removed from the list -> 4 failed (the guards). Both killed.
+Likely return wordings at $0 (docs/reviews/2026-11-25-27b-likely-wordings.py.txt): failing 0 of 28 (was 1 of 28).
