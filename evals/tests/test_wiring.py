@@ -279,9 +279,16 @@ def test_ci_integration_step_runs_after_a_unit_failure() -> None:
 
 
 def test_ci_python_job_lints_the_evals_package_and_scans_saved_contexts() -> None:
+    from northwind_llm_replay.cli import EVAL_ROOTS
+
     commands = runs("python")
     assert any(c.startswith("uv run mypy") and "evals" in c for c in commands)
-    assert any("scan cassettes" in c and "evals/contexts" in c for c in commands)
+    # Row 18a (M8): the scan names no paths, so it scans the CLI's default list, which holds the
+    # saved contexts (and data/enrichment and data/embeddings, which the old list left out).
+    assert "uv run python -m northwind_llm_replay.cli scan" in commands
+    assert {Path("evals/contexts"), Path("data/enrichment"), Path("data/embeddings")} <= set(
+        EVAL_ROOTS
+    )
 
 
 def test_ci_gate_job_installs_the_same_extension_and_model_cache_as_the_python_job() -> None:
