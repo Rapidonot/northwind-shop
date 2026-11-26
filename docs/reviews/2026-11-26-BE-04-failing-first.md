@@ -26,3 +26,25 @@ test-writer's `test_the_real_us_order_postal_code_format_picks_a_dc_by_its_digit
 ## Race (Postgres)
 
 Not run yet: window B holds the shared Postgres. `test_a_read_then_write_reserve_oversells_under_the_same_race` is the sensitivity check.
+
+## Wiring pin (`test_be04_wiring.py`): on the version-2 orders, before the generator fit
+
+```
+        assert len(real) == len(orders()) == 1000
+        changed = sorted(oid for oid in real if real[oid] != deep[oid])
+>       assert changed == [], f"{len(changed)} orders' tool results changed: {changed[:10]}"
+E       AssertionError: 2 orders' tool results changed: ['O000476', 'O000936']
+E       assert ['O000476', 'O000936'] == []
+services/backend/tests/orders_place/test_be04_wiring.py:115: AssertionError
+```
+
+On the version-3 orders (`BACKEND_DATA_VERSION` 3, `_fit_to_stock`): 10 passed. 0 orders' tool results changed, 0 reservations refused, 950 placed.
+
+## Cassettes, after the data change and the wiring (the user's condition for option B)
+
+- sha256 of every file in `cassettes/backend-replay`, `backend-audit` and `backend-orchestrator`, taken before the data change and again after the wiring: **identical, 5,989 of 5,989**. That includes the 12 `backend-replay` cassettes that name O000476 or O000936 (6 each).
+- Replay, `LLM_MODE=replay`, where the plugin fails a test on any miss:
+  - `test_be05_replay_recorded.py`: 2 passed (all 1,000 orders), 4 min 21 s;
+  - `test_be02_agent_recorded.py`: 12 passed;
+  - `test_be01_recorded.py`: 5 passed.
+  - **0 misses.**

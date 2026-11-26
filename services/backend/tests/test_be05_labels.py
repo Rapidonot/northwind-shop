@@ -53,5 +53,5 @@ def test_the_labels_are_generated_not_hand_written() -> None:
     built = build(ROOT / "data" / "fixtures")
     assert (BACKEND / "replay_labels.jsonl").read_bytes() == built["replay_labels.jsonl"]
     manifest = json.loads(built["manifest.json"])
-    assert manifest["backend_data_version"] == 2
+    assert manifest["backend_data_version"] == 3  # row #25: orders fitted to stock
     assert manifest["counts"]["replay_labels"] == 1000

@@ -177,6 +177,7 @@ def test_capture_follows_a_later_validation_that_found_an_issue() -> None:
         fraud=ports.fraud,
         catalog=CatalogTableFake(state=catalog),
         orders=ports.orders,
+        inventory=ports.inventory,
     )
     task = world.task(row)
     h = build_handlers(
@@ -291,7 +292,9 @@ def test_capture_follows_a_later_validation_that_moved_the_total() -> None:
     world, row = World.make(), first_of("clean")
     catalog = CatalogState()
     base = world.ports()
-    ports = Ports(base.payment, base.fraud, CatalogTableFake(state=catalog), base.orders)
+    ports = Ports(
+        base.payment, base.fraud, CatalogTableFake(state=catalog), base.orders, base.inventory
+    )
     task = world.task(row)
     h = build_handlers(
         task,

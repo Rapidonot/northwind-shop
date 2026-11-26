@@ -23,16 +23,19 @@ import random
 from collections import defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 from northwind_backend.carriers import UNDELIVERABLE_PREFIX, carrier_for, tracking_number_for
+from northwind_backend.errors import Ok
 from northwind_backend.fakes.payment import SANDBOX_APPROVED, SANDBOX_SOFT_DECLINE
+from northwind_backend.inventory import InventoryFake, InventoryState, Line, StockOut
+from northwind_backend.inventory.nodes import region_nodes
 
 # Bump when the output changes. Separate from FOUND-1's DATA_VERSION: nothing here is ingested.
 # 2 (row #21): adds replay_labels.jsonl; the other three files are byte-identical to version 1.
-BACKEND_DATA_VERSION = 2
+BACKEND_DATA_VERSION = 3  # row #25: orders fitted to stock (`_fit_to_stock`)
 DEFAULT_SEED = 20261105
 SHOPPER_COUNT = 200
 ORDER_COUNT = 1000
@@ -229,6 +232,76 @@ def _label(order: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+# The exceptions that reach payment, so their order takes stock when its payment is captured.
+_REACHES_PAYMENT = frozenset({None, "address_error", "soft_decline"})
+_FIT_CLOCK = datetime(2026, 11, 1, tzinfo=UTC)
+
+
+def _fit_to_stock(
+    orders: list[dict[str, Any]],
+    fixtures: Path,
+    shoppers: list[dict[str, Any]],
+    catalog: Catalog,
+) -> list[dict[str, Any]]:
+    """Row #25 (BE-04): no order that reaches payment may be refused stock that earlier ones took.
+
+    Each such order is reserved and committed in file order, against the fixtures' stock, through
+    `InventoryFake` and the same node choice placement uses. A line that no node can still fill is
+    cut to what the best node still holds, or, with nothing left, moved to the region's first
+    in-stock variant that one node can fill and that the order doesn't already have. The line count
+    stays the same. In version 2 this changed two orders: O000476 (a quantity, 3 to 2) and O000936
+    (a variant). Everything else is byte-identical (`test_found3_generator.py`)."""
+    inventory = InventoryFake(
+        lambda: _FIT_CLOCK,
+        state=InventoryState.from_fixtures(fixtures / "stock.jsonl"),
+        regions=region_nodes(fixtures / "regions.json"),
+    )
+    postal = {s["shopper_id"]: s["address"]["postal_code"] for s in shoppers}
+    fitted: list[dict[str, Any]] = []
+    for order in orders:
+        if order["exception"] not in _REACHES_PAYMENT:
+            fitted.append(order)
+            continue
+        lines = [dict(line) for line in order["lines"]]
+        for _ in range(len(lines) + 1):
+            done = inventory.reserve(
+                idempotency_key=f"{order['order_id']}:fit",
+                order_id=order["order_id"],
+                region=order["region"],
+                # An address error is placed at the shopper's address on file.
+                postal_code=postal[order["shopper_id"]],
+                lines=[Line(line["variant_id"], line["quantity"]) for line in lines],
+            )
+            if not isinstance(done, StockOut):
+                break
+            short = done.short[0]
+            index = next(i for i, ln in enumerate(lines) if ln["variant_id"] == short.variant_id)
+            if short.available >= 1:
+                lines[index]["quantity"] = short.available
+                continue
+            have = {line["variant_id"] for line in lines}
+            nodes = region_nodes(fixtures / "regions.json")[order["region"]]
+            pick = next(
+                p
+                for p in catalog.in_stock[order["region"]]
+                if p[0] not in have
+                and max((_units(inventory.available(p[0], n)) for n in nodes), default=0)
+                >= lines[index]["quantity"]
+            )
+            lines[index] = _line(pick, lines[index]["quantity"])
+        else:
+            raise RuntimeError("an order could not be fitted to stock")
+        committed = inventory.commit(idempotency_key=f"{order['order_id']}:fit")
+        if not isinstance(committed, Ok):
+            raise RuntimeError("a fitted order could not be committed")
+        fitted.append({**order, "lines": lines} if lines != order["lines"] else order)
+    return fitted
+
+
+def _units(result: object) -> int:
+    return result.value if isinstance(result, Ok) else 0
+
+
 def fraud_flagged_order_ids(orders: Iterable[dict[str, Any]]) -> frozenset[str]:
     return frozenset(o["order_id"] for o in orders if o["exception"] == "fraud_flag")
 
@@ -243,6 +316,7 @@ def build(fixtures: Path, seed: int = DEFAULT_SEED) -> dict[str, bytes]:
         _order(seed, n, pick.choice(shoppers), plan.get(n), catalog)
         for n in range(1, ORDER_COUNT + 1)
     ]
+    orders = _fit_to_stock(orders, fixtures, shoppers, catalog)
     # An order held on an exception never reaches a carrier.
     tracking = [_tracking(seed, o) for o in orders if o["exception"] is None]
 
