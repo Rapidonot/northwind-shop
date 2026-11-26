@@ -73,7 +73,14 @@ from northwind_backend.errors import (
     business,
 )
 from northwind_backend.fakes._base import NOT_PERMITTED
-from northwind_backend.inventory.model import InventoryPort, Line, Reservation
+from northwind_backend.inventory.model import (
+    MAX_LINES,
+    MAX_QUANTITY,
+    HoldStatus,
+    InventoryPort,
+    Line,
+    Reservation,
+)
 from northwind_backend.ports import (
     CatalogPort,
     FraudAssessment,
@@ -487,8 +494,17 @@ class _Handlers:
         total = 0
         currencies: set[str] = set()
         variants = [line.variant_id for line in order.lines]
-        if len(set(variants)) != len(variants) or any(
-            isinstance(line.quantity, bool) or line.quantity < 1 for line in order.lines
+        # Security review L6: the same line rules as `inventory.reserve`, so no order passes here
+        # and is then refused there after the claim.
+        if (
+            len(set(variants)) != len(variants)
+            or not 1 <= len(order.lines) <= MAX_LINES
+            or any(
+                isinstance(line.quantity, bool)
+                or not isinstance(line.quantity, int)
+                or not 1 <= line.quantity <= MAX_QUANTITY
+                for line in order.lines
+            )
         ):
             issues.append(INVALID_LINE)
         for line in () if issues else order.lines:
@@ -804,6 +820,19 @@ class _Handlers:
 
     # ---- stock (row #25, BE-04) ---------------------------------------------------------------
 
+    def _stock_view(self) -> dict[str, Any] | None:
+        p = self.placement
+        if p.reservation is None:
+            return None
+        # Built for an escalation, which releases a hold that isn't committed right after it is
+        # written; a hold left by a failed escalation expires on its own (`HOLD`).
+        state = "committed" if p.committed else "released"
+        return {
+            "reservation": state,
+            "lines": len(p.reservation.allocations),
+            "restock_needed": p.committed and p.captured is None,
+        }
+
     def _stock_key(self) -> str:
         return self.task.key("inventory.reserve")
 
@@ -825,9 +854,17 @@ class _Handlers:
                 lines=lines,
             ),
         )
-        if isinstance(done.result, Ok):
+        if isinstance(done.result, Ok) and done.result.value.status is HoldStatus.HELD:
             p.reservation = done.result.value
             return None
+        if isinstance(done.result, Ok):
+            # Security review L1: a rerun's same key found a hold that is no longer live (expired,
+            # released or committed). It holds nothing, so nothing is authorized against it.
+            p.codes.append(f"hold_{done.result.value.status.value}")
+            escalated = await self.escalate("code")
+            if not isinstance(escalated.result, Ok):
+                return self._error(ESCALATE, escalated)
+            return self._refuse(AUTHORIZE, ESCALATED)
         if done.result.code == OUT_OF_STOCK:
             escalated = await self.escalate("code")
             if not isinstance(escalated.result, Ok):
@@ -885,6 +922,9 @@ class _Handlers:
             "total": values.get(VALIDATE),
             "payment": payment,
             "error_codes": list(p.codes),
+            # Security review M2: what the order holds in stock, built by code. A committed hold
+            # with no capture means its units left on-hand stock and must be put back by hand.
+            "stock": self._stock_view(),
             "uncertain": [{"action": a, "idempotency_key": k} for a, k in p.uncertain],
             "steps_done": sorted(values),
             "failures": [

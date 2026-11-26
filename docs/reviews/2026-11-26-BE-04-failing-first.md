@@ -48,3 +48,17 @@ On the version-3 orders (`BACKEND_DATA_VERSION` 3, `_fit_to_stock`): 10 passed. 
   - `test_be02_agent_recorded.py`: 12 passed;
   - `test_be01_recorded.py`: 5 passed.
   - **0 misses.**
+
+## Security review M1 and L2 (the two-clock contract tests), on the fake before the fix (03589a2)
+
+```
+FAILED services/backend/tests/inventory/test_be04_contract.py::test_an_early_clock_commit_of_a_hold_a_later_clock_swept_gives_nothing_back_twice[fake]
+FAILED services/backend/tests/inventory/test_be04_contract.py::test_a_released_expired_hold_is_never_committed_later[fake]
+2 failed, 2 passed, 113 deselected in 0.18s
+```
+
+After the fix: 59 passed on the fake. The release test passed before too, because the old fake's release already skipped swept holds; the bug was in `postgres.py`, and its Postgres run waits for window B.
+
+## After the security fixes
+- The three recorded replays pass again, with 0 misses: 12 + 5 + 2, plus the rule-driven replay. The cassettes still hash identical, 5,989 of 5,989.
+- `_replay.py`'s `CONTEXT_KEYS` gained `stock` (M2): an exact-set pin that grew, stop 5, awaiting the user's approval.

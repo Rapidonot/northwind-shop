@@ -179,3 +179,27 @@ def test_no_synthetic_order_has_a_duplicate_variant_or_a_quantity_below_one() ->
         assert all(line["quantity"] >= 1 for line in order["lines"]), (
             f"{order['order_id']}: a quantity below 1"
         )
+
+
+# ---- security review L6: the same line rules as `inventory.reserve` -------------------------
+
+
+def test_a_quantity_over_the_reservation_limit_is_invalid_line_before_any_claim() -> None:
+    from northwind_backend.inventory.model import MAX_QUANTITY
+
+    world, row, variant, _ = _clean()
+    _with_lines(world, row, [(variant, MAX_QUANTITY + 1)])
+    replies, result = _run(world, row, [*MONEY_PATH, "escalate_order"])
+    assert _body(replies[0])["issues"] == ["invalid_line"]
+    _assert_escalated_invalid_line(world, row, result)
+
+
+def test_more_lines_than_a_reservation_takes_is_invalid_line() -> None:
+    from northwind_backend.inventory.model import MAX_LINES
+
+    world, row = World.make(), first_of("clean")
+    region = row["region"]
+    variants = sorted(v for v, r in catalog_state().stock if r == region)[: MAX_LINES + 1]
+    _with_lines(world, row, [(v, 1) for v in variants])
+    replies, _ = _run(world, row, ["validate_order"])
+    assert _body(replies[0])["issues"] == ["invalid_line"]

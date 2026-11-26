@@ -61,12 +61,16 @@ BAD_LINES = validation(
 )
 BAD_REGION = validation("invalid_region", "The region is not one Northwind sells in.")
 BAD_POSTAL = validation("invalid_postal_code", "The postal code is malformed.")
+# Security review L3: its own code, so placement never reads it as a payment confirmation problem.
 KEY_CONFLICT = validation(
-    "idempotency_conflict", "This idempotency key was already used for a different reservation."
+    "reservation_conflict", "This idempotency key was already used for a different reservation."
 )
 NOT_FOUND = validation("reservation_not_found", "No reservation has this idempotency key.")
 UNAVAILABLE = transient(
-    "inventory_unavailable", "The inventory store could not be reached. Nothing was changed."
+    # Security review L4: a lost connection at COMMIT may follow a write that took effect, so this
+    # never says nothing changed. A same-key retry returns the stored result.
+    "inventory_unavailable",
+    "The inventory store could not be reached.",
 )
 RELEASED = business("hold_released", "This reservation was released, so it can't be committed.")
 EXPIRED = business("hold_expired", "This reservation expired and its stock is no longer available.")

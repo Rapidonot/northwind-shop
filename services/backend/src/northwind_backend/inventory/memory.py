@@ -205,11 +205,10 @@ class InventoryFake:
             if record is None:
                 return NOT_FOUND
             if record.status is HoldStatus.HELD:
-                if record.expires_at <= now:
-                    self._sweep_record(record)
-                else:
-                    self._sweep_record(record)
-                    record.status = HoldStatus.RELEASED
+                # Gives back only holds not swept yet; an expired one that is released stays
+                # released (security review L2).
+                self._sweep_record(record)
+                record.status = HoldStatus.RELEASED
             return Ok(_view(idempotency_key, record, now))
 
     def commit(self, *, idempotency_key: str) -> Result[Reservation]:
@@ -227,7 +226,9 @@ class InventoryFake:
                 return RELEASED
             if record.status is HoldStatus.COMMITTED:
                 return Ok(_view(idempotency_key, record, now))
-            if record.expires_at <= now:
+            # Security review M1: a hold another clock already swept has given its units back, so
+            # the reservation counts as expired and nothing is given back twice.
+            if record.expires_at <= now or any(hold.swept for hold in record.holds):
                 self._sweep_record(record)
                 wanted = [hold.allocation for hold in record.holds]
                 if any(self._available(a.variant_id, a.node, now) < a.quantity for a in wanted):
@@ -241,6 +242,7 @@ class InventoryFake:
                     row = self.state.rows[(hold.allocation.variant_id, hold.allocation.node)]
                     row.held -= hold.allocation.quantity
                     row.on_hand -= hold.allocation.quantity
+                    hold.swept = True
             record.status = HoldStatus.COMMITTED
             return Ok(_view(idempotency_key, record, now))
 

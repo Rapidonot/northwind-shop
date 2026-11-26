@@ -26,8 +26,8 @@ from northwind_backend.agents.orders_place import (
     build_handlers,
     finish,
 )
-from northwind_backend.errors import AgentResult, Ok, RunStatus
-from northwind_backend.inventory import HoldStatus, InventoryState
+from northwind_backend.errors import AgentResult, Ok, RunStatus, business
+from northwind_backend.inventory import HoldStatus, InventoryState, Line
 from northwind_backend.ports import OrderStatus
 
 from ._placement import World, first_of, orders
@@ -281,3 +281,92 @@ def test_invalid_line_has_its_own_recommended_action() -> None:
     assert INVALID_LINE == "invalid_line"
     assert RECOMMENDED[INVALID_LINE] == "correct the order lines with the shopper, or cancel"
     assert RECOMMENDED[INVALID_LINE] not in {v for k, v in RECOMMENDED.items() if k != INVALID_LINE}
+
+
+# ---- security review fixes -------------------------------------------------------------------
+
+
+def test_a_rerun_that_finds_its_hold_no_longer_live_escalates_and_never_authorizes() -> None:
+    """L1: the same key returns the first reservation, released here; it holds nothing."""
+    world, row = World.make(), first_of("clean")
+    key = f"{row['order_id']}:inventory.reserve"
+    lines = [Line(line["variant_id"], line["quantity"]) for line in row["lines"]]
+    inventory = world.ports().inventory
+    first = inventory.reserve(
+        idempotency_key=key,
+        order_id=row["order_id"],
+        region=row["region"],
+        postal_code=row["shipping_postal_code"],
+        lines=lines,
+    )
+    assert isinstance(first, Ok)
+    assert isinstance(inventory.release(idempotency_key=key), Ok)
+    h = _handlers(world, row)
+    arg = {"order_id": row["order_id"]}
+
+    async def go() -> dict[str, Any]:
+        await _to_authorize(h, arg)
+        return _body(await h.authorize_payment(arg))
+
+    body = asyncio.run(go())
+    assert body["isError"] and body["code"] == "order_escalated"
+    assert world.payment.intents == {}
+    assert world.orders.orders[row["order_id"]].status is OrderStatus.ESCALATED
+
+
+def test_a_capture_that_fails_after_the_commit_says_the_stock_needs_restocking() -> None:
+    """M2: the escalation context says the units left on-hand stock with no money captured."""
+    world, row = World.make(), first_of("clean")
+    h = _handlers(world, row)
+    arg = {"order_id": row["order_id"]}
+    declined = business("capture_failed", "The capture failed.")
+    h.payment.capture = lambda **_: declined
+
+    async def go() -> None:
+        await _to_authorize(h, arg)
+        await h.authorize_payment(arg)
+        assert _body(await h.capture_payment(arg))["isError"]
+        await h.escalate_order(arg)
+
+    asyncio.run(go())
+    context = world.orders.escalations[row["order_id"]]
+    assert context["stock"] == {
+        "reservation": "committed",
+        "lines": len(row["lines"]),
+        "restock_needed": True,
+    }
+
+
+def test_an_escalated_order_that_held_stock_reports_it_released() -> None:
+    world = World.make(soft_decline_retry_approves=False)
+    row = first_of("soft_decline")
+    h = _handlers(world, row)
+    arg = {"order_id": row["order_id"]}
+
+    async def go() -> None:
+        await _to_authorize(h, arg)
+        await h.authorize_payment(arg)
+        await h.authorize_payment(arg)
+        await h.escalate_order(arg)
+
+    asyncio.run(go())
+    context = world.orders.escalations[row["order_id"]]
+    assert context["stock"]["reservation"] == "released"
+    assert context["stock"]["restock_needed"] is False
+
+
+def test_a_stock_view_never_reaches_the_model() -> None:
+    """M2's field is in the stored context only: `escalate_order` returns status and reason."""
+    world = World.make(soft_decline_retry_approves=False)
+    row = first_of("soft_decline")
+    h = _handlers(world, row)
+    arg = {"order_id": row["order_id"]}
+
+    async def go() -> dict[str, Any]:
+        await _to_authorize(h, arg)
+        await h.authorize_payment(arg)
+        await h.authorize_payment(arg)
+        return _body(await h.escalate_order(arg))
+
+    body = asyncio.run(go())
+    assert set(body["value"]) == {"status", "reason"}

@@ -237,7 +237,7 @@ def test_an_expired_hold_frees_its_unit_to_exactly_one_new_taker(db: Db) -> None
     assert len(granted(results)) == 1
     assert db.row(CA, "DC-CA") == (1, 1)
     first = inventory.release(idempotency_key="first")
-    assert isinstance(first, Ok) and first.value.status is HoldStatus.EXPIRED
+    assert isinstance(first, Ok) and first.value.status is HoldStatus.RELEASED
     assert db.row(CA, "DC-CA") == (1, 1)  # releasing the expired hold gives nothing back twice
 
 

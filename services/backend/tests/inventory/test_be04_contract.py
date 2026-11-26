@@ -241,7 +241,7 @@ def test_the_same_key_for_another_request_is_a_validation_conflict_and_changes_n
     ok(reserve(h, lines=[Line(A, 1)]))
     err(
         reserve(h, lines=other_lines, order_id=other_order, postal=other_postal),
-        "idempotency_conflict",
+        "reservation_conflict",  # its own code (security review L3)
         "validation",
     )
     assert total(h, A) == 7 and total(h, B) == 4
@@ -451,7 +451,7 @@ def test_release_after_expiry_is_a_no_op_and_gives_nothing_back_twice(h: Harness
     ok(reserve(h, lines=[Line(A, 2)]))
     h.clock.advance(HOLD)
     after = ok(h.inv.release(idempotency_key="key-1"))
-    assert after.status is HoldStatus.EXPIRED
+    assert after.status is HoldStatus.RELEASED  # an expired hold released stays released (L2)
     assert avail(h, A, EAST) == 5
     ok(reserve(h, key="k-2", lines=[Line(A, 5)], order_id="O000002"))
     ok(h.inv.release(idempotency_key="key-1"))
@@ -563,3 +563,74 @@ def test_out_of_stock_and_an_outage_are_told_apart_by_code_category_and_retry(h:
     assert short.is_retryable is False and down.is_retryable is True
     assert json.dumps(short.to_envelope()) != json.dumps(down.to_envelope())
     assert not isinstance(down, StockOut)
+
+
+# ---- security review M1, L2: two clocks on one store ---------------------------------------
+
+
+def _other(h: Harness, clock: SetClock) -> InventoryPort:
+    """A second caller on the same store with its own clock, as another process would be."""
+    if isinstance(h.inv, InventoryFake):
+        return InventoryFake(clock, state=h.inv.state, regions=REGIONS)
+    assert isinstance(h.inv, PostgresInventory)
+    return PostgresInventory(h.inv.connect, clock, regions=REGIONS)
+
+
+def _late_sweep(build: Build) -> tuple[Harness, InventoryPort]:
+    """X holds 1 from T0, Y holds 1 from T0+10m, of 2 on hand. A later clock, at X's expiry,
+    reserves Z, which sweeps X and takes its unit: Y and Z now hold both units."""
+    h = build([{"variant_id": A, "node": EAST, "region": "US", "on_hand": 2}])
+    ok(reserve(h, key="x", order_id="O000001", lines=[Line(A, 1)]))
+    h.clock.advance(timedelta(minutes=10))
+    ok(reserve(h, key="y", order_id="O000002", lines=[Line(A, 1)]))
+    late = _other(h, SetClock(T0 + HOLD))
+    ok(
+        late.reserve(
+            idempotency_key="z",
+            order_id="O000003",
+            region="US",
+            postal_code="10001",
+            lines=[Line(A, 1)],
+        )
+    )
+    return h, late
+
+
+def test_an_early_clock_commit_of_a_hold_a_later_clock_swept_gives_nothing_back_twice(
+    build: Build,
+) -> None:
+    h, late = _late_sweep(build)
+    err(h.inv.commit(idempotency_key="x"), "hold_expired", "business")  # both units are held
+    assert ok(late.available(A, EAST)) == 0
+    ok(late.commit(idempotency_key="y"))
+    ok(late.commit(idempotency_key="z"))
+    assert ok(late.available(A, EAST)) == 0
+    err(
+        late.reserve(
+            idempotency_key="w",
+            order_id="O000004",
+            region="US",
+            postal_code="10001",
+            lines=[Line(A, 1)],
+        ),
+        "out_of_stock",
+        "business",
+    )
+
+
+def test_an_early_clock_release_of_a_hold_a_later_clock_swept_gives_nothing_back(
+    build: Build,
+) -> None:
+    h, late = _late_sweep(build)
+    released = ok(h.inv.release(idempotency_key="x"))
+    assert released.status is HoldStatus.RELEASED
+    assert ok(late.available(A, EAST)) == 0  # Y and Z still hold both units
+    err(h.inv.commit(idempotency_key="x"), "hold_released", "business")
+
+
+def test_a_released_expired_hold_is_never_committed_later(h: Harness) -> None:
+    ok(reserve(h, lines=[Line(A, 1)]))
+    h.clock.advance(HOLD)
+    ok(h.inv.release(idempotency_key="key-1"))
+    err(h.inv.commit(idempotency_key="key-1"), "hold_released", "business")
+    assert avail(h) == 5

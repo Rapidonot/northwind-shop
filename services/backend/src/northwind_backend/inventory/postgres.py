@@ -70,6 +70,8 @@ WHERE r.idempotency_key = h.idempotency_key AND r.status = 'held' AND r.expires_
   AND NOT h.swept AND h.variant_id = ANY(%(variants)s) AND h.node = ANY(%(nodes)s)
 RETURNING h.variant_id, h.node, h.quantity
 """
+# Security review L5: a lock wait or a slow statement fails fast instead of stalling a run.
+_TIMEOUTS = "SET LOCAL lock_timeout = '2s'; SET LOCAL statement_timeout = '5s'"
 _GIVE_BACK = "UPDATE inventory_stock SET held = held - %s WHERE variant_id = %s AND node = %s"
 _TAKE = """
 UPDATE inventory_stock SET held = held + %(q)s
@@ -143,7 +145,8 @@ class PostgresInventory:
     def available(self, variant_id: str, node: str) -> Result[int]:
         now = checked_now(self.clock)
         try:
-            with self.connect() as conn:
+            with self.connect() as conn, conn.transaction():
+                conn.execute(_TIMEOUTS)
                 found = _available(conn, now, [node], [variant_id])
         except psycopg.OperationalError:
             return UNAVAILABLE
@@ -169,6 +172,7 @@ class PostgresInventory:
             with self.connect() as conn:
                 try:
                     with conn.transaction():
+                        conn.execute(_TIMEOUTS)
                         return self._reserve(conn, checked, now, dry_run)
                 except _Abort as abort:
                     return abort.result
@@ -252,6 +256,7 @@ class PostgresInventory:
         now = checked_now(self.clock)
         try:
             with self.connect() as conn, conn.transaction():
+                conn.execute(_TIMEOUTS)
                 return self._settle_in(conn, key, now, commit)
         except psycopg.OperationalError:
             return UNAVAILABLE
@@ -272,15 +277,53 @@ class PostgresInventory:
         if status is not HoldStatus.HELD:
             view = _view(conn, key, now)
             return NOT_FOUND if view is None else Ok(view)
-        holds = conn.execute(
-            "SELECT variant_id, node, quantity, swept FROM inventory_holds "
-            "WHERE idempotency_key = %s ORDER BY variant_id, node",
+        planned = conn.execute(
+            "SELECT DISTINCT variant_id, node FROM inventory_holds WHERE idempotency_key = %s",
             (key,),
         ).fetchall()
-        variants = sorted({h[0] for h in holds})
-        nodes = sorted({h[1] for h in holds})
-        locked = _lock(conn, now, variants, nodes)  # also sweeps every expired hold on these rows
-        if expires_at > now:
+        variants = sorted({v for v, _ in planned})
+        nodes = sorted({n for _, n in planned})
+        free = _lock(conn, now, variants, nodes)  # also sweeps every expired hold on these rows
+        # Security review M1: read the holds again under the stock locks. Another call, with a later
+        # clock, may have swept some of them while this one waited; a swept hold has already given
+        # its units back, so it is never given back again, and the reservation counts as expired.
+        holds = conn.execute(
+            "SELECT variant_id, node, quantity, swept FROM inventory_holds "
+            "WHERE idempotency_key = %s ORDER BY variant_id, node FOR UPDATE",
+            (key,),
+        ).fetchall()
+        expired = expires_at <= now or any(swept for *_, swept in holds)
+        if expired:
+            for variant, node, quantity, swept in holds:
+                if not swept:  # a later clock swept part of it: give back the rest, once
+                    conn.execute(_GIVE_BACK, (quantity, variant, node))
+                    free[(variant, node)] = free.get((variant, node), 0) + quantity
+            conn.execute(
+                "UPDATE inventory_holds SET swept = true WHERE idempotency_key = %s", (key,)
+            )
+            if not commit:
+                # Security review L2: an expired hold that is released stays released.
+                conn.execute(
+                    "UPDATE inventory_reservations SET status = 'released' "
+                    "WHERE idempotency_key = %s",
+                    (key,),
+                )
+            else:
+                # Take the units again from the same nodes, if they are still free.
+                if any(free.get((v, n), 0) < q for v, n, q, _ in holds):
+                    return EXPIRED
+                for variant, node, quantity, _swept in holds:
+                    conn.execute(
+                        "UPDATE inventory_stock SET on_hand = on_hand - %s "
+                        "WHERE variant_id = %s AND node = %s",
+                        (quantity, variant, node),
+                    )
+                conn.execute(
+                    "UPDATE inventory_reservations SET status = 'committed' "
+                    "WHERE idempotency_key = %s",
+                    (key,),
+                )
+        else:
             for variant, node, quantity, _swept in holds:
                 if commit:
                     conn.execute(
@@ -297,20 +340,6 @@ class PostgresInventory:
             conn.execute(
                 "UPDATE inventory_reservations SET status = %s WHERE idempotency_key = %s",
                 (new.value, key),
-            )
-        elif commit:
-            # Expired: its holds are swept now. Take the units again from the same nodes, if any.
-            if any(locked.get((v, n), 0) < q for v, n, q, _ in holds):
-                return EXPIRED
-            for variant, node, quantity, _swept in holds:
-                conn.execute(
-                    "UPDATE inventory_stock SET on_hand = on_hand - %s "
-                    "WHERE variant_id = %s AND node = %s",
-                    (quantity, variant, node),
-                )
-            conn.execute(
-                "UPDATE inventory_reservations SET status = 'committed' WHERE idempotency_key = %s",
-                (key,),
             )
         view = _view(conn, key, now)
         return NOT_FOUND if view is None else Ok(view)
