@@ -649,7 +649,7 @@ def run_partner_turn(
     root: Path,
 ) -> TurnResult:
     """One `stream_answer` turn for one scripted message, through a real in-process mcp-rag and,
-    since row 18a (option B of `docs/reviews/2026-11-25-a2a05-surface-memo.md`, decision 0025),
+    since row 18a (option B of `docs/reviews/2026-11-25-a2a05-surface-memo.md`, decision 0026),
     a real mcp-catalog with the cart tools: an anonymous shopper's surface, with a fresh random
     cart session per turn. No query understanding, and no orders or policy server."""
     from northwind_assistant.caller import Caller

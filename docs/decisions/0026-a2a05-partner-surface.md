@@ -1,6 +1,6 @@
-# 0025: What the A2A-05 partner turn gets (row 18a, part 6)
+# 0026: What the A2A-05 partner turn gets (row 18a, part 6)
 
-Status: accepted by the user, 2026-11-25 (`docs/reviews/2026-11-25-a2a05-surface-memo.md`, "The user's answers": option B,
+Status: accepted by the user, 2026-11-25. Numbered 0025 until the merge of main brought SA-06's 0025 (human hand-off); the row's raw review reports keep the old number (`docs/reviews/2026-11-25-a2a05-surface-memo.md`, "The user's answers": option B,
 the artifact alone, the change in 18a). Amends 0002.
 
 ## Context

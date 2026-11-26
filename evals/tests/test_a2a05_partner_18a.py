@@ -1,5 +1,5 @@
 """Row 18a, part 6 (A2A-05; option B of `docs/reviews/2026-11-25-a2a05-surface-memo.md`, the user's
-answers of 2026-11-25; decision 0025). The recorder gives a partner turn an anonymous shopper's
+answers of 2026-11-25; decision 0026). The recorder gives a partner turn an anonymous shopper's
 surface: mcp-rag, mcp-catalog and the cart tools, with a fresh random cart session per turn, and no
 query understanding, orders or policy server. P3-1: an order turn is one whose every call was
 offered northwind-catalog's exact cart tools and that called one of them. The order narrative goes
