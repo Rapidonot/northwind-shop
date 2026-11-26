@@ -5,7 +5,7 @@ No test is edited. Phase B's two files are written back to the merge base `06713
 in the working tree only, never the index. $0: scripted model and replay only.
 
 Version 2 (the security read after 4821fc8, L1 and L2; the advisor's re-read, A, E and F):
-- a mutant is CAUGHT only when a named test is reported failed (pytest `-rfE`, Vitest's JSON
+- a mutant is CAUGHT only when a named test is reported failed (pytest `-rfEA`, Vitest's JSON
   reporter); any other non-zero exit is ERROR, and a zero exit SURVIVED;
 - every git call is checked: its return code, and its output for the five error strings in CLAUDE.md;
 - each file is restored from HEAD's blob and checked equal to it; the script exits 1 on any ERROR,

@@ -68,5 +68,5 @@ so no re-review.
 | B (medium): the security read after 4821fc8 pending | **done**: above |
 | C (medium): PROGRESS stated that read as done | **fixed** |
 | D (low): attribution, the probe called measured while uncommitted, no pin on `/api/chat`, a stale docstring | **fixed** |
-| E (low): m20's verdict | **fixed**: on assertion |
+| E (low): m20's verdict | **fixed**: its named test is reported failed (the second re-read's L-b: "on assertion" means that) |
 | F (low): two runs in prose only | **fixed**: v2's raw output and the recorded run's raw output are in the log |

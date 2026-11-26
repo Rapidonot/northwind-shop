@@ -169,8 +169,11 @@ a fragment, `allowed_tools` returning no case tool, and that shopper agents exis
 before this row, because no shopper agent had a case tool. The 4 that fail are the ones that need "case" in the
 fragments.
 
-m20 failed on its assertion (it is in Vitest's JSON report as failed), not only on the unhandled render error that v1
-logged.
+m20's named test is reported failed in Vitest's JSON report. So it was caught by that test's own failure, not only by
+the render error that v1 logged. The script reads the test's status, not its `failureMessages`, so "failed on
+assertion" in its output means "the named test failed". The note "the run also had an unhandled error or failed
+suite" comes from `numFailedTestSuites`, which a file with any failed test raises. For m18 to m20 it most likely
+reflects the named failure itself (the second re-read, L-b).
 
 ## The m01 re-run (finding F)
 v1's m01 re-run was by hand after the test edit, not by the script. v2 above re-ran it with the committed script
