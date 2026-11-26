@@ -148,14 +148,13 @@ def test_the_portal_reads_never_name_the_canary_or_its_product(url: str) -> None
                 out.append(json.dumps(result.model_dump(mode="json", by_alias=True)))
         return out
 
-    listed = 0
     for region in REGIONS:
         raws = asyncio.run(go(region))
+        # A positive control per region: the unfiltered browse really lists products here.
+        assert raws[0].count("product_id") > 0, region
         for (name, args), raw in zip(calls, raws, strict=True):
             for needle in FORBIDDEN:
                 assert needle not in raw, (region, name, args)
-        listed += raws[0].count("product_id")
-    assert listed  # a positive control: the unfiltered browse really lists products
 
 
 def test_the_live_filter_never_names_the_canary_or_its_product(url: str) -> None:
