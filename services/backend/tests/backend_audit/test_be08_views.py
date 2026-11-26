@@ -198,6 +198,14 @@ def test_the_placement_sets_are_exactly_these() -> None:
     assert ORDERS_PLACE == {"get", "use_address_on_file", "confirm", "escalate", "claim_payment"}
 
 
+def test_the_inventory_placement_set_is_exactly_these() -> None:
+    """Row #25 (BE-04): placement holds, commits and releases stock, by code; no `available` read
+    and no other write."""
+    from northwind_backend.views import INVENTORY_PLACE
+
+    assert INVENTORY_PLACE == {"reserve", "commit", "release"}
+
+
 def test_the_read_only_sets_are_reads() -> None:
     assert PAYMENT_READ_ONLY == {"status"}
     assert FRAUD_READ_ONLY == {"read"}
@@ -388,11 +396,13 @@ def test_every_view_built_under_src_uses_a_read_only_constant() -> None:
         "AuditedOrderStore",
         # Row #26 (stop 5, approved by the user 2026-11-24): the case queue's view is checked too.
         "AuditedCaseQueue",
+        # Row #25 (BE-04; stop 5, awaiting the user's approval): the inventory view is checked too.
+        "AuditedInventoryPort",
     }
     # Advisor finding 8: CATALOG_READ is admitted in the placement module only, as approved.
     read_only = {"PAYMENT_READ_ONLY", "FRAUD_READ_ONLY", "CARRIER_READ_ONLY"}
     # Row #21 (stop 5, approved): the placement sets, in the placement module only.
-    placement = {"PAYMENT_PLACE", "FRAUD_PLACE", "CATALOG_READ", "ORDERS_PLACE"}
+    placement = {"PAYMENT_PLACE", "FRAUD_PLACE", "CATALOG_READ", "ORDERS_PLACE", "INVENTORY_PLACE"}
     # Row #26 (stop 5, approved): the Care agent's sets, in the Care module only. No catalog read.
     care = {"CARE_READ", "CASE_CREATE"}
     built = 0
