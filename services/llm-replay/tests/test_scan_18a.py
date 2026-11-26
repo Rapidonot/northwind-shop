@@ -411,3 +411,26 @@ def test_a_card_glued_to_a_long_token_is_found_across_requests(tmp_path: Path) -
 def test_an_x_api_key_escaped_three_times_is_found() -> None:
     bs = "\\" * 7
     assert kinds(scan_text(f'{{{bs}"x-api-key{bs}": {bs}"abcd1234{bs}"}}')) == {"x-api-key-header"}
+
+
+# ---- second re-review R5 (the user's D5 (b)): key shapes counted per occurrence ----------------
+
+
+def test_a_key_split_between_requests_beside_a_cut_key_shape_on_the_same_line_is_found(
+    tmp_path: Path,
+) -> None:
+    """R5: the carry starts with a key shape its cut made ("Xsk-AAAA…" cut to "sk-AAAA…"), on the
+    one line where the split key lands. Counted per line, the join held one and so did the parts."""
+    tail = (
+        "sk-"
+        + "A" * 22
+        + " "
+        + "b" * (PAD_FOR - 3 - 22 - 1 - len(" sk-abcdefghij"))
+        + " sk-abcdefghij"
+    )
+    assert len(tail) == PAD_FOR
+    first = cassette(text_stream("note X" + tail), seq=0)
+    second = cassette(text_stream("klmnopqrstuvwxyz0123 ok"), seq=1)
+    assert scan_cassettes(tmp_path / "alone", first) == []
+    found = {(Path(f.path).stem, f.kind) for f in scan_cassettes(tmp_path / "both", first, second)}
+    assert ("c1", "rebuilt-across-requests-generic-sk-key") in found

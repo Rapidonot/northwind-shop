@@ -314,11 +314,14 @@ def scan_cassette(
         # What the carry and this call's start hold alone was reported, or the carry's cut made it:
         # only what the join adds, by count (re-review N3: a cut can make a finding of its own, and
         # a count takes off that one alone, where a kind took off every finding of its kind).
+        # Second re-review R5 (the user's D5 (b)): key shapes and canaries are counted each time
+        # they appear, not once per line, so a cut key shape on the seam's line cannot cancel the
+        # split key that closes there.
         head = "".join(blocks)[:CARRY]
-        alone = Counter(
-            f.kind for text in (carry, head) for f in scan_text(text, path, secret, canaries)
+        alone = _occurrences(carry, path, secret, canaries) + _occurrences(
+            head, path, secret, canaries
         )
-        together = Counter(f.kind for f in scan_text(carry + head, path, secret, canaries))
+        together = _occurrences(carry + head, path, secret, canaries)
         findings += [
             Finding(
                 path, 0, kind if kind == "api-key-fragment" else f"rebuilt-across-requests-{kind}"
@@ -327,6 +330,24 @@ def scan_cassette(
             if more > 0
         ]
     return findings
+
+
+_PER_LINE_KINDS = frozenset({kind for kind, _ in _KEY_PATTERNS} | {"internal-canary"})
+
+
+def _occurrences(
+    text: str, path: str, secret: str | None, canaries: frozenset[str]
+) -> Counter[str]:
+    """`scan_text`'s findings by kind, with key shapes and canaries counted per occurrence: card
+    numbers already are, and a key fragment cannot be made by a cut."""
+    counts = Counter(
+        f.kind for f in scan_text(text, path, secret, canaries) if f.kind not in _PER_LINE_KINDS
+    )
+    for line in text.splitlines() or [text]:
+        for kind, pattern in _KEY_PATTERNS:
+            counts[kind] += len(pattern.findall(line))
+        counts["internal-canary"] += sum(line.count(canary) for canary in canaries)
+    return +counts
 
 
 # A secret split between two requests lies within this many characters of the cut on each side:
