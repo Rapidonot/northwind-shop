@@ -13,7 +13,11 @@ A message matches when one of its clauses (split on sentence punctuation and "bu
    through at most four filler words, by a word for a person ("a person", "a real human",
    "someone from support", "customer service"); `someone`, `support`, `staff` and `people` count
    after a talk-to verb only ("I need support for my knees" is not a request); or
-3. has a word for a person followed by "take over" or "join this chat".
+3. has a word for a person followed by "take over" or "join this chat"; or
+4. is only "connect me" (or "transfer me", "put me through"), and another clause names a person
+   ("Is there a human I can chat with? If so, please connect me.").
+Words are read after a small spelling map ("persn", "wanna", "u"); a talk verb used as a noun
+("this chat with a real human?") is not a request.
 A clause does not match when, before its verb, it is negated ("don't", "no need"), hypothetical
 ("if", "would I have to", "do I need to"), a how-to question ("how do I") or reported speech ("my
 friend said"); or when the person word is about a product ("two-person tent", "travel agent",
@@ -30,6 +34,34 @@ MAX_FILLERS = 4
 _APOSTROPHES = str.maketrans({"’": "'", "‘": "'", "`": "'", "´": "'"})
 _CLAUSE = re.compile(r"[.;!?,:()\n]+|\bbut\b|\s-\s")
 _TOKEN = re.compile(r"[a-z0-9']+")
+# Fix round 1 (in-sample, the user's change 2): shorthand and misspellings of the words below.
+_SPELLINGS = {
+    "u": "you",
+    "ur": "your",
+    "wanna": "want to",
+    "persn": "person",
+    "peson": "person",
+    "preson": "person",
+    "humen": "human",
+    "humn": "human",
+    "hooman": "human",
+    "suport": "support",
+    "supprt": "support",
+    "conect": "connect",
+    "connet": "connect",
+    "agnet": "agent",
+    "representive": "representative",
+    "speek": "speak",
+    "tlk": "talk",
+}
+# A talk verb used as a noun ("this chat with a real human?") is not a request.
+_NOUN_DETERMINERS = frozenset({"this", "the", "our", "my", "a"})
+# A verb that asks to be handed over on its own, when another clause names a person.
+_BARE_HANDOVER: tuple[tuple[str, ...], ...] = (
+    ("connect", "me"),
+    ("transfer", "me"),
+    ("put", "me", "through"),
+)
 
 # A word for a person, as token sequences. `WEAK` ones count only after a talk-to verb.
 _STRONG: tuple[tuple[str, ...], ...] = (
@@ -74,7 +106,10 @@ _TALK_VERBS: tuple[tuple[str, ...], ...] = (
     ("chat", "to"),
     ("connect", "me"),
     ("transfer", "me"),
+    ("transfer", "to"),
+    ("transferred", "to"),
     ("put", "me", "through"),
+    ("put", "me", "in", "touch", "with"),
     ("hand", "me", "over"),
     ("pass", "me"),
     ("escalate",),
@@ -255,8 +290,12 @@ def _normal(message: str) -> str:
     return text.replace("-", " ")
 
 
+def _tokens(part: str) -> list[str]:
+    return [w for t in _TOKEN.findall(part) for w in _SPELLINGS.get(t, t).split()]
+
+
 def _clauses(message: str) -> list[list[str]]:
-    return [tokens for part in _CLAUSE.split(_normal(message)) if (tokens := _TOKEN.findall(part))]
+    return [tokens for part in _CLAUSE.split(_normal(message)) if (tokens := _tokens(part))]
 
 
 def _at(tokens: list[str], i: int, seq: tuple[str, ...]) -> bool:
@@ -312,9 +351,28 @@ def _noun_after(tokens: list[str], start: int, nouns: tuple[tuple[str, ...], ...
     return False
 
 
+def _noun_use(tokens: list[str], start: int) -> bool:
+    return start > 0 and tokens[start - 1] in _NOUN_DETERMINERS
+
+
+def _bare_handover(tokens: list[str]) -> bool:
+    """ "connect me" (or "transfer me", "put me through") with nothing after it but fillers."""
+    for start, end in _find(tokens, _BARE_HANDOVER):
+        rest = tokens[end:]
+        if not _blocked(tokens, start) and all(t in _TERSE_FILLERS for t in rest):
+            return True
+    return False
+
+
+def _names_person(tokens: list[str]) -> bool:
+    return any(not _product_use(tokens, s, e) for s, e in _find(tokens, _STRONG + _WEAK))
+
+
 def _requests(tokens: list[str]) -> bool:
     for start, end in _find(tokens, _TALK_VERBS):
-        if not _blocked(tokens, start) and _noun_after(tokens, end, _STRONG + _WEAK):
+        if _noun_use(tokens, start) or _blocked(tokens, start):
+            continue
+        if _noun_after(tokens, end, _STRONG + _WEAK):
             return True
     for start, end in _find(tokens, _WANT_VERBS):
         if not _blocked(tokens, start) and _noun_after(tokens, end, _STRONG):
@@ -330,7 +388,10 @@ def _requests(tokens: list[str]) -> bool:
 
 def asks_for_person(message: str) -> bool:
     """True when the message explicitly asks for a person now (see the module docstring)."""
-    return any(_terse(tokens) or _requests(tokens) for tokens in _clauses(message))
+    clauses = _clauses(message)
+    if any(_terse(tokens) or _requests(tokens) for tokens in clauses):
+        return True
+    return any(_bare_handover(t) for t in clauses) and any(_names_person(t) for t in clauses)
 
 
 __all__ = ["asks_for_person"]
