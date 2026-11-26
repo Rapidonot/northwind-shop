@@ -214,3 +214,18 @@ After `_AS_CONDITION` (a negative lookahead on "arrived" only; plain "arrived" s
   (in_transit#1, label_created_no_scans#1, on_hold#1), replaced by this window's recording
 Mutants: lookahead removed -> 5 failed; "arrived" removed from the list -> 4 failed (the guards). Both killed.
 Likely return wordings at $0 (docs/reviews/2026-11-25-27b-likely-wordings.py.txt): failing 0 of 28 (was 1 of 28).
+
+== 2026-11-26: the window, two rounds (assistant-orders) ==
+Round 1 at 54a866b: 28 calls, $0.085881, 11 of 11 scenarios. Shown text read: return_damaged#2 wrote a reasoning line before
+request_return, shown to the shopper. New check test_no_text_is_written_before_a_tool_call: red on return_damaged#2 only (of 16).
+The journey harness now drops text at a Reset (return_false_policy's answer had been read twice).
+Fix round at 0290964 (one ORDERS_RULES line): 28 calls, $0.086437, 11 of 11 scenarios; red: return_damaged#2 (still a pre-tool
+line) and test_every_stated_status_is_the_orders_own[on_hold#1] ("it hasn't shipped"). Stop 9.
+
+== 2026-11-26: the user's decisions after the window ==
+1. return_damaged#2: strict xfail with its reason (option B); the check stays.
+2. M-1 matcher: a negated "shipped"/"dispatched" is true only with no picked_up-or-later scan (option A).
+   Before the change: -k matcher: 4 failed (the 4 new right answers), 51 passed (6 new guards pass).
+   After: test_chk07_recorded_status.py: 141 passed, 1 xfailed (strict).
+   Mutants: carrier test removed -> 4 failed; negation not needed -> 2 failed; picked_up dropped -> 1 failed;
+   branch off -> 4 failed. All killed. Likely return wordings at $0: failing 0 of 28.

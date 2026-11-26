@@ -7,8 +7,10 @@ turn. It reads the cassettes, so it costs nothing and needs no model. The matche
 the words above where that is cheap: "its" and "it" carry the last order named, and a dated scan
 line must be a scan of an order the answer names. "Arrived" followed at once by a condition
 ("arrived damaged", "arrived with a tear") states the item's condition and is not read as a status
-(the user, 2026-11-26); plain "arrived" still is, and is never true. It knows the words listed
-here; a status in other words is not seen. The matcher is tested on wrong answers first.
+(the user, 2026-11-26); plain "arrived" still is, and is never true. "Shipped" and "dispatched" are
+true only negated, of an order with no carrier scan yet (the user, 2026-11-26). It knows the
+words listed here; a status in other words is not seen. The matcher is tested on wrong answers
+first.
 """
 
 from __future__ import annotations
@@ -38,6 +40,7 @@ _AS_CONDITION = (
     r"(?!\s+(?:damaged|broken|faulty|torn|defective|ripped|cracked|stained|scratched|dented|"
     r"with (?:a |some )?(?:defect|damage|tear|hole|stain|fault)s?))"
 )
+SHIPPED = "shipped"  # no status the tool returns: never affirmed, negated only as below
 # What an answer may call each status. `None`: no status the tool returns, so never true.
 WORDS: tuple[tuple[str, str | None], ...] = (
     (r"out for delivery", "out_for_delivery"),
@@ -50,9 +53,11 @@ WORDS: tuple[tuple[str, str | None], ...] = (
     (r"not yet with the carrier", "confirmed"),
     (r"confirmed", "confirmed"),
     (r"placed", "placed"),
-    (rf"(?:shipped|dispatched|delayed|cancell?ed|lost|arrived{_AS_CONDITION}|packed|on its way|"
-     r"on the way)", None),
+    (r"(?:shipped|dispatched)", SHIPPED),
+    (rf"(?:delayed|cancell?ed|lost|arrived{_AS_CONDITION}|packed|on its way|on the way)", None),
 )  # fmt: skip
+# A negated "shipped" is true only before the carrier's first scan (the user, 2026-11-26).
+WITH_THE_CARRIER = frozenset({"picked_up", "in_transit", "out_for_delivery", "delivered"})
 _CODE = re.compile(r"\b[a-z]+(?:_[a-z]+)+\b")
 _ORDER = re.compile(r"\bO\d{6}\b")
 _DATE = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
@@ -116,6 +121,8 @@ def _claim_ok(result: Mapping[str, Any], code: str | None, before: str, after: s
         return True  # states nothing yet
     if code is None or _FUTURE.search(before):
         return False
+    if code == SHIPPED:
+        return bool(_NEGATED.search(before)) and not _ever(result) & WITH_THE_CARRIER
     if _NEGATED.search(before):
         return code not in _ever(result)
     dated = re.match(r"\W{0,3}(?:on\W{1,3})?(\d{4}-\d{2}-\d{2})", after)
@@ -187,6 +194,11 @@ RIGHT = [
     "O000800: the jacket arrived faulty.",
     "Order O000800's scarf arrived torn and a person will review the return.",
     "O000800's item arrived defective.",
+    # Not shipped, true of an order with no carrier scan yet (the user, 2026-11-26).
+    "O000418 has no tracking scans yet, because it hasn't shipped.",
+    "Order O000418 has not shipped.",
+    "O000406 hasn't been dispatched yet.",
+    "Order O000517 has not been shipped yet.",
 ]
 WRONG = [
     "Order O000418 has been confirmed.",  # M-1: it is on hold
@@ -219,6 +231,13 @@ WRONG = [
     "O000800 arrived on 2026-10-26.",
     "O000928 arrived, but the jacket was damaged.",
     "O000928 arrived and is damaged.",
+    # "Shipped" stays never true, and a negated one is false once the carrier has it.
+    "O000418 has shipped.",
+    "O000418 was dispatched.",
+    "O000800 hasn't shipped.",
+    "O000267 has not been dispatched.",
+    "O000898 hasn't shipped yet.",
+    "O000418 will not be shipped.",
 ]
 
 
@@ -315,16 +334,37 @@ def test_every_stated_status_is_the_orders_own(name: str, answer: str) -> None:
     assert problems(answer) == []
 
 
-BEFORE_A_TOOL_CALL = _before_a_tool_call()
+# The user, 2026-11-26 (option B): prompt-held, not dropped by the turn. A message's text streams
+# before its tool_use block starts, so `turn.py` could drop it only by holding every message's text
+# until it ends, at a cost to the first token on a protected path. Each entry is a known line,
+# strict.
+PRE_TOOL_NARRATION = {
+    "return_damaged#2": (
+        "pre-tool narration, true at that point (the eligibility result was already returned): "
+        '"Needs review, so I\'ll record the request." 2 of about 600 recordings '
+        "(with assistant-cart); prompt-held"
+    ),
+}
+BEFORE_A_TOOL_CALL = [
+    pytest.param(
+        name,
+        text,
+        id=name,
+        marks=[pytest.mark.xfail(strict=True, reason=PRE_TOOL_NARRATION[name])]
+        if name in PRE_TOOL_NARRATION
+        else [],
+    )
+    for name, text in _before_a_tool_call()
+]
 
 
 def test_the_messages_that_call_a_tool_are_read() -> None:
+    names = {p.values[0] for p in BEFORE_A_TOOL_CALL}
+    assert set(PRE_TOOL_NARRATION) <= names, "a known line is no longer recorded: drop its entry"
     assert len(BEFORE_A_TOOL_CALL) >= 11  # get_order in ten scenarios, and more in the returns
 
 
-@pytest.mark.parametrize(
-    ("name", "text"), BEFORE_A_TOOL_CALL, ids=[n for n, _ in BEFORE_A_TOOL_CALL]
-)
+@pytest.mark.parametrize(("name", "text"), BEFORE_A_TOOL_CALL)
 def test_no_text_is_written_before_a_tool_call(name: str, text: str) -> None:
     """The shopper sees every word a turn writes, so a message that calls a tool writes none
     (row #27 PR 2's window: a reasoning line about "the shopper" reached the portal)."""
