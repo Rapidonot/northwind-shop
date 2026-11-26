@@ -1,6 +1,6 @@
 # Row #18 step 0: failing-first log (branch req/18-record-all from bcc135b; 2026-11-26)
 # Each mutant was applied to the working tree, its tests run as one file, and the file restored (cmp against the pre-mutant copy).
-# Entries after the security review (M-m1, M-a2, the M-a1 rerun) and after the re-review (M-n1, M-n3) are against the fixed tests.
+# Entries after the security review (M-m1, M-a2, the M-a1 rerun), the re-review (M-n1, M-n3) and the advisor review (M-r1, M-r1b, M-l4, M-l5a, M-l5b, M-t1, M-l6, the CPU-hog run, the base hash) are against the fixed tests.
 == (a) mutant M-a1: _back always returns 0 (look back to the start)
  services/assistant/src/northwind_assistant/output_check.py | 2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)
@@ -91,3 +91,47 @@ restored
 FAILED services/mcp-catalog/tests/test_18_step0_stock.py::test_get_cart_reads_holds_once_for_every_line
 1 failed, 22 passed in 1.50s
 restored
+== advisor F1: router mutant M-r1, a C-speed quadratic pass (str.find over each prefix, stride 8) after normalising
+6 passed, 189 deselected in 6.87s   <- SURVIVED: its quadratic part (~n^2/16 bytes at memchr speed) is below the linear cost at 50K, the ratio test's known limit (advisor F1, re-review L3)
+restored
+== (a run with no hog: sysctl was refused in the sandbox, so 0 busy-loop processes started; discarded, rerun below)
+== advisor F1: router mutant M-r1b, the same pass at stride 1 (~n^2/2 bytes)
+FAILED services/rag/tests/test_rag07_tw.py::test_huge_input_is_fast[x]
+FAILED services/rag/tests/test_rag07_tw.py::test_huge_input_is_fast[SYSTEM:]
+FAILED services/rag/tests/test_rag07_tw.py::test_huge_input_is_fast[<!--]
+3 failed, 3 passed, 189 deselected in 14.66s
+restored
+== advisor F1: the three tests under real CPU contention: 10 busy-loop processes (one per CPU) started by this command, stopped after
+hog pids: 10
+6 passed, 189 deselected in 7.86s
+2 passed, 155 deselected in 6.51s
+hog stopped
+== advisor F4: M-l4, a psycopg import added to the backend import chain (inventory/model.py)
+FAILED services/mcp-catalog/tests/test_18_step0_stock.py::test_the_catalog_servers_import_closure_has_no_model_code
+1 failed, 22 deselected in 0.93s
+restored
+== advisor F4: M-l5a, exit 3 for absent tables put back to 0
+1
+FAILED services/backend/tests/inventory/test_18_live_holds_guard_tw.py::test_main_exits_3_not_0_when_the_tables_do_not_exist
+FAILED services/backend/tests/inventory/test_18_live_holds_guard_tw.py::test_main_against_the_real_database_reads_live_holds
+2 failed, 16 passed in 0.64s
+restored
+== advisor F4: M-l5b, only OperationalError caught
+FAILED services/backend/tests/inventory/test_18_live_holds_guard_tw.py::test_main_exits_2_on_a_malformed_url_and_prints_none_of_it
+FAILED services/backend/tests/inventory/test_18_live_holds_guard_tw.py::test_main_exits_2_on_any_database_error
+2 failed, 16 passed in 0.71s
+restored
+== advisor F4: M-t1, one character changed in add_to_cart's description
+FAILED services/mcp-catalog/tests/test_18_step0_stock.py::test_the_tool_list_is_unchanged
+1 failed, 22 deselected in 0.36s
+restored
+== advisor F4: M-l6, the report run without -P
+FAILED tests/reports/test_hedge_report.py::test_a_module_beside_the_script_is_never_imported
+1 failed, 2 passed in 3.93s
+restored
+== advisor 'unconfirmed': the tool-list sha256 recomputed at bcc135b in a clean export (git archive), not the working tree
+$TMPDIR/base/services/mcp-catalog/src/northwind_mcp_catalog/tools.py
+fc86e9e8ab4944583a460d96de5d091fde2728dba3c282fa75ac90b3a8a87756
+== the guard on the northwind DB (read only), 2026-11-26T19:34:45Z:
+live holds: none possible, BE-04's tables do not exist in database 'northwind'
+exit 3

@@ -26,10 +26,14 @@ REPORT = REPO / "docs" / "reviews" / "2026-11-25-30-w6-hedge-report.py.txt"
 TOTAL = re.compile(r"^answer calls (\d+), excused sentences (\d+)$")
 
 
+def command(script: Path, *args: str) -> list[str]:
+    # -P: the script's folder (docs/reviews/) is not put on sys.path (security review L6).
+    return [sys.executable, "-P", str(script), *args]
+
+
 def run(*args: str) -> tuple[list[str], tuple[int, int]]:
     done = subprocess.run(  # noqa: S603 - this interpreter, a committed script
-        # -P: the script's folder (docs/reviews/) is not put on sys.path (security review L6).
-        [sys.executable, "-P", str(REPORT), *args],
+        command(REPORT, *args),
         cwd=REPO,
         capture_output=True,
         text=True,
@@ -57,3 +61,14 @@ def test_the_report_reads_the_committed_cassettes() -> None:
     rows, (calls, excused) = run()
     assert calls > 0
     assert excused == len(rows)
+
+
+def test_a_module_beside_the_script_is_never_imported(tmp_path: Path) -> None:
+    """Security review L6: a `json.py` planted in the script's folder must not run."""
+    script = tmp_path / "report.py.txt"
+    script.write_text("import json\nprint('ok', json.dumps(1))\n", encoding="utf-8")
+    (tmp_path / "json.py").write_text("raise SystemExit(99)\n", encoding="utf-8")
+    done = subprocess.run(  # noqa: S603 - this interpreter, a script this test wrote
+        command(script), cwd=REPO, capture_output=True, text=True, timeout=60, check=False
+    )
+    assert (done.returncode, done.stdout.strip()) == (0, "ok 1"), done.stderr[-500:]

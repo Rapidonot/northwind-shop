@@ -1,6 +1,6 @@
 # RECORD-ALL (#18): runbook draft
 
-Status: a **draft** for the user, written 2026-11-26 from the repository read-only. It is uncommitted until the user
+Status: a **draft** for the user, written 2026-11-26 from the repository read-only; revised the same day with the user's settled points (the hold guard, the freeze's catalog files; row #18 step 0, advisor F7). It is uncommitted until the user
 approves it. Nothing here has run. Row #18 is planned for about Dec 13–16 (the user's decision, 2026-11-22). The
 credit runs out around 2026-12-22 (decision 0013).
 
@@ -39,6 +39,7 @@ Figures:
 | Model IDs | `ASSISTANT_MODEL`, `ROUTINE_MODEL` and `JUDGE_MODEL` in `services/common/src/northwind_common/llm.py`: `claude-sonnet-5-5`, `claude-haiku-5-5`, `claude-sonnet-5-5`; no environment override set in any window | printed at the start of each window |
 | Care prompts | `SYSTEM_PROMPT` and `SYSTEM_PROMPT_NO_ORDER` in `agents/care.py` | SA-06's sha256 pin (`services/backend/tests/care/test_sa06_care_no_order.py`) |
 | Query understanding | `services/assistant/src/northwind_assistant/understand.py` | sha256 |
+| Catalog stock and alternatives (row #18 step 0) | `services/mcp-catalog/src/northwind_mcp_catalog/{cart,tools,holds,server,live}.py`; `services/backend/src/northwind_backend/inventory/substitutes.py` | sha256 of each file at the freeze commit |
 
 **Record per window:**
 - the freeze commit and `answerer_id`;
@@ -46,6 +47,19 @@ Figures:
 - the runner's HEAD, equal to `origin/main`.
 
 ## 2. The guarded window command (template; the user runs it in their own terminal)
+
+**Before every window, the session runs the hold guard** (the user's decision, 2026-11-26) and tells the
+user its output line:
+`uv run --no-sync python -m northwind_backend.inventory.live_holds`.
+- Exit 0 means none live; the window may open.
+- Exit 1 means some hold is live; stop, and the window does not open.
+- Exit 2 means not checked; stop.
+- Exit 3 means BE-04's tables do not exist in the named database. While mcp-catalog has no holds
+  reader (`NoHolds`), that reads as 0 live holds, if the user agrees. Once a reader is wired, 3 blocks
+  the window (Open items, "From #18 step 0, re-review N2").
+
+The session also tells the user before each window, because window B's `make check` or `make ci` must
+not overlap one.
 
 ```
 B=req/18-record-all; H=<the head the session names>; S=<suite>; USD=<budget>; MIN=<minutes>
@@ -101,6 +115,7 @@ cents. The full eval comes last, on the frozen prompt and check.
 3. **Scan:** `make scan-cassettes`, clean. The user runs the key-fragment check from the runner clone:
    `make -C ~/.northwind/runner scan-cassettes CASSETTES_DIR=$HOME/Projects/northwind-shop/cassettes`.
 4. **The freeze diff**, which must be empty, and `make llm-spend` before and after.
+4a. **The hold guard's output line and exit code**, from before the window opened (§2).
 5. **One record file per window** in `docs/reviews/`, in #30's form (`docs/reviews/2026-11-25-30-windows-2-5.md`):
    spend, recorded/hit/refusal counts, cassettes added and removed, replay result, first-byte p50 and p95.
 

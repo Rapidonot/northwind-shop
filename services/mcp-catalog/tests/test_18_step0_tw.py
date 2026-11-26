@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from collections.abc import Iterator, Mapping
+from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -497,7 +497,3 @@ def test_a_caller_who_cannot_see_the_refused_product_gets_no_alternatives() -> N
     internal = server.catalog.variant("P0009-BLK-REG-L")
     assert internal is not None
     assert cart.alternatives(server, claims(), REGION, internal, 1) == []
-
-
-def _unused() -> Iterator[None]:  # keep Iterator import honest for type checkers
-    yield

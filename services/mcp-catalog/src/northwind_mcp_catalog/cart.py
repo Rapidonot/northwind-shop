@@ -23,7 +23,7 @@ ranked same product other colour, other product same size, same product other si
 product, and at most `MAX_ALTERNATIVES`. Prices come from this server's live store, and stock is
 this server's region total, less live holds (`holds.py`), covering the quantity asked. BE-04's
 checkout reserves from one node, so an alternative whose units are split across nodes can be offered
-here and still be short at checkout (step 0's security review L1, an open item owned by row #21).
+here and still be short at checkout (step 0's security review L1, a scope question put to the user).
 The model never chooses or invents one.
 
 **Visibility (hard rule 7).** An unknown or internal variant gets exactly `get_variant`'s

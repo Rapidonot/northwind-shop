@@ -182,20 +182,25 @@ def test_blank_or_control_only_is_every_index(message: str) -> None:
     "unit", ["x", "reviewers say ", "can I return ", "ignore ", "SYSTEM:", "<!--"]
 )
 def test_huge_input_is_fast(unit: str) -> None:
-    """Routing scales linearly: 4x the text may cost at most 6x the CPU time (linear 4x, any
-    quadratic pass about 16x, at Python or C speed alike), with 200,000 characters under 30 s of
-    CPU as a backstop (0.84 s today for the slowest unit). CPU time is what this process spent,
-    which another process's load does not add to (row #18, step 0 (a); its security review L3)."""
-    spent: list[float] = []
-    for size in (50_000, 200_000):
-        started = time.process_time()
-        found = route_indexes(unit * (size // len(unit)))
-        spent.append(time.process_time() - started)
-        assert found
-        assert found <= ALL_INDEXES
-    quick, slow = spent
-    assert slow <= 6 * max(quick, 0.02), spent
-    assert slow < 30.0, spent
+    """Routing scales linearly, as the approved plan put it (row #18, step 0 (a)): the median of 3
+    CPU-time readings at 50,000 and at 200,000 characters, ratio under 8 (linear about 4, any
+    quadratic pass about 16), with 200,000 characters under 60 s of CPU as a backstop (0.84 s
+    today for the slowest unit). CPU time is what this process spent, which another process's
+    load does not add to."""
+
+    def median_cpu(size: int) -> float:
+        readings = []
+        for _ in range(3):
+            started = time.process_time()
+            found = route_indexes(unit * (size // len(unit)))
+            readings.append(time.process_time() - started)
+            assert found
+            assert found <= ALL_INDEXES
+        return sorted(readings)[1]
+
+    quick, slow = median_cpu(50_000), median_cpu(200_000)
+    assert slow < 8 * max(quick, 0.02), (quick, slow)
+    assert slow < 60.0, slow
 
 
 @pytest.mark.req("RAG-07")
