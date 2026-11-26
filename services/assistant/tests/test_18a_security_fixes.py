@@ -18,6 +18,11 @@ from northwind_assistant.output_check import (
 
 pytestmark = pytest.mark.req("RAG-09")
 
+# The user's D5 (a), 2026-11-26: no clause restart, so a negation anywhere earlier in the sentence
+# leaves the claim unvouched. These expectations no longer hold; what replaces them is pinned in
+# test_18a_d5_pins.py.
+D5 = pytest.mark.xfail(strict=True, reason="D5 (a): now replaced; see test_18a_d5_pins.py")
+
 STOCK = FIXED_SENTENCES["stock"]
 
 
@@ -57,6 +62,7 @@ def test_a_negation_before_a_dashed_aside_is_not_vouched_by_units(text: str) -> 
     assert STOCK in word_by_word(text, stock(a=5))
 
 
+@D5
 @pytest.mark.parametrize(
     "text",
     [
@@ -106,6 +112,7 @@ def test_a_negated_time_word_between_commas_keeps_the_negation(text: str) -> Non
     assert hits(text, live=stock(a=5)) == {"stock": 1}
 
 
+@D5
 def test_a_negated_attitude_adverb_is_still_left_out() -> None:
     text = "It is, not surprisingly, available in three colours."  # row #30's pin
     assert check_text(text) == text
@@ -200,6 +207,7 @@ def test_a_closing_dash_whose_opening_dash_is_out_of_reach_does_not_restart() ->
     assert hits(text, live=stock(a=5)) == {"stock": 1}
 
 
+@D5
 @pytest.mark.parametrize(
     "text",
     [

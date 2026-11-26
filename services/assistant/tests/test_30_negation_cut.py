@@ -17,6 +17,11 @@ from northwind_assistant.output_check import (
 
 pytestmark = pytest.mark.req("RAG-09")
 
+# The user's D5 (a), 2026-11-26: no clause restart, so a negation anywhere earlier in the sentence
+# leaves the claim unvouched. These expectations no longer hold; what replaces them is pinned in
+# test_18a_d5_pins.py.
+D5 = pytest.mark.xfail(strict=True, reason="D5 (a): now replaced; see test_18a_d5_pins.py")
+
 STOCK = FIXED_SENTENCES["stock"]
 NEGATED = [
     "The towel is not in stock.",
@@ -83,6 +88,7 @@ def test_a_negated_range_is_a_stock_claim_across_commas_too(text: str) -> None:
     assert hits(text, live=stock(5)) == {"stock": 1}
 
 
+@D5
 def test_a_negation_in_an_earlier_clause_does_not_govern() -> None:
     text = "It is not waterproof, not packable, and it is in stock."
     assert hits(text, live=stock(5)) == {}

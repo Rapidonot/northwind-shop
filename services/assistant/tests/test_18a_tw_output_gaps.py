@@ -165,13 +165,11 @@ def test_none_of_them_are_left_is_a_stock_claim() -> None:
     assert hits("None of them are left.", live=stock(a=0)) == {}
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="18a tw: 'None left on the reviews page.' is blocked by row #30's M-4 pattern (the "
-    "user's); the plan named it a near-miss that stays shown. Decision D4",
-)
-def test_none_left_on_the_reviews_stays_shown() -> None:
-    assert hits("None left on the reviews page.") == {}
+def test_none_left_on_the_reviews_stays_blocked() -> None:
+    """The user's D4, 2026-11-26: blocked by row #30's M-4 pattern (`none left`, the user's approval
+    of 2026-11-25), and kept so. The plan named it a near-miss that stays shown; that was wrong.
+    It costs a sentence; showing it would loosen M-4."""
+    assert hits("None left on the reviews page.") == {"stock": 1}
 
 
 # ---- part 0: a widening only ---------------------------------------------------------------------

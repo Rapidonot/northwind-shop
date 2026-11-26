@@ -881,34 +881,20 @@ def _negated(view: str, start: int) -> bool | None:
 # one newline does not end it ("is not" newline "in stock").
 # Read on the case-kept text (re-review N5): a full stop before a lower-case word or a digit ("the
 # U.S. stores", "No. 5 towels") ends no sentence.
-_SENTENCE_END = re.compile(r"\.(?=\s+(?![a-z0-9])|\s*$)|[!?](?=\s)|\n[^\S\n]*\n")
+_SENTENCE_END = re.compile(
+    r"\.(?=\s+[^\sa-z0-9]|\s*$)|[!?](?=\s)|\n[^\S\n]*\n"
+)  # D5 (d): "U.S.  stores"
 # Security L1: an abbreviation's full stop does not end the sentence ("None of the towels (e.g. Bath
 # or Hand) is in stock"). "No." is left out: as a reply it does end one.
 _SENTENCE_ABBREVIATION = re.compile(r"\b(?:e\.g|i\.e|etc|approx|vs|incl|cf|esp)\.$", re.IGNORECASE)
 # A reply word that opens the sentence answers the shopper and negates nothing after it: "No, the
 # Charcoal L is out of stock right now" (two recorded `assistant-intents` answers, step 0).
 _REPLY_NO = re.compile(r"\s*[*_]{0,4}(?:no|nope)[*_]{0,4}\s{0,3}(?:,|[-‐‑‒–—―])")
-# A new clause the phrase is in: a semicolon, colon or dash, or a comma and a conjunction or a
-# subject ("…, but the M is available", "Not only is it warm, it is available in three colours").
-# It counts only when no comma, bracket or newline follows it before the phrase, so "is not, and I
-# checked, in stock" stays negated.
-_SUBJECT_WORD = r"(?:it|they|we|i|you|there|this|these|those|he|she)(?=\s|['’])"
-# Re-review N1: a semicolon or colon restarts only before a subject ("Nothing beats it: it is
-# available"), so "None of these sizes: M or L is in stock" stays one clause; an en or figure dash
-# between two letters or digits is a range ("sizes S–M", "UK 8–12"), not a new clause.
-_RESTART = re.compile(
-    rf"[;:]\s{{0,3}}{_SUBJECT_WORD}|\s[-‐‑]\s|[—―]|(?<![^\W_])[‒–]|[‒–](?![^\W_])"
-    r"|,\s{0,3}(?:but|and|so|yet)\s"
-    rf"|,\s{{0,3}}{_SUBJECT_WORD}"
-)
-_RESTART_SPOILED = re.compile(r"[,()\n]|\s[-‐‑]\s|[‒–—―]")
-_DASH = re.compile(r"\s[-‐‑]\s|[‒–—―]")
-# A sentence adverb closed by commas: "It is, not surprisingly, available in three colours."
-# Security L2: an attitude word only; "not yet", "no longer" and the like keep their negation.
-_NEGATED_ADVERB = re.compile(
-    r",\s{0,3}(?:not|no)\s{1,3}(?:surprisingly|unexpectedly|unusually|coincidentally|oddly|"
-    r"strangely|ironically|incidentally|doubt)\s{0,3},"
-)
+# The user's D5 (a), 2026-11-26: no clause restart. Three review rounds found a restart rule that
+# hid a negation each time (M1 dashed asides, N1 range dashes and colons, R1 an Oxford comma, R2
+# "he"), so any negation earlier in the sentence leaves the claim unvouched. True sentences such as
+# "There is no size chart, but it is available in sizes M and L" are replaced too (fail closed); 0
+# of 448 recorded answer calls change.
 # View characters looked back for a negation in the sentence. A sentence that starts further back
 # is unread, so its claim is unvouched (test-writer's gap, a negation 160 characters back).
 NEGATION_REACH = 4 * L
@@ -916,30 +902,20 @@ NEGATION_REACH = 4 * L
 
 def negated_in_sentence(before: str, *, whole: bool = True) -> bool:
     """Whether `before`, the text ahead of a stock phrase (case kept, so a sentence's end can be
-    told), holds a negation in the phrase's sentence: from its start, or from a new clause the
-    phrase is in, with a reply word that opens it and a negated sentence adverb left out. With
-    `whole` False, `before` may begin inside the sentence: if neither its start nor a new clause is
-    in it, it counts as negated (fail closed), and no dash restarts, as its pair may be out of view
-    (re-review N1)."""
+    told), holds a negation anywhere in the phrase's sentence, a reply word that opens it left out.
+    With `whole` False, `before` may begin inside the sentence: if its start is not in it, it counts
+    as negated (fail closed)."""
     ends = [
         end
         for end in _SENTENCE_END.finditer(before)
         if not _SENTENCE_ABBREVIATION.search(before[: end.start() + 1])
     ]
-    started = whole or bool(ends)
+    if not (whole or ends):
+        return True
     sentence = (before[ends[-1].end() :] if ends else before).casefold()
-    reply = _REPLY_NO.match(sentence) if started else None
+    reply = _REPLY_NO.match(sentence)
     sentence = sentence[reply.end() :] if reply else sentence
-    for restart in reversed(list(_RESTART.finditer(sentence))):
-        # Security M1: a dash with another before it closes an aside ("None of the towels — Bath
-        # or Hand — is in stock"), and one with another after it opens one: neither restarts.
-        dash = bool(_DASH.fullmatch(restart.group()))
-        if dash and (_DASH.search(sentence, 0, restart.start()) or not started):
-            continue
-        if not _RESTART_SPOILED.search(sentence, restart.end()):
-            sentence, started = sentence[restart.end() :], True
-            break
-    return not started or bool(_NEGATION.search(_NEGATED_ADVERB.sub(",", sentence)))
+    return bool(_NEGATION.search(sentence))
 
 
 # Row 18a, part 4 (the user's decision, 2026-11-26: any listed over-blocking item, failing first,

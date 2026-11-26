@@ -21,6 +21,11 @@ from northwind_assistant.output_check import (
 )
 from northwind_assistant.turn import cited_ids
 
+# The user's D5 (a), 2026-11-26: no clause restart, so a negation anywhere earlier in the sentence
+# leaves the claim unvouched. These expectations no longer hold; what replaces them is pinned in
+# test_18a_d5_pins.py.
+D5 = pytest.mark.xfail(strict=True, reason="D5 (a): now replaced; see test_18a_d5_pins.py")
+
 LINK = FIXED_SENTENCES["link"]
 STOCK = FIXED_SENTENCES["stock"]
 SEEN = {"P0001", "P0011", "R00002", "FAQ-019", "POL-RETURNS-US", "SG-TOWELS", "CG-SHELL"}
@@ -159,19 +164,25 @@ def test_a_negated_range_in_a_list_line_is_replaced() -> None:
 # An ordinary range, with a negation that governs something else, passes.
 
 ORDINARY = [
-    "There is no size chart on the page, but it is available in sizes M and L.",
+    pytest.param(
+        "There is no size chart on the page, but it is available in sizes M and L.", marks=D5
+    ),
     "It isn't waterproof. It is available in three colours.",
-    "It isn't packable; it is available in sizes S to XL.",
-    "Not only is it warm, it is available in three colours.",
-    "It's not heavy - it's available in several colours.",
+    pytest.param("It isn't packable; it is available in sizes S to XL.", marks=D5),
+    pytest.param("Not only is it warm, it is available in three colours.", marks=D5),
+    pytest.param("It's not heavy - it's available in several colours.", marks=D5),
     "It is available in sizes M and L (no returns on sale items).",
     "It is available in sizes M and L.\nNot machine washable.",
-    "Nothing beats it: it is available in all sizes.",
-    "It is not cheap (nor is it dear); it is available in a range of colours.",
+    pytest.param("Nothing beats it: it is available in all sizes.", marks=D5),
+    pytest.param(
+        "It is not cheap (nor is it dear); it is available in a range of colours.", marks=D5
+    ),
     "Do not tumble dry. It is available in a range of colours.",
-    "It is, not surprisingly, available in three colours.",
+    pytest.param("It is, not surprisingly, available in three colours.", marks=D5),
     pytest.param("It is available (not that you asked) in three colours.", marks=PARENTHETICAL),
-    "I can't promise a colour, but I can tell you it is available in three colours.",
+    pytest.param(
+        "I can't promise a colour, but I can tell you it is available in three colours.", marks=D5
+    ),
     "It is available in sizes M and L, and there are no hidden extras.",
     "They are available in three colours and they never fade.",
 ]
