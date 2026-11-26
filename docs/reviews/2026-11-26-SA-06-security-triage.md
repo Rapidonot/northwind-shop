@@ -7,7 +7,7 @@ that is a real bug in the row's files is fixed; a low elsewhere is logged with a
 | Finding | Severity | Outcome | Where |
 |---|---|---|---|
 | M1: unbounded Care runs, temp directories and memory; cross-site trigger; shutdown | medium | **fixed**: open-handoff cap (`DESK_FULL`), Care-run cap (`care_busy`), one runtime per desk, `close()` in the lifespan, `/api/handoff` takes `application/json` only. The same check for `/api/chat` is not this row (the user, 2026-11-26): it is pre-existing and fails decision 0021's real-bug test on localhost in replay, so it goes in the PR body only, not Open items | `70a4307` |
-| M2: matcher quadratic in message length | medium | **fixed**: linear per clause; the same answers on all 111 labelled phrases and on 60,000 fuzzed messages; the worst case drops from 1.2 s to under 10 ms; the timing test failed 3 of 6 on the old code | `cc1bbdf` |
+| M2: matcher quadratic in message length | medium | **fixed**: linear per clause; the same answers on all 111 labelled phrases, the re-review's line-by-line equivalence check, and 60,000 fuzzed messages (a session measurement, not committed); the worst case drops from 1.2 s to under 10 ms; the timing test failed 3 of 6 on the old code | `cc1bbdf` |
 | L1: a refused handoff stays refused on every retry; chat's wording | low | **fixed**: the turns are dropped and the portal shows its own fixed text; the retry sends `[]` | `ccebdb1` |
 | L2: an open handoff never closes, so a later request is merged | low | **logged** (decision 0025, owner #19 or Window B); the repeat is audited | `70a4307` |
 | L3: a dry run of `open_handoff` ignores an open handoff | low | **fixed** | `70a4307` |
@@ -42,3 +42,9 @@ above).
 | N8: phase B must keep `/api/chat` a signal only | **pinned**: a test that `chat.py` never names the desk or the backend |
 | N9: the dry run matched identities, not the key | **fixed**: `IdempotencyStore.replay`, so a dry run predicts a conflict too |
 | N10: the desk's record of open handoffs is in memory | **logged** in decision 0025 for #19 |
+
+## The advisor's correction to M1 (2026-11-26, `docs/reviews/2026-11-26-SA-06-content-type-probe.md`)
+M1's cross-site point was unconfirmed when it was raised. Measured since: FastAPI 0.162's body parsing refuses every
+CORS-simple body on `/api/handoff` and `/api/chat`. So that part of M1 was already met before the fix. The JSON-only
+check is defence in depth: it refuses `+json` subtypes, which FastAPI parses as JSON. Mutant m01 showed the gap in its
+test, and two `+json` cases were added. The rest of M1 (the caps, one runtime, shutdown) stands as fixed.

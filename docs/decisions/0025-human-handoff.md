@@ -1,6 +1,8 @@
 # 0025: The human handoff: a deterministic trigger, no assistant tool, the Care agent in the gateway (row #23, SA-06)
 
-Status: accepted by the user with the row #23 plan (`docs/reviews/2026-11-26-SA-06-plan.md`), including its four
+Status: the design was accepted by the user with the row #23 plan (`docs/reviews/2026-11-26-SA-06-plan.md`). Its
+Consequences were updated afterwards from the security and advisor reviews: the caps, the content-type reading and N6.
+The acceptance covers the plan's four
 design answers and the user's four changes at approval, 2026-11-26. 0024 is #27b's (returns and the policy server).
 
 ## Context
@@ -94,7 +96,9 @@ intent, root cause, amounts and the recommended action.
   (`care_busy`, `summary_missing`), still with its intent and the shopper's own order. The first refusal over a cap
   is audited once (`handoff.full`), and a repeat skips the live cart read. One agent runtime serves the desk, and
   open builds get a bounded wait at shutdown.
-- `/api/handoff` takes `application/json` only, so a page on another origin cannot open a handoff without a
-  preflight, and the gateway has no CORS policy. A page DNS-rebound to 127.0.0.1 is same-origin and is not stopped
+- `/api/handoff` takes `application/json` only. A page on another origin cannot open a handoff without a preflight,
+  and the gateway has no CORS policy. FastAPI's own body parsing already refuses every CORS-simple body (measured,
+  `docs/reviews/2026-11-26-SA-06-content-type-probe.md`), so the check is defence in depth: it refuses `+json`
+  subtypes. A page DNS-rebound to 127.0.0.1 is same-origin and is not stopped
   by this. A Host allowlist would stop it; that is a new control on the whole gateway, so it goes in the PR body
   (security re-review N6), as `/api/chat`'s JSON check does.
