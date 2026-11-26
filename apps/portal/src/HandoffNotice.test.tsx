@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AI_DISCLOSURE } from "./AiDisclosure";
 import { Chat, MAX_HANDOFF_TURNS } from "./Chat";
-import { HANDOFF_FAILED } from "./chatStream";
+import { HANDOFF_FAILED, HANDOFF_TURNS_REFUSED } from "./chatStream";
 import { HANDOFF_JOINED, HANDOFF_QUEUED, type HandoffStatus } from "./HandoffNotice";
 
 const frame = (name: string, data: unknown) => `event: ${name}\ndata: ${JSON.stringify(data)}\n\n`;
@@ -181,5 +181,35 @@ describe("[SA-06] [NFR-08] handoff to a person", () => {
     fireEvent.click(talkButton());
     await screen.findByText(/Your reference is H000042/);
     expect(screen.queryByText(HANDOFF_JOINED)).toBeNull();
+  });
+});
+
+describe("[SA-06] security review L1 and L7", () => {
+  it("drops refused turns, so the retry asks for a person without them and succeeds", async () => {
+    const fetchMock = respondWith(
+      () => streamOf(frame("token", { text: "ok" }), frame("done", {})),
+      () => Response.json({ isError: true, message: "chat's text" }, { status: 422 }),
+      () => queued(),
+    );
+    render(<Chat />);
+    await ask("my card is 4111 1111");
+    fireEvent.click(talkButton());
+    const alert = await screen.findByRole("alert", { name: "Handoff failed" });
+    expect(alert).toHaveTextContent(HANDOFF_TURNS_REFUSED);
+    expect(alert).not.toHaveTextContent("chat's text");
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await waitFor(() =>
+      expect(screen.getByRole("status", { name: "Handoff" })).toHaveTextContent(HANDOFF_QUEUED),
+    );
+    expect(bodyOf(fetchMock, 2).body.turns).toEqual([]);
+    expectDisclosureShown();
+  });
+
+  it("shows a chat refusal's message only when it is a string", async () => {
+    respondWith(() => Response.json({ isError: true, message: { html: "<b>x</b>" } }, { status: 422 }));
+    render(<Chat />);
+    await ask("hi");
+    expect(screen.getByRole("alert")).toHaveTextContent("That message could not be accepted.");
+    expectDisclosureShown();
   });
 });

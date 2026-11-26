@@ -89,8 +89,12 @@ export function parseFrames(buffer: string): { events: ChatEvent[]; rest: string
 
 async function refusal(response: Response): Promise<ChatEvent> {
   try {
-    const body = (await response.json()) as { message?: string };
-    return { type: "refused", message: body.message ?? GENERIC_REFUSAL };
+    const body = (await response.json()) as { message?: unknown };
+    // Only a string is shown (security review L7): anything else is the fixed text.
+    return {
+      type: "refused",
+      message: typeof body.message === "string" ? body.message : GENERIC_REFUSAL,
+    };
   } catch {
     return { type: "refused", message: GENERIC_REFUSAL };
   }
@@ -136,13 +140,18 @@ export type HandoffTurn = { role: "shopper" | "assistant"; text: string };
 
 export type HandoffResult =
   | { kind: "queued"; reference: string }
-  | { kind: "failed"; message: string };
+  | { kind: "failed"; message: string; turnsRefused?: boolean };
 
 export const HANDOFF_FAILED = "A person can't be reached from here right now. Please try again.";
+// Security review L1: the gateway refused the turns themselves (card data across them, say). The
+// chat drops them, so "Try again" asks for a person without them and can succeed.
+export const HANDOFF_TURNS_REFUSED =
+  "Part of this conversation can't be passed on to a person. Try again to ask for a person " +
+  "without it.";
 const REFERENCE = /^H\d{6}$/;
 
 /** POST /api/handoff (row #23, SA-06). Only a well-formed reference counts as queued; anything else
- * is the fixed failure text, or the gateway's own fixed refusal for a 422. */
+ * is the fixed failure text; a 422 (the turns refused) is its own fixed text. */
 export async function requestHandoff(
   turns: HandoffTurn[],
   trigger: "button" | "message",
@@ -154,8 +163,7 @@ export async function requestHandoff(
       body: JSON.stringify({ turns, trigger }),
     });
     if (response.status === 422) {
-      const refused = await refusal(response);
-      return { kind: "failed", message: refused.type === "refused" ? refused.message : HANDOFF_FAILED };
+      return { kind: "failed", message: HANDOFF_TURNS_REFUSED, turnsRefused: turns.length > 0 };
     }
     if (response.status !== 202) return { kind: "failed", message: HANDOFF_FAILED };
     const body = (await response.json()) as { status?: unknown; reference?: unknown };

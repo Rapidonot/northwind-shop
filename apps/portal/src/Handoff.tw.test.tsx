@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AI_DISCLOSURE } from "./AiDisclosure";
 import { Chat } from "./Chat";
-import { HANDOFF_FAILED, parseFrames, requestHandoff } from "./chatStream";
+import { HANDOFF_FAILED, HANDOFF_TURNS_REFUSED, parseFrames, requestHandoff } from "./chatStream";
 import {
   HANDOFF_JOINED,
   HANDOFF_QUEUED,
@@ -84,15 +84,21 @@ describe("[SA-06] [NFR-08] requestHandoff", () => {
     expect(await requestHandoff([], "button")).toEqual({ kind: "failed", message: HANDOFF_FAILED });
   });
 
-  it("shows the gateway's fixed refusal text on a 422, and the fixed failure when it has none", async () => {
+  // Changed with security review L1 (row #23): a refused handoff shows its own fixed text, never
+  // chat's "Your message was not sent", and says whether the turns were what was refused.
+  it("shows its own fixed text on a 422, whatever the body, and marks sent turns refused", async () => {
     stubFetch(() => Response.json({ isError: true, message: "No card details, please." }, { status: 422 }));
     expect(await requestHandoff([], "button")).toEqual({
       kind: "failed",
-      message: "No card details, please.",
+      message: HANDOFF_TURNS_REFUSED,
+      turnsRefused: false,
     });
     stubFetch(() => new Response("nope", { status: 422 }));
-    const result = await requestHandoff([], "button");
-    expect(result.kind).toBe("failed");
+    expect(await requestHandoff([{ role: "shopper", text: "hi" }], "button")).toEqual({
+      kind: "failed",
+      message: HANDOFF_TURNS_REFUSED,
+      turnsRefused: true,
+    });
   });
 });
 

@@ -154,7 +154,8 @@ export function Chat({
     setHandoff({ kind: "requesting" });
     const result = await requestHandoff(history.current, trigger);
     if (result.kind === "failed") {
-      setHandoff(result);
+      if (result.turnsRefused) history.current = []; // security review L1
+      setHandoff({ kind: "failed", message: result.message });
       return;
     }
     setHandoff({ kind: "queued", reference: result.reference });
