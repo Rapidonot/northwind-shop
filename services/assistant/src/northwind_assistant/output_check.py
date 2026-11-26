@@ -887,7 +887,11 @@ _SENTENCE_END = re.compile(
 )  # D5 (d): "U.S.  stores"
 # Security L1: an abbreviation's full stop does not end the sentence ("None of the towels (e.g. Bath
 # or Hand) is in stock"). "No." is left out: as a reply it does end one.
-_SENTENCE_ABBREVIATION = re.compile(r"\b(?:e\.g|i\.e|etc|approx|vs|incl|cf|esp)\.$", re.IGNORECASE)
+# The user's D6 (F4): U.S., U.K. and E.U. too. A sentence end inside another abbreviation or an
+# aside ("— sadly! —") is not always told: an accepted residual.
+_SENTENCE_ABBREVIATION = re.compile(
+    r"\b(?:e\.g|i\.e|etc|approx|vs|incl|cf|esp|u\.s|u\.k|e\.u)\.$", re.IGNORECASE
+)
 # A reply word that opens the sentence answers the shopper and negates nothing after it: "No, the
 # Charcoal L is out of stock right now" (two recorded `assistant-intents` answers, step 0).
 _REPLY_NO = re.compile(r"\s*[*_]{0,4}(?:no|nope)[*_]{0,4}\s{0,3}(?:,|[-‐‑‒–—―])")

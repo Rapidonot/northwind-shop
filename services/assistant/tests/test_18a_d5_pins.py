@@ -99,3 +99,18 @@ def test_weve_not_run_out_is_never_shown(text: str) -> None:
     """It says there is stock with a negation inside the phrase, which no check reads: blocked."""
     for live in (None, stock(a=5), stock(a=0)):
         assert hits(text, live=live) == {"stock": 1}
+
+
+# ---- the user's D6 (F4): U.S., U.K. and E.U. end no sentence; the rest is a residual ----------
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "None of the U.S. Outlets has the M in stock.",
+        "None of the U.K. Stores has the M in stock.",
+        "None of the E.U. Warehouses has the M in stock.",
+    ],
+)
+def test_a_country_abbreviation_before_a_capital_ends_no_sentence(text: str) -> None:
+    assert hits(text, live=stock(a=5)) == {"stock": 1}

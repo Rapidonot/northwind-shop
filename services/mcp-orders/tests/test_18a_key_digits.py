@@ -78,3 +78,46 @@ def test_a_key_that_holds_a_whole_card_is_still_card_data_first(
 ) -> None:
     body = call(live[1], **{**GOOD, "idempotency_key": "4242424242424242a"})[2]
     assert body["code"] == "card_data_refused"
+
+
+# ---- the user's D6 (F3): the same limit on every argument ---------------------------------------
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"variant_id": "P4111-111111", "idempotency_key": "k-111111-x"},  # F3
+        {"order_id": "O000800", "variant_id": "P1111-111111"},  # F3
+        {"variant_id": "P0003-1234567"},
+    ],
+)
+def test_an_argument_with_more_than_six_digits_in_a_row_is_refused(
+    live: tuple[OrdersServer, str], fields: dict[str, str]
+) -> None:
+    instance, url = live
+    is_error, _text, body = call(url, **{**GOOD, **fields})
+    assert is_error and body["code"] == "invalid_argument"
+    assert body["errorCategory"] == "validation"
+    assert "111111" not in str(body)
+    assert instance.desk.open == {}
+
+
+def test_an_order_number_with_too_many_digits_is_the_same_not_found_as_an_unknown_one(
+    live: tuple[OrdersServer, str],
+) -> None:
+    """The lookalike pin (test_chk07_tw_tools.py) holds: no reply tells an order number apart."""
+    unknown = call(live[1], **{**GOOD, "order_id": "O999999"})
+    got = call(live[1], **{**GOOD, "order_id": "O4111111", "idempotency_key": "k-111111-x"})
+    assert got[1] == unknown[1] and got[2]["code"] == "not_found"
+    assert live[0].desk.open == {}
+
+
+def test_every_real_order_line_passes_the_limit() -> None:
+    """Measured at $0: in every variant ID of the fixtures and recordings the longest group is 4."""
+    import re
+
+    from northwind_mcp_orders.tools import MAX_KEY_DIGITS, too_many_digits
+
+    ids = ["P0003-SLT-REL-M", "P0085-FOR-REG-M", "P0002-NAV-REL-4XL", "P0010-CHR-REG-XS"]
+    assert all(not too_many_digits(v) for v in [*ids, "O000800", "O999999"])
+    assert MAX_KEY_DIGITS == 6 and re.fullmatch(r"O\d{6}", "O000800")

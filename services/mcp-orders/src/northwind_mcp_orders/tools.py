@@ -74,11 +74,23 @@ def key_digits_refused() -> ToolError:
     )
 
 
-def _long_digit_key(value: Any) -> bool:
-    if not isinstance(value, str):
-        return False  # the desk refuses a key that is no string
-    groups = (re.sub(r"\D", "", g) for g in _KEY_DIGITS.findall(value))
+def too_many_digits(value: Any) -> bool:
+    """More than `MAX_KEY_DIGITS` digits in a row. The user's D6 (F3): on every argument, as a card
+    could also be split between a variant ID ("P4111-111111") and another; every real variant ID
+    has at most 4 in a row and an order number 6, so no real request is refused."""
+    if not isinstance(value, str | int) or isinstance(value, bool):
+        return False  # the other checks refuse what is neither
+    groups = (re.sub(r"\D", "", g) for g in _KEY_DIGITS.findall(str(value)))
     return any(len(group) > MAX_KEY_DIGITS for group in groups)
+
+
+def argument_digits_refused() -> ToolError:
+    return ToolError(
+        "validation",
+        False,
+        "invalid_argument",
+        "A variant ID or condition has more digits in a row than any real one.",
+    )
 
 
 def sign_in_required() -> ToolError:
@@ -145,8 +157,12 @@ async def request_return(
     if _card_across(args):
         raise card_data_refused()
     shopper, order_id = _checked(claims, args, RETURN_ARGUMENTS)
-    if _long_digit_key(args.get("idempotency_key")):
+    if too_many_digits(args.get("idempotency_key")):
         raise key_digits_refused()
+    if too_many_digits(args.get("order_id")):
+        raise not_found()  # the same bytes as any order number that is not the shopper's
+    if any(too_many_digits(args.get(name)) for name in ("variant_id", "condition")):
+        raise argument_digits_refused()
     made = server.desk.request(
         shopper=shopper,
         region=claims.region,
