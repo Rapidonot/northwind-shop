@@ -335,9 +335,12 @@ ORDER_WORDS = ("order", "checkout", "pay", "purchase", "refund", "capture", "ass
 
 
 def test_the_registry_holds_the_catalog_reads_and_the_four_cart_tools_and_nothing_else() -> None:
-    # Row #11 (approved under stop 5): plus the server-only live filter, read-only.
+    # Row #11 (approved under stop 5): plus the server-only live filter, read-only. SA-01 PR 1
+    # (approved by the user under stop 5, 2026-11-26): plus the portal's two reads, by name.
     assert set(TOOLS) == set(tool_scopes.CATALOG_READ_TOOLS) | set(CART_TOOLS) | {
-        tool_scopes.ELIGIBLE_PRODUCTS
+        tool_scopes.ELIGIBLE_PRODUCTS,
+        "browse_products",
+        "get_prices",
     }
     assert tool_scopes.CART_TOOLS == frozenset(CART_TOOLS)
     for name in TOOLS:
@@ -381,7 +384,11 @@ def test_the_one_order_read_is_read_only_and_the_orders_server_has_one_request_m
 def test_each_agent_gets_exactly_its_cart_tools() -> None:
     catalog = tool_scopes.AGENT_TOOLS
     assert tool_scopes.CART_TOOLS <= catalog["shopper-assistant"]["northwind-catalog"]
-    assert catalog["shopper-portal"]["northwind-catalog"] == frozenset({"get_cart"})
+    # SA-01 PR 1: the portal also reads the catalog for the shop pages; still no cart write.
+    assert catalog["shopper-portal"]["northwind-catalog"] == frozenset(
+        {"get_cart", "get_product", "browse_products", "get_prices"}
+    )
+    assert not tool_scopes.CART_WRITE_TOOLS & catalog["shopper-portal"]["northwind-catalog"]
     assert not tool_scopes.CART_TOOLS & catalog["catalog-subagent"]["northwind-catalog"]
     assert catalog["shopper-portal"]["northwind-rag"] == frozenset()
 
@@ -397,7 +404,7 @@ def test_each_agent_lists_only_its_own_tools_on_a_real_server(url: str) -> None:
     portal = asyncio.run(names("shopper-portal", SESSION_A))
     staff = asyncio.run(names("catalog-subagent", None))
     assert set(CART_TOOLS) <= assistant
-    assert portal == {"get_cart"}
+    assert portal == {"get_cart", "get_product", "browse_products", "get_prices"}  # SA-01 PR 1
     assert not set(CART_TOOLS) & staff
 
 
