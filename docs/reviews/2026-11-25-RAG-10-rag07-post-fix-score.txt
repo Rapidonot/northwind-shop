@@ -1,0 +1,16 @@
+RAG-07 (row #31): score after the one fix round. IN-SAMPLE: the session that fixed it had read every label and the misses.
+The honest score is the first one: 44/60 (docs/reviews/2026-11-25-RAG-10-rag07-first-score.txt).
+Author's own dev sets, after/before the fix round: 149/150 (150), 99/100 (100), 82/82 (82), 58/60 (58).
+RT7-046 was right in the first score and is wrong now.
+
+58/60
+  specifications: 16/16
+  reviews: 13/14
+  policy: 14/14
+  multi: 11/12
+  all: 4/4
+  policy: added 0, left out 1
+  reviews: added 0, left out 1
+  specifications: added 1, left out 0
+  RT7-020: want ['reviews'], got ['specifications']: Is the Halvardine Home Merino Washable Throw actually worth the price, or am I just paying for a nice label?
+  RT7-046: want ['policy', 'reviews'], got ['reviews']: What's the verdict from buyers on the Emberquay Moor Blanket Throw? Oh and is postage free
