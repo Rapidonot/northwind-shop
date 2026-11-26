@@ -802,6 +802,7 @@ source = { editable = "services/gateway" }
 dependencies = [
     { name = "fastapi" },
     { name = "northwind-assistant" },
+    { name = "northwind-backend" },
     { name = "northwind-common" },
     { name = "northwind-rag" },
     { name = "psycopg", extra = ["binary"] },
@@ -812,6 +813,7 @@ dependencies = [
 requires-dist = [
     { name = "fastapi", specifier = ">=0.162.0" },
     { name = "northwind-assistant", editable = "services/assistant" },
+    { name = "northwind-backend", editable = "services/backend" },
     { name = "northwind-common", editable = "services/common" },
     { name = "northwind-rag", editable = "services/rag" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.3.7" },

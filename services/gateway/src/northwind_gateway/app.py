@@ -4,6 +4,7 @@ FOUND-0: a health endpoint that proves the portal -> gateway -> Postgres path wo
 SA-02: the chat endpoint, in `northwind_gateway.chat`.
 Row #16 (CHK-01): the shopper's session (`northwind_gateway.session`) and GET /api/cart
 (`northwind_gateway.cart`).
+Row #23 (SA-06): POST /api/handoff (`northwind_gateway.handoff`).
 """
 
 import logging
@@ -25,6 +26,7 @@ from northwind_gateway.chat import (
     invalid_request,
     router,
 )
+from northwind_gateway.handoff import router as handoff_router
 from northwind_gateway.session import SessionMiddleware
 from northwind_gateway.settings import database_url
 from northwind_gateway.signin import router as signin_router
@@ -47,6 +49,7 @@ app = FastAPI(title="Northwind gateway", lifespan=lifespan)
 app.include_router(router)
 app.include_router(cart_router)
 app.include_router(signin_router)  # row #27: the demo sign-in, behind NORTHWIND_DEMO_SIGNIN
+app.include_router(handoff_router)  # row #23 (SA-06): the shopper asks for a person
 app.add_middleware(SessionMiddleware)
 app.add_exception_handler(RequestValidationError, invalid_request)
 app.add_exception_handler(CardNumberRefused, card_refused)
