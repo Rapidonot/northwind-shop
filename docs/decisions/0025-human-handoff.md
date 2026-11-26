@@ -78,3 +78,16 @@ intent, root cause, amounts and the recommended action.
 - Open: the live "a person has joined" moment and the staff console (Window B's staff caller). When it lands, the AI
   disclosure must change once a person is replying, because "not a person" would then be false.
 - Open: `mcp-cases` (#19) replaces the in-process queues.
+- Open (security review L2, owner #19 or Window B's staff caller): a handoff never closes. A later request from
+  the same shopper or session gets the first reference, and its transcript is not merged (the repeat is audited as
+  `handoff.repeat`). It needs a close or resolve operation. The demo sign-in has one fixed shopper, so every
+  signed-in demo session shares one handoff.
+- Open (security review L5, owner Window B's staff caller): references are sequential (`H000001`, ...). A real
+  `HandoffStatus.watch` must check the caller's session or identity on the server, never the reference alone
+  (hard rule 7).
+- Open (security review M1, pre-existing for `/api/chat`; owner hardening, or the user): `/api/handoff` takes only
+  `application/json`, so a cross-site page cannot start Care runs without a preflight. `/api/chat` has no such
+  check. Adding one there is a new control on an existing path, so it is the user's decision.
+- Limits (security review M1): one process holds at most `MAX_OPEN_HANDOFFS` (1000) open handoffs and runs at most
+  `MAX_CARE_RUNS` (2) Care runs at once. Over the run cap the case is built by code at once (`care_busy`,
+  `summary_missing`). One agent runtime serves the desk, and open builds get a bounded wait at shutdown.
