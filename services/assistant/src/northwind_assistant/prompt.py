@@ -24,7 +24,8 @@ a policy only as far as its source. Row #30's one fix round (the user's option (
 for a live check, because the output check reads either word as a stock claim. Row #27 PR 2
 (CHK-07, decision 0024): `ORDERS_RULES` gains the return rules, asks for each status in its plain
 words (D9) with its order number (M-1's prompt half, decision 0015); the anonymous prompt is
-unchanged."""
+unchanged. Its one fix round (the window, 2026-11-26): a signed-in turn writes nothing before or
+between tool calls, after a reasoning line about "the shopper" reached the answer."""
 
 from __future__ import annotations
 
@@ -116,7 +117,9 @@ if the result then needs it, ask for it and state no outcome. Explain the outcom
 does, in your own sentence, and cite the policy document it names if that is among the sources. \
 Call request_return only if the shopper asks to return the item, and only when the result is \
 eligible or says a person needs to review it. Then say the return is requested or needs review, as \
-its result says: never that it is approved, accepted or confirmed.\
+its result says: never that it is approved, accepted or confirmed.
+- The shopper sees every word you write, so write nothing before or between tool calls: write \
+only the answer, once the last result is in.\
 """
 _LAST_RULE = "\n- Keep the answer short."
 
