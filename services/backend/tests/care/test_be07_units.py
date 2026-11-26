@@ -477,7 +477,7 @@ SPLIT_PAN = ("4111 11", "11 1111", "11 11", "11")  # 4111 1111 1111 1111 in 4- a
 
 def _digits_shown(task: CareTask) -> list[str]:
     """Every run of two or more digits in the model's input, the task's order ID taken out."""
-    return re.findall(r"\d{2,}", task.prompt().replace(task.order_id, ""))
+    return re.findall(r"\d{2,}", task.prompt().replace(task.order_id or "", ""))
 
 
 def test_b_a_card_split_into_4_and_2_digit_groups_never_reaches_the_model() -> None:
@@ -583,7 +583,7 @@ PAN = "4111111111111111"
 
 def _all_digits(task: CareTask) -> str:
     """Every digit of the model's input, in order, the task's order ID taken out."""
-    return "".join(ch for ch in task.prompt().replace(task.order_id, "") if ch.isdigit())
+    return "".join(ch for ch in task.prompt().replace(task.order_id or "", "") if ch.isdigit())
 
 
 @pytest.mark.parametrize("between", [None, "cvv 123"])
