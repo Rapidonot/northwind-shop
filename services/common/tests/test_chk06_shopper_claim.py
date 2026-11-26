@@ -1,6 +1,8 @@
-"""Row #27 (CHK-06, NFR-01; decision 0023): the signed-in shopper rides in a northwind-orders token
-only, as `shp`. No other server's token can carry it, and a token carrying it verifies only for
-northwind-orders. The order tool's output contract (`order_tool`) is checked here too."""
+"""Row #27 (CHK-06, NFR-01; decision 0023, amended by 0024): the signed-in shopper rides in a
+northwind-orders or (PR 2, CHK-07) northwind-policy token only, as `shp`. No other server's token
+northwind-orders or (PR 2, CHK-07) northwind-policy token only, as `shp`. No other server's token
+can carry it, and a token carrying it verifies only for the server it was minted for. The order
+tool's output contract (`order_tool`) is checked here too."""
 
 from __future__ import annotations
 
@@ -16,6 +18,7 @@ from northwind_common import order_tool
 from northwind_common.mcp_token import (
     CATALOG_SERVER,
     ORDERS_SERVER,
+    POLICY_SERVER,
     RAG_SERVER,
     SERVERS,
     TokenError,
@@ -124,16 +127,41 @@ def test_the_well_formed_forged_body_verifies_so_the_cases_above_fail_for_their_
     assert verify_for(forge(_body()), key=KEY, server=ORDERS_SERVER, now=NOW).shp == "S0031"
 
 
+@pytest.mark.req("CHK-07")
+def test_a_policy_token_carries_shp_for_the_assistant_and_verifies_only_there() -> None:
+    token, claims = orders_token(server=POLICY_SERVER)
+    assert claims.shp == "S0031"
+    assert verify_for(token, key=KEY, server=POLICY_SERVER, now=NOW).shp == "S0031"
+    for other in SERVERS - {POLICY_SERVER}:
+        with pytest.raises(TokenError):
+            verify_for(token, key=KEY, server=other, now=NOW)
+
+
+@pytest.mark.req("CHK-07")
+@pytest.mark.parametrize("agent", ["shopper-portal", "shopper-query"])
+def test_no_other_agent_may_carry_a_shopper_to_the_policy_server(agent: str) -> None:
+    with pytest.raises(ValueError):
+        orders_token(server=POLICY_SERVER, agent=agent)
+    forged = forge(_body(srv=POLICY_SERVER, agent=agent))
+    for server in SERVERS:
+        with pytest.raises(TokenError):
+            verify_for(forged, key=KEY, server=server, now=NOW)
+    # The same body for the assistant verifies, so the agent is what is refused.
+    good = forge(_body(srv=POLICY_SERVER))
+    assert verify_for(good, key=KEY, server=POLICY_SERVER, now=NOW).shp == "S0031"
+
+
 # ---- the order tool's contract ------------------------------------------------------------------
 
 
 @pytest.mark.parametrize("srv", sorted(SERVERS))
 def test_a_token_carrying_both_claims_verifies_nowhere(srv: str) -> None:
-    """`qf` (row #11) is northwind-rag's and `shp` northwind-orders'; `srv` is one value. Each alone
-    verifies on its own server, so the pair is what is refused."""
+    """`qf` (row #11) is northwind-rag's and `shp` northwind-orders' or northwind-policy's; `srv` is
+    one value. Each alone verifies on its own server, so the pair is what is refused."""
     base = json.loads(base64.urlsafe_b64decode(orders_token(None)[0].split(".")[1] + "=="))
     plan = {"qf": PLAN}
-    alone: dict[str, dict[str, Any]] = {RAG_SERVER: plan, ORDERS_SERVER: {"shp": "S0031"}}
+    shp = {"shp": "S0031"}
+    alone: dict[str, dict[str, Any]] = {RAG_SERVER: plan, ORDERS_SERVER: shp, POLICY_SERVER: shp}
     for server, claim in alone.items():
         verify_for(forge({**base, "srv": server, **claim}), key=KEY, server=server, now=NOW)
     both = forge({**base, "srv": srv, **plan, "shp": "S0031"})
@@ -173,7 +201,10 @@ def test_the_statuses_split_into_confirmed_and_not() -> None:
         "out_for_delivery",
         "delivered",
     }
-    assert order_tool.ALLOWED_TOOLS == ("mcp__northwind-orders__get_order",)
+    assert order_tool.ALLOWED_TOOLS == (  # PR 2 (CHK-07) adds request_return, exactly
+        "mcp__northwind-orders__get_order",
+        "mcp__northwind-orders__request_return",
+    )
 
 
 def test_the_orders_port_is_its_own_and_can_be_set(monkeypatch: pytest.MonkeyPatch) -> None:

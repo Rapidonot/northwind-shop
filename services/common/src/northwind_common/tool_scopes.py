@@ -15,6 +15,10 @@ catalog subagent gets none. No cart tool places an order.
 Row #27 (CHK-06, decision 0023): northwind-orders and its one read tool, `get_order`, for the
 assistant only (PRD §7: "get_order (own orders)"). The server answers only for the signed-in
 shopper in the token (`shp`), so a session with no sign-in gets no order. No other agent has it.
+
+Row #27 PR 2 (CHK-07, decision 0024): northwind-policy and its one read tool,
+`evaluate_return_eligibility` (PRD §7), for the assistant only. Its policy resources are for
+`shopper-portal` (the gateway, never a model); the assistant still gets no resource (D14).
 """
 
 from __future__ import annotations
@@ -50,9 +54,21 @@ ELIGIBLE_PRODUCTS = "eligible_products"
 # Each region's own currency: a price filter in another currency is never converted.
 REGION_CURRENCY: Mapping[str, str] = {"US": "USD", "CA": "CAD", "UK": "GBP", "EU": "EUR"}
 
-# Row #27 (CHK-06). One read of the signed-in shopper's own order; no write, no list.
+# Row #27 (CHK-06). One read of the signed-in shopper's own order; no list.
 GET_ORDER = "get_order"
-ORDER_TOOLS = frozenset({GET_ORDER})
+# PR 2 (CHK-07, decision 0024): the shopper's own return request. Outside PRD §7's list, by the
+# user's decision (D6): non-monetary, and no label, refund or case.
+REQUEST_RETURN = "request_return"
+ORDER_TOOLS = frozenset({GET_ORDER, REQUEST_RETURN})
+
+# Row #27 PR 2 (CHK-07). One read: is one line of the shopper's own order returnable.
+EVALUATE_RETURN = "evaluate_return_eligibility"
+POLICY_TOOLS = frozenset({EVALUATE_RETURN})
+# One resource per kind and region; the server gives a caller only its token's region.
+POLICY_KINDS = ("returns", "shipping")
+POLICY_RESOURCES = frozenset(
+    f"northwind-policy://{kind}/{region}" for kind in POLICY_KINDS for region in REGION_CURRENCY
+)
 
 AGENT_TOOLS: Mapping[str, Mapping[str, frozenset[str]]] = {
     "shopper-assistant": {
@@ -60,6 +76,7 @@ AGENT_TOOLS: Mapping[str, Mapping[str, frozenset[str]]] = {
         # PRD §7, decision D1 at #10b; attached at #12 (RAG-09).
         "northwind-catalog": CATALOG_READ_TOOLS | CART_TOOLS,  # cart: row #16
         "northwind-orders": ORDER_TOOLS,  # row #27 (CHK-06), attached only when signed in
+        "northwind-policy": POLICY_TOOLS,  # row #27 PR 2 (CHK-07), likewise; PRD §7
     },
     "shopper-portal": {"northwind-rag": frozenset(), "northwind-catalog": frozenset({GET_CART})},
     # Row #11: one read-only tool that returns product IDs only (RAG-04, hard rule 2).
@@ -74,7 +91,8 @@ AGENT_TOOLS: Mapping[str, Mapping[str, frozenset[str]]] = {
 # The assistant gets no resource (S0 item 2): what it can read is what its one tool returns.
 AGENT_RESOURCES: Mapping[str, Mapping[str, frozenset[str]]] = {
     "shopper-assistant": {"northwind-rag": frozenset()},
-    "shopper-portal": {"northwind-rag": frozenset()},
+    # Row #27 PR 2 (D14): the public returns and shipping policies. Only tests read them so far.
+    "shopper-portal": {"northwind-rag": frozenset(), "northwind-policy": POLICY_RESOURCES},
     "shopper-query": {"northwind-rag": frozenset()},
     "catalog-subagent": {"northwind-rag": frozenset({"northwind-rag://index/manifest"})},
 }

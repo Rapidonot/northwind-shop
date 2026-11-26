@@ -359,10 +359,14 @@ def test_no_agent_is_scoped_to_a_tool_that_could_place_an_order() -> None:
                 assert not any(word in name for word in ORDER_WORDS), (agent, name)
 
 
-def test_the_one_order_tool_is_read_only_and_the_orders_server_has_nothing_else() -> None:
+def test_the_one_order_read_is_read_only_and_the_orders_server_has_one_request_more() -> None:
     from northwind_mcp_orders.tools import TOOLS as ORDERS_TOOLS
 
-    assert set(ORDERS_TOOLS) == {"get_order"} == set(tool_scopes.ORDER_TOOLS)
+    # Row #27 PR 2 (CHK-07, decision 0024): plus the shopper's own return request, exactly. It
+    # places no order.
+    assert set(ORDERS_TOOLS) == {"get_order", "request_return"} == set(tool_scopes.ORDER_TOOLS)
+    made = ORDERS_TOOLS["request_return"].tool.annotations
+    assert made is not None and made.read_only_hint is False and made.destructive_hint is False
     annotations = ORDERS_TOOLS["get_order"].tool.annotations
     assert annotations is not None and annotations.read_only_hint is True
     assert annotations.destructive_hint in (None, False)

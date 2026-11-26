@@ -50,6 +50,14 @@ const ordersEnv = {
   MCP_ORDERS_URL: `http://127.0.0.1:${ordersPort}/mcp`,
 };
 
+// mcp-policy (row #27 PR 2, CHK-07): as mcp-orders.
+const policyPort = 18435;
+const policyEnv = {
+  NORTHWIND_MCP_TOKEN_KEY: tokenKey,
+  MCP_POLICY_PORT: String(policyPort),
+  MCP_POLICY_URL: `http://127.0.0.1:${policyPort}/mcp`,
+};
+
 const model = scripted
   ? `uv run python services/assistant/e2e/scripted_model.py --port ${modelPort}`
   : "uv run python -m northwind_llm_replay.cli serve --suite assistant-smoke";
@@ -88,10 +96,17 @@ export default defineConfig({
       timeout: 120_000,
     },
     {
+      command: "uv run python -m northwind_mcp_policy.app",
+      port: policyPort,
+      cwd: repo,
+      env: policyEnv,
+      timeout: 120_000,
+    },
+    {
       command: "uv run uvicorn northwind_gateway.app:app --port 8000",
       port: 8000,
       cwd: repo,
-      env: { ...modelEnv, ...ragEnv, ...catalogEnv, ...ordersEnv },
+      env: { ...modelEnv, ...ragEnv, ...catalogEnv, ...ordersEnv, ...policyEnv },
       timeout: 60_000,
     },
     { command: "./node_modules/.bin/vite --port 5173 --strictPort", port: 5173, cwd: here },

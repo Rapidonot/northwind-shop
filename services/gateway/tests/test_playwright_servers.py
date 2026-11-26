@@ -17,17 +17,24 @@ pytestmark = pytest.mark.req("CHK-01")
 CONFIG = (Path(__file__).resolve().parents[3] / "apps/portal/playwright.config.ts").read_text()
 
 
-def test_the_gateway_attaches_exactly_mcp_rag_mcp_catalog_and_mcp_orders() -> None:
+def test_the_gateway_attaches_exactly_rag_catalog_orders_and_policy() -> None:
     # A new server here must also be started in playwright.config.ts: this pin fails first.
     # Row #27 (CHK-06): mcp-orders joins, for signed-in turns. Still exact.
+    # Row #27 PR 2 (CHK-07): mcp-policy, likewise. Still exact.
     # Row #11 (approved under stop 5): `understand` is not a server; it calls Haiku through the
     # runtime's own proxy, so playwright.config.ts starts nothing new for it.
     fields = {f.name for f in dataclasses.fields(ChatServices)}
-    assert fields == {"rag", "runtime", "catalog", "understand", "orders"}
+    assert fields == {"rag", "runtime", "catalog", "understand", "orders", "policy"}
 
 
 @pytest.mark.parametrize(
-    "module", ["northwind_mcp_rag.app", "northwind_mcp_catalog.app", "northwind_mcp_orders.app"]
+    "module",
+    [
+        "northwind_mcp_rag.app",
+        "northwind_mcp_catalog.app",
+        "northwind_mcp_orders.app",
+        "northwind_mcp_policy.app",  # row #27 PR 2 (CHK-07)
+    ],
 )
 def test_playwright_starts_each_attached_server(module: str) -> None:
     assert f"uv run python -m {module}" in CONFIG
@@ -38,7 +45,9 @@ def test_the_gateway_is_told_where_both_servers_are() -> None:
     [gateway_env] = re.findall(r"env: \{([^\n]*)", block)
     assert "...ragEnv" in gateway_env and "...catalogEnv" in gateway_env
     assert "...ordersEnv" in gateway_env  # row #27
+    assert "...policyEnv" in gateway_env  # row #27 PR 2
     assert "MCP_RAG_URL" in CONFIG and "MCP_CATALOG_URL" in CONFIG and "MCP_ORDERS_URL" in CONFIG
+    assert "MCP_POLICY_URL" in CONFIG
 
 
 def test_playwright_never_sets_the_database_itself() -> None:

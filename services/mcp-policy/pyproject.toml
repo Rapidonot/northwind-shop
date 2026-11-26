@@ -1,0 +1,19 @@
+[project]
+name = "northwind-mcp-policy"
+version = "0.0.0"
+description = "northwind-policy MCP server: returns and shipping policy resources, return eligibility (CHK-07, row #27)"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "mcp>=2.3,<3",
+    "northwind-common",
+    "northwind-mcp-orders",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[tool.uv.sources]
+northwind-common = { workspace = true }
+northwind-mcp-orders = { workspace = true }
+
+[build-system]
+requires = ["uv_build>=0.12,<0.13"]
+build-backend = "uv_build"

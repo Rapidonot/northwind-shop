@@ -3,6 +3,7 @@ spend: the real CLI, a scripted model, a real mcp-rag, mcp-catalog and mcp-order
 
 - A signed-in turn offers `get_order` and carries the prompt's order section; an anonymous turn's
   request is byte for byte the one it was before row #27 (D3), even with an orders endpoint passed.
+  PR 2 (CHK-07): and, beside mcp-orders, mcp-policy's one tool and token, likewise; still exact.
 - The orders token carries the shopper (`shp`); no other token does, and no other server takes it.
 - A `get_order` result reaches the model as labelled data. It vouches for nothing in the output
   check: "your order was placed" stays blocked on every turn (decision 0015's row #27 note).
@@ -22,17 +23,18 @@ import pytest
 
 from northwind_assistant.caller import Caller
 from northwind_assistant.catalog_client import CatalogEndpoint
-from northwind_assistant.orders_client import OrdersEndpoint
+from northwind_assistant.orders_client import OrdersEndpoint, PolicyEndpoint
 from northwind_assistant.output_check import CONFIRMATION_SENTENCE
 from northwind_assistant.prompt import ORDERS_RULES, system_prompt
 from northwind_assistant.rag_client import RagEndpoint
 from northwind_assistant.tools import ALLOWED_TOOL
 from northwind_assistant.turn import TextDelta, TurnEvent, assistant_options, stream_answer
-from northwind_common import catalog_tool, order_tool
+from northwind_common import catalog_tool, order_tool, policy_tool
 from northwind_common.llm import AgentRuntime, agent_runtime
 from northwind_common.mcp_token import (
     CATALOG_SERVER,
     ORDERS_SERVER,
+    POLICY_SERVER,
     RAG_SERVER,
     TokenError,
     verify_for,
@@ -41,6 +43,7 @@ from northwind_llm_replay.scripted import ScriptedLLM
 from northwind_llm_replay.scrub import canonical, scrub
 from northwind_mcp_catalog import testing as catalog_testing
 from northwind_mcp_orders import testing as orders_testing
+from northwind_mcp_policy import testing as policy_testing
 from northwind_mcp_rag.testing import KEY, serve_retriever
 from northwind_rag.retrieval import RetrievedChunk
 
@@ -73,15 +76,28 @@ def runtime_for(llm: ScriptedLLM, root: Path) -> AgentRuntime:
     return agent_runtime(base_url=llm.url, root=root)
 
 
-def ask(message: str, caller: Caller, runtime: AgentRuntime, orders_url: str | None) -> list[Any]:
+def ask(
+    message: str,
+    caller: Caller,
+    runtime: AgentRuntime,
+    orders_url: str | None,
+    policy_url: str | None = None,
+) -> list[Any]:
     catalog = catalog_testing.server(key=KEY)
 
     async def collect(rag: RagEndpoint, catalog_url: str) -> list[TurnEvent]:
         orders = None if orders_url is None else OrdersEndpoint(orders_url, KEY)
+        policy = None if policy_url is None else PolicyEndpoint(policy_url, KEY)
         return [
             e
             async for e in stream_answer(
-                message, caller, rag, runtime, CatalogEndpoint(catalog_url, KEY), orders=orders
+                message,
+                caller,
+                rag,
+                runtime,
+                CatalogEndpoint(catalog_url, KEY),
+                orders=orders,
+                policy=policy,
             )
         ]
 
@@ -112,6 +128,12 @@ def tool_results(request: dict[str, Any]) -> list[str]:
 @pytest.fixture
 def orders_url() -> Any:
     with orders_testing.running(orders_testing.server(key=KEY)) as url:
+        yield url
+
+
+@pytest.fixture
+def policy_url() -> Any:
+    with policy_testing.running(policy_testing.server(key=KEY)) as url:
         yield url
 
 
@@ -147,48 +169,60 @@ def test_the_signed_in_prompt_holds_no_order_data(region: Any) -> None:
 
 
 def test_an_anonymous_turn_sends_the_same_request_with_or_without_an_orders_endpoint(
-    tmp_path: Path, orders_url: str
+    tmp_path: Path, orders_url: str, policy_url: str
 ) -> None:
     bodies: list[dict[str, Any]] = []
-    for url in (None, orders_url):
+    for url, policy in ((None, None), (orders_url, policy_url)):
         with ScriptedLLM() as llm:
             llm.reply_stream("Orders ship within 2 business days [POL-001].")
-            ask("When do orders ship?", ANON, runtime_for(llm, tmp_path / str(len(bodies))), url)
+            runtime = runtime_for(llm, tmp_path / str(len(bodies)))
+            ask("When do orders ship?", ANON, runtime, url, policy)
         bodies.append(llm.requests[0]["body"])
     # As the replay proxy hashes a request: scrubbed of the CLI's per-run `metadata.user_id`.
     assert canonical(scrub(bodies[0])) == canonical(scrub(bodies[1]))
     names = {tool["name"] for tool in bodies[0]["tools"]}
-    assert GET_ORDER not in names and ORDERS_RULES not in json.dumps(bodies[0])
+    assert not names & {*order_tool.ALLOWED_TOOLS, *policy_tool.ALLOWED_TOOLS}
+    assert ORDERS_RULES not in json.dumps(bodies[0])
 
 
 def test_an_anonymous_caller_gets_no_orders_token() -> None:
     assert OrdersEndpoint("http://127.0.0.1:9/mcp", KEY).mint(ANON) is None
+    assert PolicyEndpoint("http://127.0.0.1:9/mcp", KEY).mint(ANON) is None
 
 
 # ---- a signed-in turn --------------------------------------------------------------------------
 
 
 def test_a_signed_in_turn_offers_get_order_and_the_order_section(
-    tmp_path: Path, orders_url: str
+    tmp_path: Path, orders_url: str, policy_url: str
 ) -> None:
     with ScriptedLLM() as llm:
         llm.reply_stream("Which order number is it?")
-        ask("Where's my order?", SIGNED_IN, runtime_for(llm, tmp_path), orders_url)
+        ask("Where's my order?", SIGNED_IN, runtime_for(llm, tmp_path), orders_url, policy_url)
     request = llm.requests[0]
     names = sorted(tool["name"] for tool in request["body"]["tools"])
-    assert names == sorted({ALLOWED_TOOL, *catalog_tool.ALLOWED_TOOLS, GET_ORDER})
+    assert names == sorted(
+        {
+            ALLOWED_TOOL,
+            *catalog_tool.ALLOWED_TOOLS,
+            GET_ORDER,
+            "mcp__northwind-orders__request_return",
+            "mcp__northwind-policy__evaluate_return_eligibility",
+        }
+    )
     system = _system(request)
     assert ORDERS_RULES in system and system.endswith("The shopper is in the US region.")
     assert "S0188" not in json.dumps(request["body"])  # the shopper ID never reaches the model
 
 
-def test_each_server_gets_its_own_token_and_only_the_orders_one_names_the_shopper(
+def test_each_server_gets_its_own_token_and_only_orders_and_policy_name_the_shopper(
     tmp_path: Path,
 ) -> None:
     rag_token = RagEndpoint("http://127.0.0.1:9/mcp", KEY).mint(SIGNED_IN)
     catalog_token = CatalogEndpoint("http://127.0.0.1:8/mcp", KEY).mint(SIGNED_IN)
     orders_token = OrdersEndpoint("http://127.0.0.1:7/mcp", KEY).mint(SIGNED_IN)
-    assert orders_token is not None
+    policy_token = PolicyEndpoint("http://127.0.0.1:6/mcp", KEY).mint(SIGNED_IN)
+    assert orders_token is not None and policy_token is not None
     options = assistant_options(
         SIGNED_IN,
         "http://127.0.0.1:9/mcp",
@@ -196,17 +230,29 @@ def test_each_server_gets_its_own_token_and_only_the_orders_one_names_the_shoppe
         agent_runtime(base_url="http://127.0.0.1:1", root=tmp_path),
         ("http://127.0.0.1:8/mcp", catalog_token),
         ("http://127.0.0.1:7/mcp", orders_token),
+        ("http://127.0.0.1:6/mcp", policy_token),
     )
-    assert set(options.mcp_servers) == {RAG_SERVER, CATALOG_SERVER, ORDERS_SERVER}
-    assert options.allowed_tools == [ALLOWED_TOOL, *catalog_tool.ALLOWED_TOOLS, GET_ORDER]
+    assert set(options.mcp_servers) == {RAG_SERVER, CATALOG_SERVER, ORDERS_SERVER, POLICY_SERVER}
+    assert options.allowed_tools == [
+        ALLOWED_TOOL,
+        *catalog_tool.ALLOWED_TOOLS,
+        GET_ORDER,
+        "mcp__northwind-orders__request_return",
+        "mcp__northwind-policy__evaluate_return_eligibility",
+    ]
     assert verify_for(orders_token, key=KEY, server=ORDERS_SERVER).shp == "S0188"
+    assert verify_for(policy_token, key=KEY, server=POLICY_SERVER).shp == "S0188"
     for token, server in ((rag_token, RAG_SERVER), (catalog_token, CATALOG_SERVER)):
         payload = json.loads(base64.urlsafe_b64decode(token.split(".")[1] + "=="))
         assert "shp" not in payload
         assert verify_for(token, key=KEY, server=server).shp is None
-    for server in (RAG_SERVER, CATALOG_SERVER):
-        with pytest.raises(TokenError):
-            verify_for(orders_token, key=KEY, server=server)
+    for token, others in (
+        (orders_token, (RAG_SERVER, CATALOG_SERVER, POLICY_SERVER)),
+        (policy_token, (RAG_SERVER, CATALOG_SERVER, ORDERS_SERVER)),
+    ):
+        for server in others:
+            with pytest.raises(TokenError):
+                verify_for(token, key=KEY, server=server)
     assert KEY.decode() not in json.dumps(options.mcp_servers)
 
 

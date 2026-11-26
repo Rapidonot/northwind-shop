@@ -28,6 +28,7 @@ from northwind_mcp_orders import testing
 from northwind_mcp_orders.book import OrderBook, shopper_status
 from northwind_mcp_orders.server import OrdersServer
 from northwind_mcp_orders.tools import TOOLS
+from northwind_mcp_orders.wording import worded
 
 pytestmark = pytest.mark.req("CHK-06")
 
@@ -127,7 +128,8 @@ def test_over_http_the_owner_gets_each_order_as_the_files_state_it(
     bearer, _ = testing.token()
     for order_id in DEMO_ORDERS:
         is_error, _, body = call(url, bearer, {"order_id": order_id})
-        assert not is_error and body == expected(order_id)
+        # Row #27 PR 2 (D9): exactly the files' values, plus each code's wording beside it.
+        assert not is_error and body == worded(expected(order_id))
 
 
 # ---- 2. the status mapping ---------------------------------------------------------------------
@@ -246,7 +248,7 @@ def test_only_the_assistant_is_offered_get_order(live: tuple[OrdersServer, str])
         async with testing.connect(url, bearer) as client:
             return [tool.name for tool in (await client.list_tools()).tools]
 
-    assert asyncio.run(names("shopper-assistant")) == ["get_order"]
+    assert asyncio.run(names("shopper-assistant")) == ["get_order", "request_return"]  # CHK-07
     assert asyncio.run(names("shopper-portal")) == []
     is_error, _, body = call(url, testing.token(agent="shopper-portal")[0], {"order_id": "O000800"})
     assert is_error and body["code"] == "not_allowed"

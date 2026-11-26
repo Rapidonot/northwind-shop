@@ -1,0 +1,68 @@
+{"condition": "unused", "days": 0, "id": "RC-001", "outcome": "eligible", "reason": "within_window", "region": "US", "reviewed_by": "model", "subcategory": "pants"}
+{"condition": "unused", "days": 30, "id": "RC-002", "outcome": "eligible", "reason": "within_window", "region": "US", "reviewed_by": "model", "subcategory": "pants"}
+{"condition": "unused", "days": 31, "id": "RC-003", "outcome": "ineligible", "reason": "out_of_window", "region": "US", "reviewed_by": "model", "subcategory": "pants"}
+{"condition": "unused", "days": 45, "id": "RC-004", "outcome": "eligible", "reason": "within_window", "region": "CA", "reviewed_by": "model", "subcategory": "pants"}
+{"condition": "unused", "days": 46, "id": "RC-005", "outcome": "ineligible", "reason": "out_of_window", "region": "CA", "reviewed_by": "model", "subcategory": "pants"}
+{"condition": "unused", "days": 28, "id": "RC-006", "outcome": "eligible", "reason": "within_window", "region": "UK", "reviewed_by": "model", "subcategory": "pants"}
+{"condition": "unused", "days": 29, "id": "RC-007", "outcome": "ineligible", "reason": "out_of_window", "region": "UK", "reviewed_by": "model", "subcategory": "pants"}
+{"condition": "unused", "days": 60, "id": "RC-008", "outcome": "eligible", "reason": "within_window", "region": "EU", "reviewed_by": "model", "subcategory": "pants"}
+{"condition": "unused", "days": 61, "id": "RC-009", "outcome": "ineligible", "reason": "out_of_window", "region": "EU", "reviewed_by": "model", "subcategory": "pants"}
+{"condition": "sealed", "days": 20, "id": "RC-010", "outcome": "eligible", "reason": "within_window", "region": "EU", "reviewed_by": "model", "subcategory": "pants"}
+{"condition": "opened_unused", "days": 10, "id": "RC-011", "outcome": "eligible", "reason": "within_window", "region": "UK", "reviewed_by": "model", "subcategory": "towel"}
+{"condition": "opened_unused", "days": 12, "id": "RC-012", "outcome": "eligible", "reason": "within_window", "region": "US", "reviewed_by": "model", "subcategory": "fleece"}
+{"condition": "sealed", "days": 44, "id": "RC-013", "outcome": "eligible", "reason": "within_window", "region": "CA", "reviewed_by": "model", "subcategory": "throw"}
+{"condition": "unused", "days": null, "id": "RC-014", "outcome": "ineligible", "reason": "not_delivered", "region": "US", "reviewed_by": "model", "subcategory": "pants"}
+{"condition": "sealed", "days": null, "id": "RC-015", "outcome": "ineligible", "reason": "not_delivered", "region": "CA", "reviewed_by": "model", "subcategory": "fleece"}
+{"condition": "not_stated", "days": null, "id": "RC-016", "outcome": "ineligible", "reason": "not_delivered", "region": "UK", "reviewed_by": "model", "subcategory": "rug"}
+{"condition": "wear_and_tear", "days": null, "id": "RC-017", "outcome": "ineligible", "reason": "not_delivered", "region": "EU", "reviewed_by": "model", "subcategory": "duvet"}
+{"condition": "worn_or_washed", "days": 5, "id": "RC-018", "outcome": "ineligible", "reason": "worn_or_washed", "region": "US", "reviewed_by": "model", "subcategory": "pants"}
+{"condition": "worn_or_washed", "days": 5, "id": "RC-019", "outcome": "ineligible", "reason": "worn_or_washed", "region": "CA", "reviewed_by": "model", "subcategory": "pants"}
+{"condition": "worn_or_washed", "days": 14, "id": "RC-020", "outcome": "ambiguous", "reason": "worn_in_cancellation_period", "region": "UK", "reviewed_by": "model", "subcategory": "pants"}
+{"condition": "worn_or_washed", "days": 15, "id": "RC-021", "outcome": "ineligible", "reason": "worn_or_washed", "region": "UK", "reviewed_by": "model", "subcategory": "pants"}
+{"condition": "worn_or_washed", "days": 14, "id": "RC-022", "outcome": "ambiguous", "reason": "worn_in_cancellation_period", "region": "EU", "reviewed_by": "model", "subcategory": "pants"}
+{"condition": "worn_or_washed", "days": 15, "id": "RC-023", "outcome": "ineligible", "reason": "worn_or_washed", "region": "EU", "reviewed_by": "model", "subcategory": "pants"}
+{"condition": "worn_or_washed", "days": 31, "id": "RC-024", "outcome": "ineligible", "reason": "out_of_window", "region": "US", "reviewed_by": "model", "subcategory": "pants"}
+{"condition": "worn_or_washed", "days": 0, "id": "RC-025", "outcome": "ambiguous", "reason": "worn_in_cancellation_period", "region": "EU", "reviewed_by": "model", "subcategory": "shirt"}
+{"condition": "wear_and_tear", "days": 3, "id": "RC-026", "outcome": "ineligible", "reason": "wear_and_tear", "region": "US", "reviewed_by": "model", "subcategory": "rain_shell"}
+{"condition": "wear_and_tear", "days": 3, "id": "RC-027", "outcome": "ineligible", "reason": "wear_and_tear", "region": "CA", "reviewed_by": "model", "subcategory": "rain_shell"}
+{"condition": "wear_and_tear", "days": 14, "id": "RC-028", "outcome": "ambiguous", "reason": "wear_in_cancellation_period", "region": "UK", "reviewed_by": "model", "subcategory": "rain_shell"}
+{"condition": "wear_and_tear", "days": 15, "id": "RC-029", "outcome": "ineligible", "reason": "wear_and_tear", "region": "UK", "reviewed_by": "model", "subcategory": "rain_shell"}
+{"condition": "wear_and_tear", "days": 14, "id": "RC-030", "outcome": "ambiguous", "reason": "wear_in_cancellation_period", "region": "EU", "reviewed_by": "model", "subcategory": "rain_shell"}
+{"condition": "wear_and_tear", "days": 15, "id": "RC-031", "outcome": "ineligible", "reason": "wear_and_tear", "region": "EU", "reviewed_by": "model", "subcategory": "rain_shell"}
+{"condition": "wear_and_tear", "days": 90, "id": "RC-032", "outcome": "ineligible", "reason": "wear_and_tear", "region": "US", "reviewed_by": "model", "subcategory": "rain_shell"}
+{"condition": "damaged_on_arrival", "days": 2, "id": "RC-033", "outcome": "ambiguous", "reason": "damaged_on_arrival", "region": "US", "reviewed_by": "model", "subcategory": "towel"}
+{"condition": "damaged_on_arrival", "days": 2, "id": "RC-034", "outcome": "ambiguous", "reason": "damaged_on_arrival", "region": "CA", "reviewed_by": "model", "subcategory": "towel"}
+{"condition": "damaged_on_arrival", "days": 2, "id": "RC-035", "outcome": "ambiguous", "reason": "damaged_on_arrival", "region": "UK", "reviewed_by": "model", "subcategory": "towel"}
+{"condition": "damaged_on_arrival", "days": 2, "id": "RC-036", "outcome": "ambiguous", "reason": "damaged_on_arrival", "region": "EU", "reviewed_by": "model", "subcategory": "towel"}
+{"condition": "damaged_on_arrival", "days": 200, "id": "RC-037", "outcome": "ambiguous", "reason": "damaged_on_arrival", "region": "US", "reviewed_by": "model", "subcategory": "towel"}
+{"condition": "not_stated", "days": 20, "id": "RC-038", "outcome": "ambiguous", "reason": "condition_not_stated", "region": "US", "reviewed_by": "model", "subcategory": "pants"}
+{"condition": "not_stated", "days": 20, "id": "RC-039", "outcome": "ambiguous", "reason": "condition_not_stated", "region": "CA", "reviewed_by": "model", "subcategory": "pants"}
+{"condition": "not_stated", "days": 20, "id": "RC-040", "outcome": "ambiguous", "reason": "condition_not_stated", "region": "UK", "reviewed_by": "model", "subcategory": "pants"}
+{"condition": "not_stated", "days": 20, "id": "RC-041", "outcome": "ambiguous", "reason": "condition_not_stated", "region": "EU", "reviewed_by": "model", "subcategory": "pants"}
+{"condition": "not_stated", "days": 40, "id": "RC-042", "outcome": "ineligible", "reason": "out_of_window", "region": "US", "reviewed_by": "model", "subcategory": "pants"}
+{"condition": "not_stated", "days": 10, "id": "RC-043", "outcome": "ambiguous", "reason": "condition_not_stated", "region": "CA", "reviewed_by": "model", "subcategory": "duvet"}
+{"condition": "sealed", "days": 10, "id": "RC-044", "outcome": "eligible", "reason": "within_window", "region": "US", "reviewed_by": "model", "subcategory": "duvet"}
+{"condition": "opened_unused", "days": 10, "id": "RC-045", "outcome": "ineligible", "reason": "opened_insert", "region": "US", "reviewed_by": "model", "subcategory": "duvet"}
+{"condition": "unused", "days": 10, "id": "RC-046", "outcome": "ambiguous", "reason": "packaging_not_stated", "region": "US", "reviewed_by": "model", "subcategory": "duvet"}
+{"condition": "sealed", "days": 45, "id": "RC-047", "outcome": "eligible", "reason": "within_window", "region": "CA", "reviewed_by": "model", "subcategory": "duvet"}
+{"condition": "opened_unused", "days": 45, "id": "RC-048", "outcome": "eligible", "reason": "within_window", "region": "CA", "reviewed_by": "model", "subcategory": "duvet"}
+{"condition": "unused", "days": 10, "id": "RC-049", "outcome": "eligible", "reason": "within_window", "region": "CA", "reviewed_by": "model", "subcategory": "duvet"}
+{"condition": "unused", "days": 46, "id": "RC-050", "outcome": "ineligible", "reason": "out_of_window", "region": "CA", "reviewed_by": "model", "subcategory": "duvet"}
+{"condition": "sealed", "days": 28, "id": "RC-051", "outcome": "eligible", "reason": "within_window", "region": "UK", "reviewed_by": "model", "subcategory": "duvet"}
+{"condition": "opened_unused", "days": 14, "id": "RC-052", "outcome": "ambiguous", "reason": "opened_insert_in_cancellation_period", "region": "UK", "reviewed_by": "model", "subcategory": "duvet"}
+{"condition": "opened_unused", "days": 15, "id": "RC-053", "outcome": "ineligible", "reason": "opened_insert", "region": "UK", "reviewed_by": "model", "subcategory": "duvet"}
+{"condition": "unused", "days": 20, "id": "RC-054", "outcome": "ambiguous", "reason": "packaging_not_stated", "region": "UK", "reviewed_by": "model", "subcategory": "duvet"}
+{"condition": "sealed", "days": 60, "id": "RC-055", "outcome": "eligible", "reason": "within_window", "region": "EU", "reviewed_by": "model", "subcategory": "duvet"}
+{"condition": "opened_unused", "days": 14, "id": "RC-056", "outcome": "ambiguous", "reason": "opened_insert_in_cancellation_period", "region": "EU", "reviewed_by": "model", "subcategory": "duvet"}
+{"condition": "opened_unused", "days": 15, "id": "RC-057", "outcome": "ineligible", "reason": "opened_insert", "region": "EU", "reviewed_by": "model", "subcategory": "duvet"}
+{"condition": "unused", "days": 20, "id": "RC-058", "outcome": "ambiguous", "reason": "packaging_not_stated", "region": "EU", "reviewed_by": "model", "subcategory": "duvet"}
+{"condition": "worn_or_washed", "days": 10, "id": "RC-059", "outcome": "ineligible", "reason": "worn_or_washed", "region": "CA", "reviewed_by": "model", "subcategory": "duvet"}
+{"condition": "unused", "days": 10, "id": "RC-060", "lines": 2, "outcome": "ambiguous", "reason": "more_than_one_line", "region": "US", "reviewed_by": "model", "subcategory": "pants"}
+{"condition": "unused", "days": 90, "id": "RC-061", "lines": 2, "outcome": "ineligible", "reason": "out_of_window", "region": "EU", "reviewed_by": "model", "subcategory": "pants"}
+{"condition": "unused", "days": null, "id": "RC-062", "lines": 2, "outcome": "ineligible", "reason": "not_delivered", "region": "UK", "reviewed_by": "model", "subcategory": "pants"}
+{"clearance": true, "condition": "unused", "days": 3, "id": "RC-063", "outcome": "ineligible", "reason": "clearance_final_sale", "region": "US", "reviewed_by": "model", "subcategory": "pants"}
+{"clearance": true, "condition": "sealed", "days": 3, "id": "RC-064", "outcome": "ineligible", "reason": "clearance_final_sale", "region": "CA", "reviewed_by": "model", "subcategory": "pants"}
+{"clearance": true, "condition": "unused", "days": 14, "id": "RC-065", "outcome": "eligible", "reason": "within_window", "region": "UK", "reviewed_by": "model", "subcategory": "pants"}
+{"clearance": true, "condition": "unused", "days": 15, "id": "RC-066", "outcome": "ineligible", "reason": "clearance_after_14_days", "region": "UK", "reviewed_by": "model", "subcategory": "pants"}
+{"clearance": true, "condition": "unused", "days": 14, "id": "RC-067", "outcome": "eligible", "reason": "within_window", "region": "EU", "reviewed_by": "model", "subcategory": "pants"}
+{"clearance": true, "condition": "unused", "days": 15, "id": "RC-068", "outcome": "ineligible", "reason": "clearance_after_14_days", "region": "EU", "reviewed_by": "model", "subcategory": "pants"}

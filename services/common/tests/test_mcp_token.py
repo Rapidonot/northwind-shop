@@ -229,9 +229,15 @@ def for_server(server: str) -> str:
     )[0]
 
 
-def test_the_servers_are_rag_catalog_and_orders() -> None:
-    # Row #27 (CHK-06) adds northwind-orders, exactly.
-    assert mcp_token.SERVERS == {"northwind-rag", "northwind-catalog", "northwind-orders"}
+def test_the_servers_are_rag_catalog_orders_and_policy() -> None:
+    # Row #27 (CHK-06) adds northwind-orders, and its PR 2 (CHK-07) northwind-policy, exactly.
+    assert mcp_token.SERVERS == {
+        "northwind-rag",
+        "northwind-catalog",
+        "northwind-orders",
+        "northwind-policy",
+    }
+    assert mcp_token.POLICY_SERVER == "northwind-policy"
     assert (mcp_token.RAG_SERVER, mcp_token.CATALOG_SERVER, mcp_token.ORDERS_SERVER) == (
         "northwind-rag",
         "northwind-catalog",
