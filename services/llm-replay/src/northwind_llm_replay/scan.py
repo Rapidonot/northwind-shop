@@ -29,6 +29,7 @@ import json
 import os
 import re
 import stat
+from collections import Counter
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, replace
 from datetime import datetime
@@ -54,7 +55,7 @@ _KEY_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
         "x-api-key-header",
         re.compile(
             r"""(?i)x-api-key["']?\s*[:=]\s*["']?[^\s"',}]+"""
-            r"""|(?i:x-api-key)\\{1,6}["']\s*[:=]\s*\\{1,6}["'](?!\\)[^\s"',}\\]+"""
+            r"""|(?i:x-api-key)\\+["']\s*[:=]\s*\\+["'](?!\\)[^\s"',}\\]+"""
         ),
     ),
 )
@@ -73,6 +74,12 @@ _PAN_SEP = "[ \\-.\u00a0\u2007\u2009\u202f]"
 _PAN_GROUPED_WIDE = re.compile(
     rf"(?<!\d)(?:\d{{4}}{_PAN_SEP}\d{{4}}{_PAN_SEP}\d{{4}}{_PAN_SEP}\d{{4}}"
     rf"|\d{{4}}{_PAN_SEP}\d{{6}}{_PAN_SEP}\d{{4,5}})(?!\d)"
+)
+# Re-review N2: matches may overlap, so "1111 4242 4242 4242 4242" reads the card after a leading
+# group that fails Luhn. Each start position is tried; the guards are the same.
+_PAN_GROUPED_OVERLAPPING = re.compile(
+    rf"(?=((?:\d{{4}}{_PAN_SEP}\d{{4}}{_PAN_SEP}\d{{4}}{_PAN_SEP}\d{{4}}"
+    rf"|\d{{4}}{_PAN_SEP}\d{{6}}{_PAN_SEP}\d{{4,5}})(?!\d)))(?<!\d)"
 )
 
 
@@ -135,8 +142,8 @@ def scan_text(
             grouped.add(m.span())
             if luhn_ok(re.sub(r"\D", "", m.group(0))):
                 findings.append(Finding(path, lineno, "luhn-valid-pan"))
-        for m in _PAN_GROUPED_WIDE.finditer(line):
-            if m.span() not in grouped and luhn_ok(re.sub(r"\D", "", m.group(0))):
+        for m in _PAN_GROUPED_OVERLAPPING.finditer(line):  # re-review N2: every start is tried
+            if m.span(1) not in grouped and luhn_ok(re.sub(r"\D", "", m.group(1))):
                 findings.append(Finding(path, lineno, "luhn-valid-pan"))
     return findings
 
@@ -304,10 +311,21 @@ def scan_cassette(
     findings += _new_kinds(joined, known, "rebuilt-")
     known |= {f.kind.removeprefix("rebuilt-") for f in findings}
     if carry:
-        # What the carry holds alone was reported for the earlier calls: only what the join adds.
-        ahead = {f.kind for f in scan_text(carry, path, secret, canaries)}
-        across = scan_text(carry + "".join(blocks)[:CARRY], path, secret, canaries)
-        findings += _new_kinds(across, known | ahead, "rebuilt-across-requests-")
+        # What the carry and this call's start hold alone was reported, or the carry's cut made it:
+        # only what the join adds, by count (re-review N3: a cut can make a finding of its own, and
+        # a count takes off that one alone, where a kind took off every finding of its kind).
+        head = "".join(blocks)[:CARRY]
+        alone = Counter(
+            f.kind for text in (carry, head) for f in scan_text(text, path, secret, canaries)
+        )
+        together = Counter(f.kind for f in scan_text(carry + head, path, secret, canaries))
+        findings += [
+            Finding(
+                path, 0, kind if kind == "api-key-fragment" else f"rebuilt-across-requests-{kind}"
+            )
+            for kind, more in (together - alone).items()
+            if more > 0
+        ]
     return findings
 
 
@@ -316,21 +334,9 @@ def scan_cassette(
 CARRY = 256
 
 
-_TOKEN_CHAR = re.compile(r"[0-9A-Za-z]")
-_NOT_TOKEN = re.compile(r"[^0-9A-Za-z]")
-
-
 def carried(carry: str, text: str) -> str:
-    """The carry after one more cassette of the same test: the end of everything it wrote. Cut in
-    the middle of a word or number, it starts after that piece (security L4): a cut piece, such
-    as the last 16 digits of a 17-digit run, could make a finding the earlier call never had, and
-    `scan_cassette` takes the carry's own findings off the join's."""
-    whole = carry + "".join(response_blocks(text))
-    window = whole[-CARRY:]
-    if len(whole) > CARRY and _TOKEN_CHAR.match(whole[-CARRY - 1]) and _TOKEN_CHAR.match(window):
-        cut = _NOT_TOKEN.search(window)
-        window = window[cut.start() :] if cut else window
-    return window
+    """The carry after one more cassette of the same test: the end of everything it wrote."""
+    return (carry + "".join(response_blocks(text)))[-CARRY:]
 
 
 def without_ledger_ids(line: str) -> str:

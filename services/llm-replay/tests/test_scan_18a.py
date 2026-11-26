@@ -351,3 +351,63 @@ def test_an_x_api_key_escaped_more_deeply_is_found(slashes: int) -> None:
     bs = "\\" * slashes
     assert kinds(scan_text(f'{{{bs}"x-api-key{bs}": {bs}"abcd1234{bs}"}}')) == {"x-api-key-header"}
     assert scan_text(f'{{{bs}"x-api-key{bs}": {bs}"{bs}"}}') == []
+
+
+# ---- security re-review N2, N3 and N9 ----------------------------------------------------------
+
+FULLWIDTH = str.maketrans("0123456789", "０１２３４５６７８９")
+PAD_FOR = 256
+
+
+def ending(head: str, end: str = " ref 42424242") -> str:
+    """`head`, letters and `end`, exactly the carry's length: the carry starts at `head`."""
+    return head + " " + "a" * (PAD_FOR - len(head) - len(end) - 1) + end
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["ref 1111 4242 4242 4242 4242 x", "ref 1111.4242.4242.4242.4242", "1234 3782 822463 10005"],
+)
+def test_a_grouped_card_after_a_group_that_fails_luhn_is_found(text: str) -> None:
+    """N2: the matches overlap, so the leftmost four groups failing Luhn hide nothing."""
+    assert pan_found(text)
+
+
+def test_a_card_split_between_requests_is_found_beside_an_earlier_grouped_card(
+    tmp_path: Path,
+) -> None:
+    first = cassette(text_stream("x 11" + ending("11 4242 4242 4242 4242")), seq=0)
+    second = cassette(text_stream("42424242 ok"), seq=1)
+    found = scan_cassettes(tmp_path, first, second)
+    by_file = {(Path(f.path).stem, f.kind) for f in found}
+    assert ("c1", "rebuilt-across-requests-luhn-valid-pan") in by_file
+
+
+@pytest.mark.parametrize(
+    "first_text",
+    [
+        "x " + ("1" + VISA).translate(FULLWIDTH)[0] + ending(VISA.translate(FULLWIDTH)),  # N3a
+        "1" + VISA + "b" * (PAD_FOR - len(VISA) - 8) + "42424242",  # N3b: one long token
+    ],
+)
+def test_a_carry_cut_anywhere_does_not_hide_a_card_split_between_requests(
+    tmp_path: Path, first_text: str
+) -> None:
+    first = cassette(text_stream(first_text), seq=0)
+    second = cassette(text_stream("42424242 ok"), seq=1)
+    kinds_of = {(Path(f.path).stem, f.kind) for f in scan_cassettes(tmp_path, first, second)}
+    assert ("c1", "rebuilt-across-requests-luhn-valid-pan") in kinds_of
+
+
+def test_a_card_glued_to_a_long_token_is_found_across_requests(tmp_path: Path) -> None:
+    """N3c: at 28e07ef this was found; the carry trim lost it."""
+    first = cassette(text_stream("x" * 250 + "4242 4242 "), seq=0)
+    second = cassette(text_stream("4242 4242 ok"), seq=1)
+    assert "rebuilt-across-requests-luhn-valid-pan" in kinds(
+        scan_cassettes(tmp_path, first, second)
+    )
+
+
+def test_an_x_api_key_escaped_three_times_is_found() -> None:
+    bs = "\\" * 7
+    assert kinds(scan_text(f'{{{bs}"x-api-key{bs}": {bs}"abcd1234{bs}"}}')) == {"x-api-key-header"}
