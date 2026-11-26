@@ -17,10 +17,9 @@ from pathlib import Path
 from typing import Any
 
 from northwind_llm_replay.scan import (
+    carried,
     load_canaries,
-    scan_stream,
-    scan_text,
-    without_request_hash,
+    scan_cassette,
 )
 from northwind_llm_replay.scrub import canonical
 
@@ -74,6 +73,7 @@ class CassetteStore:
         self.dir = root / suite
         self._secret = secret
         self._canaries = load_canaries(root.parent) if canaries is None else canaries
+        self._carry: dict[str, str] = {}  # row 18a: per test, the end of what it wrote
 
     def path_for(self, request_hash: str) -> Path:
         return self.dir / f"{request_hash}.json"
@@ -99,14 +99,18 @@ class CassetteStore:
     def put(self, cassette: Cassette) -> Path:
         text = cassette.to_json()
         where = str(self.path_for(cassette.hash))
-        findings = scan_text(without_request_hash(text), where, self._secret, self._canaries)
-        findings += scan_stream(text, where, self._secret, self._canaries)
+        # Row 18a (review 6): what this test's earlier calls wrote in this store's life, for a
+        # secret split between two requests. Calls recorded before it are read by `scan_paths`.
+        key = cassette.test_id or ""
+        carry = self._carry.get(key, "")
+        findings = scan_cassette(text, where, self._secret, self._canaries, carry)
         if findings:
             kinds = sorted({f.kind for f in findings})
             raise DirtyCassetteError(f"cassette {cassette.hash[:12]} not written: {kinds}")
         self.dir.mkdir(parents=True, exist_ok=True)
         p = self.path_for(cassette.hash)
         p.write_text(text, encoding="utf-8")
+        self._carry[key] = carried(carry, text)
         return p
 
     def miss_diff(

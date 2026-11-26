@@ -85,3 +85,12 @@ Passing on base: the 12 near-misses (blocked both ways) and the live_backed pin.
 Mutants (test_18a_over_blocking + test_18a_output_check): 6 of 6 killed
   P1 any text after the word closes the sentence 6; P2 no information noun needed 2; P3 no product check 4; P4 no hold 5; P5 the raw-stream guard off 10; P6 the frame not anchored to the word 2
   (a first P5, a flag that turned the exemption off in live_backed, survived: equivalent, as live_backed feeds nothing; the flag was removed)
+
+## Part 1: services/llm-replay/tests/test_scan_18a.py
+base: 28 failed, 23 passed; branch: 51 passed
+Passing on base: the near-misses (clean both ways) and the pins of today's findings (still found, once).
+Two tests first passed on base (an ASCII canary the raw scan already sees) and were rewritten to need the new code: a card behind escapes in a json tool input; a canary split across two signature deltas.
+Mutants (test_scan_18a, test_scan, test_scan_split_secrets, test_scan_reassembly): 15 of 15 killed
+  S1 no wide PAN 12; S2 no NBSP 5; S3 no Amex/Diners 5; S4 no dedupe 2; S5 no escaped x-api-key 3; S6 CR not split 1; S7 no unknown-delta finding 3; S8 no decoded walk 1 (after the tool-result test was added: it first survived); S9 no json blocks 1; S10 no joined blocks 3; S11 no carry 3; S12 carry not subtracted 2; S13 put keeps no carry 1; S14 carry of 4 4; S15 signature not read 2
+
+Full scan at $0 (cassettes, evals/contexts, evals/fixtures, evals/baselines, data/enrichment, data/embeddings, RAG-12-eval-review.md; canaries loaded): base 0 findings in 8.9 s, branch 0 findings in 24.5 s. A first version joined every earlier call of a test and did not finish in 600 s (backend-replay holds 5,935 calls of one test); replaced by a 256-character carry.
