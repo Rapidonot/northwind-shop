@@ -1,0 +1,93 @@
+# Row #18 step 0: failing-first log (branch req/18-record-all from bcc135b; 2026-11-26)
+# Each mutant was applied to the working tree, its tests run as one file, and the file restored (cmp against the pre-mutant copy).
+# Entries after the security review (M-m1, M-a2, the M-a1 rerun) and after the re-review (M-n1, M-n3) are against the fixed tests.
+== (a) mutant M-a1: _back always returns 0 (look back to the start)
+ services/assistant/src/northwind_assistant/output_check.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+    def _assert_linear(make: Callable[[int], str], monkeypatch: pytest.MonkeyPatch) -> None:
+>       assert many <= 5 * few, (few, many)
+E       assert 450300052 <= (5 * 28200052)
+2 failed, 155 deselected in 436.16s (0:07:16)
+restored
+== (a) the old tests at bcc135b under a slow clock (perf_counter advances 3 s per call)
+2 passed, 155 deselected in 87.00s (0:01:27)
+== (a) the new tests under the same slow clock
+2 passed, 155 deselected in 75.00s (0:01:15)
+== (c) mutant M-c1: subtract ignores holds
+FAILED services/mcp-catalog/tests/test_18_step0_stock.py::test_a_live_hold_lowers_check_stock_by_its_units
+FAILED services/mcp-catalog/tests/test_18_step0_stock.py::test_stock_never_goes_below_zero
+FAILED services/mcp-catalog/tests/test_18_step0_stock.py::test_the_cart_add_check_sees_holds
+FAILED services/mcp-catalog/tests/test_18_step0_stock.py::test_a_held_candidate_is_not_offered
+4 failed, 12 passed in 2.88s
+== (c) mutant M-c2: the in-stock filter ignores holds
+FAILED services/mcp-catalog/tests/test_18_step0_stock.py::test_the_in_stock_filter_sees_holds
+1 failed, 15 deselected in 0.84s
+== (b) mutant M-b1: cart.py's alternatives as at bcc135b (row #16's own choice)
+FAILED services/mcp-catalog/tests/test_18_step0_stock.py::test_the_alternatives_are_bes_substitutes_in_order[P0001-BLK-REG-M]
+FAILED services/mcp-catalog/tests/test_18_step0_stock.py::test_the_alternatives_are_bes_substitutes_in_order[P0002-CHR-REL-2XL]
+FAILED services/mcp-catalog/tests/test_18_step0_stock.py::test_the_alternatives_are_bes_substitutes_in_order[P0010-CHR-REG-L]
+FAILED services/mcp-catalog/tests/test_18_step0_stock.py::test_a_held_candidate_is_not_offered
+FAILED services/mcp-catalog/tests/test_18_step0_stock.py::test_the_live_price_is_what_the_band_reads
+FAILED services/mcp-catalog/tests/test_18_step0_stock.py::test_one_holds_read_per_refusal
+6 failed, 10 deselected in 2.31s
+== (b) mutant M-b2: no live price passed to find (the fixture table)
+1
+FAILED services/mcp-catalog/tests/test_18_step0_stock.py::test_the_live_price_is_what_the_band_reads
+1 failed, 15 deselected in 1.02s
+== (d) mutant M-d1: the control gets a third hedged sentence
+FAILED tests/reports/test_hedge_report.py::test_the_control_lists_exactly_its_two_hedged_sentences
+1 failed, 1 deselected in 2.90s
+restored: byte-identical to the pre-mutant copies; hedge report unchanged from HEAD
+== (a) redo: the old tests at bcc135b under a slow clock, 6 s per perf_counter call (the first run used 3 s, under the 5 s limit, so it proved nothing)
+FAILED services/assistant/tests/test_zz_old_tmp.py::test_m4_a_long_sentence_is_checked_in_linear_time
+FAILED services/assistant/tests/test_zz_old_tmp.py::test_m4_a_long_run_with_no_whitespace_is_checked_in_linear_time
+2 failed, 155 deselected in 174.00s (0:02:54)
+== (a) the new tests under the same 6 s clock
+2 passed, 155 deselected in 150.00s (0:02:30)
+== (a) router: the old test at bcc135b under the 6 s clock; the new one reads process_time
+6 failed, 189 deselected in 366.00s (0:06:06)
+6 passed, 189 deselected in 294.00s (0:04:54)
+== guard mutant M-g1: expiry ignored
+FAILED services/backend/tests/inventory/test_18_live_holds_guard.py::test_the_guard_counts_what_bes_store_holds
+1 failed, 2 passed in 0.48s
+== guard mutant M-g2: released and committed counted
+3 passed in 0.68s
+restored
+== guard mutant M-g2 again, with the unswept settled case
+FAILED services/backend/tests/inventory/test_18_live_holds_guard.py::test_a_settled_reservation_is_not_live_even_unswept[released]
+FAILED services/backend/tests/inventory/test_18_live_holds_guard.py::test_a_settled_reservation_is_not_live_even_unswept[committed]
+2 failed, 3 passed in 1.02s
+restored
+== M1 mutant M-m1: no call-wide holds reading before the cart write
+                # was passed to throw().  This prevents a StopIteration
+                # Don't re-raise the passed in exception. (issue27122)
+                # was passed to throw() and later wrapped into a RuntimeError
+                # passed to throw(), because __exit__() must not raise
+                # an exception unless __exit__() itself failed.  But throw()
+FAILED services/mcp-catalog/tests/test_18_step0_stock.py::test_a_reader_that_fails_leaves_the_cart_as_it_was[set_cart_quantity-args2]
+FAILED services/mcp-catalog/tests/test_18_step0_stock.py::test_a_reader_that_fails_leaves_the_cart_as_it_was[remove_from_cart-args3]
+FAILED services/mcp-catalog/tests/test_18_step0_stock.py::test_a_write_reads_holds_once_so_a_later_failure_cannot_follow_it[1]
+FAILED services/mcp-catalog/tests/test_18_step0_stock.py::test_a_write_reads_holds_once_so_a_later_failure_cannot_follow_it[2]
+4 failed, 18 passed in 4.56s
+restored
+== M2 mutant M-a2: _sentence_start's scan cache disabled (rescans from _plain_since every delta)
+2 passed, 155 deselected in 16.06s
+restored
+== M2 mutant M-a2 again, counting what _BOUNDARY.finditer is given to scan (the first count re-derived the span and missed the mutant)
+E       assert 126301700 <= (5 * 8318378)
+FAILED services/assistant/tests/test_output_check.py::test_m4_a_long_sentence_is_checked_in_linear_time
+1 failed, 1 passed, 155 deselected in 14.88s
+restored
+== M-a1 (_back to 0) again with the new count
+FAILED services/assistant/tests/test_output_check.py::test_m4_a_long_sentence_is_checked_in_linear_time
+FAILED services/assistant/tests/test_output_check.py::test_m4_a_long_run_with_no_whitespace_is_checked_in_linear_time
+2 failed, 155 deselected in 575.66s (0:09:35)
+restored
+== re-review N1 mutant M-n1: the URL parsed before the try (as at the first pass)
+FAILED services/backend/tests/inventory/test_18_live_holds_guard_tw.py::test_main_exits_2_on_a_malformed_url_and_prints_none_of_it
+1 failed, 17 passed in 0.70s
+restored
+== re-review N3 mutant M-n3: get_cart without a call-wide reading
+FAILED services/mcp-catalog/tests/test_18_step0_stock.py::test_get_cart_reads_holds_once_for_every_line
+1 failed, 22 passed in 1.50s
+restored

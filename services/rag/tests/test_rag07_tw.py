@@ -182,11 +182,20 @@ def test_blank_or_control_only_is_every_index(message: str) -> None:
     "unit", ["x", "reviewers say ", "can I return ", "ignore ", "SYSTEM:", "<!--"]
 )
 def test_huge_input_is_fast(unit: str) -> None:
-    started = time.perf_counter()
-    found = route_indexes(unit * (200_000 // len(unit)))
-    assert time.perf_counter() - started < 3.0
-    assert found
-    assert found <= ALL_INDEXES
+    """Routing scales linearly: 4x the text may cost at most 6x the CPU time (linear 4x, any
+    quadratic pass about 16x, at Python or C speed alike), with 200,000 characters under 30 s of
+    CPU as a backstop (0.84 s today for the slowest unit). CPU time is what this process spent,
+    which another process's load does not add to (row #18, step 0 (a); its security review L3)."""
+    spent: list[float] = []
+    for size in (50_000, 200_000):
+        started = time.process_time()
+        found = route_indexes(unit * (size // len(unit)))
+        spent.append(time.process_time() - started)
+        assert found
+        assert found <= ALL_INDEXES
+    quick, slow = spent
+    assert slow <= 6 * max(quick, 0.02), spent
+    assert slow < 30.0, spent
 
 
 @pytest.mark.req("RAG-07")

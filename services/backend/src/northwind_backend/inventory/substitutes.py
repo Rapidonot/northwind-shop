@@ -22,7 +22,7 @@ code only: no price, no stock count and no text.
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
@@ -30,6 +30,9 @@ from typing import Any
 
 from northwind_backend.fakes.catalog import FIXTURES, CatalogState
 from northwind_backend.inventory.model import Substitute
+from northwind_backend.ports import PriceQuote
+
+PriceLookup = Callable[[str, str], PriceQuote | None]
 
 MAX_SUBSTITUTES = 3
 PRICE_BAND_PERCENT = 20
@@ -69,8 +72,18 @@ class SubstituteCatalog:
 
     @classmethod
     def load(cls, fixtures: Path = FIXTURES) -> SubstituteCatalog:
+        return cls.from_rows(
+            _jsonl(fixtures / "products.jsonl"), _jsonl(fixtures / "variants.jsonl")
+        )
+
+    @classmethod
+    def from_rows(
+        cls, product_rows: Iterable[Mapping[str, Any]], variant_rows: Iterable[Mapping[str, Any]]
+    ) -> SubstituteCatalog:
+        """From product and variant rows in the fixtures' shape. mcp-catalog builds it from its
+        own verified live store, so both match on the same catalog (row #18, step 0 (b))."""
         products: dict[str, _Product] = {}
-        for row in _jsonl(fixtures / "products.jsonl"):
+        for row in product_rows:
             if row.get("visibility") != "public":
                 continue
             attributes = tuple(
@@ -83,7 +96,7 @@ class SubstituteCatalog:
             )
         variants: dict[str, _Variant] = {}
         by_product: dict[str, list[str]] = {}
-        for row in _jsonl(fixtures / "variants.jsonl"):
+        for row in variant_rows:
             if row.get("visibility") != "public" or row["product_id"] not in products:
                 continue
             variants[row["variant_id"]] = _Variant(
@@ -111,13 +124,22 @@ def find(
     *,
     catalog: SubstituteCatalog | None = None,
     prices: CatalogState | None = None,
+    price: PriceLookup | None = None,
 ) -> tuple[Substitute, ...]:
     """`reservable(variant)` is the most any single node of `region` can give now, live holds
-    subtracted. An unknown or internal variant, or one with no price in `region`, gets none."""
+    subtracted. An unknown or internal variant, or one with no price in `region`, gets none.
+
+    `price(variant, region)`, when given, is the live price read instead of `prices`: mcp-catalog
+    passes its live store's, so a substitute is priced from the same table the shopper's tools read
+    (hard rule 2; row #18, step 0 (b))."""
     catalog = catalog or default_catalog()
-    prices = prices or default_prices()
+    if price is None:
+        table = (prices or default_prices()).prices
+        quotes: PriceLookup = lambda v, r: table.get((v, r))  # noqa: E731
+    else:
+        quotes = price
     wanted = catalog.variants.get(variant_id)
-    base = prices.prices.get((variant_id, region))
+    base = quotes(variant_id, region)
     if wanted is None or base is None:
         return ()
     product = catalog.products[wanted.product_id]
@@ -134,7 +156,7 @@ def find(
         for candidate_id in catalog.by_product.get(other_id, ()):
             if candidate_id == variant_id:
                 continue
-            quote = prices.prices.get((candidate_id, region))
+            quote = quotes(candidate_id, region)
             if quote is None or quote.currency != base.currency:
                 continue
             gap = abs(quote.amount_minor - base.amount_minor)

@@ -304,23 +304,28 @@ def test_an_out_of_stock_add_is_refused_with_alternatives_the_server_chose(
     assert body["region"] == REGION
     assert body["requested"] == {"variant_id": variant, "on_hand": 0, "in_stock": False}
     alternatives = body["alternatives"]
-    assert 1 <= len(alternatives) <= 5
+    assert 1 <= len(alternatives) <= 3
     ids = [a["variant_id"] for a in alternatives]
     assert variant not in ids and len(set(ids)) == len(ids)
     refused = store.variant(variant)
     assert refused is not None
-    same = [a for a in alternatives if a["product_id"] == refused.product_id]
-    others = [a for a in alternatives if a["product_id"] != refused.product_id]
-    assert len(same) <= 3
-    assert alternatives[: len(same)] == same  # the same product first
-    # Same product: same colour and fit first, then by variant ID.
-    keys = [
-        (not (a["colour"] == refused.colour and a["fit"] == refused.fit), a["variant_id"])
-        for a in same
-    ]
-    assert keys == sorted(keys)
-    # Similar products: by product ID, each in the refused product's department and subcategory.
-    assert [a["product_id"] for a in others] == sorted(a["product_id"] for a in others)
+    # Row #18, step 0 (b): BE-04's substitutes, so one variant per product, ranked by tier: same
+    # product other colour, other product same size and fit, same product other size, other.
+    assert len({a["product_id"] for a in alternatives}) == len(alternatives)
+
+    def tier(a: dict[str, object]) -> int:
+        same_product = a["product_id"] == refused.product_id
+        same_size = (a["size"], a["fit"]) == (refused.size, refused.fit)
+        return (0 if same_size else 2) if same_product else (1 if same_size else 3)
+
+    tiers = [tier(a) for a in alternatives]
+    assert tiers == sorted(tiers)
+    base = store.price(variant, REGION)
+    assert base is not None
+    for alt in alternatives:
+        quote = store.price(alt["variant_id"], REGION)
+        assert quote is not None and quote.currency == base.currency
+        assert abs(quote.minor_units - base.minor_units) * 100 <= base.minor_units * 20
     product = store.product(refused.product_id)
     assert product is not None
     for alt in alternatives:

@@ -24,6 +24,7 @@ import json
 import logging
 import time
 from collections.abc import Awaitable, Callable, Mapping
+from contextvars import ContextVar, Token
 from dataclasses import dataclass
 from typing import Any
 
@@ -37,6 +38,7 @@ from northwind_common.mcp_gate import ASGIApp
 from northwind_common.mcp_token import CATALOG_SERVER, Claims
 from northwind_common.tool_scopes import allowed_tools
 from northwind_mcp_catalog.cart_store import CartStore
+from northwind_mcp_catalog.holds import Holds, NoHolds, subtract
 from northwind_mcp_catalog.live import LiveCatalog
 
 log = logging.getLogger("northwind_mcp_catalog")
@@ -93,6 +95,29 @@ def claims_of(ctx: Any) -> Claims:
     return claims
 
 
+# The holds reading of the tool call being handled (`CatalogServer.reading`): (region, reading).
+_READING: ContextVar[tuple[str, Mapping[str, int]] | None] = ContextVar(
+    "holds_reading", default=None
+)
+
+
+class _Reading:
+    """A plain context manager, not `contextlib.contextmanager`: that one sets `__traceback__` on
+    the exception leaving the block, and a `ToolError` is a frozen dataclass."""
+
+    def __init__(self, held: Mapping[str, int], region: str) -> None:
+        self.held, self.region = held, region
+        self._token: Token[tuple[str, Mapping[str, int]] | None] | None = None
+
+    def __enter__(self) -> Mapping[str, int]:
+        self._token = _READING.set((self.region, self.held))
+        return self.held
+
+    def __exit__(self, *exc: object) -> None:
+        if self._token is not None:
+            _READING.reset(self._token)
+
+
 class CatalogServer:
     def __init__(
         self,
@@ -101,13 +126,36 @@ class CatalogServer:
         key: bytes,
         tools: Mapping[str, ToolSpec] | None = None,
         clock: Callable[[], float] = time.time,
+        holds: Holds | None = None,
     ) -> None:
         self.catalog = catalog
+        self.holds: Holds = holds or NoHolds()  # row #18, step 0 (c): BE-04's live holds
         self.carts = CartStore()  # row #16: shoppers' carts, keyed on the token's session
         self._key = key
         self._tools = dict(tools or {})
         self._clock = clock
         self.calls = 0  # tool calls that reached a handler; the contract's 401 tests read it
+
+    def on_hand(self, variant_id: str, region: str, held: Mapping[str, int] | None = None) -> int:
+        """Live stock in `region` less the units BE-04 holds live there (`holds.py`). Pass `held`,
+        one `holds.live(region)` read, to price many variants on one reading; inside `reading`,
+        that call's one reading is used."""
+        if held is None:
+            held = self.held(region)
+        return subtract(self.catalog.stock(variant_id, region), held, variant_id)
+
+    def held(self, region: str) -> Mapping[str, int]:
+        """The call's holds reading for `region` (`reading`), or a fresh one outside it."""
+        taken = _READING.get()
+        if taken is not None and taken[0] == region:
+            return taken[1]
+        return self.holds.live(region)
+
+    def reading(self, region: str) -> _Reading:
+        """One holds reading for a whole tool call, taken before the call changes anything: a cart
+        write takes it before its lock, so a reader that fails fails the call before the cart moves,
+        and the result's view can't fail after the write (row #18 step 0, security review M1)."""
+        return _Reading(self.holds.live(region), region)
 
     def _offered(self, claims: Claims) -> list[str]:
         allowed = allowed_tools(claims.agent, SERVER_NAME)
