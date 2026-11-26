@@ -275,8 +275,9 @@ def test_the_desk_has_one_agent_runtime(monkeypatch: pytest.MonkeyPatch) -> None
 
 
 def test_chat_never_reaches_the_handoff_desk() -> None:
-    """Security re-review N8: /api/chat takes bodies with no Content-Type, so it may only signal a
-    handoff (phase B's `handoff` event); the portal's own JSON request opens it."""
+    """Security re-review N8: /api/chat may only signal a handoff (phase B's `handoff` event); the
+    portal's own JSON request to /api/handoff opens it, through that route's checks and the desk's
+    caps. (Both routes refuse CORS-simple bodies: `test_sa06_content_type.py`.)"""
     from pathlib import Path
 
     import northwind_gateway.chat as chat_module
