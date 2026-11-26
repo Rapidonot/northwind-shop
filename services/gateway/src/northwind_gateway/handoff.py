@@ -28,7 +28,7 @@ import logging
 from functools import lru_cache
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -51,7 +51,7 @@ from northwind_common.cards import contains_card_data
 from northwind_common.llm import agent_runtime
 from northwind_common.localenv import mcp_catalog_url
 from northwind_common.mcp_token import TokenKeyError, signing_key
-from northwind_gateway.chat import CardNumberRefused
+from northwind_gateway.chat import INVALID_MESSAGE, CardNumberRefused
 from northwind_gateway.session import HANDOFF_PATH, session_key
 from northwind_gateway.settings import shopper_caller
 
@@ -107,14 +107,20 @@ def session_ref(token_key: bytes, session: str) -> str:
 def handoff_desk() -> HandoffDesk:
     """Once per process, on BE-07's fakes (decision 0025): the order store seeded read-only from
     `data/backend`, an in-memory case queue and handoff queue, and an in-memory audit. Each Care run
-    gets its own agent runtime, through the LLM proxy."""
+    shares one agent runtime, through the LLM proxy."""
     care = CarePorts(
         orders=OrderStoreFake(state=OrderState.from_data(DATA)),
         cases=CaseQueueFake(state=CaseState()),
     )
     audit = AuditContext(InMemoryAuditSink(), correlation_id="gateway", actor="shopper-portal")
+    # One runtime for the desk, as `chat_services` has one: each `agent_runtime()` makes a temp
+    # directory (security review M1). The desk caps open handoffs and concurrent Care runs.
+    runtime = agent_runtime()
     return HandoffDesk(
-        queue=HandoffQueueFake(state=HandoffState()), care=care, audit=audit, runtime=agent_runtime
+        queue=HandoffQueueFake(state=HandoffState()),
+        care=care,
+        audit=audit,
+        runtime=lambda: runtime,
     )
 
 
@@ -145,13 +151,23 @@ async def _cart(reader: CartReader | None, caller: Caller) -> CartSnapshot | Non
         return None
 
 
+def _json_request(request: Request) -> bool:
+    """Only `application/json`: a cross-site page can send a form or text body without a preflight,
+    never a JSON one (security review M1)."""
+    kind = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+    return kind == "application/json"
+
+
 @router.post(HANDOFF_PATH)
 async def handoff(
+    raw: Request,
     body: Annotated[HandoffBody, Depends(checked_body)],
     caller: Annotated[Caller, Depends(shopper_caller)],
     desk: Annotated[HandoffDesk, Depends(handoff_desk)],
     reader: Annotated[CartReader | None, Depends(cart_reader)],
 ) -> JSONResponse:
+    if not _json_request(raw):
+        return _envelope(422, "validation", False, INVALID_MESSAGE)
     if caller.session is None:
         return _envelope(503, "transient", True, UNAVAILABLE)
     try:
@@ -159,12 +175,13 @@ async def handoff(
     except TokenKeyError:
         log.error("handoff failed: no key")
         return _envelope(503, "transient", True, UNAVAILABLE)
-    identity = (
-        Identity("shopper", caller.shopper_id, caller.region)
-        if caller.shopper_id is not None
-        else Identity("session", session_ref(key, caller.session), caller.region)
-    )
     try:
+        # Inside the try (security review L6): a malformed identity is the fixed 422, never a 500.
+        identity = (
+            Identity("shopper", caller.shopper_id, caller.region)
+            if caller.shopper_id is not None
+            else Identity("session", session_ref(key, caller.session), caller.region)
+        )
         request = HandoffRequest(
             identity,
             body.trigger,
@@ -172,7 +189,7 @@ async def handoff(
             await _cart(reader, caller),
         )
     except ValueError:
-        return _envelope(422, "validation", False, "That request could not be accepted.")
+        return _envelope(422, "validation", False, INVALID_MESSAGE)
     try:
         opened = await desk.request(request)
     except Exception as error:  # noqa: BLE001 - its text must not reach the shopper

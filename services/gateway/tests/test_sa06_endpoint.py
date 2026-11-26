@@ -197,3 +197,41 @@ def test_the_handoff_path_gets_a_session_from_the_middleware(client: TestClient)
     assert response.status_code == 202, response.text
     assert response.headers["set-cookie"].startswith(f"{COOKIE}=")
     assert desk.requests[0].identity.kind == "session"
+
+
+# ---- security review M1 and L6 ------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("kind", ["text/plain", "application/x-www-form-urlencoded", None])
+def test_only_a_json_request_is_taken(client: TestClient, kind: str | None) -> None:
+    """A cross-site page can send a text or form body without a preflight, never a JSON one."""
+    desk = SpyDesk()
+    use(desk, Caller(region="US", session=SESSION))
+    headers = {} if kind is None else {"content-type": kind}
+    response = client.post("/api/handoff", content=b'{"turns": []}', headers=headers)
+    assert response.status_code == 422 and response.json()["message"] == INVALID_MESSAGE
+    assert not desk.requests
+
+
+def test_a_malformed_identity_is_the_fixed_422_not_a_500(client: TestClient) -> None:
+    desk = SpyDesk()
+    use(desk, Caller(region="US", session=SESSION, shopper_id="not-a-shopper"))
+    response = client.post("/api/handoff", json={"turns": []})
+    assert response.status_code == 422 and response.json()["message"] == INVALID_MESSAGE
+    assert not desk.requests
+
+
+def test_the_desk_has_one_agent_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
+    made: list[object] = []
+
+    def fake_runtime() -> object:
+        made.append(object())
+        return made[-1]
+
+    monkeypatch.setattr("northwind_gateway.handoff.agent_runtime", fake_runtime)
+    handoff_desk.cache_clear()
+    try:
+        desk = handoff_desk()
+        assert desk._runtime() is desk._runtime() and len(made) == 1
+    finally:
+        handoff_desk.cache_clear()

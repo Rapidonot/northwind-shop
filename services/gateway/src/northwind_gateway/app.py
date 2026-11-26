@@ -26,6 +26,7 @@ from northwind_gateway.chat import (
     invalid_request,
     router,
 )
+from northwind_gateway.handoff import handoff_desk
 from northwind_gateway.handoff import router as handoff_router
 from northwind_gateway.session import SessionMiddleware
 from northwind_gateway.settings import database_url
@@ -43,6 +44,10 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     # Row #16: the database the health check reads, by name only (the scratch-database proof).
     announce_database("gateway", database_url())
     yield
+    # Row #23 (SA-06, security review M1): open handoff builds get a bounded wait, then are
+    # cancelled, so no Care run outlives the process unseen.
+    if handoff_desk.cache_info().currsize:
+        await handoff_desk().close()
 
 
 app = FastAPI(title="Northwind gateway", lifespan=lifespan)

@@ -73,6 +73,12 @@ class HandoffQueueFake(FakeService):
             return refused
 
         def effect(dry: bool) -> Result[str]:
+            if dry:
+                # Security review L3: a dry run predicts the real call, which returns the identity's
+                # open reference if it has one.
+                for reference, opened in self.state.opened.items():
+                    if opened == identity:
+                        return Ok(reference)
             reference = f"H{len(self.state.opened) + 1:06d}"
             if not dry:
                 self.state.opened[reference] = identity

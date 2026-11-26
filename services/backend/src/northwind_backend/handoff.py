@@ -34,7 +34,7 @@ import logging
 import re
 import unicodedata
 from collections.abc import Callable, Mapping
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from typing import Any, Literal, Protocol, runtime_checkable
 
 from northwind_backend.agents.care import (
@@ -47,7 +47,7 @@ from northwind_backend.agents.care import (
 )
 from northwind_backend.audit import AuditContext, AuditWriteError, card_data
 from northwind_backend.cases import NO_SUMMARY, SUMMARY_LABEL, Case, CaseAmounts, SummarySource
-from northwind_backend.errors import Ok, Result
+from northwind_backend.errors import Ok, Result, transient
 from northwind_backend.recovery import RetryPolicy, call_with_recovery
 from northwind_backend.views import CARE_READ, AuditedOrderStore
 from northwind_common.llm import AgentRuntime
@@ -56,10 +56,23 @@ log = logging.getLogger(__name__)
 
 ACTOR = "handoff-desk"
 MAX_HANDOFF_TURNS = 10
+# Security review M1: what one process holds. Over `MAX_OPEN_HANDOFFS`, a new identity is refused
+# with a fixed transient error; over `MAX_CARE_RUNS` at once, the case is built by code alone
+# (`care_busy`, `summary_missing`), so the handoff still opens at once.
+MAX_OPEN_HANDOFFS = 1000
+MAX_CARE_RUNS = 2
+DESK_FULL = transient(
+    "handoffs_full", "No more handoffs can be opened right now. Please try again later."
+)
 if MAX_HANDOFF_TURNS > MAX_TRANSCRIPT_TURNS:  # a handoff's turns must fit one Care task
     raise RuntimeError("MAX_HANDOFF_TURNS exceeds the Care task's bound")
 SHOPPER_REQUESTED = "shopper_requested"
 CART_LABEL = "cart at handoff (live cart read when the shopper asked)"
+# Security review L4: the portal sends the turns and labels their roles, so an "assistant" turn is
+# as unverified as a shopper's.
+TRANSCRIPT_LABEL = (
+    "sent by the shopper's browser, assistant turns included; roles and wording are unverified"
+)
 REFERENCE = re.compile(r"H\d{6}", re.ASCII)
 REGIONS = frozenset({"US", "CA", "UK", "EU"})
 _SHOPPER = re.compile(r"S\d{4}", re.ASCII)
@@ -272,12 +285,15 @@ class HandoffCase:
         body = asdict(self)
         body["flags"] = list(self.flags)
         body["summary_label"] = SUMMARY_LABEL[self.summary_source]
+        body["transcript_label"] = TRANSCRIPT_LABEL
         if self.amounts.source == "cart":
             body["amounts"]["label"] = CART_LABEL
         return body
 
     def render(self) -> str:
-        """The case as staff read it: plain text, one field per line."""
+        """The case as staff read it: plain text, one field per line. The summary line says the
+        transcript, assistant turns included, came from the shopper's browser (security review
+        L4): its roles are not verified."""
         who = (
             f"shopper {self.identity.ref}"
             if self.identity.kind == "shopper"
@@ -293,6 +309,7 @@ class HandoffCase:
             + (f" (case {self.order_case_id})" if self.order_case_id else ""),
             f"Flags: {', '.join(self.flags) or 'none'}",
             f"Summary ({SUMMARY_LABEL[self.summary_source]}): {self.summary}",
+            f"Transcript: {TRANSCRIPT_LABEL}",
             f"Correlation ID: {self.correlation_id}",
         ]
         return "\n".join(lines)
@@ -393,6 +410,10 @@ def build_case(
 # ---- the queue and the desk ---------------------------------------------------------------------
 
 
+class _CareBusy(Exception):
+    """Every Care slot is taken: the case is built by code alone."""
+
+
 @runtime_checkable
 class HandoffQueuePort(Protocol):
     """The staff handoff queue (a stub for `mcp-cases`, row #19). Both calls take an idempotency
@@ -418,8 +439,10 @@ class HandoffReceipt:
 
 
 class HandoffDesk:
-    """Opens handoffs at once and builds their cases after. `settle()` waits for every build (tests
-    and shutdown). `runtime` makes each Care run's agent runtime (None: the default)."""
+    """Opens handoffs at once and builds their cases after. `settle()` waits for every build
+    (tests); `close()` waits a bounded time, then cancels (shutdown). `runtime` gives each Care run
+    its agent runtime (None: the default); the gateway passes one runtime for the whole desk, as
+    chat does."""
 
     def __init__(
         self,
@@ -429,35 +452,67 @@ class HandoffDesk:
         audit: AuditContext,
         runtime: Callable[[], AgentRuntime | None] = lambda: None,
         policy: RetryPolicy | None = None,
+        max_open: int = MAX_OPEN_HANDOFFS,
+        max_runs: int = MAX_CARE_RUNS,
     ) -> None:
         self._queue = queue
         self._care = care
         self._audit = audit.child(actor=ACTOR, correlation_id=f"{audit.correlation_id}.handoff")
         self._runtime = runtime
         self._policy = policy or RetryPolicy()
-        self._started: set[str] = set()
+        self._max_open = max_open
+        self._max_runs = max_runs
+        self._active = 0  # Care runs now; one event loop, so a plain counter is enough
+        self._opened: dict[str, str] = {}  # idempotency key -> reference
         self._tasks: set[asyncio.Task[HandoffCase | None]] = set()
 
     async def request(
         self, request: HandoffRequest, *, dry_run: bool = False
     ) -> Result[HandoffReceipt]:
         """Opens the handoff and returns its reference; the case is built after. A repeat for the
-        same identity returns the first reference and builds nothing more."""
+        same identity returns the first reference, builds nothing more and is audited (security
+        review L2: the later request's transcript is not merged into the case)."""
+        key = request.identity.key()
+        known = self._opened.get(key)
+        if known is not None:
+            if not dry_run:
+                self._note_repeat(known)
+            return Ok(HandoffReceipt(known, dry_run))
+        if len(self._opened) >= self._max_open:
+            return DESK_FULL
         opened = self._queue.open_handoff(
-            idempotency_key=request.identity.key(), identity=request.identity, dry_run=dry_run
+            idempotency_key=key, identity=request.identity, dry_run=dry_run
         )
         if not isinstance(opened, Ok):
             return opened
         reference = opened.value
-        if not dry_run and reference not in self._started:
-            self._started.add(reference)
+        if not dry_run:
+            self._opened[key] = reference
             task = asyncio.create_task(self._build(reference, request))
             self._tasks.add(task)
             task.add_done_callback(self._tasks.discard)
         return Ok(HandoffReceipt(reference, dry_run))
 
+    def _note_repeat(self, reference: str) -> None:
+        try:
+            self._audit.record("handoff.repeat", {"reference": reference}, {"ok": True})
+        except AuditWriteError:
+            log.error("handoff audit write failed")
+
     async def settle(self) -> list[HandoffCase | None]:
         return list(await asyncio.gather(*tuple(self._tasks)))
+
+    async def close(self, timeout: float = 5.0) -> None:
+        """Waits up to `timeout` seconds for open builds, then cancels the rest (shutdown)."""
+        pending = tuple(self._tasks)
+        if not pending:
+            return
+        _done, late = await asyncio.wait(pending, timeout=timeout)
+        for task in late:
+            task.cancel()
+        if late:
+            log.error("handoff builds cancelled at shutdown: %d", len(late))
+            await asyncio.gather(*late, return_exceptions=True)
 
     async def _owned_order(self, request: HandoffRequest, run: AuditContext) -> str | None:
         """The first order ID in the shopper's turns, if the store shows it is the signed-in
@@ -483,7 +538,13 @@ class HandoffDesk:
         screened: tuple[Turn, ...] = ()
         order_case: Case | None = None
         summary: str | None = None
+        busy = self._active >= self._max_runs
+        if not busy:
+            self._active += 1
         try:
+            if busy:
+                # Security review M1: no Care run over the cap; the code-built case goes now.
+                raise _CareBusy
             order_id = await self._owned_order(request, run)
             task = CareTask(order_id, request.turns)
             screened = task.transcript
@@ -506,8 +567,13 @@ class HandoffDesk:
                     policy=self._policy,
                 )
                 summary = result.summary
+        except _CareBusy:
+            log.error("handoff care run skipped: busy")
         except Exception as error:  # noqa: BLE001 - staff still get the code-built case
             log.error("handoff care run failed: %s", type(error).__name__)
+        finally:
+            if not busy:
+                self._active -= 1
         case = build_case(
             reference=reference,
             request=request,
@@ -517,6 +583,8 @@ class HandoffDesk:
             order_case=order_case,
             summary=summary,
         )
+        if busy:
+            case = replace(case, flags=(*case.flags, "care_busy"))
         filed = self._queue.file_case(idempotency_key=f"{request.identity.key()}:case", case=case)
         outcome: dict[str, Any] = {
             "ok": isinstance(filed, Ok),
@@ -542,6 +610,10 @@ __all__ = [
     "INTENTS",
     "MAX_HANDOFF_TURNS",
     "SHOPPER_REQUESTED",
+    "DESK_FULL",
+    "MAX_CARE_RUNS",
+    "MAX_OPEN_HANDOFFS",
+    "TRANSCRIPT_LABEL",
     "CartLine",
     "CartSnapshot",
     "HandoffAmounts",
