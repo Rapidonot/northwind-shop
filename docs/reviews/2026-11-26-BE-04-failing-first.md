@@ -110,3 +110,15 @@ m06 L3: the conflict code is idempotency_conflict again: CAUGHT: 4 failed, 116 d
 m07 L4: the message says nothing changed again: CAUGHT: 1 failed in 0.15s
 m08 data pin: the fit also reorders every order's lines: CAUGHT: 3 failed in 0.73s
 ```
+
+## Postgres (after window B; the stack started by the user), at b95a61f
+
+- `pytest -m integration test_be04_race.py test_be04_contract.py`: **66 passed** on the first run, with no fix needed:
+  - the 7 race tests, including `test_a_read_then_write_reserve_oversells_under_the_same_race`, the sensitivity check: the naive read-then-write reserve did oversell under the same barrier;
+  - the 59 Postgres contract tests: 55 original, the 3 two-clock tests and the N1 test.
+- The race suite, repeated: 5 of 5 runs, 7 passed each (about 9 s).
+- Mutants on the real store, each restored after its run:
+  - p1: no row lock, no conditional update and no CHECK. The last-unit race: **1 failed**.
+  - p2: no row lock only. The race suite still passes, 7 of 7: the conditional update and the CHECK each stop an oversell alone, so the lock is defence in depth, not the only guard.
+  - p3: `postgres.py` at 03589a2, before the security fixes, against the two-clock, L2 and N1 Postgres tests: **4 failed, 2 passed**. The 2 that pass also passed before the fixes: the two-clock release (the old release already skipped swept holds) and the expired no-op release.
+- U1 (`%(variants)s` used twice, with `None`) works on Postgres 16: substitutes on a stock-out run in the last-unit race.
