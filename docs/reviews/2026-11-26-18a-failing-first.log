@@ -152,3 +152,11 @@ N1, N5, N6, N7, N10 (c219fba), test_18a_security_fixes.py: 18 of 53 fail at 1209
 N2, N3, N9 (eb83b42), test_scan_18a.py: 7 fail first; mutants 3 of 3 (no overlap 2, kinds not counts 5, bounded escapes 1). Full $0 scan: 0 findings, 25.0 s.
 N4 (19556fe), test_18a_cards.py: 2 fail first. 16,000 random code spellings: none found at 28e07ef is missed. Card check over every recorded message and tool call: 0 differ.
 N8 (2f231d7), test_a2a05_partner_18a.py: 4 fail first; mutant without the confirmation 4.
+
+## The user's answers to D1-D5 (2026-11-26)
+D5 (a), option A (010d9cc): checked first at $0 under A in a scratch copy: D1's five eval answers still shown as written, none flips; 0 of 448 calls change. The 24 changed expectations marked strict xfail D5 where they were; test_18a_d5_pins.py pins their sentences as replaced and R1/R2/R3's inputs: 27 of 30 fail at 418614f. Mutants: unread-start rule 1, old full-stop rule 1.
+D4 (010d9cc): the strict xfail becomes a pin that the sentence stays blocked.
+D2 (b) (fc87329), services/mcp-orders/tests/test_18a_key_digits.py: 6 fail first; mutant (10-digit limit) 6. The pin test_the_split_card_check_never_refuses_a_good_request_for_its_key changed as approved: 42424242 and 4111-1111-11 now refused, a good mixed key added. Orders and common: 951 passed.
+D5 (b) (7c7989a): the reviewer's R5 construction fails first; mutant (per-line count) 1. Full $0 scan: 0 findings, 28.0 s.
+D5 (c) (b229bd9): 5 of 10 new cases fail first; mutants: no negation check 3, no cart object 1, no confirmation needed 19.
+D5 (d) (5e1397b): both 've not run out forms fail first. Step 0 after all of it: 0 of 448 differ from the last state; 6 against base, the listed ones.
