@@ -464,6 +464,27 @@ PATTERNS: tuple[Pattern, ...] = (
     _p("stock", rf"\blimited{_S}(?:stock|availability|quantities|numbers)\b"),
     #    Row #30, security M-4 (the user's approval, 2026-11-25): vouched as "out of stock" is.
     _p("stock", rf"\b(?:none|no{_S}stock){_S}left\b", "live_stock"),
+    #    Row 18a, M-A (rows #30 + #22 security read 3): more "none left" wordings, vouched the same
+    #    way. A bare "no" needs a stock noun or "more" after it, so "no left pocket" is not one.
+    _p(
+        "stock",
+        rf"\b(?:zero|none)(?:{_S}of{_S}(?:them|those|these|it))?"
+        rf"(?:{_S}(?:more{_S})?(?:units?|items?|pieces?|pairs?|stock))?{_S}(?:left|remaining)\b(?![-‐‑])",
+        "live_stock",
+    ),
+    _p(
+        "stock",
+        rf"\bno{_S}(?:more{_S})?(?:units?|items?|pieces?|pairs?|stock|more)"
+        rf"(?:{_S}of{_S}(?:them|those|these|it))?{_S}(?:left|remaining)\b(?![-‐‑])",
+        "live_stock",
+    ),
+    #    "aren't any left", "don't have any left": the negation before it is read as for "in stock".
+    _p(
+        "stock",
+        rf"\b(?:(?:have|got){_S})?any{_S}(?:more{_S})?"
+        rf"(?:(?:units?|items?|pieces?|pairs?|stock){_S})?(?:left|remaining)\b(?![-‐‑])",
+        "live_stock",
+    ),
     #    More member-price wordings (#13b R4 left these to #12), class 1: no exemption.
     _p("promotion", rf"\bmembers?[\s-]{{1,3}}only{_S}(?:rates?|prices?|pricing|deals?|offers?)\b"),
     _p("promotion", rf"\bmember{_S}(?:rates?|deals?|offers?|savings?|exclusives?)\b"),
@@ -742,6 +763,7 @@ _OPEN_TAIL = re.compile(r"[*_`]*[.,]?[*_`]*")
 _COUNT_IN = re.compile(rf"\d[\d,]*|\b{_SPELLED_COUNT}")  # \b: "none" holds no "one"
 _NEGATIVE = re.compile(
     rf"\bout{_J}of{_J}stock\b|\bsold{_J}out\b|\bunavailable\b|\b(?:none|no{_S}stock){_S}left\b"
+    r"|\b(?:zero|none|no)\b"  # row 18a, M-A: every such span says there is none
 )
 _LOW = re.compile(r"\blow\b")
 
@@ -802,6 +824,46 @@ def _negated(view: str, start: int) -> bool | None:
     if _GOVERNING_NEGATION.search(before):
         return True
     return None if _NEGATION.search(before) else False
+
+
+# Row 18a, M-B (rows #30 + #22 security read 3): `_negated` reads one clause of at most 40
+# characters, so a negation past a comma, a bracket, a newline, the dot of "2.5" or a long aside
+# read as no negation at all, and "None of the Slate towels, Bath or Hand, is in stock" was
+# vouched by 5 units. Past that clause, a negation anywhere earlier in the sentence makes the
+# claim unvouched (fail closed). A sentence ends at `[.!?]` before whitespace or at a blank line:
+# one newline does not end it ("is not" newline "in stock").
+_SENTENCE_END = re.compile(r"[.!?](?=\s)|\n[^\S\n]*\n")
+# A reply word that opens the sentence answers the shopper and negates nothing after it: "No, the
+# Charcoal L is out of stock right now" (two recorded `assistant-intents` answers, step 0).
+_REPLY_NO = re.compile(r"\s*[*_]{0,4}(?:no|nope)[*_]{0,4}\s{0,3}(?:,|[-‐‑‒–—―])")
+# A new clause the phrase is in: a semicolon, colon or dash, or a comma and a conjunction or a
+# subject ("…, but the M is available", "Not only is it warm, it is available in three colours").
+# It counts only when no comma, bracket or newline follows it before the phrase, so "is not, and I
+# checked, in stock" stays negated.
+_RESTART = re.compile(
+    r"[;:]|\s[-‐‑]\s|[‒–—―]"
+    r"|,\s{0,3}(?:but|and|so|yet)\s"
+    r"|,\s{0,3}(?:it|they|we|i|you|there|this|these|those)(?=\s|['’])"
+)
+_RESTART_SPOILED = re.compile(r"[,()\n]")
+# A sentence adverb closed by commas: "It is, not surprisingly, available in three colours."
+_NEGATED_ADVERB = re.compile(r",\s{0,3}(?:not|no)\s{1,3}[^\W\d_]{2,20}\s{0,3},")
+NEGATION_REACH = 2 * L  # view characters looked back for a negation in the sentence
+
+
+def negated_in_sentence(before: str) -> bool:
+    """Whether `before`, the text ahead of a stock phrase, holds a negation in the phrase's
+    sentence: from its start, or from a new clause the phrase is in, with a reply word that opens
+    it and a negated sentence adverb left out."""
+    ends = list(_SENTENCE_END.finditer(before))
+    sentence = before[ends[-1].end() :] if ends else before
+    reply = _REPLY_NO.match(sentence)
+    sentence = sentence[reply.end() :] if reply else sentence
+    for restart in reversed(list(_RESTART.finditer(sentence))):
+        if not _RESTART_SPOILED.search(sentence, restart.end()):
+            sentence = sentence[restart.end() :]
+            break
+    return bool(_NEGATION.search(_NEGATED_ADVERB.sub(",", sentence)))
 
 
 def stems_of(text: str) -> frozenset[str]:
@@ -1105,14 +1167,28 @@ class OutputCheck:
             )
         if pattern.exempt == "offered_range":
             # Only the word is vouched: the "three" of "in three colours" is no unit count.
-            word, negated = span.split()[0], _negated(view.text, start)
+            word, negated = span.split()[0], self._stock_negation(view, found)
             if word == "available" and negated is False:
                 return True
             return stock_vouched(word, self.live, negated)
         if pattern.exempt == "live_stock":
-            return stock_vouched(span, self.live, _negated(view.text, start))
+            return stock_vouched(span, self.live, self._stock_negation(view, found))
 
         raise ValueError(f"unknown exemption: {pattern.exempt}")  # fail closed on a new kind
+
+    def _stock_negation(self, view: View, found: re.Match[str]) -> bool | None:
+        """`_negated`, then the sentence it does not reach (row 18a, M-B): None when a negation sits
+        earlier in the sentence. The text before comes from the whole raw stream when there is one,
+        as the view may start after a newline or 2L back; `live_backed` passes its whole text."""
+        negated = _negated(view.text, found.start())
+        if negated is not False:
+            return negated
+        if self._raw:
+            lo = view.raw_span(found.start(), found.end())[0]
+            before = self._view(self._back(lo, NEGATION_REACH), lo).text
+        else:
+            before = view.text[max(0, found.start() - NEGATION_REACH) : found.start()]
+        return None if negated_in_sentence(before) else False
 
     def _blocking_class(self, start: int, end: int) -> str | None:
         """The class of the earliest blocking match in raw [start, end), dropped classes left out,
