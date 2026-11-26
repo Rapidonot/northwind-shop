@@ -146,3 +146,9 @@ M1, L1, L2, L3 (134a8f0), services/assistant/tests/test_18a_security_fixes.py: 2
 L5 (78cb4df), services/common/tests/test_18a_cards.py: 4 of 5 new cases fail first; mutant, the old separator set, 4. Card check over every recorded message and tool call: 0 differ.
 L4 and L7 (58004a9), services/llm-replay/tests/test_scan_18a.py: the reviewer's carry construction (scan_paths and put) and escape depths 3, 4, 6 fail first; mutants: no token cut 2, 1-2 backslashes 3. Full $0 scan: 0 findings, 23.7 s.
 L6 (1209446), evals/tests/test_a2a05_partner_18a.py: 7 of 9 new cases fail first (2 plain confirmations pass both ways); mutant, no denial check, 9.
+
+## Security re-review fixes (docs/reviews/2026-11-26-18a-security-rereview.raw.md: no critical or high; N1, N2 medium; N3-N10 low)
+N1, N5, N6, N7, N10 (c219fba), test_18a_security_fixes.py: 18 of 53 fail at 1209446; mutants 4 of 4 (range dash restarts 3, colon before anything 1, dash restarts with the start out of view 1, full stop before lower case ends 2). Step 0 found one over-block ("they're out of their packaging", a2a-05-partner): narrowed to "we", pinned; then 0 of 448 differ (6 against base, the listed ones).
+N2, N3, N9 (eb83b42), test_scan_18a.py: 7 fail first; mutants 3 of 3 (no overlap 2, kinds not counts 5, bounded escapes 1). Full $0 scan: 0 findings, 25.0 s.
+N4 (19556fe), test_18a_cards.py: 2 fail first. 16,000 random code spellings: none found at 28e07ef is missed. Card check over every recorded message and tool call: 0 differ.
+N8 (2f231d7), test_a2a05_partner_18a.py: 4 fail first; mutant without the confirmation 4.
