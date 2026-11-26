@@ -95,3 +95,18 @@ m07 L4: the message says nothing changed again: CAUGHT: 1 failed in 0.17s
 ```
 
 All 8 are caught. The L4 and data-pin tests (`test_the_unavailable_message_never_claims_that_nothing_changed` and `tests/test_be04_data.py`) are new in this commit, for advisor findings 1 and 3.
+
+## The same mutants, one unedited run of the committed script at c11cb59 (advisor re-read N-1)
+
+The section above was put together from two runs, the second after the m07 pattern was fixed, with m07 placed after m08. This is one run of `docs/reviews/2026-11-26-BE-04-mutants.py.txt` at `c11cb59`, as printed:
+
+```
+m01 M2: no stock field in the context: CAUGHT: 1 failed in 0.47s
+m02 M2: the stock field leaks into escalate_order's result: CAUGHT: 1 failed in 0.50s
+m03 L1: any Ok from reserve counts as a live hold: CAUGHT: 1 failed in 0.50s
+m04 L6: no MAX_QUANTITY in M12: CAUGHT: 1 failed in 0.49s
+m05 L6: no MAX_LINES in M12: CAUGHT: 1 failed in 0.51s
+m06 L3: the conflict code is idempotency_conflict again: CAUGHT: 4 failed, 116 deselected in 0.19s
+m07 L4: the message says nothing changed again: CAUGHT: 1 failed in 0.15s
+m08 data pin: the fit also reorders every order's lines: CAUGHT: 3 failed in 0.73s
+```
