@@ -147,50 +147,48 @@ def _cart_tool_names() -> frozenset[str]:
 
 # Row 18a (the user's answer 5, 2026-11-25): the order narrative goes beside its artifact only when
 # it plainly agrees with it; otherwise A2A-05 returns the artifact alone. Fails closed.
-# Security L6: any negating word in a sentence that names an order or cart action, not a list of
-# denials (which "I couldn't add it" passed).
+# The user's D5 (c), 2026-11-26 (security L6, N8, R6): a positive rule, not a list of denials. The
+# narrative is served only when one sentence cites the variant, confirms it in the cart and holds no
+# negating word.
 NEGATING = re.compile(
-    r"\b(?:not|no|never|cannot|unable|fail(?:ed|s)?|nor|without)\b|n['’]t\b", re.I
+    r"\b(?:not|no|never|cannot|unable|fail(?:ed|s)?|nor|without|nothing|none|empty|declined|"
+    r"removed|unsuccessful(?:ly)?)\b|n['’]t\b",
+    re.IGNORECASE,
 )
-ORDER_ACTION = re.compile(
-    r"\b(?:order|place|add|cart|buy|bought|purchase|checkout|check\s+out)", re.IGNORECASE
-)
-
-
-# Re-review N8: no denial is not enough; the text must confirm the cart action in plain words.
-ORDER_CONFIRMED = re.compile(
-    r"\bI(?:['’]ve|\s+have)?\s+(?:now\s+)?added\b"
-    r"|\b(?:is|was|are|were|has\s+been|have\s+been)\s+(?:now\s+)?(?:added|in\s+your\s+cart)\b"
+CART_CONFIRMATION = re.compile(
+    r"\bI(?:['’]ve|\s+have)?\s+(?:now\s+)?added\b[^.!?\n]{0,80}\bto\s+your\s+cart\b"
+    r"|\b(?:is|was|are|were|has\s+been|have\s+been)\s+(?:now\s+)?in\s+your\s+cart\b"
     r"|\byour\s+cart\s+(?:now\s+)?(?:holds|has|contains)\b",
     re.IGNORECASE,
 )
-
-
-def order_denied(text: str) -> bool:
-    return any(
-        NEGATING.search(sentence) and ORDER_ACTION.search(sentence)
-        for sentence in re.split(r"[.!?\n]+", text)
-    )
-
-
 VARIANT_ID = re.compile(r"\bP\d{4}(?:-[A-Z0-9]{1,16}){1,4}\b")
+SENTENCE = re.compile(r"[^.!?\n]+")
+
+
+def confirmed_variants(text: str) -> set[str]:
+    """The variants cited in a sentence that confirms them in the cart and negates nothing."""
+    return {
+        cited
+        for sentence in SENTENCE.findall(text)
+        if CART_CONFIRMATION.search(sentence) and not NEGATING.search(sentence)
+        for cited in CITATION.findall(sentence)
+        if VARIANT_ID.fullmatch(cited)
+    }
 
 
 def narrative_agrees(text: str, artifact: Mapping[str, Any], product_id: str) -> bool:
-    """Whether the order narrative plainly agrees with the order's artifact: it confirms the cart
-    action in plain words and denies none, cites the turn's product, and cites exactly the
-    variants the artifact names, which must be that product's. An artifact that names no variant
+    """Whether the order narrative plainly agrees with the order's artifact: it cites exactly the
+    variants the artifact names, which must be the turn's product's, and each of them in a sentence
+    that confirms it in the cart and negates nothing (D5 (c)). An artifact that names no variant
     cannot be agreed with."""
-    if order_denied(text) or not ORDER_CONFIRMED.search(text):
-        return False
     cited = set(CITATION.findall(text))
     named = set(VARIANT_ID.findall(json.dumps(artifact, sort_keys=True)))
     text_variants = {c for c in cited if VARIANT_ID.fullmatch(c)}
     return bool(
         named
         and all(v.startswith(f"{product_id}-") for v in named)
-        and (product_id in cited or text_variants)
         and text_variants == named
+        and confirmed_variants(text) == named
     )
 
 

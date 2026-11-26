@@ -16,11 +16,12 @@ CHK-06 a read-only `get_order` satisfied it (P3-1).
    MCP token, never the model, so replay is unaffected.
 3. **An order turn is one whose every call was offered northwind-catalog's exact cart tools (`CART_TOOL_NAMES`) and that
    called one of them.**
-4. **The artifact alone:** the order narrative is served beside its order artifact only when it plainly agrees with it. That
-   means a plain confirmation of the cart action ("I added", "is now in your cart", "your cart now holds"; security
-   re-review N8), no negating word in any sentence that names an order or cart action (security L6), a citation of the turn's product, and exactly the variants the artifact names,
-   all of them that product's. Otherwise A2A-05 returns the artifact alone (text `None`). It is deterministic and fails closed.
-   The artifact's full shape is A2A-05's to define; only the variant IDs in it are read here.
+4. **The artifact alone:** the order narrative is served beside its order artifact only when it plainly agrees with it: it
+   cites exactly the variants the artifact names, all of them the turn's product's, and each of them in one sentence that
+   confirms it in the cart ("I added … to your cart", "… is now in your cart", "your cart now holds …") and holds no negating
+   word. Otherwise A2A-05 returns the artifact alone (text `None`). It is deterministic and fails closed. A positive rule, by
+   the user's D5 (c) (2026-11-26), after two rounds of denial lists were each found open (security L6, N8, R6). The artifact's
+   full shape is A2A-05's to define; only the variant IDs in it are read here.
 
 ## Consequences
 - The 9 fixtures and cassettes are unchanged; the suite stays stale and skips until RECORD-ALL (#18) records it, which also

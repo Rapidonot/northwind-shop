@@ -36,7 +36,8 @@ ADD = "mcp__northwind-catalog__add_to_cart"
 CART = tuple(sorted(CART_TOOL_NAMES))
 VARIANT = "P0003-SLT-REL-M"
 AGREEING = (
-    f"I'm an AI assistant. I added one Corvane Breakwater Shell in Slate, size M [{VARIANT}]."
+    "I'm an AI assistant. I added one Corvane Breakwater Shell in Slate, size M, to your cart "
+    f"[{VARIANT}]."
 )
 ARTIFACT = {"order": {"lines": [{"variant_id": VARIANT, "quantity": 1}]}}
 
@@ -269,3 +270,39 @@ def test_a_text_that_confirms_no_cart_action_leaves_the_artifact_alone(
 ) -> None:
     text, artifact = served(*order_setup(tmp_path, shown=shown))
     assert text is None and artifact is ARTIFACT
+
+
+# ---- the user's D5 (c): one sentence cites the variant and confirms it in the cart ------------
+
+
+@pytest.mark.parametrize(
+    "shown",
+    [
+        f"Your cart has nothing in it [{VARIANT}].",  # R6
+        f"I added nothing; the shell [{VARIANT}] was declined.",  # R6
+        f"I added the shell [{VARIANT}] to your wishlist.",  # R6: not the cart
+        # two sentences: the confirmation and the variant are apart
+        f"I added it to your cart. It is the Corvane Breakwater Shell [{VARIANT}].",
+        f"Your cart now holds the shell, but it was removed again [{VARIANT}].",
+        f"The shell [{VARIANT}] is in your cart, without the hood.",
+    ],
+)
+def test_without_one_plain_cart_confirmation_of_the_variant_the_artifact_goes_alone(
+    tmp_path: Path, shown: str
+) -> None:
+    text, artifact = served(*order_setup(tmp_path, shown=shown))
+    assert text is None and artifact is ARTIFACT
+
+
+@pytest.mark.parametrize(
+    "shown",
+    [
+        AGREEING,
+        f"Your cart now holds one Corvane Breakwater Shell [{VARIANT}].",
+        f"I'm an AI assistant. The Corvane Breakwater Shell [{VARIANT}] is now in your cart.",
+        f"I've added the Slate shell, size M, to your cart [{VARIANT}]. Anything else?",
+    ],
+)
+def test_one_plain_cart_confirmation_of_the_variant_is_served(tmp_path: Path, shown: str) -> None:
+    text, _artifact = served(*order_setup(tmp_path, shown=shown))
+    assert text == shown
