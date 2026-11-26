@@ -160,3 +160,6 @@ D2 (b) (fc87329), services/mcp-orders/tests/test_18a_key_digits.py: 6 fail first
 D5 (b) (7c7989a): the reviewer's R5 construction fails first; mutant (per-line count) 1. Full $0 scan: 0 findings, 28.0 s.
 D5 (c) (b229bd9): 5 of 10 new cases fail first; mutants: no negation check 3, no cart object 1, no confirmation needed 19.
 D5 (d) (5e1397b): both 've not run out forms fail first. Step 0 after all of it: 0 of 448 differ from the last state; 6 against base, the listed ones.
+
+## D6 (the user, 2026-11-26)
+F3: 6-digit limit on every request_return argument; order number refused as the same not_found bytes (lookalike pin). 4 fail first; mutant 3. F4: U.S./U.K./E.U. abbreviations, 3 fail first; the rest a residual. Step 0: 0 of 448.
