@@ -53,6 +53,6 @@ def test_at_most_two_positives_are_missed() -> None:
     assert len(missed) <= MAX_MISSED_POSITIVES, missed
 
 
-@pytest.mark.parametrize("text", ["", "   ", "​", "?!", "a" * 2000])
+@pytest.mark.parametrize("text", ["", "   ", "\u200b", "?!", "a" * 2000])
 def test_empty_or_odd_messages_do_not_hand_off(text: str) -> None:
     assert asks_for_person(text) is False
