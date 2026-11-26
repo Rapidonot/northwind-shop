@@ -17,6 +17,11 @@ from northwind_assistant.output_check import (
 
 pytestmark = pytest.mark.req("RAG-09")
 
+# The user's D5 (a), 2026-11-26: no clause restart, so a negation anywhere earlier in the sentence
+# leaves the claim unvouched. These expectations no longer hold; what replaces them is pinned in
+# test_18a_d5_pins.py.
+D5 = pytest.mark.xfail(strict=True, reason="D5 (a): now replaced; see test_18a_d5_pins.py")
+
 MONEY = FIXED_SENTENCES["money"]
 STOCK = FIXED_SENTENCES["stock"]
 
@@ -123,8 +128,11 @@ def test_an_asking_word_without_an_embedded_question_leaves_a_claim(text: str) -
     [
         "Check the product page to see whether that size is available right now.",
         "The live product page will show whether Glacier Blue is available in 4XL right now.",
-        "I can't see stock levels, so check the live product page to see whether the M is "
-        "available now.",
+        pytest.param(
+            "I can't see stock levels, so check the live product page to see whether the M is "
+            "available now.",
+            marks=D5,
+        ),
         "The live product page shows which size and colour combinations are available, and it "
         "also has current stock.",
         "I couldn't find anything on compensation for late deliveries, or on what care agents are "
@@ -263,7 +271,11 @@ def test_n2_a_us_price_does_not_vouch_canadian_dollars() -> None:
 
 
 @pytest.mark.parametrize(
-    "text", ["There's no doubt the M is in stock.", "Never mind, it is in stock now."]
+    "text",
+    [
+        "There's no doubt the M is in stock.",
+        pytest.param("Never mind, it is in stock now.", marks=D5),
+    ],
 )
 def test_n3_a_negation_that_does_not_govern_blocks_at_any_stock(text: str) -> None:
     if text.startswith("Never mind,"):  # the comma ends the clause: a plain claim, checked as one
@@ -275,7 +287,11 @@ def test_n3_a_negation_that_does_not_govern_blocks_at_any_stock(text: str) -> No
 
 
 @pytest.mark.parametrize(
-    "text", ["No worries — the M is in stock.", "Don't wait — the M is available now."]
+    "text",
+    [
+        pytest.param("No worries — the M is in stock.", marks=D5),
+        pytest.param("Don't wait — the M is available now.", marks=D5),
+    ],
 )
 def test_n3_a_dash_ends_the_negations_clause(text: str) -> None:
     # The claim after the dash stands alone: false at zero, true above it.
@@ -412,6 +428,7 @@ def test_m2_a_negation_across_an_aside_is_unvouched(text: str) -> None:
     assert check_text(text, live=LiveValues(stock={"v": 0})) == STOCK
 
 
+@D5
 def test_m2_a_negation_in_another_clause_still_leaves_a_plain_claim() -> None:
     text = "No worries — the M is in stock."
     assert check_text(text, live=LiveValues(stock={"v": 5})) == text

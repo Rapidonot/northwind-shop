@@ -19,6 +19,11 @@ from northwind_assistant.output_check import (
     live_backed,
 )
 
+# The user's D5 (a), 2026-11-26: no clause restart, so a negation anywhere earlier in the sentence
+# leaves the claim unvouched. These expectations no longer hold; what replaces them is pinned in
+# test_18a_d5_pins.py.
+D5 = pytest.mark.xfail(strict=True, reason="D5 (a): now replaced; see test_18a_d5_pins.py")
+
 LINK = FIXED_SENTENCES["link"]
 STOCK = FIXED_SENTENCES["stock"]
 
@@ -85,7 +90,7 @@ RANGES = [
     "It is available in sizes M and L.",
     "It is available in three colours.",
     "They are available in a range of colours.",
-    "It isn't packable, but it is available in three colours.",
+    pytest.param("It isn't packable, but it is available in three colours.", marks=D5),
 ]
 
 

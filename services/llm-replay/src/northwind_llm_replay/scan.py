@@ -29,6 +29,7 @@ import json
 import os
 import re
 import stat
+from collections import Counter
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, replace
 from datetime import datetime
@@ -47,7 +48,16 @@ _KEY_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("generic-sk-key", re.compile(r"(?<![A-Za-z0-9])sk-[A-Za-z0-9_\-]{20,}")),
     ("bearer-token", re.compile(r"(?i)bearer\s+[A-Za-z0-9._~+/\-]{16,}")),
     # The header *with a value* (a header dump, curl line or JSON object), not the bare name.
-    ("x-api-key-header", re.compile(r"""(?i)x-api-key["']?\s*[:=]\s*["']?[^\s"',}]+""")),
+    # Row 18a (H6): or JSON-escaped inside a cassette string (`x-api-key\": \"…`), once or more
+    # deeply (security L7); an empty value left out as before. The first alternative is the old
+    # pattern, unchanged.
+    (
+        "x-api-key-header",
+        re.compile(
+            r"""(?i)x-api-key["']?\s*[:=]\s*["']?[^\s"',}]+"""
+            r"""|(?i:x-api-key)\\+["']\s*[:=]\s*\\+["'](?!\\)[^\s"',}\\]+"""
+        ),
+    ),
 )
 _PAN_RUN = re.compile(r"(?<!\d)\d{13,19}(?!\d)")
 # The only generated values that trip the PAN check, written before ledger IDs became digit-free
@@ -57,6 +67,20 @@ LEGACY_LEDGER_VALUES = {
     "request_hash": "9ae008fbeda6cdf6a5e448691696572946f33256beca740eec2bbb879d27a62b",
 }
 _PAN_GROUPED = re.compile(r"(?<![\d])\d{4}([ -])\d{4}\1\d{4}\1\d{4}(?![\d])")
+# Row 18a (H6): 4-4-4-4, Amex 4-6-5 and Diners 4-6-4, each gap one space, hyphen, dot, no-break or
+# thin space, mixed or not. Read beside `_PAN_GROUPED`, which is unchanged; a span both find counts
+# once.
+_PAN_SEP = "[ \\-.\u00a0\u2007\u2009\u202f]"
+_PAN_GROUPED_WIDE = re.compile(
+    rf"(?<!\d)(?:\d{{4}}{_PAN_SEP}\d{{4}}{_PAN_SEP}\d{{4}}{_PAN_SEP}\d{{4}}"
+    rf"|\d{{4}}{_PAN_SEP}\d{{6}}{_PAN_SEP}\d{{4,5}})(?!\d)"
+)
+# Re-review N2: matches may overlap, so "1111 4242 4242 4242 4242" reads the card after a leading
+# group that fails Luhn. Each start position is tried; the guards are the same.
+_PAN_GROUPED_OVERLAPPING = re.compile(
+    rf"(?=((?:\d{{4}}{_PAN_SEP}\d{{4}}{_PAN_SEP}\d{{4}}{_PAN_SEP}\d{{4}}"
+    rf"|\d{{4}}{_PAN_SEP}\d{{6}}{_PAN_SEP}\d{{4,5}})(?!\d)))(?<!\d)"
+)
 
 
 def printable(text: str) -> str:
@@ -113,8 +137,13 @@ def scan_text(
         for m in _PAN_RUN.finditer(line):
             if luhn_ok(m.group(0)):
                 findings.append(Finding(path, lineno, "luhn-valid-pan"))
+        grouped = set()
         for m in _PAN_GROUPED.finditer(line):
+            grouped.add(m.span())
             if luhn_ok(re.sub(r"\D", "", m.group(0))):
+                findings.append(Finding(path, lineno, "luhn-valid-pan"))
+        for m in _PAN_GROUPED_OVERLAPPING.finditer(line):  # re-review N2: every start is tried
+            if m.span(1) not in grouped and luhn_ok(re.sub(r"\D", "", m.group(1))):
                 findings.append(Finding(path, lineno, "luhn-valid-pan"))
     return findings
 
@@ -123,7 +152,13 @@ _DELTA_TEXT_KEYS = {
     "text_delta": "text",
     "thinking_delta": "thinking",
     "input_json_delta": "partial_json",
+    "signature_delta": "signature",  # row 18a: every delta type is read, or it is a finding
 }
+UNKNOWN_DELTA = "unknown-delta-type"
+# Not splitlines(): that also breaks on U+2028 and friends, legal inside a JSON string, and the
+# broken halves would parse as nothing, leaving a hole in the text. CR-only streams are split too
+# (row 18a, H6).
+_SSE_LINE = re.compile(r"\r\n|\r|\n")
 
 
 def _record(document: str) -> dict[str, Any] | None:
@@ -139,20 +174,75 @@ def reassembled_blocks(document: str) -> list[str]:
     cassette holding one. A plain function, so anything holding a stream can reuse it."""
     record = _record(document)
     body = record["body"] if record and isinstance(record.get("body"), str) else document
+    return _reassembled(body)[0]
+
+
+def _reassembled(body: str) -> tuple[list[str], bool]:
+    """The blocks, and whether a delta was of a type not in `_DELTA_TEXT_KEYS` (or no dict)."""
     blocks: dict[int, list[str]] = {}
-    # Not splitlines(): that also breaks on U+2028 and friends, legal inside a JSON string, and the
-    # broken halves would parse as nothing, leaving a hole in the text.
-    for line in body.split("\n"):
+    unknown = False
+    for line in _SSE_LINE.split(body):
         event = _record(line[len("data:") :]) if line.startswith("data:") else None
         if event is None or event.get("type") != "content_block_delta":
             continue
         delta = event.get("delta")
-        if not isinstance(delta, dict):
+        key = _DELTA_TEXT_KEYS.get(delta.get("type", "")) if isinstance(delta, dict) else None
+        if key is None or not isinstance(delta, dict):
+            unknown = True
             continue
-        key = _DELTA_TEXT_KEYS.get(delta.get("type", ""))
-        if key is not None:
-            blocks.setdefault(event.get("index", 0), []).append(str(delta.get(key, "")))
-    return ["".join(parts) for _, parts in sorted(blocks.items())]
+        index = event.get("index", 0)
+        blocks.setdefault(index if isinstance(index, int) else -1, []).append(
+            str(delta.get(key, ""))
+        )
+    return ["".join(parts) for _, parts in sorted(blocks.items())], unknown
+
+
+def json_blocks(document: str) -> list[str]:
+    """The content blocks of a `kind: "json"` cassette's body (row 18a, H6): text, thinking and a
+    tool call's input, in order. Empty for anything else."""
+    record = _record(document)
+    if not record or record.get("kind") != "json" or not isinstance(record.get("body"), str):
+        return []
+    body = _record(record["body"])
+    content = body.get("content") if body else None
+    out: list[str] = []
+    for block in content if isinstance(content, list) else []:
+        if not isinstance(block, dict):
+            continue
+        for key in ("text", "thinking"):
+            if isinstance(block.get(key), str):
+                out.append(block[key])
+        if "input" in block:
+            out.append(json.dumps(block["input"], ensure_ascii=False))
+    return out
+
+
+def response_blocks(document: str) -> list[str]:
+    """What the model wrote in one cassette, block by block, whether it streamed or not."""
+    return reassembled_blocks(document) + json_blocks(document)
+
+
+def _strings(value: Any, depth: int = 0) -> Iterator[str]:
+    """Every string in a JSON value, decoded; a string that is itself a JSON document is opened
+    too, three levels deep at most (a cassette's `body`)."""
+    if isinstance(value, str):
+        yield value
+        if depth < 3 and value[:1] in "{[":
+            inner = _record(value) if value[:1] == "{" else None
+            if inner is None and value[:1] == "[":
+                try:
+                    inner = {"": json.loads(value)}
+                except json.JSONDecodeError:
+                    inner = None
+            if inner is not None:
+                yield from _strings(inner, depth + 1)
+    elif isinstance(value, dict):
+        for key, item in value.items():
+            yield key
+            yield from _strings(item, depth)
+    elif isinstance(value, list):
+        for item in value:
+            yield from _strings(item, depth)
 
 
 def scan_stream(
@@ -173,6 +263,101 @@ def scan_stream(
         for block in reassembled_blocks(document)
         for finding in scan_text(block, path, secret, canaries)
     ]
+
+
+def _new_kinds(found: list[Finding], known: set[str], prefix: str) -> list[Finding]:
+    """`found` without the kinds the plain scans reported already, under `prefix`: a widening adds
+    findings, it never repeats one."""
+    return [
+        f if f.kind == "api-key-fragment" else replace(f, kind=f"{prefix}{f.kind}")
+        for f in found
+        if f.kind not in known
+    ]
+
+
+def scan_cassette(
+    text: str,
+    path: str,
+    secret: str | None = None,
+    canaries: frozenset[str] = frozenset(),
+    carry: str = "",
+) -> list[Finding]:
+    """Everything a cassette is refused for, read the same way by `CassetteStore.put` and
+    `scan_paths`: the raw text (`hash` left out when it is the request's own), each reassembled
+    block, and since row 18a (H6, review 6): an unknown delta type; every JSON string decoded, so
+    an escape cannot hide a secret; a `json` body's blocks; the blocks joined, for a secret split
+    between two blocks; and with `carry`, the end of what the same test's earlier calls wrote
+    (`carried`), for one split between two requests or more."""
+    findings = scan_text(without_request_hash(text), path, secret, canaries)
+    findings += scan_stream(text, path, secret, canaries)
+    record = _record(text)
+    if record is None:
+        return findings
+    known = {f.kind.removeprefix("reassembled-") for f in findings}
+    body = record.get("body")
+    if isinstance(body, str) and _reassembled(body)[1]:
+        findings.append(Finding(path, 0, UNKNOWN_DELTA))
+    blocked = without_request_hash(text) != text
+    decoded: list[Finding] = []
+    for string in _strings({k: v for k, v in record.items() if not (blocked and k == "hash")}):
+        decoded += scan_text(string, path, secret, canaries)
+    findings += _new_kinds(decoded, known, "decoded-")
+    known |= {f.kind.removeprefix("decoded-") for f in findings}
+    blocks = response_blocks(text)
+    single = [f for block in json_blocks(text) for f in scan_text(block, path, secret, canaries)]
+    findings += _new_kinds(single, known, "reassembled-")
+    known |= {f.kind.removeprefix("reassembled-") for f in findings}
+    joined = scan_text("".join(blocks), path, secret, canaries) if len(blocks) > 1 else []
+    findings += _new_kinds(joined, known, "rebuilt-")
+    known |= {f.kind.removeprefix("rebuilt-") for f in findings}
+    if carry:
+        # What the carry and this call's start hold alone was reported, or the carry's cut made it:
+        # only what the join adds, by count (re-review N3: a cut can make a finding of its own, and
+        # a count takes off that one alone, where a kind took off every finding of its kind).
+        # Second re-review R5 (the user's D5 (b)): key shapes and canaries are counted each time
+        # they appear, not once per line, so a cut key shape on the seam's line cannot cancel the
+        # split key that closes there.
+        head = "".join(blocks)[:CARRY]
+        alone = _occurrences(carry, path, secret, canaries) + _occurrences(
+            head, path, secret, canaries
+        )
+        together = _occurrences(carry + head, path, secret, canaries)
+        findings += [
+            Finding(
+                path, 0, kind if kind == "api-key-fragment" else f"rebuilt-across-requests-{kind}"
+            )
+            for kind, more in (together - alone).items()
+            if more > 0
+        ]
+    return findings
+
+
+_PER_LINE_KINDS = frozenset({kind for kind, _ in _KEY_PATTERNS} | {"internal-canary"})
+
+
+def _occurrences(
+    text: str, path: str, secret: str | None, canaries: frozenset[str]
+) -> Counter[str]:
+    """`scan_text`'s findings by kind, with key shapes and canaries counted per occurrence: card
+    numbers already are, and a key fragment cannot be made by a cut."""
+    counts = Counter(
+        f.kind for f in scan_text(text, path, secret, canaries) if f.kind not in _PER_LINE_KINDS
+    )
+    for line in text.splitlines() or [text]:
+        for kind, pattern in _KEY_PATTERNS:
+            counts[kind] += len(pattern.findall(line))
+        counts["internal-canary"] += sum(line.count(canary) for canary in canaries)
+    return +counts
+
+
+# A secret split between two requests lies within this many characters of the cut on each side:
+# every key shape, card number, canary and key fragment is shorter.
+CARRY = 256
+
+
+def carried(carry: str, text: str) -> str:
+    """The carry after one more cassette of the same test: the end of everything it wrote."""
+    return (carry + "".join(response_blocks(text)))[-CARRY:]
 
 
 def without_ledger_ids(line: str) -> str:
@@ -248,6 +433,7 @@ def scan_paths(
 ) -> list[Finding]:
     """`ledger` names the one file whose legacy values are left out; there is no default."""
     findings: list[Finding] = []
+    cassettes: list[tuple[Path, str]] = []
     for path in (item for root in roots for item in _walk(root)):
         if isinstance(path, Finding):
             findings.append(path)
@@ -258,14 +444,38 @@ def scan_paths(
         if text is None:
             findings.append(Finding(str(path), 0, SYMLINK_REFUSED))
             continue
+        if is_cassette(path):
+            findings.extend(_check_recorded_at(path, text))
+            cassettes.append((path, text))
+            continue
         if ledger is not None and path.resolve() == ledger.resolve():
             scanned = "\n".join(without_ledger_ids(line) for line in text.splitlines())
-        elif is_cassette(path):
-            scanned = without_request_hash(text)
         else:
             scanned = text
         findings.extend(scan_text(scanned, str(path), secret, canaries))
-        if is_cassette(path):
-            findings.extend(_check_recorded_at(path, text))
-            findings.extend(scan_stream(text, str(path), secret, canaries))
+    findings.extend(_scan_cassettes(cassettes, secret, canaries))
+    return findings
+
+
+def _scan_cassettes(
+    cassettes: list[tuple[Path, str]], secret: str | None, canaries: frozenset[str]
+) -> list[Finding]:
+    """Each cassette with the carry of its test's earlier cassettes, from the same folder, in `seq`
+    order (row 18a, review 6: a secret split between two requests)."""
+    turns: dict[tuple[Path, str], list[tuple[int, str, str]]] = {}
+    for path, text in cassettes:
+        record = _record(text) or {}
+        test, seq = record.get("test_id"), record.get("seq")
+        if isinstance(test, str) and isinstance(seq, int):
+            turns.setdefault((path.parent, test), []).append((seq, str(path), text))
+    carries: dict[str, str] = {}
+    for items in turns.values():
+        carry = ""
+        for _seq, where, text in sorted(items):
+            carries[where] = carry
+            carry = carried(carry, text)
+    findings: list[Finding] = []
+    for path, text in cassettes:
+        where = str(path)
+        findings.extend(scan_cassette(text, where, secret, canaries, carries.get(where, "")))
     return findings

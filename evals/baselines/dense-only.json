@@ -1,5 +1,5 @@
 {
-  "answerer_id": "assistant:v1:claude-sonnet-5-5:prompt-26740a49:check-05379e63",
+  "answerer_id": "assistant:v1:claude-sonnet-5-5:prompt-26740a49:check-ba8577ea",
   "answers": {
     "EV-001": {
       "behaviour_ok": 1.0,
@@ -333,8 +333,8 @@
       "citation_ok": 1.0,
       "fabricated_ok": 1.0,
       "false_refusal": 0.0,
-      "groundedness": 0.75,
-      "relevance": 0.5
+      "groundedness": 1.0,
+      "relevance": 1.0
     },
     "EV-043": {
       "behaviour_ok": 1.0,
@@ -1558,7 +1558,7 @@
       "citation_ok": 1.0,
       "fabricated_ok": 1.0,
       "false_refusal": 0.0,
-      "groundedness": 0.8,
+      "groundedness": 1.0,
       "relevance": 1.0
     },
     "EV-204": {
@@ -1614,7 +1614,7 @@
       "citation_ok": 1.0,
       "fabricated_ok": 1.0,
       "false_refusal": 0.0,
-      "groundedness": 0.8,
+      "groundedness": 1.0,
       "relevance": 1.0
     },
     "EV-211": {
@@ -1630,8 +1630,8 @@
       "citation_ok": 1.0,
       "fabricated_ok": 0.0,
       "false_refusal": 0.0,
-      "groundedness": 0.5,
-      "relevance": 0.0
+      "groundedness": 0.666667,
+      "relevance": 0.5
     },
     "EV-213": {
       "behaviour_ok": 1.0,
@@ -3760,9 +3760,9 @@
         "citation_ok": 0.983766,
         "fabricated_ok": 0.99026,
         "false_refusal": 0.013953,
-        "groundedness": 0.986627,
+        "groundedness": 0.989855,
         "n": 308,
-        "relevance": 0.918831
+        "relevance": 0.922078
       },
       "policy": {
         "behaviour_ok": 0.975,
@@ -3794,9 +3794,9 @@
         "citation_ok": 1.0,
         "fabricated_ok": 0.96875,
         "false_refusal": 0.03125,
-        "groundedness": 0.954839,
+        "groundedness": 0.981183,
         "n": 32,
-        "relevance": 0.78125
+        "relevance": 0.8125
       }
     },
     "retrieval": {

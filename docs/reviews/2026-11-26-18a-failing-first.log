@@ -1,0 +1,170 @@
+# Row 18a failing-first log. Each part's new tests, run on the base tree (81683c2, git archive) with the test file copied in, then on the branch.
+
+## Part 0: services/assistant/tests/test_18a_output_check.py
+base: 57 failed, 13 passed; branch: 70 passed
+Passing on base (near-misses and pins that must pass both ways):
+  test_a_negation_across_a_cut_is_not_vouched_by_units_on_hand[The towel is not, and I checked, in stock.]
+  test_a_negation_across_a_cut_is_not_vouched_by_units_on_hand[The towel is not, in Slate,\nin stock.]
+  test_a_negation_outside_the_sentence_or_a_reply_word_is_left_alone[Neither colour is waterproof. It is available in sizes M and L.]
+  test_a_negation_outside_the_sentence_or_a_reply_word_is_left_alone[No, the Charcoal L is out of stock right now.]
+  test_other_uses_of_the_words_pass[It has no left pocket.]
+  test_other_uses_of_the_words_pass[Turn left at the hem.]
+  test_other_uses_of_the_words_pass[None of these is waterproof.]
+  test_other_uses_of_the_words_pass[There are no questions left in the reviews.]
+  test_other_uses_of_the_words_pass[Is there any left-hand pocket?]
+  test_other_uses_of_the_words_pass[No more than two washes a month.]
+  test_other_uses_of_the_words_pass[Any of them would suit a wet commute.]
+  test_every_pattern_of_the_base_commit_is_still_checked_unchanged
+  test_the_claim_is_either_shown_whole_or_replaced_at_every_stock_level
+Failing on base:
+  test_neither_with_no_stock_check_is_a_stock_claim
+  test_a_negation_across_a_cut_is_not_vouched_by_units_on_hand[None of the Slate towels, Bath or Hand, is in stock.]
+  test_a_negation_across_a_cut_is_not_vouched_by_units_on_hand[None of the 2.5 m rugs is in stock.]
+  test_a_negation_across_a_cut_is_not_vouched_by_units_on_hand[The towel is not, in Slate, Bath size, in stock.]
+  test_a_negation_across_a_cut_is_not_vouched_by_units_on_hand[The towel is not (in Slate) (Bath) in stock.]
+  test_a_negation_across_a_cut_is_not_vouched_by_units_on_hand[The towel is not, as far as I can tell today, currently in stock.]
+  test_a_negation_across_a_cut_is_not_vouched_by_units_on_hand[The towel is not\nin stock.]
+  test_a_negation_across_a_cut_is_not_vouched_by_units_on_hand[None of them, it seems, is in stock.]
+  test_a_negation_across_a_cut_is_not_vouched_by_units_on_hand[None of the 2.5 m, 3 m or 4.5 m rugs is in stock.]
+  test_a_crossing_negation_never_stays_on_screen_however_the_deltas_fall[Neither colour, Sage or Black, is available in sizes M and L.]
+  test_a_crossing_negation_never_stays_on_screen_however_the_deltas_fall[None of the Slate towels, Bath or Hand, is in stock.]
+  test_a_crossing_negation_never_stays_on_screen_however_the_deltas_fall[None of the 2.5 m rugs is in stock.]
+  test_a_crossing_negation_never_stays_on_screen_however_the_deltas_fall[The towel is not, in Slate, Bath size, in stock.]
+  test_a_crossing_negation_never_stays_on_screen_however_the_deltas_fall[The towel is not (in Slate) (Bath) in stock.]
+  test_a_crossing_negation_never_stays_on_screen_however_the_deltas_fall[The towel is not, as far as I can tell today, currently in stock.]
+  test_a_crossing_negation_never_stays_on_screen_however_the_deltas_fall[The towel is not\nin stock.]
+  test_a_reply_word_does_not_hide_a_negation_after_it
+  test_a_none_left_wording_is_a_stock_claim_with_nothing_checked[There aren't any left in size M.]
+  test_a_none_left_wording_is_a_stock_claim_with_nothing_checked[We don't have any left.]
+  test_a_none_left_wording_is_a_stock_claim_with_nothing_checked[Zero left.]
+  test_a_none_left_wording_is_a_stock_claim_with_nothing_checked[No units left.]
+  test_a_none_left_wording_is_a_stock_claim_with_nothing_checked[No stock remaining.]
+  test_a_none_left_wording_is_a_stock_claim_with_nothing_checked[None of them left.]
+  test_a_none_left_wording_is_a_stock_claim_with_nothing_checked[No more stock left.]
+  test_a_none_left_wording_is_vouched_only_when_every_checked_variant_is_at_zero[There aren't any left in size M.]
+  test_a_none_left_wording_is_vouched_only_when_every_checked_variant_is_at_zero[We don't have any left.]
+  test_a_none_left_wording_is_vouched_only_when_every_checked_variant_is_at_zero[Zero left.]
+  test_a_none_left_wording_is_vouched_only_when_every_checked_variant_is_at_zero[No units left.]
+  test_a_none_left_wording_is_vouched_only_when_every_checked_variant_is_at_zero[No stock remaining.]
+  test_a_none_left_wording_is_vouched_only_when_every_checked_variant_is_at_zero[None of them left.]
+  test_a_none_left_wording_is_vouched_only_when_every_checked_variant_is_at_zero[No more stock left.]
+  test_a_none_left_wording_never_stays_on_screen_however_the_deltas_fall[There aren't any left in size M.]
+  test_a_none_left_wording_never_stays_on_screen_however_the_deltas_fall[We don't have any left.]
+  test_a_none_left_wording_never_stays_on_screen_however_the_deltas_fall[Zero left.]
+  test_a_none_left_wording_never_stays_on_screen_however_the_deltas_fall[No units left.]
+  test_a_none_left_wording_never_stays_on_screen_however_the_deltas_fall[No stock remaining.]
+  test_a_none_left_wording_never_stays_on_screen_however_the_deltas_fall[None of them left.]
+  test_a_none_left_wording_never_stays_on_screen_however_the_deltas_fall[No more stock left.]
+  test_the_sentence_rule_only_ever_takes_a_vouch_away[None of the Slate towels, Bath or Hand, is in stock.]
+  test_the_sentence_rule_only_ever_takes_a_vouch_away[None of the 2.5 m rugs is in stock.]
+  test_the_sentence_rule_only_ever_takes_a_vouch_away[The towel is not, in Slate, Bath size, in stock.]
+  test_the_sentence_rule_only_ever_takes_a_vouch_away[The towel is not (in Slate) (Bath) in stock.]
+  test_the_sentence_rule_only_ever_takes_a_vouch_away[The towel is not, as far as I can tell today, currently in stock.]
+  test_the_sentence_rule_only_ever_takes_a_vouch_away[The towel is not\nin stock.]
+  test_the_sentence_rule_only_ever_takes_a_vouch_away[The towel is not, and I checked, in stock.]
+  test_the_sentence_rule_only_ever_takes_a_vouch_away[None of them, it seems, is in stock.]
+  test_the_sentence_rule_only_ever_takes_a_vouch_away[The towel is not, in Slate,\nin stock.]
+  test_the_sentence_rule_only_ever_takes_a_vouch_away[None of the 2.5 m, 3 m or 4.5 m rugs is in stock.]
+  test_the_sentence_rule_only_ever_takes_a_vouch_away[Neither colour, Sage or Black, is available in sizes M and L.]
+  test_the_sentence_rule_only_ever_takes_a_vouch_away[It is in stock.]
+  test_the_sentence_rule_only_ever_takes_a_vouch_away[It isn't in stock.]
+  test_the_sentence_rule_only_ever_takes_a_vouch_away[It is not waterproof, not packable, and it is in stock.]
+  test_the_sentence_rule_only_ever_takes_a_vouch_away[There is no size chart on the page, but it is available in sizes M and L.]
+  test_the_sentence_rule_only_ever_takes_a_vouch_away[There's no doubt the M is in stock.]
+  test_the_sentence_rule_only_ever_takes_a_vouch_away[Not sure if you saw, but the M is available.]
+  test_the_sentence_rule_only_ever_takes_a_vouch_away[It is, not surprisingly, available in three colours.]
+  test_the_sentence_rule_only_ever_takes_a_vouch_away[No, the Charcoal L is out of stock right now.]
+
+Mutants (test_18a_output_check, test_30_tw_gaps, test_30_negation_cut, test_rag09_output_check): 9 of 9 killed
+  M1 no sentence rule 17 failed; M2 no reply word 1; M3 restart not spoiled by a later comma 1; M4 no negated-adverb strip 1; M5 no negative polarity for zero/none/no 5; M6 a newline ends the sentence 2; M7 a decimal dot ends it 3; M8 reach 40 5; M9 view text instead of the raw stream 1
+
+## Part 4: services/assistant/tests/test_18a_over_blocking.py
+base: 31 failed, 34 passed; branch: 65 passed
+Failing on base: every listed sentence (shown as written, at every stock level, however the deltas fall).
+Passing on base: the 12 near-misses (blocked both ways) and the live_backed pin.
+Mutants (test_18a_over_blocking + test_18a_output_check): 6 of 6 killed
+  P1 any text after the word closes the sentence 6; P2 no information noun needed 2; P3 no product check 4; P4 no hold 5; P5 the raw-stream guard off 10; P6 the frame not anchored to the word 2
+  (a first P5, a flag that turned the exemption off in live_backed, survived: equivalent, as live_backed feeds nothing; the flag was removed)
+
+## Part 1: services/llm-replay/tests/test_scan_18a.py
+base: 28 failed, 23 passed; branch: 51 passed
+Passing on base: the near-misses (clean both ways) and the pins of today's findings (still found, once).
+Two tests first passed on base (an ASCII canary the raw scan already sees) and were rewritten to need the new code: a card behind escapes in a json tool input; a canary split across two signature deltas.
+Mutants (test_scan_18a, test_scan, test_scan_split_secrets, test_scan_reassembly): 15 of 15 killed
+  S1 no wide PAN 12; S2 no NBSP 5; S3 no Amex/Diners 5; S4 no dedupe 2; S5 no escaped x-api-key 3; S6 CR not split 1; S7 no unknown-delta finding 3; S8 no decoded walk 1 (after the tool-result test was added: it first survived); S9 no json blocks 1; S10 no joined blocks 3; S11 no carry 3; S12 carry not subtracted 2; S13 put keeps no carry 1; S14 carry of 4 4; S15 signature not read 2
+
+Full scan at $0 (cassettes, evals/contexts, evals/fixtures, evals/baselines, data/enrichment, data/embeddings, RAG-12-eval-review.md; canaries loaded): base 0 findings in 8.9 s, branch 0 findings in 24.5 s. A first version joined every earlier call of a test and did not finish in 600 s (backend-replay holds 5,935 calls of one test); replaced by a 256-character carry.
+
+## Part 2: services/common/tests/test_18a_cards.py, services/llm-replay/tests/test_scan_paths_18a.py, test_scan_embeddings.py (widened)
+base: 8 failed, 20 passed, 1 xfail; branch: 28 passed, 1 xfail (L4: D2)
+Failing on base: the 7 punctuated CVV spellings and test_ci_scans_the_cli_default_list (ci.yml named five roots).
+Passing on base: CVV near-misses and the codes found before; Makefile and EVAL_ROOTS pins; the widened embeddings tests (the change is to the test: its old body, a *.jsonl glob with no canaries, is mutant E1/E2 below and fails the new meta test).
+Mutants: 6 of 6 killed. C1 no new CVV form 7; C2 no mid-list guard 1; C3 no end guard 2; C4 multi-digit groups 2; E1 *.jsonl only 1; E2 no canaries 1
+Over-blocking at $0: old and new card checks over every recorded shopper message (7,185) and tool call (15,163): 0 differ.
+Shared cards.py: services/common, mcp-orders, mcp-catalog, mcp-rag, mcp-policy, gateway and backend unit tests (backend-care replay, test_be07_recorded.py, among them): 2,931 passed, 1 xfailed.
+
+## Part 3: the two timing flakes, fixed in the tests (the 120 s token lifetime and the orchestrator's deadline code unchanged)
+N-1, services/llm-replay/tests/test_tool_result_order.py: both MCP servers' token gates read a clock that stands still 60 s after the turn starts (serve_retriever gains a clock argument).
+  branch: the two record_turn tests pass. With the clock past expiry (STILL_AFTER = 200) the N-1 test fails as the captured failure did, both gates refusing before any tool ran:
+    E       AssertionError: []
+    E       assert 0 >= 2
+    E        +  where 0 = len([])
+    E        +    where [] = TurnRun(upstream_requests=[], cassette_bodies=[]).upstream_requests
+    ERROR    northwind_assistant.tools:tools.py:279 search failed: ExceptionGroup
+    ERROR    northwind_assistant.turn:turn.py:394 first search failed: transient
+    ERROR    northwind_assistant.tools:tools.py:279 search failed: ExceptionGroup
+    ERROR    northwind_assistant.turn:turn.py:394 first search failed: transient
+BE-01 (Addendum A change 1), services/backend/tests/orchestrator/test_be01_review_fixes.py::test_a_deadline_that_cancels_a_subagent_still_closes_its_run_in_the_audit:
+  the run's deadline is 600 s on a loop whose clock the test moves past it once the orders section has closed and the carrier read is hung; the hang is let go when the run is over.
+  Load simulated by docs/reviews/2026-11-26-18a-slow-start-plugin.py.txt (the event loop stalls 2 s when the orders runtime is made):
+    old test, base, loaded: FAILED, orders (run-cut.t1) FAILED with a deadline timeout: the flake
+    old test, base, not loaded: passed
+    new test, branch, loaded: passed
+  Mutant (jump as soon as the read hangs, before orders closes), loaded: 3 of 3 runs fail. Orchestrator folder under -n 4: 83 passed, 3 runs of 3.
+
+## Part 5: the hedge report (N-2, N-3), no hedge code changed
+uv run --no-sync --offline python docs/reviews/2026-11-25-30-w6-hedge-report.py.txt: on 81683c2 (git archive, PYTHONPATH) exit 0, 439 answer calls, 3 excused sentences (EV-100, EV-302, RT-022: #30's W6 three); --control exit 0, 2 excused; the branch prints the same lines as main. The command is in row #18's text.
+
+## Also: review 10's committed-cassette test, every suite but spike
+branch: passes (the data is the same on base, so it cannot fail first). Mutant, spike not left out: fails on spike/148766bf... (9.999999999999999e-06), the first of its two long floats.
+
+## Part 6: evals/tests/test_a2a05_partner_18a.py (and the old loose pin in test_a2a05_partner.py rewritten to the new rule)
+base: 16 failed, 5 passed; branch: 21 passed (with test_a2a05_partner.py and _criteria.py: 140 passed, 9 skipped, the stale suite)
+Passing on base: the positive cases (an agreeing cart turn is served; each cart tool counts as used), which the old loose check also accepted.
+Mutants: 7 of 7 killed. A1 offered but not used 2; A2 any cart tool offered 1; A3 a denial agrees 2; A4 no variant equality 2; A5 artifact of any product 1 (first survived: the other-product-cited case was added); A6 recorder without the catalog 2; A7 one fixed session 1
+
+## test-writer's gaps (271 cases, 5 strict xfails as found) and their fixes
+Fixed, each xfail then passed (strict, so it failed until the mark was removed):
+  a negation 160 characters back was missed: reach 2L -> 4L, and a sentence whose start lies past the reach is unread, so unvouched. Two tests added to test_18a_output_check.py separate the two (a negation 300 characters back; a true claim 200 characters into one sentence); mutants started=True and reach 2L, each 1 failed
+  'None of them are left.' / 'None are left.': a verb form of the M-A pattern
+  'CVV 7 / 3 / 7': a space either side of the punctuation
+Left as a strict xfail: 'None left on the reviews page.' is blocked by row #30's M-4 pattern (decision D4).
+After the fixes: step 0 0 of 448 calls differ from part 4's state; the card check over every recorded message and tool call 0 differ; assistant and common unit suites 3,173 passed, 22 xfailed.
+
+## Security review fixes (docs/reviews/2026-11-26-18a-security-review.raw.md: no critical or high; M1, L1-L7)
+M1, L1, L2, L3 (134a8f0), services/assistant/tests/test_18a_security_fixes.py: 20 of 29 fail at 94048d9 (9 near-misses pass both ways); the held-until-decided test fails 5 of 7 without the new trigger words. Mutants 4 of 4: closing dash restarts 5; dash does not spoil 5; abbreviation ends the sentence 4; hardly not low 3. Step 0: 0 of 448 calls change (against base, still the same 6).
+L5 (78cb4df), services/common/tests/test_18a_cards.py: 4 of 5 new cases fail first; mutant, the old separator set, 4. Card check over every recorded message and tool call: 0 differ.
+L4 and L7 (58004a9), services/llm-replay/tests/test_scan_18a.py: the reviewer's carry construction (scan_paths and put) and escape depths 3, 4, 6 fail first; mutants: no token cut 2, 1-2 backslashes 3. Full $0 scan: 0 findings, 23.7 s.
+L6 (1209446), evals/tests/test_a2a05_partner_18a.py: 7 of 9 new cases fail first (2 plain confirmations pass both ways); mutant, no denial check, 9.
+
+## Security re-review fixes (docs/reviews/2026-11-26-18a-security-rereview.raw.md: no critical or high; N1, N2 medium; N3-N10 low)
+N1, N5, N6, N7, N10 (c219fba), test_18a_security_fixes.py: 18 of 53 fail at 1209446; mutants 4 of 4 (range dash restarts 3, colon before anything 1, dash restarts with the start out of view 1, full stop before lower case ends 2). Step 0 found one over-block ("they're out of their packaging", a2a-05-partner): narrowed to "we", pinned; then 0 of 448 differ (6 against base, the listed ones).
+N2, N3, N9 (eb83b42), test_scan_18a.py: 7 fail first; mutants 3 of 3 (no overlap 2, kinds not counts 5, bounded escapes 1). Full $0 scan: 0 findings, 25.0 s.
+N4 (19556fe), test_18a_cards.py: 2 fail first. 16,000 random code spellings: none found at 28e07ef is missed. Card check over every recorded message and tool call: 0 differ.
+N8 (2f231d7), test_a2a05_partner_18a.py: 4 fail first; mutant without the confirmation 4.
+
+## The user's answers to D1-D5 (2026-11-26)
+D5 (a), option A (010d9cc): checked first at $0 under A in a scratch copy: D1's five eval answers still shown as written, none flips; 0 of 448 calls change. The 24 changed expectations marked strict xfail D5 where they were; test_18a_d5_pins.py pins their sentences as replaced and R1/R2/R3's inputs: 27 of 30 fail at 418614f. Mutants: unread-start rule 1, old full-stop rule 1.
+D4 (010d9cc): the strict xfail becomes a pin that the sentence stays blocked.
+D2 (b) (fc87329), services/mcp-orders/tests/test_18a_key_digits.py: 6 fail first; mutant (10-digit limit) 6. The pin test_the_split_card_check_never_refuses_a_good_request_for_its_key changed as approved: 42424242 and 4111-1111-11 now refused, a good mixed key added. Orders and common: 951 passed.
+D5 (b) (7c7989a): the reviewer's R5 construction fails first; mutant (per-line count) 1. Full $0 scan: 0 findings, 28.0 s.
+D5 (c) (b229bd9): 5 of 10 new cases fail first; mutants: no negation check 3, no cart object 1, no confirmation needed 19.
+D5 (d) (5e1397b): both 've not run out forms fail first. Step 0 after all of it: 0 of 448 differ from the last state; 6 against base, the listed ones.
+
+## D6 (the user, 2026-11-26)
+F3: 6-digit limit on every request_return argument; order number refused as the same not_found bytes (lookalike pin). 4 fail first; mutant 3. F4: U.S./U.K./E.U. abbreviations, 3 fail first; the rest a residual. Step 0: 0 of 448.
+
+## Mutants that survived at first (5 of 71)
+P5 (part 4, an equivalent mutant: the flag was removed), S8 (part 1, the decoded walk: a tool-result test added), A5 (part 6, the
+artifact of another product: a test added), and test-writer's gap round: started=True and reach 2L (each closed by one of the two
+reach tests added to test_18a_output_check.py).

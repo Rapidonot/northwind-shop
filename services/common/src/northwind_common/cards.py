@@ -32,8 +32,18 @@ _CVV_NAME = (
     r"(?<![^\W_])(?:cvv2?|cvc2?|cv2|cvn|cid|csc"
     rf"|security{_SEP}code|card{_SEP}(?:code|verification{_SEP}(?:code|value)))(?![^\W_])"
 )
-# A code may be spaced out, like "7 3 7".
-_CVV_DIGITS = r"(?<!\d)\d(?:[ -]?\d){2,3}(?!\d)"
+# A code may be spaced out, like "7 3 7", or (row 18a, BE-07 F3) written digit by digit with
+# punctuation, like "1, 2, 3", "1.2.3", "7 / 3 / 7" or "7–3–7": single digits only, so "sizes 10,
+# 12" is not one.
+# Security L5: comma, dot, semicolon, colon, slash, hyphen or any dash, a space either side or not.
+_CODE_SEP = "[,.;:/\\-\u2010-\u2015]"
+_CVV_DIGITS = (
+    r"(?:(?<!\d)\d(?:[ -]?\d){2,3}(?!\d)"
+    rf"|(?<!\d)(?<!\d{_CODE_SEP})(?<!\d{_CODE_SEP} )(?<!\d {_CODE_SEP})(?<!\d {_CODE_SEP} )"
+    rf"\d(?: ?{_CODE_SEP} ?\d){{2,3}}(?!\d| ?{_CODE_SEP} ?\d| \d)"
+    # Re-review N4: the form before L5, verbatim, so its wider guards lose nothing it found.
+    r"|(?<!\d)(?<!\d[,.;/])(?<!\d[,.;/] )\d(?:[,.;/] ?\d){2,3}(?!\d|[,.;/] ?\d| \d))"
+)
 MAX_CVV_GAP = 40
 _CVV = re.compile(
     rf"{_CVV_NAME}[\s\S]{{0,{MAX_CVV_GAP}}}?{_CVV_DIGITS}"

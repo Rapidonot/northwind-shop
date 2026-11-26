@@ -39,6 +39,11 @@ from northwind_rag.retrieval import RetrievedChunk
 
 pytestmark = pytest.mark.req("RAG-09")
 
+# The user's D5 (a), 2026-11-26: no clause restart, so a negation anywhere earlier in the sentence
+# leaves the claim unvouched. These expectations no longer hold; what replaces them is pinned in
+# test_18a_d5_pins.py.
+D5 = pytest.mark.xfail(strict=True, reason="D5 (a): now replaced; see test_18a_d5_pins.py")
+
 MONEY = FIXED_SENTENCES["money"]
 STOCK = FIXED_SENTENCES["stock"]
 PROMO = FIXED_SENTENCES["promotion"]
@@ -174,7 +179,7 @@ def test_low_stock_never_passes(text: str) -> None:
         "The option you described is available in the sources.",
         # the user's three, row #12: an asking word that does not govern the clause
         "If you need it soon, the Sage M is available now.",
-        "Not sure if you saw, but the M is available.",
+        pytest.param("Not sure if you saw, but the M is available.", marks=D5),
         "The Glacier Blue 4XL, which is available today, is warm.",
         # more of the same
         "Check if you like it and the M is available.",
@@ -211,8 +216,11 @@ def test_naming_the_range_offered_is_not_a_claim(text: str) -> None:
         # same thing, and passes when every `check_stock` result this turn agrees (D3).
         "Check the product page to see whether that size is available right now.",
         "The live product page will show whether Glacier Blue is available in 4XL right now.",
-        "I can't see stock levels, so check the live product page to see whether the M is "
-        "available now.",
+        pytest.param(
+            "I can't see stock levels, so check the live product page to see whether the M is "
+            "available now.",
+            marks=D5,
+        ),
         "The live product page shows which size and colour combinations are available, and it "
         "also has current stock.",
         "I couldn't find anything on compensation for late deliveries, or on what care agents are "

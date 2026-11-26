@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import threading
 from collections.abc import Callable, Mapping
 from itertools import count
 from pathlib import Path
@@ -22,7 +23,7 @@ import pytest
 
 from northwind_backend.agents.orders_check import FRAUD_TOOL_NAME, PAYMENT_TOOL_NAME
 from northwind_backend.audit import AuditEvent, InMemoryAuditSink
-from northwind_backend.errors import AgentResult, FailureType, RunStatus, StepResult
+from northwind_backend.errors import TIMEOUT, AgentResult, FailureType, RunStatus, StepResult
 from northwind_backend.fakes._base import FaultKind
 from northwind_backend.orchestrator import orchestrate
 from northwind_backend.orchestrator.aggregate import Section, aggregate
@@ -200,6 +201,28 @@ def test_an_unsupported_concern_can_cover_what_no_other_kind_fits() -> None:
 # --- L1 ----------------------------------------------------------------------------------------
 
 
+class _JumpingLoop(asyncio.SelectorEventLoop):
+    """Row 18a (the user's change 1): the run's deadline was 1.5 s of wall time, so under xdist
+    the orders subagent could miss it too, and the test failed on GitHub at #31's ship. Here the
+    deadline is far off, and the test moves this loop's clock past it once the orders section has
+    closed and the carrier read is hung: the deadline cuts only the hung run, whatever the load."""
+
+    ahead = 0.0
+
+    def time(self) -> float:
+        return super().time() + self.ahead
+
+
+CUT_DEADLINE = 600.0  # never reached in real time: the jump decides
+
+
+def _orders_closed(world: Any) -> bool:
+    return any(
+        e.action == "agent.run" and e.phase == "outcome" and e.correlation_id == "run-cut.t1"
+        for e in world.events()
+    )
+
+
 @pytest.mark.req("BE-08")
 def test_a_deadline_that_cancels_a_subagent_still_closes_its_run_in_the_audit(
     tmp_path: Path,
@@ -207,26 +230,56 @@ def test_a_deadline_that_cancels_a_subagent_still_closes_its_run_in_the_audit(
     world = World.make()
     carrier: Any = world.ports.carrier
     carrier.faults.inject("track", FaultKind.HANG)
-    carrier.faults.bound_seconds = 2.0  # the hung worker gives up soon after the test is done
+    # The hung read waits for the test, not for a 2 s bound that load could outlast: it is let go
+    # once the run is over, so the loop's shutdown does not wait on its thread.
+    release = threading.Event()
+
+    def hang() -> Any:
+        carrier.faults.waiting.set()
+        if not release.wait(60.0):
+            carrier.faults.bound_expired = True
+        return TIMEOUT
+
+    carrier.faults.hang = hang
     made = count(1)
+
+    async def cut_when_ready() -> None:
+        loop = asyncio.get_running_loop()
+        assert isinstance(loop, _JumpingLoop)
+        while not (carrier.faults.waiting.is_set() and _orders_closed(world)):
+            await asyncio.sleep(0.02)
+        loop.ahead += CUT_DEADLINE + 1
+
     with ScriptedLLM() as llm:
         script_planner(llm, full_plan(world))
         script_orders(llm, world)
         script_returns(llm, world)
-        result = asyncio.run(
-            orchestrate(
-                world.request(),
-                ports=world.ports,
-                sink=world.sink,
-                runtime=lambda: agent_runtime(base_url=llm.url, root=tmp_path / f"rt{next(made)}"),
-                # The read's own deadline is longer than the orchestrator's, so the orchestrator
-                # cancels the run while the tool call is still waiting.
-                policy=RetryPolicy(max_attempts=1, deadline_seconds=30.0, backoff_seconds=()),
-                deadline_seconds=1.5,
-                run_id="run-cut",
-                clock=fixed_clock,
-            )
-        )
+
+        async def run() -> Any:
+            watcher = asyncio.create_task(cut_when_ready())
+            try:
+                return await orchestrate(
+                    world.request(),
+                    ports=world.ports,
+                    sink=world.sink,
+                    runtime=lambda: agent_runtime(
+                        base_url=llm.url, root=tmp_path / f"rt{next(made)}"
+                    ),
+                    # The read's own deadline is longer than the jump, so the orchestrator
+                    # cancels the run while the tool call is still waiting.
+                    policy=RetryPolicy(
+                        max_attempts=1, deadline_seconds=10 * CUT_DEADLINE, backoff_seconds=()
+                    ),
+                    deadline_seconds=CUT_DEADLINE,
+                    run_id="run-cut",
+                    clock=fixed_clock,
+                )
+            finally:
+                watcher.cancel()
+                release.set()
+
+        with asyncio.Runner(loop_factory=_JumpingLoop) as runner:
+            result = runner.run(run())
     orders, parcel = result.sections
     assert orders.result.status is RunStatus.COMPLETE
     assert [f.code for f in parcel.result.failures] == ["deadline"]
@@ -235,6 +288,7 @@ def test_a_deadline_that_cancels_a_subagent_still_closes_its_run_in_the_audit(
     ]
     assert [e.phase for e in runs] == ["attempt", "outcome"]
     assert runs[1].outcome is not None and runs[1].outcome["failures"] == ["cancelled"]
+    assert not carrier.faults.bound_expired  # let go by the test, after the cut
 
 
 # --- L2 ----------------------------------------------------------------------------------------
