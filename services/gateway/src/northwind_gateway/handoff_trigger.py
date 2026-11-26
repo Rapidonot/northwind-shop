@@ -31,7 +31,7 @@ import unicodedata
 
 MAX_FILLERS = 4
 
-_APOSTROPHES = str.maketrans({"’": "'", "‘": "'", "`": "'", "´": "'"})
+_APOSTROPHES = str.maketrans({"\u2019": "'", "\u2018": "'", "`": "'", "\u00b4": "'"})
 _CLAUSE = re.compile(r"[.;!?,:()\n]+|\bbut\b|\s-\s")
 _TOKEN = re.compile(r"[a-z0-9']+")
 # Fix round 1 (in-sample, the user's change 2): shorthand and misspellings of the words below.
