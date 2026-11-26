@@ -55,3 +55,34 @@ FAILED services/rag/tests/test_rag07_router.py::test_ordinary_words_are_not_read
 L2: mutant '_router = route_indexes' in query.py: passed the old test by reading (the review's trace), fails the new one.
 L3: a history with searches but no offered tool, and a missing request body: both caught.
 L4: not reproduced. Interleaved and all-of-one-class-then-another combining marks: linear, 0.042 s at 40,000 characters, 0.085 s at 80,000 interleaved.
+
+== Advisor F3 (2026-11-26): the router's unit tests, against the router before them and against mutants
+Each run puts a copy of northwind_rag first on PYTHONPATH (checked: the copy is what imports).
+-- the blind router 378fdce (before the unit tests existed): $W/pre/northwind_rag/query.py
+  12 FAILED services/rag/tests/test_rag07_router.py::test_text_aimed_at_the_system_is_every_index
+   12 failed, 93 passed in 1.73s
+sed: 1: "s/^_SYSTEM_TEXT = re.co ...": RE error: parentheses not balanced
+-- mutant: system-text never matches (changed: NO)
+   105 passed in 1.76s
+sed: 1: "s/^_CALLER_WORDS = re.c ...": RE error: parentheses not balanced
+-- mutant: caller words kept (changed: NO)
+   105 passed in 1.78s
+-- mutant: unsure gives specifications (changed: NO)
+   105 passed in 1.76s
+
+== Pins: one byte appended to each pinned file, then restored with git checkout
+-- evals/fixtures/rag07_queries.jsonl: 2 failed, 5 passed in 0.12s
+-- docs/reviews/2026-11-25-RAG-10-labelling-guide.md: 1 failed, 6 passed in 0.11s
+-- evals/fixtures/rag07_heldout.jsonl: 3 failed, 4 passed in 0.11s
+-- services/rag/src/northwind_rag/query.py: 1 failed, 6 passed in 0.12s
+-- restored: 3 files differ from HEAD
+-- the three sed mutants above did not apply (sed's pattern error; 'changed: NO'). Applied again with Python:
+-- mutant system (changed: yes)
+  40 FAILED services/rag/tests/test_rag07_router.py::test_text_aimed_at_the_system_is_every_index
+   40 failed, 65 passed in 1.74s
+-- mutant caller (changed: yes)
+   105 passed in 1.76s
+-- mutant unsure (changed: yes)
+   7 FAILED services/rag/tests/test_rag07_router.py::test_unsure_is_every_index
+   7 failed, 98 passed in 1.80s
+   The caller mutant survives: no region, currency or visibility word is a cue in the frozen router, so the test holds the property (such words change nothing) but cannot see the stripping removed. Recorded, not tuned (the router is frozen).
