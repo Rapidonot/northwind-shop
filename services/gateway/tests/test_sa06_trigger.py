@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import time
 from pathlib import Path
 
 import pytest
@@ -56,3 +57,23 @@ def test_at_most_two_positives_are_missed() -> None:
 @pytest.mark.parametrize("text", ["", "   ", "\u200b", "?!", "a" * 2000])
 def test_empty_or_odd_messages_do_not_hand_off(text: str) -> None:
     assert asks_for_person(text) is False
+
+
+# Security review M2: the matcher runs on the gateway's event loop, so a 2,000-character message
+# (chat's limit) must cost linear time. Before the fix, "talk to " * 250 took about 1.2 s; after it,
+# under 10 ms. The bound is generous so a slow CI machine does not flake.
+WORST_CASES = [
+    "talk to " * 250,
+    "connect me " * 182,
+    "i want " * 286,
+    "speak with the a " * 118,
+    "how do i " * 223,
+    "no " * 667,
+]
+
+
+@pytest.mark.parametrize("text", WORST_CASES, ids=lambda t: t.split()[0])
+def test_a_worst_case_message_is_read_in_linear_time(text: str) -> None:
+    started = time.perf_counter()
+    asks_for_person(text[:2000])
+    assert time.perf_counter() - started < 0.25

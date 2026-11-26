@@ -302,96 +302,100 @@ def _at(tokens: list[str], i: int, seq: tuple[str, ...]) -> bool:
     return tuple(tokens[i : i + len(seq)]) == seq
 
 
-def _find(tokens: list[str], seqs: tuple[tuple[str, ...], ...]) -> list[tuple[int, int]]:
-    """(start, end) of every match, the longest at each position."""
-    found = []
+def _spans(tokens: list[str], seqs: tuple[tuple[str, ...], ...]) -> dict[int, int]:
+    """start -> end of the longest match at each position, in one pass (security review M2)."""
+    found: dict[int, int] = {}
     for i in range(len(tokens)):
         best = max((len(s) for s in seqs if _at(tokens, i, s)), default=0)
         if best:
-            found.append((i, i + best))
+            found[i] = i + best
     return found
 
 
-def _product_use(tokens: list[str], start: int, end: int) -> bool:
-    before = tokens[start - 1] if start > 0 else ""
-    after = tokens[end] if end < len(tokens) else ""
-    return before in _BEFORE_NOUN or after in _AFTER_NOUN
+class _Clause:
+    """One clause, read once: every lookup below is then constant time, so a 2,000-character
+    message costs linear time on the gateway's event loop, never quadratic (security review M2)."""
 
+    def __init__(self, tokens: list[str]) -> None:
+        self.tokens = tokens
+        n = len(tokens)
+        self.strong = _spans(tokens, _STRONG)
+        self.person = _spans(tokens, _STRONG + _WEAK)
+        self.talk = _spans(tokens, _TALK_VERBS)
+        self.want = _spans(tokens, _WANT_VERBS)
+        self.bare = _spans(tokens, _BARE_HANDOVER)
+        # The clause is negated, hypothetical, a how-to question or reported speech before
+        # position `upto` exactly when `upto >= self.blocked_from`.
+        ends = [i + 1 for i, t in enumerate(tokens) if t in _NEGATIONS]
+        ends += [i + len(b) for i in range(n) for b in _BLOCKERS if _at(tokens, i, b)]
+        self.blocked_from = min(ends, default=n + 1)
+        # Everything from position j on is a terse filler.
+        self.fillers_after = [True] * (n + 1)
+        for j in range(n - 1, -1, -1):
+            self.fillers_after[j] = self.fillers_after[j + 1] and tokens[j] in _TERSE_FILLERS
 
-def _blocked(tokens: list[str], upto: int) -> bool:
-    """Negated, hypothetical, a how-to question or reported speech before position `upto`."""
-    head = tokens[:upto]
-    if any(t in _NEGATIONS for t in head) or _at(head, 0, ("no", "need")):
-        return True
-    return any(_at(head, i, b) for b in _BLOCKERS for i in range(len(head)))
+    def blocked(self, upto: int) -> bool:
+        return upto >= self.blocked_from
 
+    def product_use(self, start: int, end: int) -> bool:
+        tokens = self.tokens
+        before = tokens[start - 1] if start > 0 else ""
+        after = tokens[end] if end < len(tokens) else ""
+        return before in _BEFORE_NOUN or after in _AFTER_NOUN
 
-def _terse(tokens: list[str]) -> bool:
-    nouns = _find(tokens, _STRONG)
-    if not nouns:
+    def noun_after(self, start: int, nouns: dict[int, int]) -> bool:
+        """A person word at `start`, or after at most `MAX_FILLERS` filler words, not a product
+        use."""
+        i = start
+        while i < len(self.tokens) and i - start <= MAX_FILLERS:
+            if i in nouns:
+                return not self.product_use(i, nouns[i])
+            if self.tokens[i] not in _FILLERS:
+                return False
+            i += 1
         return False
-    covered = {i for start, end in nouns for i in range(start, end)}
-    if any(_product_use(tokens, s, e) for s, e in nouns):
-        return False
-    return all(i in covered or t in _TERSE_FILLERS for i, t in enumerate(tokens))
 
-
-def _noun_after(tokens: list[str], start: int, nouns: tuple[tuple[str, ...], ...]) -> bool:
-    """A person word at `start`, or after at most `MAX_FILLERS` filler words, not a product use."""
-    skipped = 0
-    i = start
-    while i < len(tokens) and skipped <= MAX_FILLERS:
-        for s, e in _find(tokens[i:], nouns)[:1]:
-            if s == 0:
-                return not _product_use(tokens, i, i + e)
-        if tokens[i] not in _FILLERS:
+    def terse(self) -> bool:
+        if not self.strong or any(self.product_use(s, e) for s, e in self.strong.items()):
             return False
-        skipped += 1
-        i += 1
-    return False
+        covered = {i for s, e in self.strong.items() for i in range(s, e)}
+        return all(i in covered or t in _TERSE_FILLERS for i, t in enumerate(self.tokens))
 
+    def requests(self) -> bool:
+        tokens = self.tokens
+        for start, end in self.talk.items():
+            noun_use = start > 0 and tokens[start - 1] in _NOUN_DETERMINERS
+            if not noun_use and not self.blocked(start) and self.noun_after(end, self.person):
+                return True
+        for start, end in self.want.items():
+            if not self.blocked(start) and self.noun_after(end, self.strong):
+                return True
+        for start, end in self.person.items():
+            takes_over = (
+                _at(tokens, end, ("take", "over"))
+                or _at(tokens, end, ("join", "this", "chat"))
+                or _at(tokens, end, ("join", "the", "chat"))
+            )
+            if takes_over and not self.blocked(start) and not self.product_use(start, end):
+                return True
+        return False
 
-def _noun_use(tokens: list[str], start: int) -> bool:
-    return start > 0 and tokens[start - 1] in _NOUN_DETERMINERS
+    def bare_handover(self) -> bool:
+        """ "connect me" (or "transfer me", "put me through") with nothing after it but fillers."""
+        return any(
+            not self.blocked(start) and self.fillers_after[end] for start, end in self.bare.items()
+        )
 
-
-def _bare_handover(tokens: list[str]) -> bool:
-    """ "connect me" (or "transfer me", "put me through") with nothing after it but fillers."""
-    for start, end in _find(tokens, _BARE_HANDOVER):
-        rest = tokens[end:]
-        if not _blocked(tokens, start) and all(t in _TERSE_FILLERS for t in rest):
-            return True
-    return False
-
-
-def _names_person(tokens: list[str]) -> bool:
-    return any(not _product_use(tokens, s, e) for s, e in _find(tokens, _STRONG + _WEAK))
-
-
-def _requests(tokens: list[str]) -> bool:
-    for start, end in _find(tokens, _TALK_VERBS):
-        if _noun_use(tokens, start) or _blocked(tokens, start):
-            continue
-        if _noun_after(tokens, end, _STRONG + _WEAK):
-            return True
-    for start, end in _find(tokens, _WANT_VERBS):
-        if not _blocked(tokens, start) and _noun_after(tokens, end, _STRONG):
-            return True
-    for start, end in _find(tokens, _STRONG + _WEAK):
-        rest = tokens[end:]
-        takes_over = _at(rest, 0, ("take", "over")) or _at(rest, 0, ("join", "this", "chat"))
-        takes_over = takes_over or _at(rest, 0, ("join", "the", "chat"))
-        if takes_over and not _blocked(tokens, start) and not _product_use(tokens, start, end):
-            return True
-    return False
+    def names_person(self) -> bool:
+        return any(not self.product_use(s, e) for s, e in self.person.items())
 
 
 def asks_for_person(message: str) -> bool:
     """True when the message explicitly asks for a person now (see the module docstring)."""
-    clauses = _clauses(message)
-    if any(_terse(tokens) or _requests(tokens) for tokens in clauses):
+    clauses = [_Clause(tokens) for tokens in _clauses(message)]
+    if any(c.terse() or c.requests() for c in clauses):
         return True
-    return any(_bare_handover(t) for t in clauses) and any(_names_person(t) for t in clauses)
+    return any(c.bare_handover() for c in clauses) and any(c.names_person() for c in clauses)
 
 
 __all__ = ["asks_for_person"]
