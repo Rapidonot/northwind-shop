@@ -45,7 +45,8 @@ log = logging.getLogger(__name__)
 COOKIE = "nw_session"
 STATE_KEY = "northwind_session"
 SIGNIN_PATH = "/api/session/shopper"  # row #27
-SESSION_PATHS = ("/api/chat", "/api/cart", SIGNIN_PATH)
+HANDOFF_PATH = "/api/handoff"  # row #23 (SA-06)
+SESSION_PATHS = ("/api/chat", "/api/cart", SIGNIN_PATH, HANDOFF_PATH)
 LABEL = b"northwind-session-v1"
 # Row #27 (CHK-06): the demo sign-in.
 SHOPPER_COOKIE = "nw_shopper"

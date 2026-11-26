@@ -1,0 +1,27 @@
+import os
+from fastapi.testclient import TestClient
+from northwind_assistant.caller import Caller
+from northwind_backend.errors import Ok
+from northwind_backend.handoff import HandoffReceipt
+from northwind_common.mcp_token import KEY_ENV
+from northwind_mcp_catalog import testing as catalog_testing
+os.environ[KEY_ENV] = catalog_testing.KEY.decode()
+from northwind_gateway.app import app
+from northwind_gateway.handoff import cart_reader, handoff_desk
+from northwind_gateway.settings import shopper_caller
+class Desk:
+    def __init__(self): self.n = 0
+    def known(self, i): return False
+    async def request(self, r, dry_run=False): self.n += 1; return Ok(HandoffReceipt("H000001"))
+class Cart:
+    async def read(self, c): return None
+d = Desk()
+app.dependency_overrides[handoff_desk] = lambda: d
+app.dependency_overrides[cart_reader] = lambda: Cart()
+app.dependency_overrides[shopper_caller] = lambda: Caller(region="US", session="0"*32)
+c = TestClient(app)
+for ct in [None, "", "text/plain", "application/x-www-form-urlencoded", "multipart/form-data; boundary=x", "application/vnd.api+json", "application/merge-patch+json", "application/json", "application/json; charset=utf-8", "APPLICATION/JSON"]:
+    before = d.n
+    headers = {} if ct is None else {"content-type": ct}
+    r = c.post("/api/handoff", content=b'{"turns": []}', headers=headers)
+    print(repr(ct), r.status_code, "reached desk" if d.n > before else "")

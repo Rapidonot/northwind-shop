@@ -1,0 +1,20 @@
+import os
+from fastapi.testclient import TestClient
+from northwind_common.mcp_token import KEY_ENV
+from northwind_mcp_catalog import testing as catalog_testing
+os.environ[KEY_ENV] = catalog_testing.KEY.decode()
+import northwind_gateway.chat as chat_mod
+from northwind_gateway.app import app
+seen = []
+async def fake_stream(message, *a, **k):
+    seen.append(message)
+    if False:
+        yield None
+chat_mod.stream_answer = fake_stream
+app.dependency_overrides[chat_mod.chat_services] = lambda: chat_mod.ChatServices(None, None)
+c = TestClient(app, raise_server_exceptions=False)
+for ct in [None, "", "text/plain", "application/x-www-form-urlencoded", "multipart/form-data; boundary=x", "application/vnd.api+json", "application/json"]:
+    n = len(seen)
+    headers = {} if ct is None else {"content-type": ct}
+    r = c.post("/api/chat", content=b'{"message": "hello there"}', headers=headers)
+    print(repr(ct), r.status_code, "MESSAGE PARSED" if len(seen) > n else "")

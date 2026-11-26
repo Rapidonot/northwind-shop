@@ -22,6 +22,9 @@ export type ChatEvent =
   | { type: "citations"; sourceIds: string[]; sources: SourceCard[] }
   | { type: "error"; code: ErrorCode }
   | { type: "refused"; message: string }
+  // Row #23 (SA-06): the gateway's deterministic trigger read the message as a request for a person.
+  // No model saw it; the portal then asks for the handoff itself (`requestHandoff`).
+  | { type: "handoff" }
   | { type: "done" };
 
 const GENERIC_REFUSAL = "That message could not be accepted.";
@@ -57,6 +60,8 @@ function toEvent(name: string, data: string): ChatEvent | null {
       };
     case "error":
       return { type: "error", code: body.code as ErrorCode };
+    case "handoff":
+      return { type: "handoff" };
     case "done":
       return { type: "done" };
     default:
@@ -84,8 +89,12 @@ export function parseFrames(buffer: string): { events: ChatEvent[]; rest: string
 
 async function refusal(response: Response): Promise<ChatEvent> {
   try {
-    const body = (await response.json()) as { message?: string };
-    return { type: "refused", message: body.message ?? GENERIC_REFUSAL };
+    const body = (await response.json()) as { message?: unknown };
+    // Only a string is shown (security review L7): anything else is the fixed text.
+    return {
+      type: "refused",
+      message: typeof body.message === "string" ? body.message : GENERIC_REFUSAL,
+    };
   } catch {
     return { type: "refused", message: GENERIC_REFUSAL };
   }
@@ -123,5 +132,46 @@ export async function sendMessage(
       ended ||= event.type === "done" || event.type === "error";
       onEvent(event);
     }
+  }
+}
+
+/** One turn of the conversation as the shopper saw it, for the handoff summary only (row #23). */
+export type HandoffTurn = { role: "shopper" | "assistant"; text: string };
+
+export type HandoffResult =
+  | { kind: "queued"; reference: string }
+  | { kind: "failed"; message: string; turnsRefused?: boolean };
+
+export const HANDOFF_FAILED = "A person can't be reached from here right now. Please try again.";
+// Security review L1: the gateway refused the turns themselves (card data across them, say). The
+// chat drops them, so "Try again" asks for a person without them and can succeed.
+export const HANDOFF_TURNS_REFUSED =
+  "Part of this conversation can't be passed on to a person. Try again to ask for a person " +
+  "without it.";
+const REFERENCE = /^H\d{6}$/;
+
+/** POST /api/handoff (row #23, SA-06). Only a well-formed reference counts as queued; anything else
+ * is the fixed failure text; a 422 (the turns refused) is its own fixed text. */
+export async function requestHandoff(
+  turns: HandoffTurn[],
+  trigger: "button" | "message",
+): Promise<HandoffResult> {
+  try {
+    const response = await fetch("/api/handoff", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ turns, trigger }),
+    });
+    if (response.status === 422) {
+      return { kind: "failed", message: HANDOFF_TURNS_REFUSED, turnsRefused: turns.length > 0 };
+    }
+    if (response.status !== 202) return { kind: "failed", message: HANDOFF_FAILED };
+    const body = (await response.json()) as { status?: unknown; reference?: unknown };
+    if (body.status !== "queued" || typeof body.reference !== "string" || !REFERENCE.test(body.reference)) {
+      return { kind: "failed", message: HANDOFF_FAILED };
+    }
+    return { kind: "queued", reference: body.reference };
+  } catch {
+    return { kind: "failed", message: HANDOFF_FAILED };
   }
 }

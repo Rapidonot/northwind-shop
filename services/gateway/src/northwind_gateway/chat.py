@@ -8,6 +8,10 @@ one code from a closed set, never exception or upstream text.
 
 Events: `token` {text}, then `citations` {source_ids, sources} and `done` {}, or `error` {code}.
 `reset` {} means a model attempt was cut off and retried, so the text so far must be dropped.
+`handoff` {}, then `done` {} (row #23, SA-06): the deterministic trigger read the message as an
+explicit request for a person, after the card check, so no search and no model call were made. It
+is only a signal: the portal then opens the handoff with its own JSON request to /api/handoff,
+and this module never reaches the handoff desk (security re-review N8, pinned).
 """
 
 from __future__ import annotations
@@ -36,6 +40,7 @@ from northwind_common.localenv import mcp_catalog_url, mcp_rag_url
 from northwind_common.mcp_token import signing_key
 from northwind_common.order_tool import mcp_orders_url
 from northwind_common.policy_tool import mcp_policy_url
+from northwind_gateway.handoff_trigger import asks_for_person
 from northwind_gateway.settings import shopper_caller
 
 log = logging.getLogger(__name__)
@@ -158,6 +163,11 @@ async def chat(
     caller: Annotated[Caller, Depends(shopper_caller)],  # row #16: with the session
     services: Annotated[ChatServices, Depends(chat_services)],
 ) -> AsyncIterable[ServerSentEvent]:
+    if asks_for_person(message):
+        # Row #23 (SA-06): honored at once, before any search or model call.
+        yield ServerSentEvent(event="handoff", data={})
+        yield ServerSentEvent(event="done", data={})
+        return
     failed = False
     try:
         async for event in stream_answer(

@@ -47,6 +47,19 @@ class IdempotencyStore:
         with self._lock:
             return read()
 
+    def replay[T](self, key: str, request_hash: str) -> Result[T] | None:
+        """What `run` would return for `key` without running anything: the first result, a
+        conflict, or None when the key is new. For a dry run that must predict the real call (row
+        #23, security re-review N9)."""
+        with self._lock:
+            entry = self._entries.get(key)
+            if entry is None:
+                return None
+            if entry.fingerprint != request_hash:
+                return IDEMPOTENCY_CONFLICT
+            first: Result[T] = entry.result
+            return first
+
     def run[T](self, key: str, request_hash: str, effect: Callable[[], Result[T]]) -> Result[T]:
         with self._lock:
             entry = self._entries.get(key)
