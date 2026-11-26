@@ -121,3 +121,9 @@ BE-01 (Addendum A change 1), services/backend/tests/orchestrator/test_be01_revie
     old test, base, not loaded: passed
     new test, branch, loaded: passed
   Mutant (jump as soon as the read hangs, before orders closes), loaded: 3 of 3 runs fail. Orchestrator folder under -n 4: 83 passed, 3 runs of 3.
+
+## Part 5: the hedge report (N-2, N-3), no hedge code changed
+uv run --no-sync --offline python docs/reviews/2026-11-25-30-w6-hedge-report.py.txt: on 81683c2 (git archive, PYTHONPATH) exit 0, 439 answer calls, 3 excused sentences (EV-100, EV-302, RT-022: #30's W6 three); --control exit 0, 2 excused; the branch prints the same lines as main. The command is in row #18's text.
+
+## Also: review 10's committed-cassette test, every suite but spike
+branch: passes (the data is the same on base, so it cannot fail first). Mutant, spike not left out: fails on spike/5cb17435... (0.00019999999999999998).
