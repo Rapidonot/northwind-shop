@@ -121,6 +121,9 @@ export const PRICE_NOTE = "Ask me for a price or stock check: I look them up liv
 
 // Row #23 (SA-06): the turns a handoff sends, as the shopper saw them; never shown again.
 export const MAX_HANDOFF_TURNS = 10;
+// Each at most what the gateway takes (`MAX_TURN_CHARS`), or a long answer would make every later
+// handoff a refusal no retry could fix (test-writer finding, row #23).
+export const MAX_HANDOFF_TURN_CHARS = 2000;
 
 /** `onTurnEnd` (row #16): called when a turn has ended, however it ended, so the cart can be read
  * again. `handoffStatus` (row #23): tells the chat when a person has taken over; by default no one
@@ -140,9 +143,10 @@ export function Chat({
   useEffect(() => () => unwatch.current(), []);
 
   function remember(...turns: HandoffTurn[]) {
-    history.current = [...history.current, ...turns.filter((t) => t.text !== "")].slice(
-      -MAX_HANDOFF_TURNS,
-    );
+    const kept = turns
+      .filter((t) => t.text !== "")
+      .map((t) => ({ ...t, text: t.text.slice(0, MAX_HANDOFF_TURN_CHARS) }));
+    history.current = [...history.current, ...kept].slice(-MAX_HANDOFF_TURNS);
   }
 
   async function startHandoff(trigger: "button" | "message") {
