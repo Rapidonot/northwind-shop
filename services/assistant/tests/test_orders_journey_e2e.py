@@ -36,7 +36,14 @@ from northwind_assistant.catalog_client import CatalogEndpoint
 from northwind_assistant.orders_client import OrdersEndpoint, PolicyEndpoint
 from northwind_assistant.output_check import FIXED_SENTENCES
 from northwind_assistant.rag_client import RagEndpoint
-from northwind_assistant.turn import Citations, TextDelta, TurnError, TurnEvent, stream_answer
+from northwind_assistant.turn import (
+    Citations,
+    Reset,
+    TextDelta,
+    TurnError,
+    TurnEvent,
+    stream_answer,
+)
 from northwind_common import order_tool
 from northwind_common.errors import ToolError
 from northwind_common.llm import AgentRuntime, agent_runtime
@@ -219,7 +226,12 @@ def run_turn(message: str, runtime: AgentRuntime, source: PolicySource | None = 
         events = asyncio.run(collect(RagEndpoint(url, KEY), catalog_url, orders_url, policy_url))
     assert not [e for e in events if isinstance(e, TurnError)], events
     assert isinstance(events[-1], Citations)
-    answer = "".join(e.text for e in events if isinstance(e, TextDelta))
+    answer = ""  # what the portal shows: a reset drops the text so far (SA-02)
+    for event in events:
+        if isinstance(event, Reset):
+            answer = ""
+        elif isinstance(event, TextDelta):
+            answer += event.text
     requests = list(orders_server.desk.open.values())
     cited = events[-1].source_ids
     return Turn(answer, book.reads, orders_server.calls, requests, evaluations, cited)

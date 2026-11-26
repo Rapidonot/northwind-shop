@@ -269,6 +269,26 @@ def _texts(body: str) -> str:
     return "".join(out)
 
 
+def _stop_reason(body: str) -> str | None:
+    for line in body.splitlines():
+        if line.startswith("data:"):
+            event = json.loads(line[5:])
+            if event.get("type") == "message_delta":
+                return str(event["delta"]["stop_reason"])
+    return None
+
+
+def _before_a_tool_call() -> list[tuple[str, str]]:
+    """(scenario and call, text) for every recorded model message that ends in a tool call."""
+    found = []
+    for path in sorted(CASSETTES.glob("*.json")):
+        cassette = json.loads(path.read_text(encoding="utf-8"))
+        if _stop_reason(cassette["body"]) == "tool_use":
+            name = cassette["test_id"].rsplit("[", 1)[-1].rstrip("]")
+            found.append((f"{name}#{cassette['seq']}", _texts(cassette["body"])))
+    return sorted(found)
+
+
 def _recorded() -> list[tuple[str, str]]:
     """(scenario and call, what the model wrote) for every cassette of the suite."""
     found = []
@@ -293,6 +313,22 @@ def test_the_recordings_are_read() -> None:
 @pytest.mark.parametrize(("name", "answer"), RECORDED, ids=[n for n, _ in RECORDED])
 def test_every_stated_status_is_the_orders_own(name: str, answer: str) -> None:
     assert problems(answer) == []
+
+
+BEFORE_A_TOOL_CALL = _before_a_tool_call()
+
+
+def test_the_messages_that_call_a_tool_are_read() -> None:
+    assert len(BEFORE_A_TOOL_CALL) >= 11  # get_order in ten scenarios, and more in the returns
+
+
+@pytest.mark.parametrize(
+    ("name", "text"), BEFORE_A_TOOL_CALL, ids=[n for n, _ in BEFORE_A_TOOL_CALL]
+)
+def test_no_text_is_written_before_a_tool_call(name: str, text: str) -> None:
+    """The shopper sees every word a turn writes, so a message that calls a tool writes none
+    (row #27 PR 2's window: a reasoning line about "the shopper" reached the portal)."""
+    assert text.strip() == ""
 
 
 @pytest.mark.parametrize(("name", "answer"), RECORDED, ids=[n for n, _ in RECORDED])
