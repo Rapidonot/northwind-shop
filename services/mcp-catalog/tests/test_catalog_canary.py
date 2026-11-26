@@ -98,6 +98,19 @@ def arguments() -> list[tuple[str, dict[str, Any]]]:
     calls.append(("get_cart", {}))
     # Row #11: the live filter too (refused to this agent; `shopper-query` is checked below).
     calls.append(("eligible_products", {"price_max": 1_000_000}))
+    # SA-01 PR 1: the portal's two reads too (refused to this agent; `shopper-portal` is below).
+    calls.extend(portal_arguments())
+    return calls
+
+
+def portal_arguments() -> list[tuple[str, dict[str, Any]]]:
+    """`browse_products` and `get_prices` with every canary value, P0009's ID included."""
+    calls: list[tuple[str, dict[str, Any]]] = [("browse_products", {})]
+    for value in VALUES:
+        for key in ("text", "department"):
+            calls.append(("browse_products", {key: value}))
+        calls.append(("get_prices", {"product_id": value}))
+    calls.append(("get_prices", {"product_id": "P0009"}))
     return calls
 
 
@@ -120,6 +133,29 @@ def test_the_canary_title_and_id_are_in_no_response_byte(url: str) -> None:
                 assert needle not in raw, (region, name, args)
             if name == "add_to_cart" and args.get("variant_id") == OUT_OF_STOCK:
                 assert "out_of_stock" in raw  # the alternatives scan really ran
+
+
+def test_the_portal_reads_never_name_the_canary_or_its_product(url: str) -> None:
+    """SA-01 PR 1: `browse_products` and `get_prices` as `shopper-portal`, their one agent, with
+    every canary value and P0009's own ID: never the canary title or P0009, in any region."""
+    calls = portal_arguments()
+
+    async def go(region: str) -> list[str]:
+        out: list[str] = []
+        async with connect(url, token("shopper-portal", region, session=SESSION)[0]) as client:
+            for name, args in calls:
+                result = await client.call_tool(name, args)
+                out.append(json.dumps(result.model_dump(mode="json", by_alias=True)))
+        return out
+
+    listed = 0
+    for region in REGIONS:
+        raws = asyncio.run(go(region))
+        for (name, args), raw in zip(calls, raws, strict=True):
+            for needle in FORBIDDEN:
+                assert needle not in raw, (region, name, args)
+        listed += raws[0].count("product_id")
+    assert listed  # a positive control: the unfiltered browse really lists products
 
 
 def test_the_live_filter_never_names_the_canary_or_its_product(url: str) -> None:
