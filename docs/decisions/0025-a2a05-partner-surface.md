@@ -17,7 +17,8 @@ CHK-06 a read-only `get_order` satisfied it (P3-1).
 3. **An order turn is one whose every call was offered northwind-catalog's exact cart tools (`CART_TOOL_NAMES`) and that
    called one of them.**
 4. **The artifact alone:** the order narrative is served beside its order artifact only when it plainly agrees with it. That
-   means no negating word in any sentence that names an order or cart action (security L6: not a list of denials), a citation of the turn's product, and exactly the variants the artifact names,
+   means a plain confirmation of the cart action ("I added", "is now in your cart", "your cart now holds"; security
+   re-review N8), no negating word in any sentence that names an order or cart action (security L6), a citation of the turn's product, and exactly the variants the artifact names,
    all of them that product's. Otherwise A2A-05 returns the artifact alone (text `None`). It is deterministic and fails closed.
    The artifact's full shape is A2A-05's to define; only the variant IDs in it are read here.
 

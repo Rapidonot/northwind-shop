@@ -157,6 +157,15 @@ ORDER_ACTION = re.compile(
 )
 
 
+# Re-review N8: no denial is not enough; the text must confirm the cart action in plain words.
+ORDER_CONFIRMED = re.compile(
+    r"\bI(?:['’]ve|\s+have)?\s+(?:now\s+)?added\b"
+    r"|\b(?:is|was|are|were|has\s+been|have\s+been)\s+(?:now\s+)?(?:added|in\s+your\s+cart)\b"
+    r"|\byour\s+cart\s+(?:now\s+)?(?:holds|has|contains)\b",
+    re.IGNORECASE,
+)
+
+
 def order_denied(text: str) -> bool:
     return any(
         NEGATING.search(sentence) and ORDER_ACTION.search(sentence)
@@ -168,10 +177,11 @@ VARIANT_ID = re.compile(r"\bP\d{4}(?:-[A-Z0-9]{1,16}){1,4}\b")
 
 
 def narrative_agrees(text: str, artifact: Mapping[str, Any], product_id: str) -> bool:
-    """Whether the order narrative plainly agrees with the order's artifact: it denies no order or
-    cart action, cites the turn's product, and cites exactly the variants the artifact names, which
-    must be that product's. An artifact that names no variant cannot be agreed with."""
-    if order_denied(text):
+    """Whether the order narrative plainly agrees with the order's artifact: it confirms the cart
+    action in plain words and denies none, cites the turn's product, and cites exactly the
+    variants the artifact names, which must be that product's. An artifact that names no variant
+    cannot be agreed with."""
+    if order_denied(text) or not ORDER_CONFIRMED.search(text):
         return False
     cited = set(CITATION.findall(text))
     named = set(VARIANT_ID.findall(json.dumps(artifact, sort_keys=True)))

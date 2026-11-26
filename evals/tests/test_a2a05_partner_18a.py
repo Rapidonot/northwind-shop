@@ -250,3 +250,22 @@ def test_any_denial_of_the_order_leaves_the_artifact_alone(tmp_path: Path, shown
 def test_a_plain_confirmation_of_the_cart_is_still_served(tmp_path: Path, shown: str) -> None:
     text, _artifact = served(*order_setup(tmp_path, shown=shown))
     assert text == shown
+
+
+# ---- security re-review N8: a confirmation is required, not only no denial ---------------------
+
+
+@pytest.mark.parametrize(
+    "shown",
+    [
+        f"Adding the shell to your cart was unsuccessful [{VARIANT}].",
+        f"The shell [{VARIANT}] was declined at checkout.",
+        f"Your cart is still empty [{VARIANT}].",
+        f"The Corvane Breakwater Shell comes in Slate, size M [{VARIANT}].",
+    ],
+)
+def test_a_text_that_confirms_no_cart_action_leaves_the_artifact_alone(
+    tmp_path: Path, shown: str
+) -> None:
+    text, artifact = served(*order_setup(tmp_path, shown=shown))
+    assert text is None and artifact is ARTIFACT
