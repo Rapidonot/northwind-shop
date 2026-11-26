@@ -19,6 +19,23 @@ test.describe("[SA-06] [NFR-08] handoff to a person", () => {
     await expect(aiDisclosure(page)).toBeVisible();
   });
 
+  test("a typed request for a person hands off with no answer from the model", async ({ page }) => {
+    await openChat(page);
+    await page.getByLabel("Your question").fill("Can I talk to a real person?");
+    const chat = page.waitForResponse("**/api/chat");
+    const handoff = page.waitForResponse("**/api/handoff");
+    await page.getByRole("button", { name: "Send" }).click();
+    const body = await (await chat).text();
+    // The gateway's trigger answered before any search or model call: no token, no citations.
+    expect(body).toMatch(/^event: handoff$/m);
+    expect(body).toMatch(/^event: done$/m);
+    expect(body).not.toMatch(/^event: (token|citations)$/m);
+    expect((await handoff).status()).toBe(202);
+    await expect(page.getByRole("status", { name: "Handoff" })).toHaveText(QUEUED);
+    await expect(page.getByTestId("answer")).toBeEmpty();
+    await expect(aiDisclosure(page)).toBeVisible();
+  });
+
   test("asking twice in one session keeps the first reference", async ({ page }) => {
     await openChat(page);
     const first = page.waitForResponse("**/api/handoff");
