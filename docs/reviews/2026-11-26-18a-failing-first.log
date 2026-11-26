@@ -126,4 +126,9 @@ BE-01 (Addendum A change 1), services/backend/tests/orchestrator/test_be01_revie
 uv run --no-sync --offline python docs/reviews/2026-11-25-30-w6-hedge-report.py.txt: on 81683c2 (git archive, PYTHONPATH) exit 0, 439 answer calls, 3 excused sentences (EV-100, EV-302, RT-022: #30's W6 three); --control exit 0, 2 excused; the branch prints the same lines as main. The command is in row #18's text.
 
 ## Also: review 10's committed-cassette test, every suite but spike
-branch: passes (the data is the same on base, so it cannot fail first). Mutant, spike not left out: fails on spike/5cb17435... (0.00019999999999999998).
+branch: passes (the data is the same on base, so it cannot fail first). Mutant, spike not left out: fails on spike/148766bf... (9.999999999999999e-06), the first of its two long floats.
+
+## Part 6: evals/tests/test_a2a05_partner_18a.py (and the old loose pin in test_a2a05_partner.py rewritten to the new rule)
+base: 16 failed, 5 passed; branch: 21 passed (with test_a2a05_partner.py and _criteria.py: 140 passed, 9 skipped, the stale suite)
+Passing on base: the positive cases (an agreeing cart turn is served; each cart tool counts as used), which the old loose check also accepted.
+Mutants: 7 of 7 killed. A1 offered but not used 2; A2 any cart tool offered 1; A3 a denial agrees 2; A4 no variant equality 2; A5 artifact of any product 1 (first survived: the other-product-cited case was added); A6 recorder without the catalog 2; A7 one fixed session 1

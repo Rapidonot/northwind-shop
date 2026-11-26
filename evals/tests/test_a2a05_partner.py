@@ -137,7 +137,39 @@ class NotServable(LookupError):
     order narrative without an order artifact and the order tools it describes."""
 
 
-ORDER_TOOL = re.compile(r"cart|order", re.IGNORECASE)
+# Row 18a, P3-1: the exact cart tools of northwind-catalog, never "cart" or "order" anywhere in a
+# name (CHK-06's read-only `get_order` held "order").
+def _cart_tool_names() -> frozenset[str]:
+    from northwind_common.catalog_tool import CART_TOOL_NAMES
+
+    return CART_TOOL_NAMES
+
+
+# Row 18a (the user's answer 5, 2026-11-25): the order narrative goes beside its artifact only when
+# it plainly agrees with it; otherwise A2A-05 returns the artifact alone. Fails closed.
+ORDER_DENIAL = re.compile(
+    r"\b(?:can(?:no|['’])t|cannot|unable\s+to|not\s+able\s+to|won['’]t|no\s+way\s+to)\b"
+    r"[^.?!\n]{0,60}\b(?:order|place|add|cart|buy|purchase|checkout|check\s+out)",
+    re.IGNORECASE,
+)
+VARIANT_ID = re.compile(r"\bP\d{4}(?:-[A-Z0-9]{1,16}){1,4}\b")
+
+
+def narrative_agrees(text: str, artifact: Mapping[str, Any], product_id: str) -> bool:
+    """Whether the order narrative plainly agrees with the order's artifact: it denies no order or
+    cart action, cites the turn's product, and cites exactly the variants the artifact names, which
+    must be that product's. An artifact that names no variant cannot be agreed with."""
+    if ORDER_DENIAL.search(text):
+        return False
+    cited = set(CITATION.findall(text))
+    named = set(VARIANT_ID.findall(json.dumps(artifact, sort_keys=True)))
+    text_variants = {c for c in cited if VARIANT_ID.fullmatch(c)}
+    return bool(
+        named
+        and all(v.startswith(f"{product_id}-") for v in named)
+        and (product_id in cited or text_variants)
+        and text_variants == named
+    )
 
 
 def served_fixture(
@@ -147,14 +179,17 @@ def served_fixture(
     order_artifact: Mapping[str, Any] | None = None,
     answers: Path = ANSWERS,
     cassettes: Path = CASSETTES,
-) -> tuple[str, Mapping[str, Any] | None]:
+) -> tuple[str | None, Mapping[str, Any] | None]:
     """The answer text A2A-05 may serve for one turn, with the order artifact it goes with,
     failing closed (security passes 1 and 2: L6, N2, N3). The use comes from the frozen script,
     never the fixture file, and the fixture must answer exactly this script's turn. A
     `narrative_only` text is served only beside a non-empty order artifact, and only if every
     call of its turn was offered a cart or order tool (offered, not used: pass 3, P3-1, P3-2),
-    so a pre-#16 "I can't place orders" never sits beside a placed order. This, not
-    `partner_fixture`, is what moves into the A2A package. Treat any exception as a rejection."""
+    so a pre-#16 "I can't place orders" never sits beside a placed order. Since row 18a (P3-1) the
+    tools are the exact cart tools, and one of them must have been used in the turn; and the text
+    goes beside the artifact only if it plainly agrees with it (`narrative_agrees`), else the
+    artifact is returned alone (text None). This, not `partner_fixture`, is what moves into the
+    A2A package. Treat any exception as a rejection."""
     if not isinstance(name, str) or not NAME.fullmatch(name) or name not in NAMES:
         raise NotServable(str(name))
     turn = turn_named(name)
@@ -176,7 +211,9 @@ def served_fixture(
     if use == "answer":
         return str(fixture["answer"]["shown"]), None
     if use == "narrative_only" and order_artifact and offered_order_tools(name, cassettes):
-        return str(fixture["answer"]["shown"]), order_artifact
+        text = str(fixture["answer"]["shown"])
+        agrees = narrative_agrees(text, order_artifact, str(turn["product_id"]))
+        return (text if agrees else None), order_artifact
     raise NotServable(f"{name} is served only beside an order artifact, from order tools")
 
 
@@ -378,14 +415,30 @@ def model_text(name: str, cassettes: Path = CASSETTES) -> str:
     return "\n".join(sse_text(c["body"]) for c in recorded_calls(name, cassettes))
 
 
+def sse_tool_names(body: str) -> list[str]:
+    """The tools the model called in one streamed response, in order."""
+    names = []
+    for line in body.splitlines():
+        if not line.startswith("data: "):
+            continue
+        event = json.loads(line[len("data: ") :])
+        block = event.get("content_block") or {}
+        if event.get("type") == "content_block_start" and block.get("type") == "tool_use":
+            names.append(str(block.get("name", "")))
+    return names
+
+
 def offered_order_tools(name: str, cassettes: Path = CASSETTES) -> bool:
-    """Whether every call of the turn offered the model a cart or order tool (none does before
-    #16), read from the recorded requests."""
+    """Whether every call of the turn offered the model northwind-catalog's cart tools, by their
+    exact names, and the model called one of them in the turn (row 18a, P3-1: offered and used),
+    read from the recorded requests and responses."""
     calls = recorded_calls(name, cassettes)
-    return bool(calls) and all(
-        any(ORDER_TOOL.search(str(tool.get("name", ""))) for tool in c["match"]["body"]["tools"])
+    carts = _cart_tool_names()
+    offered = bool(calls) and all(
+        carts <= {str(tool.get("name", "")) for tool in c["match"]["body"].get("tools", [])}
         for c in calls
     )
+    return offered and any(n in carts for c in calls for n in sse_tool_names(c["body"]))
 
 
 def tool_errors(name: str, cassettes: Path = CASSETTES) -> int:
@@ -575,8 +628,12 @@ def run_partner_turn(
     base_url: str,
     root: Path,
 ) -> TurnResult:
-    """One `stream_answer` turn for one scripted message, through a real in-process mcp-rag."""
+    """One `stream_answer` turn for one scripted message, through a real in-process mcp-rag and,
+    since row 18a (option B of `docs/reviews/2026-11-25-a2a05-surface-memo.md`, decision 0025),
+    a real mcp-catalog with the cart tools: an anonymous shopper's surface, with a fresh random
+    cart session per turn. No query understanding, and no orders or policy server."""
     from northwind_assistant.caller import Caller
+    from northwind_assistant.catalog_client import CatalogEndpoint
     from northwind_assistant.rag_client import RagEndpoint
     from northwind_assistant.turn import (
         INSUFFICIENT_EVIDENCE,
@@ -587,7 +644,7 @@ def run_partner_turn(
         stream_answer,
     )
     from northwind_common.llm import agent_runtime
-    from northwind_evals.answerers import SavedFirstIndex
+    from northwind_evals.answerers import CatalogLog, SavedFirstIndex, serve_catalog
     from northwind_evals.items import EvalItem
     from northwind_mcp_rag.testing import serve_retriever
 
@@ -607,13 +664,23 @@ def run_partner_turn(
     index = SavedFirstIndex(recorded, counting, leaks)
     index.begin(item, context)
     key = secrets.token_bytes(40)  # a fresh key per turn, never the fixed test key
-    with serve_retriever(index, Caller, key=key) as (url, _server):
+    session = secrets.token_hex(16)  # a fresh cart per turn: no partner cart meets another's
+    with (
+        serve_retriever(index, Caller, key=key) as (url, _server),
+        serve_catalog(key, CatalogLog(), leaks) as catalog_url,
+    ):
         runtime = agent_runtime(base_url=base_url, root=root)
 
         async def collect() -> list[Any]:
-            caller = Caller(region=REGION)  # type: ignore[arg-type]
+            caller = Caller(region=REGION, session=session)  # type: ignore[arg-type]
             message = str(turn["message"])
-            return [e async for e in stream_answer(message, caller, RagEndpoint(url, key), runtime)]
+            catalog = CatalogEndpoint(catalog_url, key)
+            return [
+                e
+                async for e in stream_answer(
+                    message, caller, RagEndpoint(url, key), runtime, catalog
+                )
+            ]
 
         events = asyncio.run(collect())
     sent: list[str] = []
@@ -1336,19 +1403,20 @@ def test_the_order_narrative_needs_an_artifact_and_order_tools(tmp_path: Path) -
             )
 
 
-def test_the_order_narrative_is_served_with_its_artifact_once_order_tools_exist(
+def test_a_tool_named_like_a_cart_tool_offered_but_not_used_is_no_order_turn(
     tmp_path: Path,
 ) -> None:
+    """Row 18a, P3-1: this shape (a cart-like name on another server, offered, never called) was
+    served here before. The served case, with northwind-catalog's exact cart tools offered and one
+    called, and the text beside an artifact it agrees with, is in `test_a2a05_partner_18a.py`."""
     name, answers, cassettes = _served_setup(
         tmp_path, 8, tools=("mcp__northwind-cart__add_to_cart",)
     )
-    artifact = {"order": "x"}
-    with pytest.raises(NotServable):
-        served_fixture(name, CURRENT, answers=answers, cassettes=cassettes)
-    text, served = served_fixture(
-        name, CURRENT, order_artifact=artifact, answers=answers, cassettes=cassettes
-    )
-    assert text and served is artifact
+    for artifact in (None, {"order": "x"}):
+        with pytest.raises(NotServable):
+            served_fixture(
+                name, CURRENT, order_artifact=artifact, answers=answers, cassettes=cassettes
+            )
 
 
 def test_unknown_names_and_todays_fixtures_fail_closed() -> None:
