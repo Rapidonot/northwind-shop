@@ -85,9 +85,6 @@ intent, root cause, amounts and the recommended action.
 - Open (security review L5, owner Window B's staff caller): references are sequential (`H000001`, ...). A real
   `HandoffStatus.watch` must check the caller's session or identity on the server, never the reference alone
   (hard rule 7).
-- Open (security review M1, pre-existing for `/api/chat`; owner hardening, or the user): `/api/handoff` takes only
-  `application/json`, so a cross-site page cannot start Care runs without a preflight. `/api/chat` has no such
-  check. Adding one there is a new control on an existing path, so it is the user's decision.
 - Limits (security review M1): one process holds at most `MAX_OPEN_HANDOFFS` (1000) open handoffs and runs at most
   `MAX_CARE_RUNS` (2) Care runs at once. Over the run cap the case is built by code at once (`care_busy`,
   `summary_missing`). One agent runtime serves the desk, and open builds get a bounded wait at shutdown.

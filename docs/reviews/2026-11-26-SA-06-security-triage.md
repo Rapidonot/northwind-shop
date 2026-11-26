@@ -6,7 +6,7 @@ that is a real bug in the row's files is fixed; a low elsewhere is logged with a
 
 | Finding | Severity | Outcome | Where |
 |---|---|---|---|
-| M1: unbounded Care runs, temp directories and memory; cross-site trigger; shutdown | medium | **fixed**: open-handoff cap (`DESK_FULL`), Care-run cap (`care_busy`), one runtime per desk, `close()` in the lifespan, `/api/handoff` takes `application/json` only. Logged: the same Origin question for `/api/chat` (pre-existing; the user's decision) | `70a4307` |
+| M1: unbounded Care runs, temp directories and memory; cross-site trigger; shutdown | medium | **fixed**: open-handoff cap (`DESK_FULL`), Care-run cap (`care_busy`), one runtime per desk, `close()` in the lifespan, `/api/handoff` takes `application/json` only. The same check for `/api/chat` is not this row (the user, 2026-11-26): it is pre-existing and fails decision 0021's real-bug test on localhost in replay, so it goes in the PR body only, not Open items | `70a4307` |
 | M2: matcher quadratic in message length | medium | **fixed**: linear per clause; the same answers on all 111 labelled phrases and on 60,000 fuzzed messages; the worst case drops from 1.2 s to under 10 ms; the timing test failed 3 of 6 on the old code | `cc1bbdf` |
 | L1: a refused handoff stays refused on every retry; chat's wording | low | **fixed**: the turns are dropped and the portal shows its own fixed text; the retry sends `[]` | `ccebdb1` |
 | L2: an open handoff never closes, so a later request is merged | low | **logged** (decision 0025, owner #19 or Window B); the repeat is audited | `70a4307` |
@@ -19,3 +19,7 @@ that is a real bug in the row's files is fixed; a low elsewhere is logged with a
 One test-writer test was changed with the L1 fix. It asserted chat's 422 text on a refused handoff, the very
 behaviour L1 found wrong. It now asserts the new fixed text and `turnsRefused`, just as exactly. That is not a
 loosening, but it is listed here for the reviewer.
+
+**The user's decisions, 2026-11-26:**
+- The changed test-writer test is **approved** (stop 5): it is just as exact, and the old wording was L1's bug.
+- JSON-only for `/api/chat`: **not this row**. It goes in the PR body only, not Open items.
