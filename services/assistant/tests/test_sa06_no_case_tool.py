@@ -98,3 +98,14 @@ def test_the_care_agent_never_gets_a_write_tool() -> None:
     assert sorted(lists) == ["ORDER_TOOL_NAME, SUMMARY_TOOL_NAME", "SUMMARY_TOOL_NAME"], lists
     desk = HANDOFF.read_text(encoding="utf-8")
     assert "allowed_tools" not in desk and "@tool(" not in desk
+
+
+def test_case_is_a_forbidden_fragment_for_every_shopper_agent() -> None:
+    """Phase B: the scope table itself forbids a case tool, not only this pin."""
+    for agent, audience in tool_scopes.AGENT_AUDIENCE.items():
+        if audience != "shopper":
+            continue
+        fragments = tool_scopes.FORBIDDEN_FRAGMENTS[agent]
+        assert "case" in fragments, agent
+        for tools in tool_scopes.AGENT_TOOLS.get(agent, {}).values():
+            assert not [t for t in tools if any(f in t for f in fragments)], agent

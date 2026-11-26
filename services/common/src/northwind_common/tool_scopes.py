@@ -97,11 +97,13 @@ AGENT_RESOURCES: Mapping[str, Mapping[str, frozenset[str]]] = {
     "catalog-subagent": {"northwind-rag": frozenset({"northwind-rag://index/manifest"})},
 }
 
-# PRD §7 "Explicitly not allowed", as fragments no tool name of that agent may contain.
+# PRD §7 "Explicitly not allowed", as fragments no tool name of that agent may contain. Row #23
+# (SA-06, hard rule 8): "case" too, so no shopper agent can be given a case-creating tool; the
+# handoff is the gateway's, and code in the backend queues the case.
 FORBIDDEN_FRAGMENTS: Mapping[str, tuple[str, ...]] = {
-    "shopper-assistant": ("refund", "capture", "assign"),
-    "shopper-portal": ("refund", "capture", "assign"),
-    "shopper-query": ("refund", "capture", "assign"),
+    "shopper-assistant": ("refund", "capture", "assign", "case"),
+    "shopper-portal": ("refund", "capture", "assign", "case"),
+    "shopper-query": ("refund", "capture", "assign", "case"),
 }
 
 
