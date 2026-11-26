@@ -70,3 +70,8 @@ so no re-review.
 | D (low): attribution, the probe called measured while uncommitted, no pin on `/api/chat`, a stale docstring | **fixed** |
 | E (low): m20's verdict | **fixed**: its named test is reported failed (the second re-read's L-b: "on assertion" means that) |
 | F (low): two runs in prose only | **fixed**: v2's raw output and the recorded run's raw output are in the log |
+
+## The failed make ci and the advisor's third re-read (`docs/reviews/2026-11-26-SA-06-advisor-reread-3.raw.md`)
+`make ci` at 2781f9d failed BE-08's view pin, and `7aa7787` fixes it in the source. The advisor found the fix right,
+the pin unloosened, and nothing at medium or above. It returned `unconfirmed` because the session sent no
+failing-first log, plan or list of requested changes. Its one low: the tool register should name `read_order`. Fixed.

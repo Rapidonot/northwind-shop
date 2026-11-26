@@ -201,3 +201,26 @@ Restored: 3 passed in 2.67s
 ## The content-type tests (security read L3)
 services/gateway/tests/test_sa06_content_type.py at the head: 8 passed. With `strict_content_type=False` on the app,
 then restored: 3 failed (no Content-Type, an empty one, the pin), 5 passed.
+
+
+## make ci at 2781f9d: failed, then fixed in 7aa7787 (2026-11-26)
+`make ci` at 2781f9d exited 2 in `make test`, so integration, eval-integrity and eval-gate did not run. The raw lines,
+with their line numbers in the run's log:
+
+    218:E                   AssertionError: (PosixPath('/Users/rapido/Projects/northwind-shop/services/backend/src/northwind_backend/handoff.py'), 'CARE_READ')
+    219:E                   assert 'CARE_READ' in {'CARRIER_READ_ONLY', 'FRAUD_READ_ONLY', 'PAYMENT_READ_ONLY'}
+    220:E                    +  where 'CARE_READ' = <ast.Name object at 0x113944850>.id
+    223:=========================== short test summary info ============================
+    224:FAILED services/backend/tests/backend_audit/test_be08_views.py::test_every_view_built_under_src_uses_a_read_only_constant
+    225:====== 1 failed, 10274 passed, 9 skipped, 49 xfailed in 203.50s (0:03:23) ======
+    227:make ci exit 2
+
+Cause: BE-08's pin admits CARE_READ views only in agents/care.py, and handoff.py built one for the desk's
+ownership read. The row's single-file runs never ran test_be08_views.py. Fix, 7aa7787: agents/care.py gains
+read_order, which builds the view and reads once, and handoff.py calls it. The pin is unchanged.
+
+The pin with 2781f9d's handoff.py written over the head's, then restored from HEAD:
+    FAILED services/backend/tests/backend_audit/test_be08_views.py::test_every_view_built_under_src_uses_a_read_only_constant
+1 failed, 25 passed in 0.31s
+At 7aa7787:
+    26 passed in 0.32s
