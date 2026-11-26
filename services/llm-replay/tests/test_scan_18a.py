@@ -314,3 +314,40 @@ def test_a_signature_delta_is_read_not_skipped(tmp_path: Path) -> None:
 def test_a_known_delta_type_is_no_finding(tmp_path: Path) -> None:
     body = with_delta({"type": "thinking_delta", "thinking": "Plan the answer."})
     assert scan_cassettes(tmp_path, cassette(body)) == []
+
+
+# ---- security review L4 and L7 -----------------------------------------------------------------
+
+
+def test_a_carry_cut_inside_a_number_does_not_hide_a_card_split_between_requests(
+    tmp_path: Path,
+) -> None:
+    """L4: the carry's own findings are taken off the join's. A carry cut in the middle of a
+    17-digit run that fails Luhn starts with a 16-digit run that passes it, which is no finding of
+    the earlier call; it must not hide the card the join makes."""
+    run = "1" + VISA  # 17 digits, fails Luhn
+    assert "luhn-valid-pan" not in kinds(scan_text(f"x {run} y"))
+    tail = VISA + " " + "a" * (256 - len(VISA) - len(" ref 42424242") - 1) + " ref 42424242"
+    first_text = "x 1" + tail
+    assert len(tail) == 256 and first_text.endswith("ref 42424242")
+    first = cassette(text_stream(first_text), seq=0)
+    second = cassette(text_stream("42424242 ok"), seq=1)
+    assert scan_cassettes(tmp_path / "alone", first) == []
+    found = kinds(scan_cassettes(tmp_path / "both", first, second))
+    assert "rebuilt-across-requests-luhn-valid-pan" in found
+
+
+def test_put_finds_the_same_card_however_its_carry_was_cut(tmp_path: Path) -> None:
+    tail = VISA + " " + "a" * (256 - len(VISA) - len(" ref 42424242") - 1) + " ref 42424242"
+    store = CassetteStore(tmp_path, "s", canaries=frozenset())
+    store.put(cassette(text_stream("x 1" + tail), seq=0))
+    with pytest.raises(DirtyCassetteError, match="rebuilt-across-requests-luhn-valid-pan"):
+        store.put(cassette(text_stream("42424242 ok"), seq=1))
+
+
+@pytest.mark.parametrize("slashes", [3, 4, 6])
+def test_an_x_api_key_escaped_more_deeply_is_found(slashes: int) -> None:
+    """L7: a header escaped twice or more, in a file the scanner reads raw (ledger, proxy log)."""
+    bs = "\\" * slashes
+    assert kinds(scan_text(f'{{{bs}"x-api-key{bs}": {bs}"abcd1234{bs}"}}')) == {"x-api-key-header"}
+    assert scan_text(f'{{{bs}"x-api-key{bs}": {bs}"{bs}"}}') == []

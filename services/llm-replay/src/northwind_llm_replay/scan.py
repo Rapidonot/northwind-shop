@@ -47,13 +47,14 @@ _KEY_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("generic-sk-key", re.compile(r"(?<![A-Za-z0-9])sk-[A-Za-z0-9_\-]{20,}")),
     ("bearer-token", re.compile(r"(?i)bearer\s+[A-Za-z0-9._~+/\-]{16,}")),
     # The header *with a value* (a header dump, curl line or JSON object), not the bare name.
-    # Row 18a (H6): or JSON-escaped inside a cassette string (`x-api-key\": \"…`), an empty value
-    # left out as before. The first alternative is the old pattern, unchanged.
+    # Row 18a (H6): or JSON-escaped inside a cassette string (`x-api-key\": \"…`), once or more
+    # deeply (security L7); an empty value left out as before. The first alternative is the old
+    # pattern, unchanged.
     (
         "x-api-key-header",
         re.compile(
             r"""(?i)x-api-key["']?\s*[:=]\s*["']?[^\s"',}]+"""
-            r"""|(?i:x-api-key)\\{1,2}["']\s*[:=]\s*\\{1,2}["'](?!\\)[^\s"',}\\]+"""
+            r"""|(?i:x-api-key)\\{1,6}["']\s*[:=]\s*\\{1,6}["'](?!\\)[^\s"',}\\]+"""
         ),
     ),
 )
@@ -315,9 +316,21 @@ def scan_cassette(
 CARRY = 256
 
 
+_TOKEN_CHAR = re.compile(r"[0-9A-Za-z]")
+_NOT_TOKEN = re.compile(r"[^0-9A-Za-z]")
+
+
 def carried(carry: str, text: str) -> str:
-    """The carry after one more cassette of the same test: the end of everything it wrote."""
-    return (carry + "".join(response_blocks(text)))[-CARRY:]
+    """The carry after one more cassette of the same test: the end of everything it wrote. Cut in
+    the middle of a word or number, it starts after that piece (security L4): a cut piece, such
+    as the last 16 digits of a 17-digit run, could make a finding the earlier call never had, and
+    `scan_cassette` takes the carry's own findings off the join's."""
+    whole = carry + "".join(response_blocks(text))
+    window = whole[-CARRY:]
+    if len(whole) > CARRY and _TOKEN_CHAR.match(whole[-CARRY - 1]) and _TOKEN_CHAR.match(window):
+        cut = _NOT_TOKEN.search(window)
+        window = window[cut.start() :] if cut else window
+    return window
 
 
 def without_ledger_ids(line: str) -> str:
