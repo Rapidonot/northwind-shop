@@ -23,6 +23,11 @@ Open items: the M-1 entry (line 166 at `7f0f8d9`) is replaced by:
 >
 > **Row #27 PR 2: untrusted content can steer a return request.** Accepted residual by the user's decision (2026-11-26), with no
 > owner: own orders only, non-monetary, re-evaluated by the server, idempotency keys (threat model, Residuals).
+>
+> **Row #27 PR 2 security review L4 (Low): a card number split between an order number and an all-digit key passes both card
+> checks** (`O411111` + `1111111111`). `request_return`'s pair check skips a well-formed order number by design (pinned: a good
+> request is never refused for its key), and `holds_card_data`'s gap limit (12) is narrower than the argument names between them.
+> Refused later as `not_found`; logs hold codes only. Owner: 18a, with its card-check widening (`cards.py`, parts 1 and 2).
 
 Log line:
 
