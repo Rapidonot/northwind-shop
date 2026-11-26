@@ -57,6 +57,8 @@ const ONE_OF_EACH_EVENT: Record<ChatEvent["type"], () => Response> = {
   error: () => streamOf(frame("error", { code: "internal" })),
   refused: () =>
     Response.json({ isError: true, message: "That message could not be accepted." }, { status: 422 }),
+  // Row #23 (SA-06): the portal then asks for the handoff; with no reply queued, that request fails.
+  handoff: () => streamOf(frame("handoff", {}), frame("done", {})),
   done: () => streamOf(frame("done", {})),
 };
 
