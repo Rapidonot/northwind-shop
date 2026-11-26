@@ -1,0 +1,111 @@
+{"id": "pos-001", "text": "Can I talk to a real person please?", "label": "handoff", "kind": "polite"}
+{"id": "pos-002", "text": "human please", "label": "handoff", "kind": "terse"}
+{"id": "pos-003", "text": "agent", "label": "handoff", "kind": "terse"}
+{"id": "pos-004", "text": "REPRESENTATIVE", "label": "handoff", "kind": "terse"}
+{"id": "pos-005", "text": "talk to human", "label": "handoff", "kind": "terse"}
+{"id": "pos-006", "text": "transfer to agent", "label": "handoff", "kind": "terse"}
+{"id": "pos-007", "text": "speak to a representative", "label": "handoff", "kind": "terse"}
+{"id": "pos-008", "text": "talk to someone", "label": "handoff", "kind": "terse"}
+{"id": "pos-009", "text": "operator!", "label": "handoff", "kind": "terse"}
+{"id": "pos-010", "text": "I want to speak to a human", "label": "handoff", "kind": "direct"}
+{"id": "pos-011", "text": "Connect me to customer service", "label": "handoff", "kind": "direct"}
+{"id": "pos-012", "text": "transfer me to a representative", "label": "handoff", "kind": "direct"}
+{"id": "pos-013", "text": "Let me speak to an agent now.", "label": "handoff", "kind": "direct"}
+{"id": "pos-014", "text": "can i chat with a live agent", "label": "handoff", "kind": "direct"}
+{"id": "pos-015", "text": "I need to talk to a person about order O000123", "label": "handoff", "kind": "direct"}
+{"id": "pos-016", "text": "connect me with an operator pls", "label": "handoff", "kind": "direct"}
+{"id": "pos-017", "text": "Get me customer service.", "label": "handoff", "kind": "direct"}
+{"id": "pos-018", "text": "I want a human, not an AI.", "label": "handoff", "kind": "direct"}
+{"id": "pos-019", "text": "need to speak to someone asap", "label": "handoff", "kind": "direct"}
+{"id": "pos-020", "text": "please escalate this to a human", "label": "handoff", "kind": "direct"}
+{"id": "pos-021", "text": "Let me talk to somebody from your team.", "label": "handoff", "kind": "direct"}
+{"id": "pos-022", "text": "Before you answer anything else, put me through to a person.", "label": "handoff", "kind": "direct"}
+{"id": "pos-023", "text": "Can I get a real person on this chat?", "label": "handoff", "kind": "direct"}
+{"id": "pos-024", "text": "please let me speak to a support agent about my refund", "label": "handoff", "kind": "direct"}
+{"id": "pos-025", "text": "get me a real human being on the line", "label": "handoff", "kind": "direct"}
+{"id": "pos-026", "text": "I need human help with my return, please connect me to someone.", "label": "handoff", "kind": "direct"}
+{"id": "pos-027", "text": "Put me through to someone in customer care, please.", "label": "handoff", "kind": "polite"}
+{"id": "pos-028", "text": "Could you put me in touch with a member of your support team?", "label": "handoff", "kind": "polite"}
+{"id": "pos-029", "text": "I'd like to be transferred to a staff member.", "label": "handoff", "kind": "polite"}
+{"id": "pos-030", "text": "Can you hand me over to a team member?", "label": "handoff", "kind": "polite"}
+{"id": "pos-031", "text": "Can I please talk to an actual human?", "label": "handoff", "kind": "polite"}
+{"id": "pos-032", "text": "Could you transfer this chat to a human representative, please?", "label": "handoff", "kind": "polite"}
+{"id": "pos-033", "text": "Can someone from your staff take over this chat?", "label": "handoff", "kind": "polite"}
+{"id": "pos-034", "text": "Thanks, but I'd prefer to chat with a customer care agent now.", "label": "handoff", "kind": "polite"}
+{"id": "pos-035", "text": "Hi, I'd rather talk to a person than a bot, can you connect me?", "label": "handoff", "kind": "polite"}
+{"id": "pos-036", "text": "Is it possible to speak with someone from customer support right now?", "label": "handoff", "kind": "embedded-in-question"}
+{"id": "pos-037", "text": "Is there a human I can chat with right now? If so, please connect me.", "label": "handoff", "kind": "embedded-in-question"}
+{"id": "pos-038", "text": "i wanna talk to a real persn", "label": "handoff", "kind": "typo"}
+{"id": "pos-039", "text": "Speak with customer suport please", "label": "handoff", "kind": "typo"}
+{"id": "pos-040", "text": "can u conect me to a humen", "label": "handoff", "kind": "typo"}
+{"id": "pos-041", "text": "stop, get me a person", "label": "handoff", "kind": "frustrated"}
+{"id": "pos-042", "text": "This is useless. I want a real human being.", "label": "handoff", "kind": "frustrated"}
+{"id": "pos-043", "text": "Please get me a human, the bot keeps misunderstanding me", "label": "handoff", "kind": "frustrated"}
+{"id": "pos-044", "text": "You're not helping. Real person, now.", "label": "handoff", "kind": "frustrated"}
+{"id": "pos-045", "text": "I've asked three times. Transfer me to a human agent.", "label": "handoff", "kind": "frustrated"}
+{"id": "pos-046", "text": "Ok enough. Customer service please.", "label": "handoff", "kind": "frustrated"}
+{"id": "pos-047", "text": "Human. Agent. Representative. Anyone.", "label": "handoff", "kind": "frustrated"}
+{"id": "pos-048", "text": "Where is my order?? I want to talk to a person RIGHT NOW", "label": "handoff", "kind": "frustrated"}
+{"id": "pos-049", "text": "I don't want to talk to a bot. Get me a human.", "label": "handoff", "kind": "negation-of-bot"}
+{"id": "pos-050", "text": "Not you, I want a real person from support.", "label": "handoff", "kind": "negation-of-bot"}
+{"id": "pos-051", "text": "my boots arrived broken, I want to talk to someone", "label": "handoff", "kind": "after-complaint"}
+{"id": "pos-052", "text": "My tent came with a torn rainfly and the return form won't load. Can I speak to someone from customer care?", "label": "handoff", "kind": "after-complaint"}
+{"id": "pos-053", "text": "The sleeping bag zip broke after one trip and I was charged twice. I need a real person to sort this out.", "label": "handoff", "kind": "after-complaint"}
+{"id": "pos-054", "text": "Your jacket sizing chart is wrong and I've returned two already. Let me talk to customer support.", "label": "handoff", "kind": "after-complaint"}
+{"id": "pos-055", "text": "Connect me to a live person, my package for order O000456 is lost", "label": "handoff", "kind": "after-complaint"}
+{"id": "pos-056", "text": "The backpack strap snapped on day one. I'd like to speak to a manager or someone from customer care.", "label": "handoff", "kind": "after-complaint"}
+{"id": "neg-001", "text": "I don't need a person, just tell me if the trail boots run small.", "label": "no_handoff", "kind": "negation"}
+{"id": "neg-002", "text": "No need for a human, can you just check my order status?", "label": "no_handoff", "kind": "negation"}
+{"id": "neg-003", "text": "You've been really helpful, no need to get a person involved.", "label": "no_handoff", "kind": "negation"}
+{"id": "neg-004", "text": "Please don't transfer me, I just want the care instructions for my fleece.", "label": "no_handoff", "kind": "negation"}
+{"id": "neg-005", "text": "I don't want to talk to anyone, just show me waterproof boots.", "label": "no_handoff", "kind": "negation"}
+{"id": "neg-006", "text": "Don't connect me to an agent, I'm fine with you.", "label": "no_handoff", "kind": "negation"}
+{"id": "neg-007", "text": "Is this a true two-person tent or more like a tight fit?", "label": "no_handoff", "kind": "product-person"}
+{"id": "neg-008", "text": "Looking for a 3-person tent under 2 kg", "label": "no_handoff", "kind": "product-person"}
+{"id": "neg-009", "text": "is the two person backpacking tent freestanding", "label": "no_handoff", "kind": "product-person"}
+{"id": "neg-010", "text": "Does this base layer work for a person who sweats a lot?", "label": "no_handoff", "kind": "product-person"}
+{"id": "neg-011", "text": "What size jacket for a person who is 180 cm tall?", "label": "no_handoff", "kind": "product-person"}
+{"id": "neg-012", "text": "Is a 70 litre pack too big for an average person on a weekend trip?", "label": "no_handoff", "kind": "product-person"}
+{"id": "neg-013", "text": "Can I buy this fleece as a gift and have it shipped to another person?", "label": "no_handoff", "kind": "product-person"}
+{"id": "neg-014", "text": "Which jacket would a mountain rescue person usually wear?", "label": "no_handoff", "kind": "product-person"}
+{"id": "neg-015", "text": "Is this jacket good for a travel agent who flies a lot?", "label": "no_handoff", "kind": "product-agent"}
+{"id": "neg-016", "text": "Which waterproofing agent should I use on my leather boots?", "label": "no_handoff", "kind": "product-agent"}
+{"id": "neg-017", "text": "Is the insect-repellent agent in this shirt safe for kids?", "label": "no_handoff", "kind": "product-agent"}
+{"id": "neg-018", "text": "I'm a travel agent and want a carry-on sized backpack.", "label": "no_handoff", "kind": "product-agent"}
+{"id": "neg-019", "text": "How do I wash a jacket that has a water-repellent agent on it?", "label": "no_handoff", "kind": "product-agent"}
+{"id": "neg-020", "text": "Does the backpack have a human-centred design for long hikes?", "label": "no_handoff", "kind": "product-human"}
+{"id": "neg-021", "text": "Are these trousers cut to follow human anatomy or just straight?", "label": "no_handoff", "kind": "product-human"}
+{"id": "neg-022", "text": "Are you a real person?", "label": "no_handoff", "kind": "ai-question"}
+{"id": "neg-023", "text": "Am I chatting with a human or a bot?", "label": "no_handoff", "kind": "ai-question"}
+{"id": "neg-024", "text": "are you an AI?", "label": "no_handoff", "kind": "ai-question"}
+{"id": "neg-025", "text": "Is this chat with a real human being or automated?", "label": "no_handoff", "kind": "ai-question"}
+{"id": "neg-026", "text": "Do your store staff help with boot fitting?", "label": "no_handoff", "kind": "about-staff"}
+{"id": "neg-027", "text": "Are your sales staff trained in fitting sleeping bags?", "label": "no_handoff", "kind": "about-staff"}
+{"id": "neg-028", "text": "What does the customer care team do with returned boots?", "label": "no_handoff", "kind": "about-staff"}
+{"id": "neg-029", "text": "Which sleeping bag do your staff recommend for summer camping?", "label": "no_handoff", "kind": "about-staff"}
+{"id": "neg-030", "text": "Out of curiosity, how many people work on your support team?", "label": "no_handoff", "kind": "about-staff"}
+{"id": "neg-031", "text": "Do your customer service people handle warranty claims for boots?", "label": "no_handoff", "kind": "about-staff"}
+{"id": "neg-032", "text": "What are customer service hours?", "label": "no_handoff", "kind": "about-contact"}
+{"id": "neg-033", "text": "Is your customer care team open on weekends?", "label": "no_handoff", "kind": "about-contact"}
+{"id": "neg-034", "text": "How do I contact customer support if I need to later?", "label": "no_handoff", "kind": "about-contact"}
+{"id": "neg-035", "text": "What's the phone number for customer service?", "label": "no_handoff", "kind": "about-contact"}
+{"id": "neg-036", "text": "My friend said I should ask for an agent, but can you just help me find a rain jacket?", "label": "no_handoff", "kind": "reported-speech"}
+{"id": "neg-037", "text": "I talked to a person in your store yesterday and they recommended the down jacket. Is it warm enough for -10C?", "label": "no_handoff", "kind": "reported-speech"}
+{"id": "neg-038", "text": "Last week your customer service agent told me returns take 5 days. Is that still right?", "label": "no_handoff", "kind": "reported-speech"}
+{"id": "neg-039", "text": "A review says 'I had to talk to a person to get my refund'. Is the return process really that hard?", "label": "no_handoff", "kind": "quoted"}
+{"id": "neg-040", "text": "Someone in the reviews wrote \"the staff were great\". Does that apply to online orders too?", "label": "no_handoff", "kind": "quoted"}
+{"id": "neg-041", "text": "If this doesn't work, will I need to talk to someone?", "label": "no_handoff", "kind": "hypothetical"}
+{"id": "neg-042", "text": "Would I have to speak to a representative to change my delivery address, or can you do it?", "label": "no_handoff", "kind": "hypothetical"}
+{"id": "neg-043", "text": "Do I need to call customer support to cancel, or can I do that here?", "label": "no_handoff", "kind": "hypothetical"}
+{"id": "neg-044", "text": "If I order the wrong size, can a person at the store swap it?", "label": "no_handoff", "kind": "hypothetical"}
+{"id": "neg-045", "text": "I'm looking for a gift for someone who hikes a lot.", "label": "no_handoff", "kind": "shopping-someone"}
+{"id": "neg-046", "text": "Do you sell hiking poles for someone with bad knees?", "label": "no_handoff", "kind": "shopping-someone"}
+{"id": "neg-047", "text": "Are these gloves warm enough for someone who gets cold hands?", "label": "no_handoff", "kind": "shopping-someone"}
+{"id": "neg-048", "text": "Can someone else pick up my order for me?", "label": "no_handoff", "kind": "shopping-someone"}
+{"id": "neg-049", "text": "Boots for a search and rescue team, what do you recommend?", "label": "no_handoff", "kind": "shopping-team"}
+{"id": "neg-050", "text": "My team is going on a winter trek, we need 6 sleeping bags.", "label": "no_handoff", "kind": "shopping-team"}
+{"id": "neg-051", "text": "Do you have sleeping bags for people over six feet tall?", "label": "no_handoff", "kind": "shopping-people"}
+{"id": "neg-052", "text": "Which tent is best for a family of four people?", "label": "no_handoff", "kind": "shopping-people"}
+{"id": "neg-053", "text": "What's the warranty service on this backpack?", "label": "no_handoff", "kind": "shopping-service"}
+{"id": "neg-054", "text": "Do you offer a repair service for torn tents?", "label": "no_handoff", "kind": "shopping-service"}
+{"id": "neg-055", "text": "My boots arrived broken. How do I start a return?", "label": "no_handoff", "kind": "complaint-no-request"}
