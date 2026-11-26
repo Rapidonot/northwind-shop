@@ -140,3 +140,9 @@ Fixed, each xfail then passed (strict, so it failed until the mark was removed):
   'CVV 7 / 3 / 7': a space either side of the punctuation
 Left as a strict xfail: 'None left on the reviews page.' is blocked by row #30's M-4 pattern (decision D4).
 After the fixes: step 0 0 of 448 calls differ from part 4's state; the card check over every recorded message and tool call 0 differ; assistant and common unit suites 3,173 passed, 22 xfailed.
+
+## Security review fixes (docs/reviews/2026-11-26-18a-security-review.raw.md: no critical or high; M1, L1-L7)
+M1, L1, L2, L3 (134a8f0), services/assistant/tests/test_18a_security_fixes.py: 20 of 29 fail at 94048d9 (9 near-misses pass both ways); the held-until-decided test fails 5 of 7 without the new trigger words. Mutants 4 of 4: closing dash restarts 5; dash does not spoil 5; abbreviation ends the sentence 4; hardly not low 3. Step 0: 0 of 448 calls change (against base, still the same 6).
+L5 (78cb4df), services/common/tests/test_18a_cards.py: 4 of 5 new cases fail first; mutant, the old separator set, 4. Card check over every recorded message and tool call: 0 differ.
+L4 and L7 (58004a9), services/llm-replay/tests/test_scan_18a.py: the reviewer's carry construction (scan_paths and put) and escape depths 3, 4, 6 fail first; mutants: no token cut 2, 1-2 backslashes 3. Full $0 scan: 0 findings, 23.7 s.
+L6 (1209446), evals/tests/test_a2a05_partner_18a.py: 7 of 9 new cases fail first (2 plain confirmations pass both ways); mutant, no denial check, 9.
