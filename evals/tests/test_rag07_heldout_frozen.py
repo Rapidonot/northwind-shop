@@ -32,3 +32,17 @@ def test_sixty_items_all_model() -> None:
     assert [i["id"] for i in items] == [f"RH7-{n:03d}" for n in range(1, 61)]
     assert Counter(i["category"] for i in items) == CATEGORIES
     assert {i["reviewed_by"] for i in items} == {"model"}
+
+
+# Measured once, 2026-11-26 (`docs/reviews/2026-11-26-RAG-10-rag07-heldout-score.txt`): under the 54
+# the criterion needs, so RAG-07 stays partial. Router and labels are both pinned, so this only
+# moves if one of them does.
+HELDOUT_CORRECT = 51
+
+
+def test_the_held_out_score_is_as_measured() -> None:
+    from northwind_rag.query import route_indexes
+
+    items = [json.loads(line) for line in HELDOUT.read_text(encoding="utf-8").splitlines()]
+    correct = sum(route_indexes(i["query"]) == frozenset(i["indexes"]) for i in items)
+    assert correct == HELDOUT_CORRECT
