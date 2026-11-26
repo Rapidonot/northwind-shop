@@ -79,7 +79,8 @@ test.describe("[SA-01] shop pages", () => {
 
   test("an unknown product and an unknown page say so plainly", async ({ page }) => {
     await page.goto("/#/p/P9999");
-    await expect(page.getByRole("status")).toHaveText("We couldn't find that page.");
+    // Scoped to the page content: the footer's gateway health line is a status too.
+    await expect(page.getByRole("main").getByRole("status")).toHaveText("We couldn't find that page.");
     await page.goto("/#/nowhere");
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("We couldn't find that page.");
   });
