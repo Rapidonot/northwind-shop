@@ -77,14 +77,24 @@ intent, root cause, amounts and the recommended action.
   (phase C), and `docs/governance/data-flow.md` and `tool-register.md`.
 - Open: the live "a person has joined" moment and the staff console (Window B's staff caller). When it lands, the AI
   disclosure must change once a person is replying, because "not a person" would then be false.
-- Open: `mcp-cases` (#19) replaces the in-process queues.
+- Open: `mcp-cases` (#19) replaces the in-process queues. It must also be the source of truth for "already open":
+  the desk's record of open handoffs lives in process memory, so after a restart a repeat would start a second build
+  for an existing reference (security re-review N10).
 - Open (security review L2, owner #19 or Window B's staff caller): a handoff never closes. A later request from
   the same shopper or session gets the first reference, and its transcript is not merged (the repeat is audited as
-  `handoff.repeat`). It needs a close or resolve operation. The demo sign-in has one fixed shopper, so every
-  signed-in demo session shares one handoff.
+  `handoff.repeat`, once per reference). It needs a close or resolve operation. The demo sign-in has one fixed
+  shopper, so every signed-in demo session shares one handoff. Until it lands, only a restart frees a place under
+  the caps below (re-review N1), and turns the portal dropped after a refusal can never be sent again (L1).
 - Open (security review L5, owner Window B's staff caller): references are sequential (`H000001`, ...). A real
   `HandoffStatus.watch` must check the caller's session or identity on the server, never the reference alone
   (hard rule 7).
-- Limits (security review M1): one process holds at most `MAX_OPEN_HANDOFFS` (1000) open handoffs and runs at most
-  `MAX_CARE_RUNS` (2) Care runs at once. Over the run cap the case is built by code at once (`care_busy`,
-  `summary_missing`). One agent runtime serves the desk, and open builds get a bounded wait at shutdown.
+- Limits (security review M1, re-review N1 and N2): one process holds at most `MAX_OPEN_HANDOFFS` (1000) open
+  handoffs, of which at most `MAX_SESSION_HANDOFFS` (800) are anonymous sessions, so signed-in shoppers keep places.
+  It runs at most `MAX_CARE_RUNS` (2) Care runs at once. Over the run cap the case is built by code at once
+  (`care_busy`, `summary_missing`), still with its intent and the shopper's own order. The first refusal over a cap
+  is audited once (`handoff.full`), and a repeat skips the live cart read. One agent runtime serves the desk, and
+  open builds get a bounded wait at shutdown.
+- `/api/handoff` takes `application/json` only, so a page on another origin cannot open a handoff without a
+  preflight, and the gateway has no CORS policy. A page DNS-rebound to 127.0.0.1 is same-origin and is not stopped
+  by this. A Host allowlist would stop it; that is a new control on the whole gateway, so it goes in the PR body
+  (security re-review N6), as `/api/chat`'s JSON check does.

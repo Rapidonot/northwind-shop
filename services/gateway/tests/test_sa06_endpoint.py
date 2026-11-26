@@ -46,6 +46,9 @@ class SpyDesk:
         self.requests: list[HandoffRequest] = []
         self.result = result
 
+    def known(self, identity: Any) -> bool:
+        return any(r.identity == identity for r in self.requests)
+
     async def request(self, request: HandoffRequest, *, dry_run: bool = False) -> Any:
         self.requests.append(request)
         if isinstance(self.result, Exception):
@@ -213,12 +216,33 @@ def test_only_a_json_request_is_taken(client: TestClient, kind: str | None) -> N
     assert not desk.requests
 
 
-def test_a_malformed_identity_is_the_fixed_422_not_a_500(client: TestClient) -> None:
+def test_a_malformed_identity_is_the_fixed_503_not_a_500(client: TestClient) -> None:
+    """Security review L6, then re-review N3: the identity is the server's, so a fault there is the
+    transient 503, never a 422 that the portal reads as "your turns were refused"."""
     desk = SpyDesk()
     use(desk, Caller(region="US", session=SESSION, shopper_id="not-a-shopper"))
     response = client.post("/api/handoff", json={"turns": []})
-    assert response.status_code == 422 and response.json()["message"] == INVALID_MESSAGE
+    assert response.status_code == 503 and response.json()["message"] == UNAVAILABLE
     assert not desk.requests
+
+
+class CountingCart(SpyCart):
+    def __init__(self) -> None:
+        super().__init__(CART_VIEW)
+        self.reads = 0
+
+    async def read(self, caller: Caller) -> Any:
+        self.reads += 1
+        return await super().read(caller)
+
+
+def test_a_repeat_makes_no_cart_read(client: TestClient) -> None:
+    """Security re-review N2: a known identity gets its first reference back, so no live read."""
+    cart = CountingCart()
+    use(SpyDesk(), Caller(region="US", session=SESSION), cart)
+    for _ in range(3):
+        assert client.post("/api/handoff", json={"turns": []}).status_code == 202
+    assert cart.reads == 1
 
 
 def test_the_desk_has_one_agent_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -235,3 +259,15 @@ def test_the_desk_has_one_agent_runtime(monkeypatch: pytest.MonkeyPatch) -> None
         assert desk._runtime() is desk._runtime() and len(made) == 1
     finally:
         handoff_desk.cache_clear()
+
+
+def test_chat_never_reaches_the_handoff_desk() -> None:
+    """Security re-review N8: /api/chat takes bodies with no Content-Type, so it may only signal a
+    handoff (phase B's `handoff` event); the portal's own JSON request opens it."""
+    from pathlib import Path
+
+    import northwind_gateway.chat as chat_module
+
+    source = Path(chat_module.__file__).read_text(encoding="utf-8")
+    for name in ("handoff_desk", "HandoffDesk", "northwind_backend", "HandoffRequest"):
+        assert name not in source, name

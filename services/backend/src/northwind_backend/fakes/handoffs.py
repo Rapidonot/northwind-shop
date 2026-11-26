@@ -24,6 +24,7 @@ from northwind_backend.fakes._base import (
     card_data_in,
 )
 from northwind_backend.handoff import REFERENCE, HandoffCase, Identity
+from northwind_backend.idempotency import fingerprint
 from northwind_common.cards import argument_texts, contains_card_data, holds_card_data
 
 HANDOFF_SCOPES = frozenset({"open_handoff", "file_case"})
@@ -72,20 +73,24 @@ class HandoffQueueFake(FakeService):
         if refused is not None:
             return refused
 
+        request = asdict(identity)
+        if dry_run:
+            # Security review L3 and re-review N9: a dry run predicts the real call, from the
+            # idempotency store itself: the first reference, a conflict, or the next new one.
+            known: Result[str] | None = self._store.replay(
+                idempotency_key, fingerprint("open_handoff", request)
+            )
+            if known is not None:
+                return known
+
         def effect(dry: bool) -> Result[str]:
-            if dry:
-                # Security review L3: a dry run predicts the real call, which returns the identity's
-                # open reference if it has one.
-                for reference, opened in self.state.opened.items():
-                    if opened == identity:
-                        return Ok(reference)
             reference = f"H{len(self.state.opened) + 1:06d}"
             if not dry:
                 self.state.opened[reference] = identity
                 self._effects.append(Effect("open_handoff", reference))
             return Ok(reference)
 
-        return self._commit("open_handoff", idempotency_key, asdict(identity), dry_run, effect)
+        return self._commit("open_handoff", idempotency_key, request, dry_run, effect)
 
     def file_case(
         self, *, idempotency_key: str, case: HandoffCase, dry_run: bool = False

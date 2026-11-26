@@ -23,3 +23,22 @@ loosening, but it is listed here for the reviewer.
 **The user's decisions, 2026-11-26:**
 - The changed test-writer test is **approved** (stop 5): it is just as exact, and the old wording was L1's bug.
 - JSON-only for `/api/chat`: **not this row**. It goes in the PR body only, not Open items.
+
+## The scoped re-review (`docs/reviews/2026-11-26-SA-06-security-rereview.raw.md`, base `21c2107`, head `c8a2557`)
+
+M1 closed at medium; M2, L1, L3, L4, L6 and L7 fixed. No critical, high or medium. New: N1 to N7, all low, and
+notes N8 to N10. Only lows were fixed, so no further re-review runs (CLAUDE.md: re-review only after a medium or
+above).
+
+| Finding | Outcome |
+|---|---|
+| N1: the open cap is a lockout for the process's lifetime; sessions can take every place | **fixed**: sessions get their own cap (800 of 1000); the first refusal is audited (`handoff.full`); decision 0025's L2 entry says only a restart frees places |
+| N2: every repeat writes an audit record and reads the cart | **fixed**: one `handoff.repeat` record per reference (later repeats only counted); a known identity skips the cart read |
+| N3: an identity fault returned a 422 that the portal reads as "your turns were refused" | **fixed at the gateway**: it is the fixed 503 now, so a 422 always means the request itself was refused. My own test `test_a_malformed_identity_is_the_fixed_422_not_a_500` (this row, L6) now expects the 503, just as exactly. **That test change needs the user's approval (stop 5).** The portal's empty-turns wording is left as it is: no reachable 422 now carries empty turns, and changing it would change a test-writer test again (PR body) |
+| N4: a turn remembered while the request was in flight was dropped too | **fixed**: only the sent turns are dropped |
+| N5: a `care_busy` case skipped the code-only steps | **fixed**: the screening and the order check run before the slot check; `care_busy` replaces `order_case_failed` |
+| N6: DNS rebinding gets past the JSON check | **PR body only**: a Host allowlist is a new control on the whole gateway (the same kind of call as the user's `/api/chat` decision). Decision 0025 reworded |
+| N7: BE-07's order case carries no unverified-transcript label | **fixed**: `CareTask.from_browser` makes `_draft` add `transcript_unverified`. It is never in model input, and the order-bound sha256 pin and the 6 recorded tests still pass |
+| N8: phase B must keep `/api/chat` a signal only | **pinned**: a test that `chat.py` never names the desk or the backend |
+| N9: the dry run matched identities, not the key | **fixed**: `IdempotencyStore.replay`, so a dry run predicts a conflict too |
+| N10: the desk's record of open handoffs is in memory | **logged** in decision 0025 for #19 |

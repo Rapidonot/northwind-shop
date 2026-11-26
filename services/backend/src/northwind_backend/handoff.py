@@ -34,7 +34,7 @@ import logging
 import re
 import unicodedata
 from collections.abc import Callable, Mapping
-from dataclasses import asdict, dataclass, field, replace
+from dataclasses import asdict, dataclass, field
 from typing import Any, Literal, Protocol, runtime_checkable
 
 from northwind_backend.agents.care import (
@@ -60,6 +60,9 @@ MAX_HANDOFF_TURNS = 10
 # with a fixed transient error; over `MAX_CARE_RUNS` at once, the case is built by code alone
 # (`care_busy`, `summary_missing`), so the handoff still opens at once.
 MAX_OPEN_HANDOFFS = 1000
+# Security re-review N1: anonymous sessions cost nothing to make, so they get their own, lower cap,
+# and signed-in shoppers keep the rest. Until a handoff can close (L2), only a restart frees places.
+MAX_SESSION_HANDOFFS = 800
 MAX_CARE_RUNS = 2
 DESK_FULL = transient(
     "handoffs_full", "No more handoffs can be opened right now. Please try again later."
@@ -358,6 +361,7 @@ def build_case(
     order_id: str | None = None,
     order_case: Case | None = None,
     summary: str | None = None,
+    care_busy: bool = False,
 ) -> HandoffCase:
     """The case from code-held data. With `order_case` (BE-07's), its root cause, action, amounts
     and summary are taken as they are; otherwise the no-order fields, with `summary` (the checked
@@ -380,7 +384,9 @@ def build_case(
             order_case_id=order_case.case_id,
             correlation_id=correlation_id,
         )
-    if order_id is not None:
+    if care_busy:
+        flags.append("care_busy")  # no Care slot: neither BE-07's case nor a summary was made
+    elif order_id is not None:
         flags.append("order_case_failed")  # the shopper's order, but BE-07's case was not queued
     cart = request.cart
     if cart is not None and cart.lines:
@@ -453,6 +459,7 @@ class HandoffDesk:
         runtime: Callable[[], AgentRuntime | None] = lambda: None,
         policy: RetryPolicy | None = None,
         max_open: int = MAX_OPEN_HANDOFFS,
+        max_sessions: int = MAX_SESSION_HANDOFFS,
         max_runs: int = MAX_CARE_RUNS,
     ) -> None:
         self._queue = queue
@@ -461,7 +468,11 @@ class HandoffDesk:
         self._runtime = runtime
         self._policy = policy or RetryPolicy()
         self._max_open = max_open
+        self._max_sessions = max_sessions
         self._max_runs = max_runs
+        self._sessions = 0  # open handoffs of anonymous sessions
+        self._repeats: dict[str, int] = {}  # reference -> repeats since its one audit record
+        self._full_noted = False
         self._active = 0  # Care runs now; one event loop, so a plain counter is enough
         self._opened: dict[str, str] = {}  # idempotency key -> reference
         self._tasks: set[asyncio.Task[HandoffCase | None]] = set()
@@ -478,7 +489,11 @@ class HandoffDesk:
             if not dry_run:
                 self._note_repeat(known)
             return Ok(HandoffReceipt(known, dry_run))
-        if len(self._opened) >= self._max_open:
+        anonymous = request.identity.kind == "session"
+        if len(self._opened) >= self._max_open or (
+            anonymous and self._sessions >= self._max_sessions
+        ):
+            self._note_full()
             return DESK_FULL
         opened = self._queue.open_handoff(
             idempotency_key=key, identity=request.identity, dry_run=dry_run
@@ -488,14 +503,40 @@ class HandoffDesk:
         reference = opened.value
         if not dry_run:
             self._opened[key] = reference
+            self._sessions += anonymous
             task = asyncio.create_task(self._build(reference, request))
             self._tasks.add(task)
             task.add_done_callback(self._tasks.discard)
         return Ok(HandoffReceipt(reference, dry_run))
 
+    def known(self, identity: Identity) -> bool:
+        """An open handoff for this identity: the gateway then skips the live cart read (security
+        re-review N2)."""
+        return identity.key() in self._opened
+
     def _note_repeat(self, reference: str) -> None:
+        """One audit record per reference, at its first repeat; later ones are only counted, so a
+        loop of repeats cannot grow the audit (security re-review N2)."""
+        count = self._repeats.get(reference, 0)
+        self._repeats[reference] = count + 1
+        if count:
+            return
         try:
             self._audit.record("handoff.repeat", {"reference": reference}, {"ok": True})
+        except AuditWriteError:
+            log.error("handoff audit write failed")
+
+    def repeats(self, reference: str) -> int:
+        return self._repeats.get(reference, 0)
+
+    def _note_full(self) -> None:
+        """The first refusal over a cap is audited; later ones are only logged (re-review N1)."""
+        log.error("handoff refused: desk full")
+        if self._full_noted:
+            return
+        self._full_noted = True
+        try:
+            self._audit.record("handoff.full", {"open": len(self._opened)}, {"ok": False})
         except AuditWriteError:
             log.error("handoff audit write failed")
 
@@ -538,16 +579,20 @@ class HandoffDesk:
         screened: tuple[Turn, ...] = ()
         order_case: Case | None = None
         summary: str | None = None
-        busy = self._active >= self._max_runs
-        if not busy:
-            self._active += 1
+        busy = False
+        taken = False
         try:
+            # Code-only steps first (security re-review N5): the screening and the order check need
+            # no Care slot, so a busy case still has its intent and the shopper's own order.
+            order_id = await self._owned_order(request, run)
+            task = CareTask(order_id, request.turns, from_browser=True)
+            screened = task.transcript
+            busy = self._active >= self._max_runs
             if busy:
                 # Security review M1: no Care run over the cap; the code-built case goes now.
                 raise _CareBusy
-            order_id = await self._owned_order(request, run)
-            task = CareTask(order_id, request.turns)
-            screened = task.transcript
+            self._active += 1
+            taken = True
             if order_id is not None:
                 care = await run_care(
                     task,
@@ -572,7 +617,7 @@ class HandoffDesk:
         except Exception as error:  # noqa: BLE001 - staff still get the code-built case
             log.error("handoff care run failed: %s", type(error).__name__)
         finally:
-            if not busy:
+            if taken:
                 self._active -= 1
         case = build_case(
             reference=reference,
@@ -582,9 +627,8 @@ class HandoffDesk:
             order_id=order_id,
             order_case=order_case,
             summary=summary,
+            care_busy=busy,
         )
-        if busy:
-            case = replace(case, flags=(*case.flags, "care_busy"))
         filed = self._queue.file_case(idempotency_key=f"{request.identity.key()}:case", case=case)
         outcome: dict[str, Any] = {
             "ok": isinstance(filed, Ok),
@@ -613,6 +657,7 @@ __all__ = [
     "DESK_FULL",
     "MAX_CARE_RUNS",
     "MAX_OPEN_HANDOFFS",
+    "MAX_SESSION_HANDOFFS",
     "TRANSCRIPT_LABEL",
     "CartLine",
     "CartSnapshot",

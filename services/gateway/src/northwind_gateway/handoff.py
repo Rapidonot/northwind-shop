@@ -176,17 +176,21 @@ async def handoff(
         log.error("handoff failed: no key")
         return _envelope(503, "transient", True, UNAVAILABLE)
     try:
-        # Inside the try (security review L6): a malformed identity is the fixed 422, never a 500.
+        # Inside a try (security review L6). The identity is the server's own, so a malformed one
+        # is the fixed 503, never a 422 that would blame the shopper's turns (re-review N3).
         identity = (
             Identity("shopper", caller.shopper_id, caller.region)
             if caller.shopper_id is not None
             else Identity("session", session_ref(key, caller.session), caller.region)
         )
+    except ValueError:
+        log.error("handoff failed: identity")
+        return _envelope(503, "transient", True, UNAVAILABLE)
+    # A known identity gets its first reference back, so no cart read (security re-review N2).
+    cart = None if desk.known(identity) else await _cart(reader, caller)
+    try:
         request = HandoffRequest(
-            identity,
-            body.trigger,
-            tuple(Turn(turn.role, turn.text) for turn in body.turns),
-            await _cart(reader, caller),
+            identity, body.trigger, tuple(Turn(turn.role, turn.text) for turn in body.turns), cart
         )
     except ValueError:
         return _envelope(422, "validation", False, INVALID_MESSAGE)

@@ -152,9 +152,12 @@ export function Chat({
   async function startHandoff(trigger: "button" | "message") {
     lastTrigger.current = trigger;
     setHandoff({ kind: "requesting" });
-    const result = await requestHandoff(history.current, trigger);
+    const sent = history.current;
+    const result = await requestHandoff(sent, trigger);
     if (result.kind === "failed") {
-      if (result.turnsRefused) history.current = []; // security review L1
+      // Security review L1: drop the refused turns. Only those (re-review N4): a turn remembered
+      // while the request was in flight was never part of it.
+      if (result.turnsRefused) history.current = history.current.filter((t) => !sent.includes(t));
       setHandoff({ kind: "failed", message: result.message });
       return;
     }

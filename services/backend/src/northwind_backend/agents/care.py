@@ -347,6 +347,9 @@ class CareTask:
 
     order_id: str | None = None
     transcript: tuple[Turn, ...] = field(default=())
+    # Row #23 (security re-review N7): the turns came from the shopper's browser, roles included,
+    # so the case says so (`transcript_unverified`). Never in the model's input.
+    from_browser: bool = False
 
     def __post_init__(self) -> None:
         if self.order_id is not None:
@@ -536,9 +539,11 @@ def _failure(
     )
 
 
-def _draft(order: Order, summary: str | None, correlation_id: str) -> CaseDraft:
+def _draft(
+    order: Order, summary: str | None, correlation_id: str, *, from_browser: bool = False
+) -> CaseDraft:
     root = root_cause_of(escalated=order.status is OrderStatus.ESCALATED, code=order.escalation)
-    flags: list[str] = []
+    flags: list[str] = ["transcript_unverified"] if from_browser else []
     if summary is None:
         flags.append("summary_missing")
     # The order's lines carry no order-time price and there is no live catalog read (the user,
@@ -639,7 +644,7 @@ async def run_care(
 
     case: Case | None = None
     if order is not None:
-        draft = _draft(order, seen.summary, correlation_id)
+        draft = _draft(order, seen.summary, correlation_id, from_browser=task.from_browser)
         key = case_key(order.order_id, draft.root_cause)
         write = replace(policy, retry_codes=NOTHING_RAN)
         created = await call_with_recovery(

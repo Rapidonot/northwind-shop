@@ -213,3 +213,35 @@ describe("[SA-06] security review L1 and L7", () => {
     expectDisclosureShown();
   });
 });
+
+describe("[SA-06] security re-review N4", () => {
+  it("keeps a turn sent while a refused handoff was in flight", async () => {
+    let refuse!: (response: Response) => void;
+    const pending = new Promise<Response>((resolve) => {
+      refuse = resolve;
+    });
+    const queue: (() => Promise<Response>)[] = [
+      () => Promise.resolve(streamOf(frame("token", { text: "first" }), frame("done", {}))),
+      () => pending,
+      () => Promise.resolve(streamOf(frame("token", { text: "second" }), frame("done", {}))),
+      () => Promise.resolve(queued()),
+    ];
+    const fetchMock = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>(() => {
+      const next = queue.shift();
+      return next ? next() : Promise.reject(new Error("no response queued"));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<Chat />);
+    await ask("question one");
+    fireEvent.click(talkButton());
+    await ask("question two");
+    refuse(Response.json({ isError: true }, { status: 422 }));
+    await screen.findByRole("alert", { name: "Handoff failed" });
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await screen.findByText(/Your reference is H000042/);
+    expect(bodyOf(fetchMock as never, 3).body.turns).toEqual([
+      { role: "shopper", text: "question two" },
+      { role: "assistant", text: "second" },
+    ]);
+  });
+});

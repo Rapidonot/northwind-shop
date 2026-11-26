@@ -353,3 +353,79 @@ def test_the_case_says_the_transcript_and_its_roles_are_unverified(tmp_path: Pat
     assert TRANSCRIPT_LABEL in case.render()
     assert case.to_dict()["transcript_label"] == TRANSCRIPT_LABEL
     assert "assistant turns included" in TRANSCRIPT_LABEL
+
+
+# ---- security re-review N1, N2, N5, N7, N9 ------------------------------------------------------
+
+
+def test_anonymous_sessions_cannot_take_the_signed_in_places(tmp_path: Path) -> None:
+    """N1: sessions have their own, lower cap; the first refusal is audited once."""
+    me = Identity("shopper", "S0188", "US")
+    with ScriptedLLM() as llm:
+        h = Harness(llm, tmp_path, max_open=3, max_sessions=1, max_runs=0)
+        one, two, three, mine = h.go(
+            HandoffRequest(session(1), "button", ()),
+            HandoffRequest(session(2), "button", ()),
+            HandoffRequest(session(3), "button", ()),
+            HandoffRequest(me, "button", ()),
+        )
+    assert isinstance(one, Ok) and two == DESK_FULL and three == DESK_FULL
+    assert isinstance(mine, Ok)
+    full = [e for e in h.world.events() if e.action == "handoff.full" and e.phase == "attempt"]
+    assert len(full) == 1
+
+
+def test_repeats_write_one_audit_record_per_reference(tmp_path: Path) -> None:
+    """N2: a loop of repeats is counted, not written, so it cannot grow the audit."""
+    with ScriptedLLM() as llm:
+        script_summary(llm)
+        h = Harness(llm, tmp_path)
+        receipts = h.go(*[HandoffRequest(SESSION, "button", ()) for _ in range(6)])
+    reference = receipts[0].value.reference
+    attempts = [
+        e for e in h.world.events() if e.action == "handoff.repeat" and e.phase == "attempt"
+    ]
+    assert len(attempts) == 1 and h.desk.repeats(reference) == 5
+    assert h.desk.known(SESSION) and not h.desk.known(session(9))
+
+
+def test_a_busy_case_still_has_its_intent_and_the_shoppers_own_order(tmp_path: Path) -> None:
+    """N5: the screening and the order check need no Care slot."""
+    order = first_of("fraud_flag", skip=7)
+    me = Identity("shopper", order["shopper_id"], order["region"])
+    turns = transcript(f"Order {order['order_id']} was charged twice, get me a human", "AI.")
+    with ScriptedLLM() as llm:
+        h = Harness(llm, tmp_path, max_runs=0)
+        h.go(HandoffRequest(me, "button", turns))
+        assert not llm.requests
+    case = only_case(h)
+    assert case.intent == "payment" and case.order_id == order["order_id"]
+    assert "care_busy" in case.flags and "order_case_failed" not in case.flags
+    assert case.recommended_action == HANDOFF_ACTIONS["payment"]
+
+
+def test_be07s_case_from_a_handoff_says_its_transcript_is_unverified(tmp_path: Path) -> None:
+    """N7: the order case is built from the browser's turns too."""
+    order = first_of("fraud_flag", skip=8)
+    world = World.make()
+    world.escalate(order, "fraud_review")
+    me = Identity("shopper", order["shopper_id"], order["region"])
+    turns = transcript(f"Order {order['order_id']} is held. Speak to a person.", "AI.")
+    with ScriptedLLM() as llm:
+        llm.reply_tool_use(ORDER_TOOL_NAME, {"order_id": order["order_id"]}, tool_id="toolu_o1")
+        script_summary(llm, "The shopper says their order is held.")
+        h = Harness(llm, tmp_path, world)
+        h.go(HandoffRequest(me, "message", turns))
+    [be07] = world.case_state.cases
+    assert "transcript_unverified" in be07.flags
+
+
+def test_a_dry_run_predicts_a_conflict_too() -> None:
+    """N9: from the idempotency store, so a key reused with another fingerprint is a conflict."""
+    state = HandoffState()
+    queue = HandoffQueueFake(state=state)
+    assert isinstance(queue.open_handoff(idempotency_key=SESSION.key(), identity=SESSION), Ok)
+    other = Identity("session", SESSION.ref, "EU")
+    real = queue.open_handoff(idempotency_key=SESSION.key(), identity=other)
+    dry = queue.open_handoff(idempotency_key=SESSION.key(), identity=other, dry_run=True)
+    assert not isinstance(real, Ok) and dry == real
