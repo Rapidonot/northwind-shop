@@ -141,8 +141,6 @@ def test_hardly_any_left_is_low_stock_and_never_passes(text: str) -> None:
 @pytest.mark.parametrize(
     "text",
     [
-        "There's nothing left to add.",
-        "Nothing left me cold on the hike.",
         "The colours are all good.",
         "You won't run out of warmth.",
     ],
@@ -151,27 +149,115 @@ def test_other_uses_of_the_words_pass(text: str) -> None:
     assert hits(text) == {}
 
 
-# ---- held until decided, not sent and taken back -----------------------------------------------
+# ---- held until decided, not sent and taken back (re-review N10: a reset counts as sent) -------
+
+# The word that makes each one a claim. Words before it may be sent and then taken back by the
+# reset that replaces the sentence ("There's ", "They're all "): they state nothing. The claim's own
+# word must never be sent.
+HELD = {
+    "Zero left.": "zero",
+    "No units left.": "units",
+    "No stock remaining.": "remaining",
+    "There's nothing left in size M.": "nothing",
+    "There are hardly any left.": "hardly",
+    "They're all gone.": "gone",
+    "We've run out of the M.": "run",
+    "We're out of the M.": "out",
+    "Hardly any are left.": "hardly",
+}
+
+
+@pytest.mark.parametrize("text", list(HELD))
+def test_a_none_left_wording_is_held_until_it_is_decided(text: str) -> None:
+    check = OutputCheck(set(), [])
+    pieces = [p for d in re.findall(r"\s+|\S+", text) for p in check.feed(d)] + check.finish()
+    word = HELD[text]
+    assert not any(p and re.search(rf"\b{word}\b", p, re.IGNORECASE) for p in pieces), pieces
+    assert check.shown == STOCK
+
+
+# ---- re-review N1: a range dash or a colon is no new clause ------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("text", "live"),
+    [
+        ("None of the Bath towels in sizes S–M are in stock.", {"a": 5}),
+        ("None of the jackets in UK 8–12 is available in three colours.", None),
+        ("None of these sizes: M or L is in stock.", {"a": 5}),
+        ("None of the Bath towels in sizes S‒M are in stock.", {"a": 5}),
+    ],
+)
+def test_a_range_dash_or_a_colon_does_not_restart_the_clause(
+    text: str, live: dict[str, int] | None
+) -> None:
+    assert hits(text, live=stock(**live) if live else None) == {"stock": 1}
+
+
+def test_a_closing_dash_whose_opening_dash_is_out_of_reach_does_not_restart() -> None:
+    aside = " as far as I can tell from the notes and the pages I was given last week," * 4
+    text = "None of the Slate towels —" + aside + " — is in stock."
+    assert hits(text, live=stock(a=5)) == {"stock": 1}
 
 
 @pytest.mark.parametrize(
     "text",
     [
-        "Zero left.",
-        "No units left.",
-        "No stock remaining.",
-        "There's nothing left in size M.",
-        "There are hardly any left.",
-        "They're all gone.",
-        "We've run out of the M.",
+        "Nothing beats it: it is available in all sizes.",  # row #30's pin
+        "It isn't packable; it is available in sizes S to XL.",  # row #30's pin
+        "It isn't waterproof—it is in stock.",
     ],
 )
-def test_a_none_left_wording_is_held_until_it_is_decided(text: str) -> None:
-    first = {"Zero": "zero", "No": "no", "There's": "nothing", "There": "hardly"}.get(
-        text.split()[0], text.split()[-1].strip(".").lower()
-    )
-    check = OutputCheck(set(), [])
-    pieces = [p for d in re.findall(r"\s+|\S+", text) for p in check.feed(d)] + check.finish()
-    sent = [p for p in pieces if p]
-    assert not any(re.search(rf"\b{first}\b", p, re.IGNORECASE) for p in sent), sent
-    assert check.shown == STOCK
+def test_a_colon_or_dash_before_a_new_subject_still_restarts(text: str) -> None:
+    assert check_text(text, live=stock(a=5)) == text
+
+
+# ---- re-review N5: a full stop before a lower-case word or a digit ends no sentence ------------
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["None of the U.S. stores has the M in stock.", "None of the No. 5 towels is in stock."],
+)
+def test_a_full_stop_inside_the_sentence_does_not_end_it(text: str) -> None:
+    assert hits(text, live=stock(a=5)) == {"stock": 1}
+
+
+def test_a_full_stop_before_a_capital_still_ends_the_sentence() -> None:
+    text = "Nothing in the U.S. range is waterproof. The M is in stock."
+    assert check_text(text, live=stock(a=5)) == text
+
+
+# ---- re-review N6 and N7: more wordings, and the stream and the whole text agree ---------------
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "There's nothing left to buy in size M.",
+        "We haven't run out of the M.",
+        "It's not gone.",
+        "We're out of the M.",
+        "Hardly any are left.",
+        "There are hardly any of them left.",
+    ],
+)
+def test_more_stock_wordings_are_never_shown_unchecked(text: str) -> None:
+    assert hits(text) == {"stock": 1}
+
+
+def test_out_of_their_packaging_is_no_stock_claim() -> None:  # step 0, a2a-05-partner
+    text = "Pillows can't be returned once they're out of their packaging."
+    assert hits(text) == {}
+
+
+@pytest.mark.parametrize("text", ["There's nothing left to add.", "Nothing left me cold."])
+def test_the_stream_and_the_whole_text_agree_on_nothing_left(text: str) -> None:
+    whole = check_text(text)
+    for cut in range(len(text) + 1):
+        check = OutputCheck(set(), [])
+        check.feed(text[:cut])
+        check.feed(text[cut:])
+        check.finish()
+        assert check.shown == whole, cut
+    assert word_by_word(text, LiveValues()) == whole

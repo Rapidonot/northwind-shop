@@ -492,12 +492,19 @@ PATTERNS: tuple[Pattern, ...] = (
         rf"(?:(?:units?|items?|pieces?|pairs?|stock){_S})?(?:left|remaining)\b(?![-‐‑])",
         "live_stock",
     ),
+    #    Re-review N6: "hardly any are left", "hardly any of them left".
+    _p(
+        "stock",
+        rf"\b(?:(?:hardly|barely|scarcely){_S})?any(?:{_S}of{_S}(?:them|those|these)"
+        rf"(?:{_S}(?:are|is))?|{_S}(?:are|is)){_S}(?:left|remaining)\b(?![-‐‑])",
+        "live_stock",
+    ),
     #    Row 18a, security L3: "nothing left in size M", "we've run out of the M", "they're all
     #    gone", vouched as "out of stock" is. "Nothing left to add" and "nothing left me cold" are
     #    no stock claim; only "we" or "they" runs out, so "you won't run out of warmth" is none.
     _p(
         "stock",
-        rf"\bnothing{_S}(?:left|remaining)\b(?![-‐‑])(?!{_S}(?:to|me|us|you|him|her|them|it)\b)",
+        rf"\bnothing{_S}(?:left|remaining)\b(?![-‐‑])",  # re-review N7: no look further ahead
         "live_stock",
     ),
     _p(
@@ -506,6 +513,23 @@ PATTERNS: tuple[Pattern, ...] = (
         "live_stock",
     ),
     _p("stock", rf"\b(?:all|they['’]re|they{_S}are|it['’]s|it{_S}is){_S}gone\b", "live_stock"),
+    #    Re-review N6: "we're out of the M" is "out of stock" ("they're out of their packaging" is
+    #    no stock: step 0, a2a-05-partner); "we haven't run out" and "it's not
+    #    gone" say there is stock with a negation inside the phrase, which no check reads: blocked.
+    _p(
+        "stock",
+        rf"\bwe(?:['’]re|{_S}are){_S}(?:(?:all|now|currently){_S})?out{_S}of\b",
+        "live_stock",
+    ),
+    _p(
+        "stock",
+        rf"\b(?:we|they){_S}(?:(?:have|had|did)n['’]t|(?:have|had|did){_S}not|(?:['’]ve){_S}not)"
+        rf"{_S}(?:run|ran){_S}out\b",
+    ),
+    _p(
+        "stock",
+        rf"\b(?:it|they)(?:['’]s|['’]re|{_S}is|{_S}are){_S}(?:not|n['’]t){_S}(?:all{_S})?gone\b",
+    ),
     #    More member-price wordings (#13b R4 left these to #12), class 1: no exemption.
     _p("promotion", rf"\bmembers?[\s-]{{1,3}}only{_S}(?:rates?|prices?|pricing|deals?|offers?)\b"),
     _p("promotion", rf"\bmember{_S}(?:rates?|deals?|offers?|savings?|exclusives?)\b"),
@@ -785,7 +809,8 @@ _OPEN_TAIL = re.compile(r"[*_`]*[.,]?[*_`]*")
 _COUNT_IN = re.compile(rf"\d[\d,]*|\b{_SPELLED_COUNT}")  # \b: "none" holds no "one"
 _NEGATIVE = re.compile(
     rf"\bout{_J}of{_J}stock\b|\bsold{_J}out\b|\bunavailable\b|\b(?:none|no{_S}stock){_S}left\b"
-    r"|\b(?:zero|none|no|nothing)\b|\b(?:run|ran)\s{1,3}out\b|\bgone\b"  # row 18a: there is none
+    # Row 18a: each of these spans says there is none.
+    r"|\b(?:zero|none|no|nothing)\b|\b(?:run|ran)\s{1,3}out\b|\bgone\b|\bout\s{1,3}of\b"
 )
 _LOW = re.compile(r"\blow\b|\b(?:hardly|barely|scarcely)\b")  # row 18a, L3: "hardly any left"
 
@@ -854,10 +879,12 @@ def _negated(view: str, start: int) -> bool | None:
 # vouched by 5 units. Past that clause, a negation anywhere earlier in the sentence makes the
 # claim unvouched (fail closed). A sentence ends at `[.!?]` before whitespace or at a blank line:
 # one newline does not end it ("is not" newline "in stock").
-_SENTENCE_END = re.compile(r"[.!?](?=\s)|\n[^\S\n]*\n")
+# Read on the case-kept text (re-review N5): a full stop before a lower-case word or a digit ("the
+# U.S. stores", "No. 5 towels") ends no sentence.
+_SENTENCE_END = re.compile(r"\.(?=\s+(?![a-z0-9])|\s*$)|[!?](?=\s)|\n[^\S\n]*\n")
 # Security L1: an abbreviation's full stop does not end the sentence ("None of the towels (e.g. Bath
 # or Hand) is in stock"). "No." is left out: as a reply it does end one.
-_SENTENCE_ABBREVIATION = re.compile(r"\b(?:e\.g|i\.e|etc|approx|vs|incl|cf|esp)\.$")
+_SENTENCE_ABBREVIATION = re.compile(r"\b(?:e\.g|i\.e|etc|approx|vs|incl|cf|esp)\.$", re.IGNORECASE)
 # A reply word that opens the sentence answers the shopper and negates nothing after it: "No, the
 # Charcoal L is out of stock right now" (two recorded `assistant-intents` answers, step 0).
 _REPLY_NO = re.compile(r"\s*[*_]{0,4}(?:no|nope)[*_]{0,4}\s{0,3}(?:,|[-‐‑‒–—―])")
@@ -865,10 +892,14 @@ _REPLY_NO = re.compile(r"\s*[*_]{0,4}(?:no|nope)[*_]{0,4}\s{0,3}(?:,|[-‐‑‒
 # subject ("…, but the M is available", "Not only is it warm, it is available in three colours").
 # It counts only when no comma, bracket or newline follows it before the phrase, so "is not, and I
 # checked, in stock" stays negated.
+_SUBJECT_WORD = r"(?:it|they|we|i|you|there|this|these|those|he|she)(?=\s|['’])"
+# Re-review N1: a semicolon or colon restarts only before a subject ("Nothing beats it: it is
+# available"), so "None of these sizes: M or L is in stock" stays one clause; an en or figure dash
+# between two letters or digits is a range ("sizes S–M", "UK 8–12"), not a new clause.
 _RESTART = re.compile(
-    r"[;:]|\s[-‐‑]\s|[‒–—―]"
+    rf"[;:]\s{{0,3}}{_SUBJECT_WORD}|\s[-‐‑]\s|[—―]|(?<![^\W_])[‒–]|[‒–](?![^\W_])"
     r"|,\s{0,3}(?:but|and|so|yet)\s"
-    r"|,\s{0,3}(?:it|they|we|i|you|there|this|these|those)(?=\s|['’])"
+    rf"|,\s{{0,3}}{_SUBJECT_WORD}"
 )
 _RESTART_SPOILED = re.compile(r"[,()\n]|\s[-‐‑]\s|[‒–—―]")
 _DASH = re.compile(r"\s[-‐‑]\s|[‒–—―]")
@@ -884,23 +915,26 @@ NEGATION_REACH = 4 * L
 
 
 def negated_in_sentence(before: str, *, whole: bool = True) -> bool:
-    """Whether `before`, the text ahead of a stock phrase, holds a negation in the phrase's
-    sentence: from its start, or from a new clause the phrase is in, with a reply word that opens
-    it and a negated sentence adverb left out. With `whole` False, `before` may begin inside the
-    sentence: if neither its start nor a new clause is in it, it counts as negated (fail closed)."""
+    """Whether `before`, the text ahead of a stock phrase (case kept, so a sentence's end can be
+    told), holds a negation in the phrase's sentence: from its start, or from a new clause the
+    phrase is in, with a reply word that opens it and a negated sentence adverb left out. With
+    `whole` False, `before` may begin inside the sentence: if neither its start nor a new clause is
+    in it, it counts as negated (fail closed), and no dash restarts, as its pair may be out of view
+    (re-review N1)."""
     ends = [
         end
         for end in _SENTENCE_END.finditer(before)
         if not _SENTENCE_ABBREVIATION.search(before[: end.start() + 1])
     ]
     started = whole or bool(ends)
-    sentence = before[ends[-1].end() :] if ends else before
+    sentence = (before[ends[-1].end() :] if ends else before).casefold()
     reply = _REPLY_NO.match(sentence) if started else None
     sentence = sentence[reply.end() :] if reply else sentence
     for restart in reversed(list(_RESTART.finditer(sentence))):
         # Security M1: a dash with another before it closes an aside ("None of the towels — Bath
         # or Hand — is in stock"), and one with another after it opens one: neither restarts.
-        if _DASH.fullmatch(restart.group()) and _DASH.search(sentence, 0, restart.start()):
+        dash = bool(_DASH.fullmatch(restart.group()))
+        if dash and (_DASH.search(sentence, 0, restart.start()) or not started):
             continue
         if not _RESTART_SPOILED.search(sentence, restart.end()):
             sentence, started = sentence[restart.end() :], True
@@ -1295,10 +1329,11 @@ class OutputCheck:
         if self._raw:
             lo = view.raw_span(found.start(), found.end())[0]
             origin = self._back(lo, NEGATION_REACH)
-            before, whole = self._view(origin, lo).text, origin == 0
-        else:
-            origin = max(0, found.start() - NEGATION_REACH)
-            before, whole = view.text[origin : found.start()], origin == 0
+            before, whole = self._view(origin, lo).exact, origin == 0
+        else:  # `live_backed`: the case-kept view up to the same raw position
+            at = bisect_left(view.exact_index, view.index[found.start()])
+            origin = max(0, at - NEGATION_REACH)
+            before, whole = view.exact[origin:at], origin == 0
         return None if negated_in_sentence(before, whole=whole) else False
 
     def _blocking_class(self, start: int, end: int) -> str | None:
