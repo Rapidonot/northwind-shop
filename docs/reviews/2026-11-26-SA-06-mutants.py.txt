@@ -1,8 +1,18 @@
 """Row #23 (SA-06): failing-first evidence for the fix and phase B tests (advisor finding 1), by mutants.
 
 Each mutant undoes one fix in the source at the head, then runs only the named tests, which must fail.
-The file is then restored with `git checkout -- <file>`. No test is edited. Phase B's two files are
-reverted whole to the merge base `06713f1` (before phase B). $0: scripted model and replay only.
+No test is edited. Phase B's two files are written back to the merge base `06713f1` (before phase B),
+in the working tree only, never the index. $0: scripted model and replay only.
+
+Version 2 (the security read after 4821fc8, L1 and L2; the advisor's re-read, A, E and F):
+- a mutant is CAUGHT only when a named test is reported failed (pytest `-rfE`, Vitest's JSON
+  reporter); any other non-zero exit is ERROR, and a zero exit SURVIVED;
+- every git call is checked: its return code, and its output for the five error strings in CLAUDE.md;
+- each file is restored from HEAD's blob and checked equal to it; the script exits 1 on any ERROR,
+  any SURVIVED or a tree that is not clean at the end;
+- the tests that passed under each mutant are listed, so a passing one can be explained;
+- m21 (chat's card refusal) and m22 (a `northwind_backend` import in chat.py) were added for the
+  hard-rule-1 test and the N8 pins that m16 cannot reach.
 
 Run from the repository root, in the sandbox, with a clean tree:
     python3 docs/reviews/2026-11-26-SA-06-mutants.py.txt
@@ -22,7 +32,7 @@ TE = "services/gateway/tests/test_sa06_endpoint.py"
 CHATS = "apps/portal/src/Chat.tsx"
 STREAM = "apps/portal/src/chatStream.ts"
 
-# (id, finding, file, old, new, kind, tests). kind "py": pytest node IDs; "vitest": (file, -t pattern).
+# (id, finding, file, old, new, kind, tests). old None: write `new`'s revision of the file.
 MUTANTS = [
     ("m01", "M1 JSON only", G, 'return kind == "application/json"', "return True", "py",
      [f"{TE}::test_only_a_json_request_is_taken"]),
@@ -80,6 +90,15 @@ MUTANTS = [
     ("m17", "phase B: tool_scopes.py at 06713f1", SCOPES, None, "06713f1", "py",
      ["services/gateway/tests/test_sa06_scopes_tw.py",
       "services/assistant/tests/test_sa06_no_case_tool.py::test_case_is_a_forbidden_fragment_for_every_shopper_agent"]),
+    ("m21", "hard rule 1: card refusal before the trigger", CHAT,
+     "    if contains_card_data(body.message):", "    if False:", "py",
+     ["services/gateway/tests/test_sa06_chat_trigger.py::test_card_data_is_refused_before_the_trigger",
+      "services/gateway/tests/test_sa06_phase_b_tw.py::test_card_data_is_refused_before_the_trigger"]),
+    ("m22", "N8: chat.py never reaches the desk", CHAT,
+     "from __future__ import annotations\n",
+     "from __future__ import annotations\n\nimport northwind_backend.handoff as _desk_mutant  # noqa: F401\n",
+     "py", [f"{TE}::test_chat_never_reaches_the_handoff_desk",
+            "services/gateway/tests/test_sa06_phase_b_tw.py::test_chat_py_never_reaches_the_handoff_desk"]),
     ("m18", "N4 keep in-flight turns", CHATS,
      "history.current = history.current.filter((t) => !sent.includes(t));", "history.current = [];",
      "vitest", ("src/HandoffNotice.test.tsx", "keeps a turn sent while")),
@@ -93,49 +112,104 @@ MUTANTS = [
 ]
 
 
+
+import json
+import os
+import re
+import tempfile
+
+GIT_ERRORS = ("Operation not permitted", "could not lock config file", "unable to unlink",
+              "unable to create file", "cannot create directory")
+
+
 def run(cmd, cwd=None):
     p = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=600)
     return p.returncode, (p.stdout + p.stderr)
 
 
-def summary_line(out):
-    for line in reversed(out.splitlines()):
-        s = line.strip()
-        if any(w in s for w in (" passed", " failed", " error", "Tests ")):
-            return s
-    return out.strip().splitlines()[-1] if out.strip() else "(no output)"
+def git(*args):
+    code, out = run(["git", *args])
+    if code != 0 or any(e in out for e in GIT_ERRORS):
+        sys.exit(f"git {' '.join(args)} failed ({code}): {out.strip()[:300]}\nSTOP: check the tree by hand")
+    return out
+
+
+def write(path, text):
+    with open(path, "w", encoding="utf-8") as handle:
+        handle.write(text)
+
+
+def restore(path):
+    write(path, git("show", f"HEAD:{path}"))
+    code, _ = run(["git", "diff", "--quiet", "HEAD", "--", path])
+    if code != 0:
+        sys.exit(f"{path} is not HEAD's blob after the restore\nSTOP: check the tree by hand")
+
+
+def pytest_verdict(tests):
+    code, out = run(["uv", "run", "--quiet", "--no-sync", "pytest", *tests, "-q", "-rfEA",
+                     "-p", "no:cacheprovider"])
+    failed = re.findall(r"^FAILED (\S+)", out, re.M)
+    passed = re.findall(r"^PASSED (\S+)", out, re.M)
+    hit = all(any(f.startswith(t) for f in failed) for t in tests)
+    verdict = "CAUGHT" if failed and hit else ("SURVIVED" if code == 0 else "ERROR")
+    return verdict, f"{len(failed)} failed, {len(passed)} passed", failed, passed, out
+
+
+def vitest_verdict(spec):
+    vfile, pattern = spec
+    fd, report = tempfile.mkstemp(suffix=".json")
+    os.close(fd)
+    code, out = run(["corepack", "pnpm", "exec", "vitest", "run", vfile, "-t", pattern,
+                     "--reporter=json", f"--outputFile={report}"], cwd="apps/portal")
+    try:
+        data = json.load(open(report, encoding="utf-8"))
+    except (OSError, ValueError):
+        return "ERROR", "no JSON report", [], [], out
+    finally:
+        os.unlink(report)
+    results = [a for f in data.get("testResults", []) for a in f.get("assertionResults", [])]
+    named = [a for a in results if pattern in a.get("fullName", "")]
+    failed = [a["fullName"] for a in named if a.get("status") == "failed"]
+    passed = [a["fullName"] for a in named if a.get("status") == "passed"]
+    errors = data.get("numFailedTestSuites", 0) or bool(data.get("unhandledErrors"))
+    verdict = "CAUGHT" if failed else ("SURVIVED" if code == 0 else "ERROR")
+    note = f"{len(failed)} named failed on assertion, {len(passed)} named passed"
+    if errors:
+        note += "; the run also had an unhandled error or failed suite"
+    return verdict, note, failed, passed, out
 
 
 def main():
-    code, status = run(["git", "status", "--porcelain", "--untracked-files=no"])
-    if status.strip():
+    if git("status", "--porcelain", "--untracked-files=no").strip():
         sys.exit("tree not clean: stop")
-    head = run(["git", "rev-parse", "--short", "HEAD"])[1].strip()
-    print(f"SA-06 mutants at {head} (tests unchanged; each mutant restored with git checkout)")
-    caught = 0
+    head = git("rev-parse", "--short", "HEAD").strip()
+    print(f"SA-06 mutants v2 at {head} (tests unchanged; each file restored from HEAD and checked)")
+    bad = 0
     for mid, finding, path, old, new, kind, tests in MUTANTS:
         if old is None:
-            run(["git", "checkout", new, "--", path])
+            write(path, git("show", f"{new}:{path}"))  # the working tree only, never the index
         else:
             text = open(path, encoding="utf-8").read()
             if text.count(old) != 1:
-                print(f"{mid} {finding}: ANCHOR NOT FOUND ({text.count(old)}) - not run")
+                print(f"{mid} {finding}: ERROR - anchor found {text.count(old)} times, not run")
+                bad += 1
                 continue
-            open(path, "w", encoding="utf-8").write(text.replace(old, new))
+            write(path, text.replace(old, new))
         try:
-            if kind == "py":
-                code, out = run(["uv", "run", "--quiet", "pytest", *tests, "-q", "-p", "no:cacheprovider"])
-            else:
-                vfile, pattern = tests
-                code, out = run(["corepack", "pnpm", "exec", "vitest", "run", vfile, "-t", pattern],
-                                cwd="apps/portal")
+            verdict, note, failed, passed, _out = (
+                pytest_verdict(tests) if kind == "py" else vitest_verdict(tests)
+            )
         finally:
-            run(["git", "checkout", "HEAD", "--", path])
-        verdict = "CAUGHT" if code != 0 else "SURVIVED"
-        caught += code != 0
-        print(f"{mid} {finding}: {verdict} - {summary_line(out)}")
-    left = run(["git", "status", "--porcelain", "--untracked-files=no"])[1].strip()
-    print(f"{caught} of {len(MUTANTS)} caught; tree after: {'clean' if not left else left}")
+            restore(path)
+        bad += verdict != "CAUGHT"
+        print(f"{mid} {finding}: {verdict} - {note}")
+        for name in passed:
+            print(f"      passed: {name}")
+    left = git("status", "--porcelain", "--untracked-files=no").strip()
+    print(f"{len(MUTANTS) - bad} of {len(MUTANTS)} caught; tree after: {'clean' if not left else left}")
+    if bad or left:
+        sys.exit(1)
 
 
 if __name__ == "__main__":
