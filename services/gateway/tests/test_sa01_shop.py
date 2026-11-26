@@ -130,6 +130,14 @@ def test_products_with_a_photo_come_first_in_catalog_order(
     assert [t["photo"] for t in tiles] == [True, True] + [False] * (len(jackets) - 2)
 
 
+def test_a_directory_or_a_dangling_link_named_like_a_photo_is_not_one(tmp_path: Path) -> None:
+    """test-writer (SA-01 PR 1): only a regular file counts, so no tile shows a broken image."""
+    (tmp_path / "P0001.webp").write_bytes(b"x")
+    (tmp_path / "P0002.webp").mkdir()
+    (tmp_path / "P0003.webp").symlink_to(tmp_path / "missing.webp")
+    assert photo_ids(tmp_path) == {"P0001"}
+
+
 def test_photo_ids_take_only_exact_product_file_names(tmp_path: Path) -> None:
     for name in ("P0001.webp", "P0002.WEBP", "p0003.webp", "P0004.webp.tmp", "../P0005.webp"):
         if "/" not in name:
