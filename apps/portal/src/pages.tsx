@@ -175,8 +175,12 @@ export function ProductPage({ id }: { id: string }) {
   return state.kind === "ready" ? <ProductView key={id} product={state.value} /> : <Status state={state} />;
 }
 
-/** PR 1: the bag, read-only. Quantity controls and checkout come in PR 2. */
+/** PR 1: the bag, read-only. Quantity controls and checkout come in PR 2. A cart line has no brand
+ * (`get_cart` is the assistant's tool, unchanged), so the brand line comes from the portal's own
+ * product list; until it is read, or if it can't be, the full catalog name is shown (rule 4). */
 export function CartPage({ cart }: { cart: CartState }) {
+  const products = useLoaded(() => fetchProducts({}), "bag-brands");
+  const brands = new Map(products.kind === "ready" ? products.value.map((p) => [p.product_id, p.brand]) : []);
   return (
     <section aria-label="Bag" className="bag">
       <div className="page-head">
@@ -191,7 +195,16 @@ export function CartPage({ cart }: { cart: CartState }) {
           <ul className="bag-lines" aria-label="Bag items">
             {cart.cart.lines.map((line) => (
               <li key={line.variant_id} data-variant={line.variant_id}>
-                <a href={href({ page: "product", id: line.product_id })}>{line.name}</a>
+                <a href={href({ page: "product", id: line.product_id })}>
+                  {brands.has(line.product_id) ? (
+                    <>
+                      <span className="tile-brand">{brands.get(line.product_id)}</span>
+                      <span>{displayName(brands.get(line.product_id) ?? "", line.name)}</span>
+                    </>
+                  ) : (
+                    line.name
+                  )}
+                </a>
                 <span className="muted">{[line.colour, line.size, line.fit].filter(Boolean).join(" · ")}</span>
                 <span>Qty {line.quantity}</span>
                 <span>
