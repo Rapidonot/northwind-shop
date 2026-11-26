@@ -1,6 +1,14 @@
-import { type FormEvent, type ReactNode, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { AiDisclosure } from "./AiDisclosure";
-import { type ChatEvent, type ErrorCode, type SourceCard, sendMessage } from "./chatStream";
+import {
+  type ChatEvent,
+  type ErrorCode,
+  type HandoffTurn,
+  requestHandoff,
+  type SourceCard,
+  sendMessage,
+} from "./chatStream";
+import { HandoffNotice, type HandoffState, type HandoffStatus, NO_STAFF_YET } from "./HandoffNotice";
 
 const ERROR_TEXT: Record<ErrorCode, string> = {
   retrieval_failed: "Search isn't available right now, so I can't answer that.",
@@ -103,6 +111,7 @@ function apply(turn: Turn, event: ChatEvent): Turn {
       return { ...turn, notice: errorText(event.code) };
     case "refused":
       return { ...turn, notice: event.message };
+    case "handoff":
     case "done":
       return turn;
   }
@@ -110,26 +119,76 @@ function apply(turn: Turn, event: ChatEvent): Turn {
 
 export const PRICE_NOTE = "Ask me for a price or stock check: I look them up live.";
 
+// Row #23 (SA-06): the turns a handoff sends, as the shopper saw them; never shown again.
+export const MAX_HANDOFF_TURNS = 10;
+
 /** `onTurnEnd` (row #16): called when a turn has ended, however it ended, so the cart can be read
- * again. */
-export function Chat({ onTurnEnd }: { onTurnEnd?: () => void } = {}) {
+ * again. `handoffStatus` (row #23): tells the chat when a person has taken over; by default no one
+ * ever does, because no staff side exists yet. */
+export function Chat({
+  onTurnEnd,
+  handoffStatus = NO_STAFF_YET,
+}: { onTurnEnd?: () => void; handoffStatus?: HandoffStatus } = {}) {
   const [message, setMessage] = useState("");
   const [turn, setTurn] = useState<Turn>(EMPTY);
   const [busy, setBusy] = useState(false);
+  const [handoff, setHandoff] = useState<HandoffState>({ kind: "idle" });
+  const history = useRef<HandoffTurn[]>([]);
+  const lastTrigger = useRef<"button" | "message">("button");
+  const unwatch = useRef<() => void>(() => {});
+
+  useEffect(() => () => unwatch.current(), []);
+
+  function remember(...turns: HandoffTurn[]) {
+    history.current = [...history.current, ...turns.filter((t) => t.text !== "")].slice(
+      -MAX_HANDOFF_TURNS,
+    );
+  }
+
+  async function startHandoff(trigger: "button" | "message") {
+    lastTrigger.current = trigger;
+    setHandoff({ kind: "requesting" });
+    const result = await requestHandoff(history.current, trigger);
+    if (result.kind === "failed") {
+      setHandoff(result);
+      return;
+    }
+    setHandoff({ kind: "queued", reference: result.reference });
+    unwatch.current();
+    unwatch.current = handoffStatus.watch(result.reference, () =>
+      setHandoff({ kind: "joined", reference: result.reference }),
+    );
+  }
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     setBusy(true);
     setTurn(EMPTY);
+    const asked = message;
+    let shown = "";
+    let refused = false;
+    let handedOff = false;
     try {
-      await sendMessage(message, (chatEvent) => setTurn((current) => apply(current, chatEvent)));
+      await sendMessage(asked, (chatEvent) => {
+        if (chatEvent.type === "token") shown += chatEvent.text;
+        else if (chatEvent.type === "reset") shown = "";
+        else if (chatEvent.type === "refused") refused = true;
+        else if (chatEvent.type === "handoff") handedOff = true;
+        setTurn((current) => apply(current, chatEvent));
+      });
     } catch {
       setTurn((current) => apply(current, { type: "error", code: "internal" }));
     } finally {
+      // A refused message was never sent, so it is never part of a handoff either (hard rule 1).
+      if (!refused) remember({ role: "shopper", text: asked }, { role: "assistant", text: shown });
       setBusy(false);
       onTurnEnd?.();
     }
+    if (handedOff) await startHandoff("message");
   }
+
+  const handoffOpen =
+    handoff.kind === "requesting" || handoff.kind === "queued" || handoff.kind === "joined";
 
   // Only a cited source gets a card: an entry for an ID outside `source_ids` has no anchor to link.
   const cited = new Set(turn.sources);
@@ -154,6 +213,14 @@ export function Chat({ onTurnEnd }: { onTurnEnd?: () => void } = {}) {
           Send
         </button>
       </form>
+      <button
+        type="button"
+        disabled={handoffOpen}
+        onClick={() => void startHandoff("button")}
+      >
+        Talk to a person
+      </button>
+      <HandoffNotice state={handoff} onRetry={() => void startHandoff(lastTrigger.current)} />
       <p data-testid="answer" aria-live="polite">
         {linked(turn.answer, cited)}
       </p>
