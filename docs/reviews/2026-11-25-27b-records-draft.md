@@ -47,6 +47,7 @@ CC-10's status cell: `____` (the PRD's acceptance is "contract tests pass; polic
 decides whether Q3's two resources keep it `partial`).
 
 ## Decision 0015 and the threat model: applied 2026-11-25, with stage B
-In `docs/decisions/0015-output-control.md` (row #27 note) and `docs/governance/threat-model.md` (boundary 3, Owners).
+In `docs/decisions/0015-output-control.md` (row #27 note) and `docs/governance/threat-model.md` (boundary 3, Residuals).
+Decision 0023 gets no note: decision 0024 ("Amends 0023") is the only record of the `shp` change for northwind-policy (advisor L6).
 2026-11-26, the user: "untrusted content can steer a return request" is an accepted residual (threat model, Residuals),
 with no P6 or NFR-03 owner; its Owners row is gone.

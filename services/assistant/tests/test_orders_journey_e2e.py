@@ -187,6 +187,32 @@ class Turn:
     cited: tuple[str, ...] = ()
 
 
+def shown_answer(events: list[TurnEvent]) -> str:
+    """What the portal shows: a reset drops the text so far (SA-02's `reset` event)."""
+    answer = ""
+    for event in events:
+        if isinstance(event, Reset):
+            answer = ""
+        elif isinstance(event, TextDelta):
+            answer += event.text
+    return answer
+
+
+def test_the_answer_read_is_what_the_portal_shows_after_a_reset() -> None:
+    """Row #27 PR 2's window: `return_false_policy`'s answer was read twice, before and after the
+    output check's reset. Both readings give the same verdict on every committed recording (the
+    failing-first log); this pins the portal's."""
+    events: list[TurnEvent] = [
+        TextDelta("I can't. The "),
+        Reset(),
+        TextDelta("I can't. "),
+        TextDelta("Fixed sentence."),
+    ]
+    assert shown_answer(events) == "I can't. Fixed sentence."
+    assert shown_answer([TextDelta("a"), TextDelta("b")]) == "ab"
+    assert shown_answer([TextDelta("a"), Reset()]) == ""
+
+
 def run_turn(message: str, runtime: AgentRuntime, source: PolicySource | None = None) -> Turn:
     real = OrderBook.from_data()
     book = WatchedBook(real.orders, real.carrier, real.tracking_numbers, real.placed_on)
@@ -226,12 +252,7 @@ def run_turn(message: str, runtime: AgentRuntime, source: PolicySource | None = 
         events = asyncio.run(collect(RagEndpoint(url, KEY), catalog_url, orders_url, policy_url))
     assert not [e for e in events if isinstance(e, TurnError)], events
     assert isinstance(events[-1], Citations)
-    answer = ""  # what the portal shows: a reset drops the text so far (SA-02)
-    for event in events:
-        if isinstance(event, Reset):
-            answer = ""
-        elif isinstance(event, TextDelta):
-            answer += event.text
+    answer = shown_answer(events)
     requests = list(orders_server.desk.open.values())
     cited = events[-1].source_ids
     return Turn(answer, book.reads, orders_server.calls, requests, evaluations, cited)

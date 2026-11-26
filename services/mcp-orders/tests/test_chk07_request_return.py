@@ -12,6 +12,7 @@ from typing import Any
 
 import pytest
 
+from northwind_backend.fakes.orders import DATA as BACKEND_DATA
 from northwind_common.errors import ENVELOPE_KEYS
 from northwind_common.tool_scopes import FORBIDDEN_FRAGMENTS
 from northwind_mcp_orders import app, testing
@@ -19,7 +20,7 @@ from northwind_mcp_orders.book import DataMismatch, OrderBook
 from northwind_mcp_orders.policy_data import FIXTURES, PolicyData
 from northwind_mcp_orders.server import OrdersServer
 from northwind_mcp_orders.tools import TOOLS
-from northwind_mcp_orders.wording import STATUS_WORDING
+from northwind_mcp_orders.wording import STATUS_WORDING, worded
 
 pytestmark = pytest.mark.req("CHK-07")
 
@@ -144,6 +145,33 @@ def test_get_order_gives_the_plain_words_beside_every_code(live: tuple[OrdersSer
             assert scan["status_text"] == STATUS_WORDING[scan["status"]]
             assert set(scan) == {"on", "status", "status_text"}
     assert seen == set(STATUS_WORDING) - {"processing"}
+
+
+def _without_wording(view: dict[str, Any]) -> dict[str, Any]:
+    out = {k: v for k, v in view.items() if k != "status_text"}
+    if out["tracking"] is not None:
+        scans = [
+            {k: v for k, v in s.items() if k != "status_text"} for s in out["tracking"]["scans"]
+        ]
+        out["tracking"] = {**out["tracking"], "scans": scans}
+    return out
+
+
+def test_worded_only_adds_the_wording_and_keeps_every_value_of_the_view() -> None:
+    """PR 1's whole-body pin now compares with `worded(expected(...))` (advisor L7): this holds the
+    expected side to the files' values. Every order of the demo shopper, scans included."""
+    book = OrderBook.from_data()
+    rows = (
+        json.loads(x) for x in (BACKEND_DATA / "orders.jsonl").read_text().splitlines() if x.strip()
+    )
+    owned = sorted(row["order_id"] for row in rows if row["shopper_id"] == "S0188")
+    assert len(owned) >= 7
+    for order_id in owned:
+        view = dict(book.view(order_id, shopper="S0188", region="US"))
+        made = worded(view)
+        assert _without_wording(made) == view
+        assert set(made) == set(view) | {"status_text"}
+        assert made["status_text"] == STATUS_WORDING[view["status"]]
 
 
 def test_the_store_view_itself_has_no_wording() -> None:
