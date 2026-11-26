@@ -738,10 +738,14 @@ version = "0.0.0"
 source = { editable = "services/backend" }
 dependencies = [
     { name = "northwind-common" },
+    { name = "psycopg", extra = ["binary"] },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "northwind-common", editable = "services/common" }]
+requires-dist = [
+    { name = "northwind-common", editable = "services/common" },
+    { name = "psycopg", extras = ["binary"], specifier = ">=3.3.7" },
+]
 
 [[package]]
 name = "northwind-common"

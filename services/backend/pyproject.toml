@@ -3,7 +3,7 @@ name = "northwind-backend"
 version = "0.0.0"
 description = "Backend ports, deterministic fakes and synthetic shoppers, orders and tracking (FOUND-3)"
 requires-python = ">=3.12,<3.13"
-dependencies = ["northwind-common"]
+dependencies = ["northwind-common", "psycopg[binary]>=3.3.7"]
 
 [tool.uv.sources]
 northwind-common = { workspace = true }

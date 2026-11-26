@@ -364,7 +364,13 @@ def test_a_doubtful_write_is_never_called_again_and_is_escalated(
         port: Any = ports.payment
     else:
         port = _RaiseAfter(ports.payment, operation)
-    ports = Ports(payment=port, fraud=ports.fraud, catalog=ports.catalog, orders=ports.orders)
+    ports = Ports(
+        payment=port,
+        fraud=ports.fraud,
+        catalog=ports.catalog,
+        orders=ports.orders,
+        inventory=ports.inventory,
+    )
     tools = HAPPY[: HAPPY.index(f"{operation}_payment") + 1]
     with ScriptedLLM() as llm:
         # The model even tries the same write again and then the next step: all refused.

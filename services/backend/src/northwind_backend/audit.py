@@ -41,6 +41,7 @@ from typing import Any, Literal, Protocol
 from northwind_backend.carriers import CARRIERS, TRACKING_NUMBER
 from northwind_backend.cases import CASE_ID, Case
 from northwind_backend.errors import Ok, ToolError
+from northwind_backend.inventory.model import Reservation
 from northwind_backend.ports import (
     FraudAssessment,
     Order,
@@ -184,6 +185,15 @@ def _value_ref(value: object) -> dict[str, Any]:
             "root_cause": _ref("root_cause", value.root_cause),
             "flags": _ref("flags", value.flags),
             "summary": _shape(value.summary),
+            "dry_run": _ref("dry_run", value.dry_run),
+        }
+    if isinstance(value, Reservation):
+        # Row #25 (BE-04): by reference; never the postal code, nodes or lines themselves.
+        return {
+            "order_id": _ref("order_id", value.order_id),
+            "region": _ref("region", value.region),
+            "status": _ref("status", value.status),
+            "lines": len(value.allocations),
             "dry_run": _ref("dry_run", value.dry_run),
         }
     if isinstance(value, Tracking):
