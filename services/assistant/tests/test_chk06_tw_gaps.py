@@ -83,7 +83,11 @@ def test_a_signed_in_turn_adds_exactly_the_orders_server_and_get_order(tmp_path:
     anon = _options(tmp_path, orders=None)
     signed = _options(tmp_path, orders=("http://127.0.0.1:3/mcp", "ord-token"), signed=True)
     assert set(signed.mcp_servers) - set(anon.mcp_servers) == {order_tool.SERVER_NAME}
-    assert [t for t in signed.allowed_tools if t not in anon.allowed_tools] == [ORDERS]
+    # PR 2 (CHK-07): and `request_return`, exactly.
+    assert [t for t in signed.allowed_tools if t not in anon.allowed_tools] == [
+        ORDERS,
+        "mcp__northwind-orders__request_return",
+    ]
     assert signed.system_prompt == system_prompt("US", signed_in=True)
     assert signed.tools == anon.tools == []
 
@@ -93,7 +97,7 @@ def test_get_order_is_the_assistants_alone_in_the_scopes() -> None:
         a for a, servers in AGENT_TOOLS.items() if "get_order" in servers.get(ORDERS_SERVER, ())
     ]
     assert holders == ["shopper-assistant"]
-    assert AGENT_TOOLS["shopper-assistant"][ORDERS_SERVER] == frozenset({"get_order"})
+    assert AGENT_TOOLS["shopper-assistant"][ORDERS_SERVER] == {"get_order", "request_return"}
 
 
 # ---- the output check, streamed (the user's N1-R option B: no order exemption) ---------------

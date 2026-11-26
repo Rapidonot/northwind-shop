@@ -1,0 +1,61 @@
+"""Likely answers per return scenario, through the output check and the scenario's and M-1's checks."""
+import importlib.util,sys,json
+from dataclasses import replace
+from northwind_assistant.output_check import OutputCheck, Source, LiveValues
+spec=importlib.util.spec_from_file_location("rj","services/assistant/tests/test_returns_journey_e2e.py")
+rj=importlib.util.module_from_spec(spec); sys.modules["rj"]=rj; spec.loader.exec_module(rj)
+P="[POL-RETURNS-US]"
+body=[json.loads(l)["body"] for l in open("data/fixtures/documents.jsonl") if '"POL-RETURNS-US"' in l][0]
+src=[Source("POL-RETURNS-US","document",body)]
+L={
+"return_eligible":[
+ f"Your return request for the hiking pants in order O000800 is requested. The item is inside the return window and in a condition the policy accepts {P}.",
+ f"I've requested a return for the hiking pants (P0085-FOR-REG-M) from order O000800. They're within the 30-day window and unworn, which the policy accepts {P}.",
+ f"The return for P0085-FOR-REG-M from order O000800 is requested. Order O000800 was delivered on 2026-10-26, so it is inside the window of 30 days from delivery for unworn, unwashed items {P}.",
+ f"Your return is requested for order O000800. This isn't an approval. {P}",
+ f"Your return is now requested. You can return unworn, unwashed items within 30 days of delivery for a refund to the original payment method {P}.",
+ f"The return is requested. Returns are free: print the prepaid return label from your account {P}.",
+],
+"return_not_delivered":[
+ f"Not yet. Order O000928 has not been delivered, and the return window starts at delivery {P}. You can ask again after delivery.",
+ f"No, order O000928 hasn't been delivered yet, so P0004-RST-REL-XL can't be returned now {P}. You can ask again once it's delivered.",
+ f"Order O000928 is in transit, so P0004-RST-REL-XL isn't eligible for a return yet: the window runs 30 days from delivery {P}.",
+ f"You can't return it yet, because order O000928 is still in transit and returns start at delivery {P}.",
+ f"This item isn't returnable right now. Order O000928 hasn't been delivered; its last scan was in transit on 2026-10-16. {P}",
+],
+"return_condition_missing":[
+ "What condition are the hiking pants in: unworn and sealed, unworn but opened, worn or washed, or damaged?",
+ "Are the hiking pants unworn and unwashed, and is the packaging still sealed?",
+ "Could you tell me the condition of the hiking pants from order O000800? For example, are they unworn, and is the packaging opened or still sealed?",
+ f"Can you tell me what condition the hiking pants are in? The policy accepts unworn, unwashed items within 30 days of delivery {P}.",
+ "To check this return, what's the condition of the pants (unused and sealed, opened, worn or washed, or damaged)?",
+ "Please tell me the condition of the pants.",
+],
+"return_damaged":[
+ f"Your return for the hiking pants in order O000800 needs review. The policy does not say what happens to an item damaged on arrival, so a person needs to review it {P}.",
+ f"I've recorded your return request for order O000800, and it needs review by a person, because the returns policy doesn't cover items damaged on arrival {P}.",
+ f"Your return needs review: a person has to look at it. The returns policy only covers wear and tear through the repair program {P}.",
+ f"Your return request needs review. The policy's damage rule is about wear and tear, not damage on arrival {P}, so a person needs to review it.",
+ f"Your return needs review because the pants arrived damaged {P}.",
+ f"Your return for order O000800 needs review because the item arrived damaged {P}.",
+],
+"return_false_policy":[
+ f"The hiking pants from order O000800 can't be returned, because the policy accepts unworn, unwashed items only {P}.",
+ f"I can't request this return. The policy covers unworn, unwashed items within 30 days of delivery {P}, and yours have been worn and washed.",
+ f"These can't be returned: they've been worn and washed, and Northwind's policy accepts only unworn, unwashed items, within 30 days of delivery, not 90 {P}.",
+ f"No. The window is 30 days, not 90 days. Worn items can't be returned {P}.",
+ f"This item isn't eligible: worn or washed items aren't accepted {P}.",
+],
+}
+bad=0
+for name,ans in L.items():
+    sc=rj.SCENARIOS[name]
+    base=dict(tool_calls=1,reads=[],evaluations=[{"order_id":sc.order_id,"variant_id":sc.variant_id,"condition":sorted(sc.conditions)[0]}],
+      returns=[{"request_status":x,"order_id":sc.order_id,"variant_id":sc.variant_id,"condition":sorted(sc.conditions)[0]} for x in sc.requests])
+    for a in ans:
+        c=OutputCheck({"POL-RETURNS-US"},src,live=LiveValues()); c.feed(a); c.finish()
+        t=rj.journey.Turn(answer=c.shown,cited=("POL-RETURNS-US",) if P in c.shown else (),**base)
+        try: rj.check(sc,t); v="pass"
+        except AssertionError as e: v="FAIL "+str(e).splitlines()[0][:110]; bad+=1
+        print(name,"|",v,"|",dict(c.counts) or "","|",a)
+print("failing",bad)

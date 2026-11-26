@@ -7,11 +7,12 @@ The same shape as `northwind_mcp_catalog.server`:
 - Handlers take the caller (audience, region, agent and the signed-in shopper, `shp`) only from the
   verified token. No schema takes a shopper or a region.
 - A caller sees only what `northwind_common.tool_scopes` gives its agent on this server: the
-  assistant's `get_order`. Anything else, including a tool that does not exist, gets one
-  `permission` refusal.
+  assistant's `get_order` and `request_return`. Anything else, including a tool that does not exist,
+  gets one `permission` refusal.
 - Errors are the structured envelope with fixed text. Logs name codes, never arguments or tokens.
 
-It is read-only: no tool writes an order, and none lists one.
+No tool writes an order, and none lists one. `request_return` (PR 2, CHK-07) records the shopper's
+own return request in memory, through `ReturnDesk`, and nothing else.
 """
 
 from __future__ import annotations
@@ -33,6 +34,8 @@ from northwind_common.mcp_gate import ASGIApp
 from northwind_common.mcp_token import ORDERS_SERVER, Claims
 from northwind_common.tool_scopes import allowed_tools
 from northwind_mcp_orders.book import OrderBook
+from northwind_mcp_orders.policy_data import PolicyData
+from northwind_mcp_orders.returns import ReturnDesk
 
 log = logging.getLogger("northwind_mcp_orders")
 
@@ -93,6 +96,8 @@ class OrdersServer:
         clock: Callable[[], float] = time.time,
     ) -> None:
         self.book = book
+        # Refuses to start on policy documents that lost a fact (D14, decision 0024).
+        self.desk = ReturnDesk(book, PolicyData.from_fixtures())
         self._key = key
         self._tools = dict(tools or {})
         self._clock = clock

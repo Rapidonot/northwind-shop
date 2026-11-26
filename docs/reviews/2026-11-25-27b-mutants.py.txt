@@ -1,0 +1,44 @@
+import subprocess, os, sys
+R='/Users/rapido/Projects/northwind-shop-b/'
+C='services/common/src/northwind_common/'; O='services/mcp-orders/src/northwind_mcp_orders/'; P='services/mcp-policy/src/northwind_mcp_policy/'
+TC='services/common/tests/test_chk06_shopper_claim.py'; TS='services/mcp-policy/tests/test_chk07_policy_server.py'; TD='services/mcp-orders/tests/test_chk07_return_desk.py'; TE='services/mcp-policy/tests/test_chk07_cases.py'; TK='services/common/tests/test_tool_scopes.py'
+M=[
+('shp: any agent on the policy server',C+'mcp_token.py',' and agent == POLICY_SHOPPER_AGENT','',TC),
+('shp: any server',C+'mcp_token.py','and (srv == ORDERS_SERVER or (srv == POLICY_SERVER and agent == POLICY_SHOPPER_AGENT))','and True',TC),
+('scope: assistant reads resources',C+'tool_scopes.py','"shopper-assistant": {"northwind-rag": frozenset()},','"shopper-assistant": {"northwind-rag": frozenset(), "northwind-policy": POLICY_RESOURCES},',TK),
+('resource: region not checked',P+'server.py','if doc.region == claims.region and','if',TS),
+('resource: scope not checked',P+'server.py',' and resource_uri(doc) in allowed','',TS),
+('tool: card check removed',P+'tools.py','if holds_card_data(args):','if False:',TS),
+('tool: unknown keys accepted',P+'tools.py','if any(not isinstance(key, str) or key not in ARGUMENTS for key in args):','if False:',TS),
+('tool: sign-in not needed',P+'tools.py','if claims.shp is None or claims.aud != "shopper":','if False:',TS),
+('data: manifest not checked',O+'policy_data.py','if manifest.get("files", {}).get(name) != hashlib.sha256(raw).hexdigest():','if False:',TS),
+('data: facts not checked',O+'policy_data.py','        if missing:','        if False:',TS),
+('data: internal products kept',O+'policy_data.py','for row in rows["products.jsonl"]\n                if row["visibility"] == "public"','for row in rows["products.jsonl"]',TS),
+('label not escaped',C+'policy_tool.py','body.replace("<", "\\\\u003c").','body.',TS),
+('assess: condition first',O+'returns.py','    view = book.view(order_id, shopper=shopper, region=region)\n','    if condition not in CONDITIONS:\n        raise invalid_condition()\n    view = book.view(order_id, shopper=shopper, region=region)\n',TS),
+('desk: ineligible stored',O+'returns.py','if found.decision.outcome not in REQUEST_STATUS:','if False:',TD),
+('desk: conflict not seen',O+'returns.py','if seen[0] != fingerprint:','if False:',TD),
+('desk: second open request',O+'returns.py','if line in self.open:','if False:',TD),
+('desk: key not checked',O+'returns.py','if not isinstance(key, str) or not KEY.fullmatch(key):','if False:',TD),
+('desk: key not remembered',O+'returns.py','            keys[(turn, key)] = (fingerprint, stored)\n','',TD),
+('desk: ambiguous as requested',O+'returns.py','"ambiguous": "needs_review"','"ambiguous": "requested"',TD),
+('assess: unknown kind guessed',O+'returns.py','raise policy_unavailable()  #','subcategory = "pants"  #',TD),
+('assess: shopper ignored',O+'returns.py','view = book.view(order_id, shopper=shopper, region=region)','view = book.view(order_id, shopper=book.orders.state.orders[order_id].shopper_id if order_id in book.orders.state.orders else shopper, region=region)',TD),
+('rules: window last day out',C+'returns_policy.py','if days > WINDOW_DAYS[region]:','if days >= WINDOW_DAYS[region]:',TE),
+('rules: 14th day out',C+'returns_policy.py','days <= STATUTORY_DAYS','days < STATUTORY_DAYS',TE),
+('rules: window before damaged',C+'returns_policy.py','if condition == "damaged_on_arrival":','if condition == "damaged_on_arrival" and days <= WINDOW_DAYS[region]:',TE),
+('wording: code shown',O+'wording.py','"in_transit": "in transit"','"in_transit": "in_transit"',TD),
+('wording: confirms',O+'wording.py','"not yet with the carrier"','"confirmed"',TD),
+]
+caught=0
+for name,f,a,b,t in M:
+    s=open(R+f).read()
+    if s.count(a)<1: print('NOT APPLIED',name); continue
+    try:
+        open(R+f,'w').write(s.replace(a,b,1))
+        r=subprocess.run(['uv','run','--frozen','pytest','-q','-x','-p','no:cacheprovider',t],cwd=R,capture_output=True,text=True,env={**os.environ,'LLM_MODE':'replay','PYTHONDONTWRITEBYTECODE':'1'},timeout=100)
+    finally: open(R+f,'w').write(s)
+    fail=[l for l in r.stdout.splitlines() if l.startswith('FAILED') or l.startswith('ERROR')]
+    ok=r.returncode==1 and bool(fail); caught+=ok
+    print('caught  ' if ok else 'SURVIVED', name,'|',(fail[0].split('::')[-1][:90] if fail else r.stdout[-200:]))
+print(f'{caught} of {len(M)} caught')

@@ -21,6 +21,7 @@ from northwind_common.rag_tool import NO_SOURCES, TOOL_NAME
 from northwind_common.tool_scopes import AGENT_TOOLS, FORBIDDEN_FRAGMENTS
 from northwind_mcp_catalog.tools import TOOLS as CATALOG_TOOLS
 from northwind_mcp_orders.tools import TOOLS as ORDERS_TOOLS
+from northwind_mcp_policy.tools import TOOLS as POLICY_TOOLS
 from northwind_mcp_rag.retrieve import TOOLS
 from northwind_mcp_rag.server import Backend, RagServer
 from northwind_mcp_rag.testing import KEY, CallerSearcher, connect, running, token
@@ -193,25 +194,28 @@ def test_the_real_registry_holds_no_refund_capture_or_assign_tool_and_nothing_th
     fragments = FORBIDDEN_FRAGMENTS["shopper-assistant"]
     # #10b: mcp-catalog's registry joins (decision D1 scopes it to the assistant).
     # Row #27 (CHK-06): mcp-orders' registry joins: `get_order`, read-only.
-    registry: dict[str, Any] = {**TOOLS, **CATALOG_TOOLS, **ORDERS_TOOLS}
+    # Row #27 PR 2 (CHK-07): mcp-policy's: `evaluate_return_eligibility`, read-only.
+    registry: dict[str, Any] = {**TOOLS, **CATALOG_TOOLS, **ORDERS_TOOLS, **POLICY_TOOLS}
     # Row #16 (CHK-01): the three cart writes are the only tools that change state, and they change
     # only the caller's own cart. Hard rule 9: a tool that changes state requires an idempotency
     # key, and a read-only tool takes none. No tool takes `dry_run` (not useful for a reversible
     # cart write, by the user's decision, 2026-11-17).
     cart_writes = {"add_to_cart", "remove_from_cart", "set_cart_quantity"}
+    # Row #27 PR 2 (CHK-07, decision 0024): the shopper's own return request, under the same rules.
+    writes = cart_writes | {"request_return"}
     for name, spec in registry.items():
         assert not any(f in name.lower() for f in fragments)
         schema = spec.tool.input_schema
         properties = set(schema.get("properties", {}))
         assert "dry_run" not in properties
-        if name in cart_writes:
+        if name in writes:
             assert "idempotency_key" in schema.get("required", [])
         else:
             assert "idempotency_key" not in properties
         assert spec.tool.annotations is not None
-        assert spec.tool.annotations.read_only_hint is (name not in cart_writes)
+        assert spec.tool.annotations.read_only_hint is (name not in writes)
         assert spec.tool.annotations.destructive_hint in (None, False)
-    assert cart_writes <= set(registry)
+    assert writes <= set(registry)
     granted = {n for row in AGENT_TOOLS.values() for names in row.values() for n in names}
     assert granted == set(registry)
 

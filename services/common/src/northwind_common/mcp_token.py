@@ -21,6 +21,8 @@ Row #27 (CHK-06, decision 0023): a shopper token for northwind-orders may also c
 signed-in shopper's ID, which the demo sign-in binds to the session. It is minted only for that one
 server (`mint(shopper=…)` refuses any other), so no other server ever sees it, and the ID never
 reaches the model: like `sid`, it rides in the token, which the CLI only forwards as a header.
+Row #27 PR 2 (CHK-07, decision 0024, amending 0023): also for northwind-policy, whose one tool reads
+the same shopper's order, and there only for the agent `shopper-assistant`. Still no other server.
 
 Format: `v1.<base64url JSON claims>.<base64url HMAC-SHA256>`, signed with the key in
 `NORTHWIND_MCP_TOKEN_KEY`. The key comes only from the environment, is never logged, and never
@@ -52,7 +54,8 @@ MAX_TTL_SECONDS = 120
 VERSION = "v1"
 CLAIMS = frozenset({"aud", "region", "agent", "srv", "turn", "exp"})
 # Row #16: present only on a token minted with a session (`mint(session=…)`).
-# Row #27: `shp`, only on a northwind-orders token minted with a shopper (`mint(shopper=…)`).
+# Row #27: `shp`, only on a northwind-orders or northwind-policy token minted with a shopper
+# (`mint(shopper=…)`).
 OPTIONAL_CLAIMS = frozenset({"sid", "qf", "shp"})
 MAX_TOKEN_CHARS = 2048
 # Row #11 (RAG-04): the query-plan claim's limits.
@@ -67,11 +70,14 @@ _BITMAP = re.compile(r"[0-9a-f]{1,64}", re.ASCII)
 RAG_SERVER = "northwind-rag"
 CATALOG_SERVER = "northwind-catalog"
 ORDERS_SERVER = "northwind-orders"  # row #27 (CHK-06)
-SERVERS = frozenset({RAG_SERVER, CATALOG_SERVER, ORDERS_SERVER})
+POLICY_SERVER = "northwind-policy"  # row #27 PR 2 (CHK-07)
+SERVERS = frozenset({RAG_SERVER, CATALOG_SERVER, ORDERS_SERVER, POLICY_SERVER})
 _UUID4 = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
 _B64 = re.compile(r"^[A-Za-z0-9_-]+$")
 _REGION = re.compile(r"^[A-Z]{2,3}$")
 SESSION_ID = re.compile(r"[0-9a-f]{32}", re.ASCII)  # fullmatch: no trailing "\n"
+# Row #27 PR 2: the one agent whose northwind-policy token may name a shopper.
+POLICY_SHOPPER_AGENT = "shopper-assistant"
 SHOPPER_ID = re.compile(r"S\d{4}", re.ASCII)  # fullmatch; the synthetic shoppers' IDs
 
 
@@ -96,7 +102,7 @@ class Claims:
     srv: str
     sid: str | None = None  # row #16: the gateway's session, which the cart is keyed on
     qf: dict[str, Any] | None = None  # row #11: a query plan for one server search
-    shp: str | None = None  # row #27: the signed-in shopper, on a northwind-orders token only
+    shp: str | None = None  # row #27: the signed-in shopper, on an orders or policy token only
 
 
 def signing_key(environ: dict[str, str] | None = None) -> bytes:
@@ -214,8 +220,8 @@ def mint(
         raise ValueError("a turn is a version-4 UUID")
     if plan is not None and not (server == RAG_SERVER and plan_ok(plan)):
         raise ValueError("a query plan is for northwind-rag only, in the allowed shape")
-    if shopper is not None and not _shopper_ok(audience, server, shopper):
-        raise ValueError("a shopper is an S-number, on a northwind-orders shopper token only")
+    if shopper is not None and not _shopper_ok(audience, server, agent, shopper):
+        raise ValueError("a shopper is an S-number, on an orders or policy shopper token only")
     claims = Claims(
         aud=audience,
         region=region,
@@ -248,11 +254,12 @@ def mint(
     return token, claims
 
 
-def _shopper_ok(aud: Any, srv: Any, shp: Any) -> bool:
-    """`shp` (row #27): a shopper ID, on a shopper token for northwind-orders, nothing else."""
+def _shopper_ok(aud: Any, srv: Any, agent: Any, shp: Any) -> bool:
+    """`shp` (row #27): a shopper ID, on a shopper token for northwind-orders, or for
+    northwind-policy and the assistant (PR 2, CHK-07), nothing else."""
     return (
         aud == "shopper"
-        and srv == ORDERS_SERVER
+        and (srv == ORDERS_SERVER or (srv == POLICY_SERVER and agent == POLICY_SHOPPER_AGENT))
         and isinstance(shp, str)
         and SHOPPER_ID.fullmatch(shp) is not None
     )
@@ -285,7 +292,7 @@ def _claims(body: Any, now: float) -> Claims:
             and not (aud == "shopper" and isinstance(sid, str) and SESSION_ID.fullmatch(sid))
         )
         or ("qf" in body and not (srv == RAG_SERVER and plan_ok(qf)))
-        or ("shp" in body and not _shopper_ok(aud, srv, shp))
+        or ("shp" in body and not _shopper_ok(aud, srv, agent, shp))
     ):
         raise TokenError
     return Claims(

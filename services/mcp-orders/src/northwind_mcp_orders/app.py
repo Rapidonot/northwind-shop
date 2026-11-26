@@ -1,7 +1,8 @@
 """Run the northwind-orders MCP server: `python -m northwind_mcp_orders.app` (row #27, CHK-06).
 
 The signing key comes only from `NORTHWIND_MCP_TOKEN_KEY` (hard rule 4). The server refuses to start
-without it, and on `data/backend` files that do not match their manifest. It listens on 127.0.0.1
+without it, on `data/backend` files that do not match their manifest, and on policy documents that
+no longer hold a returns fact (D14). It listens on 127.0.0.1
 only, one worker, on this worktree's port (`northwind_common.order_tool.mcp_orders_port`).
 `make dev` starts it beside mcp-rag and mcp-catalog; the gateway's signed-in turns reach it at
 `order_tool.mcp_orders_url`.

@@ -2,7 +2,8 @@
 
 Every server in `SERVERS`, every agent in `tool_scopes`: the token gate, scoping, the error
 envelope, and per tool the description rules and a closed schema, over each server's real tool
-registry. mcp-catalog joined at #10b, mcp-orders at row #27 (CHK-06).
+registry. mcp-catalog joined at #10b, mcp-orders at row #27 (CHK-06), mcp-policy at its PR 2
+(CHK-07).
 """
 
 from __future__ import annotations
@@ -26,6 +27,9 @@ from northwind_mcp_catalog.tools import TOOLS as CATALOG_TOOLS
 from northwind_mcp_orders import testing as orders_testing
 from northwind_mcp_orders.server import SERVER_NAME as ORDERS
 from northwind_mcp_orders.tools import TOOLS as ORDERS_TOOLS
+from northwind_mcp_policy import testing as policy_testing
+from northwind_mcp_policy.server import SERVER_NAME as POLICY
+from northwind_mcp_policy.tools import TOOLS as POLICY_TOOLS
 from northwind_mcp_rag import retrieve
 from northwind_mcp_rag.server import SERVER_NAME as RAG
 from northwind_mcp_rag.server import Backend, RagServer
@@ -44,13 +48,18 @@ READ_ONLY_TOOLS = frozenset(
         "check_stock",
         "get_price",
         "get_order",  # row #27 (CHK-06): PRD §7 "get_order (own orders)"
+        "evaluate_return_eligibility",  # row #27 PR 2 (CHK-07): PRD §7
     }
 )
 # Row #16 (CHK-01): PRD §7's "cart tools". `get_cart` reads; the three writes change only the
 # caller's own cart. They are the only shopper-facing tools that are not read-only. Exact sets.
 CART_READ_TOOLS = frozenset({"get_cart"})
 CART_WRITE_TOOLS = frozenset({"add_to_cart", "remove_from_cart", "set_cart_quantity"})
-SHOPPER_TOOLS = READ_ONLY_TOOLS | CART_READ_TOOLS | CART_WRITE_TOOLS
+# Row #27 PR 2 (CHK-07, decision 0024; the user's D6 and D8): one write outside PRD §7, the
+# shopper's own return request. An exact one-tool set.
+RETURN_WRITE_TOOLS = frozenset({"request_return"})
+WRITE_TOOLS = CART_WRITE_TOOLS | RETURN_WRITE_TOOLS
+SHOPPER_TOOLS = READ_ONLY_TOOLS | CART_READ_TOOLS | WRITE_TOOLS
 # Row #11 (RAG-04, decision 0022; approved by the user under stop 5): one server-only tool, outside
 # PRD §7's shopper set, granted to exactly one agent that no model holds. Read-only, IDs only.
 SERVER_ONLY_TOOLS: dict[str, str] = {"eligible_products": "shopper-query"}
@@ -80,6 +89,7 @@ SERVERS: dict[str, tuple[Callable[[], Any], dict[str, Any]]] = {
     ),
     CATALOG: (lambda: catalog_testing.server(key=KEY), dict(CATALOG_TOOLS)),
     ORDERS: (lambda: orders_testing.server(key=KEY), dict(ORDERS_TOOLS)),
+    POLICY: (lambda: policy_testing.server(key=KEY), dict(POLICY_TOOLS)),
 }
 TOOL_CASES = [(server, name) for server, (_, tools) in SERVERS.items() for name in tools]
 
@@ -131,9 +141,9 @@ def test_tools_list_is_within_the_agents_scope_and_read_only(server: str, agent:
     # Row #11: a server-only tool is listed to its one agent and to nobody else.
     server_only = {name for name, owner in SERVER_ONLY_TOOLS.items() if owner == agent}
     assert names <= SHOPPER_TOOLS | server_only
-    for tool in listed:  # read-only, except exactly the cart writes (row #16)
+    for tool in listed:  # read-only, except exactly the cart writes (row #16) and request_return
         assert tool.annotations is not None
-        assert tool.annotations.read_only_hint is (tool.name not in CART_WRITE_TOOLS)
+        assert tool.annotations.read_only_hint is (tool.name not in WRITE_TOOLS)
 
 
 @pytest.mark.req("NFR-01")
