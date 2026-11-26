@@ -55,6 +55,32 @@ def unknown_argument() -> ToolError:
     )
 
 
+# The user's D2 (b), 2026-11-26 (row #27 PR 2's security L4): a card split between a well-formed
+# order number and a digit key passed both card checks, as the pair check skips an order number so
+# a good request is never refused for the digits of its key. A key may hold at most 6 digits in a
+# row (single separators joined, as `cards.py` joins them), so an order number's 6 digits and a
+# key's join to 12 at most: never a card. The tool's text is unchanged (it is in every recorded
+# request); the error says what to do. No recorded key is refused.
+MAX_KEY_DIGITS = 6
+_KEY_DIGITS = re.compile(r"\d(?:[\W_]?\d)*")
+
+
+def key_digits_refused() -> ToolError:
+    return ToolError(
+        "validation",
+        False,
+        "invalid_idempotency_key",
+        "A return request needs a new random idempotency_key with at most 6 digits in a row.",
+    )
+
+
+def _long_digit_key(value: Any) -> bool:
+    if not isinstance(value, str):
+        return False  # the desk refuses a key that is no string
+    groups = (re.sub(r"\D", "", g) for g in _KEY_DIGITS.findall(value))
+    return any(len(group) > MAX_KEY_DIGITS for group in groups)
+
+
 def sign_in_required() -> ToolError:
     return ToolError(
         "permission", False, "sign_in_required", "Orders are shown only after sign-in."
@@ -119,6 +145,8 @@ async def request_return(
     if _card_across(args):
         raise card_data_refused()
     shopper, order_id = _checked(claims, args, RETURN_ARGUMENTS)
+    if _long_digit_key(args.get("idempotency_key")):
+        raise key_digits_refused()
     made = server.desk.request(
         shopper=shopper,
         region=claims.region,

@@ -52,12 +52,11 @@ def test_the_codes_found_before_are_still_found(text: str) -> None:
     assert contains_cvv(text)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Row #27 PR 2 security L4: waits on the user's decision D2 (the pair check's pin)",
-)
-def test_a_card_split_between_an_order_number_and_a_digit_key_is_card_data() -> None:
-    assert holds_card_data({"order_id": "O411111", "idempotency_key": "1111111111"})
+def test_a_card_split_between_an_order_number_and_a_digit_key_is_not_cards_py_s() -> None:
+    """Row #27 PR 2 security L4, by the user's D2 (b): closed in `request_return`, which refuses a
+    key with more than 6 digits in a row (services/mcp-orders/tests/test_18a_key_digits.py).
+    `holds_card_data` stays as it is: joining digits across a letter would refuse good requests."""
+    assert not holds_card_data({"order_id": "O411111", "idempotency_key": "1111111111"})
 
 
 # ---- security review L5: other spacings and separators -----------------------------------------
