@@ -516,6 +516,7 @@ PATTERNS: tuple[Pattern, ...] = (
     #    Re-review N6: "we're out of the M" is "out of stock" ("they're out of their packaging" is
     #    no stock: step 0, a2a-05-partner); "we haven't run out" and "it's not
     #    gone" say there is stock with a negation inside the phrase, which no check reads: blocked.
+    #    D5 (d): "we've not run out" has no space before "'ve" (the first form could never match).
     _p(
         "stock",
         rf"\bwe(?:['’]re|{_S}are){_S}(?:(?:all|now|currently){_S})?out{_S}of\b",
@@ -523,7 +524,7 @@ PATTERNS: tuple[Pattern, ...] = (
     ),
     _p(
         "stock",
-        rf"\b(?:we|they){_S}(?:(?:have|had|did)n['’]t|(?:have|had|did){_S}not|(?:['’]ve){_S}not)"
+        rf"\b(?:we|they)(?:{_S}(?:have|had|did)n['’]t|{_S}(?:have|had|did){_S}not|['’]ve{_S}not)"
         rf"{_S}(?:run|ran){_S}out\b",
     ),
     _p(

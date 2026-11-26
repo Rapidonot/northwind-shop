@@ -87,3 +87,15 @@ def test_a_negated_range_across_a_spaced_dash_is_a_stock_claim_with_nothing_chec
 def test_what_is_still_read_as_its_own_sentence_is_shown(text: str) -> None:
     live = stock(a=0) if "out of stock" in text else stock(a=5)
     assert check_text(text, live=live) == text
+
+
+# ---- the user's D5 (d): the broken "we've not run out" alternative ------------------------------
+
+
+@pytest.mark.parametrize(
+    "text", ["We've not run out of the M.", "They've not run out of the Sage."]
+)
+def test_weve_not_run_out_is_never_shown(text: str) -> None:
+    """It says there is stock with a negation inside the phrase, which no check reads: blocked."""
+    for live in (None, stock(a=5), stock(a=0)):
+        assert hits(text, live=live) == {"stock": 1}
