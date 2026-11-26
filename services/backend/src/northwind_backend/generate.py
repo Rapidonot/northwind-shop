@@ -250,7 +250,7 @@ def _fit_to_stock(
     cut to what the best node still holds, or, with nothing left, moved to the region's first
     in-stock variant that one node can fill and that the order doesn't already have. The line count
     stays the same. In version 2 this changed two orders: O000476 (a quantity, 3 to 2) and O000936
-    (a variant). Everything else is byte-identical (`test_found3_generator.py`)."""
+    (a variant). Everything else is byte-identical (`tests/test_be04_data.py`)."""
     inventory = InventoryFake(
         lambda: _FIT_CLOCK,
         state=InventoryState.from_fixtures(fixtures / "stock.jsonl"),

@@ -78,3 +78,20 @@ FAILED services/backend/tests/inventory/test_be04_contract.py::test_a_commit_ref
 ```
 
 After the fix: 20 wiring and 60 contract (fake) tests pass. The recorded replays pass again with 0 misses (17 + 3, including the rule-driven replay), and the cassettes are identical.
+
+## Advisor finding 1: each remaining fix, failing first, by a mutant at 9a604d5 plus this commit's tests
+
+Each mutant undoes one fix at the head; the named test must fail. The script is `docs/reviews/2026-11-26-BE-04-mutants.py.txt`. The file is restored after each run.
+
+```
+m01 M2: no stock field in the context: CAUGHT: 1 failed in 0.53s
+m02 M2: the stock field leaks into escalate_order's result: CAUGHT: 1 failed in 0.52s
+m03 L1: any Ok from reserve counts as a live hold: CAUGHT: 1 failed in 0.51s
+m04 L6: no MAX_QUANTITY in M12: CAUGHT: 1 failed in 0.51s
+m05 L6: no MAX_LINES in M12: CAUGHT: 1 failed in 0.52s
+m06 L3: the conflict code is idempotency_conflict again: CAUGHT: 4 failed, 116 deselected in 0.19s
+m08 data pin: the fit also reorders every order's lines: CAUGHT: 3 failed in 0.73s
+m07 L4: the message says nothing changed again: CAUGHT: 1 failed in 0.17s
+```
+
+All 8 are caught. The L4 and data-pin tests (`test_the_unavailable_message_never_claims_that_nothing_changed` and `tests/test_be04_data.py`) are new in this commit, for advisor findings 1 and 3.

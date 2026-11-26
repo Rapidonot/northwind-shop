@@ -1,0 +1,56 @@
+"""Row #25: undo one fix at a time at the head, run its tests, restore. Prints each result."""
+
+import subprocess
+import sys
+from pathlib import Path
+
+ROOT = Path(sys.argv[1])
+SRC = ROOT / "services/backend/src/northwind_backend"
+T = "services/backend/tests/"
+OP = SRC / "agents/orders_place.py"
+MUTANTS = [
+    ("m01 M2: no stock field in the context", OP,
+     '            "stock": self._stock_view(),\n', "",
+     [T + "orders_place/test_be04_wiring.py::test_a_capture_that_fails_after_the_commit_says_the_stock_needs_restocking"]),
+    ("m02 M2: the stock field leaks into escalate_order's result", OP,
+     '_ok({"status": "escalated", "reason": self.placement.reason})',
+     '_ok({"status": "escalated", "reason": self.placement.reason, "stock": self._stock_view()})',
+     [T + "orders_place/test_be04_wiring.py::test_a_stock_view_never_reaches_the_model"]),
+    ("m03 L1: any Ok from reserve counts as a live hold", OP,
+     "if isinstance(done.result, Ok) and done.result.value.status is HoldStatus.HELD:",
+     "if isinstance(done.result, Ok):",
+     [T + "orders_place/test_be04_wiring.py::test_a_rerun_that_finds_its_hold_no_longer_live_escalates_and_never_authorizes"]),
+    ("m04 L6: no MAX_QUANTITY in M12", OP,
+     "or not 1 <= line.quantity <= MAX_QUANTITY", "or line.quantity < 1",
+     [T + "orders_place/test_m12_lines.py::test_a_quantity_over_the_reservation_limit_is_invalid_line_before_any_claim"]),
+    ("m05 L6: no MAX_LINES in M12", OP,
+     "or not 1 <= len(order.lines) <= MAX_LINES", "or len(order.lines) < 1",
+     [T + "orders_place/test_m12_lines.py::test_more_lines_than_a_reservation_takes_is_invalid_line"]),
+    ("m06 L3: the conflict code is idempotency_conflict again", SRC / "inventory/model.py",
+     '"reservation_conflict",', '"idempotency_conflict",',
+     [T + "inventory/test_be04_contract.py", "-k", "conflict"]),
+    ("m07 L4: the message says nothing changed again", SRC / "inventory/model.py",
+     '    "The inventory store could not be reached.",',
+     '    "The inventory store could not be reached. Nothing was changed.",',
+     [T + "inventory/test_be04_contract.py::test_the_unavailable_message_never_claims_that_nothing_changed"]),
+    ("m08 data pin: the fit also reorders every order's lines", SRC / "generate.py",
+     'lines = [dict(line) for line in order["lines"]]',
+     'lines = [dict(line) for line in reversed(order["lines"])]',
+     [T + "test_be04_data.py"]),
+]
+
+for name, path, old, new, tests in MUTANTS:
+    text = path.read_text()
+    if text.count(old) != 1:
+        print(f"{name}: NOT APPLIED (pattern count {text.count(old)})")
+        continue
+    path.write_text(text.replace(old, new))
+    try:
+        run = subprocess.run(
+            ["uv", "run", "--offline", "pytest", "-q", "-p", "no:cacheprovider", *tests],
+            cwd=ROOT, capture_output=True, text=True,
+        )
+        last = (run.stdout.strip().splitlines() or ["(no output)"])[-1]
+        print(f"{name}: {'CAUGHT' if run.returncode else 'SURVIVED'}: {last}")
+    finally:
+        path.write_text(text)

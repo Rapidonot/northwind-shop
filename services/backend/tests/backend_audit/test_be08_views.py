@@ -396,7 +396,7 @@ def test_every_view_built_under_src_uses_a_read_only_constant() -> None:
         "AuditedOrderStore",
         # Row #26 (stop 5, approved by the user 2026-11-24): the case queue's view is checked too.
         "AuditedCaseQueue",
-        # Row #25 (BE-04; stop 5, awaiting the user's approval): the inventory view is checked too.
+        # Row #25 (BE-04; stop 5, approved 2026-11-26): the inventory view is checked too.
         "AuditedInventoryPort",
     }
     # Advisor finding 8: CATALOG_READ is admitted in the placement module only, as approved.

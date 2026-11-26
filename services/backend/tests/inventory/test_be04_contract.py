@@ -644,3 +644,12 @@ def test_a_commit_refused_on_the_two_clock_path_is_never_reported_held_again(
     err(h.inv.commit(idempotency_key="x"), "hold_expired", "business")
     again = ok(reserve(h, key="x", order_id="O000001", lines=[Line(A, 1)]))
     assert again.status is not HoldStatus.HELD
+
+
+def test_the_unavailable_message_never_claims_that_nothing_changed() -> None:
+    """Security review L4: a connection lost at COMMIT may follow a write that took effect."""
+    from northwind_backend.inventory.model import UNAVAILABLE
+
+    assert UNAVAILABLE.code == "inventory_unavailable" and UNAVAILABLE.is_retryable
+    assert "nothing" not in UNAVAILABLE.message.lower()
+    assert "changed" not in UNAVAILABLE.message.lower()
