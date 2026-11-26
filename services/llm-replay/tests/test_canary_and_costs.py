@@ -259,13 +259,20 @@ def test_cassettes_written_with_a_cost_stay_scanner_clean(tmp_path: Path) -> Non
     )
 
 
+# `spike` holds FOUND-2's spike recordings, two of them with long float costs written before costs
+# were fixed (row 18a, the user's decision); every other suite is read (`eval-answers` only before).
+OLD_FLOAT_SUITES = frozenset({"spike"})
+
+
 def test_every_committed_cassette_cost_is_at_fixed_precision() -> None:
     repo = Path(__file__).resolve().parents[3]
-    files = sorted((repo / "cassettes" / "eval-answers").glob("*.json"))
+    suites = sorted(p for p in (repo / "cassettes").iterdir() if p.is_dir())
+    assert len(suites) > 2
+    files = [f for s in suites if s.name not in OLD_FLOAT_SUITES for f in sorted(s.glob("*.json"))]
     assert files
     for file in files:
         value = json.loads(file.read_text())["cost_usd"]
-        assert value == round(value, COST_DECIMALS), file.name
+        assert value == round(value, COST_DECIMALS), f"{file.parent.name}/{file.name}"
 
 
 # --- generated IDs vs the PAN check (`make ci` failed on a ledger ID) ---------------------------

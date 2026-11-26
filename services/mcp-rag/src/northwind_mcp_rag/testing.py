@@ -108,9 +108,14 @@ def _no_db() -> Any:
 
 @contextlib.contextmanager
 def serve_retriever(
-    retriever: Any, make_caller: Callable[..., Any], *, key: bytes = KEY
+    retriever: Any,
+    make_caller: Callable[..., Any],
+    *,
+    key: bytes = KEY,
+    clock: Callable[[], float] = time.time,
 ) -> Iterator[tuple[str, RagServer]]:
-    """A real mcp-rag over HTTP, with the real `retrieve_context`, searching through `retriever`."""
+    """A real mcp-rag over HTTP, with the real `retrieve_context`, searching through `retriever`.
+    `clock` is the token gate's (row 18a: a test that must not race token expiry passes its own)."""
     from northwind_mcp_rag.retrieve import TOOLS
 
     server = RagServer(
@@ -118,6 +123,7 @@ def serve_retriever(
         key=key,
         tools=TOOLS,
         searcher=CallerSearcher(retriever, make_caller),
+        clock=clock,
     )
     with running(server) as url:
         yield url, server

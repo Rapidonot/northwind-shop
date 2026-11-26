@@ -200,15 +200,22 @@ def test_the_server_does_not_start_on_policy_that_lost_a_fact(
         app.build()
 
 
-@pytest.mark.parametrize("key", ["4242424242424242a", "42424242", "4111-1111-11"])
+@pytest.mark.parametrize(
+    "key", ["4242424242424242a", "42424242", "4111-1111-11", "a1b2c3d4", "key-123456-x"]
+)
 def test_the_split_card_check_never_refuses_a_good_request_for_its_key(
     live: tuple[OrdersServer, str], key: str
 ) -> None:
     """Beside well-formed arguments the pair check is silent: what it adds is only for malformed
-    ones. (A whole card number in the key itself is still `holds_card_data`'s.)"""
+    ones. (A whole card number in the key itself is still `holds_card_data`'s.) Since the user's D2
+    (b), row 18a, 2026-11-26: a key with more than 6 digits in a row ("42424242", "4111-1111-11")
+    is refused as a validation error, so a card cannot be split between an order number and a key
+    (test_18a_key_digits.py); a key with 6 or fewer is still recorded."""
     body = call(live[1], testing.token()[0], **{**GOOD, "idempotency_key": key})[2]
     if key.startswith("4242424242424242"):
         assert body["code"] == "card_data_refused"
+    elif key in ("42424242", "4111-1111-11"):
+        assert body["code"] == "invalid_idempotency_key"
     else:
         assert body["result"] == "recorded"
 
