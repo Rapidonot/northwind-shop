@@ -33,12 +33,14 @@ _CVV_NAME = (
     rf"|security{_SEP}code|card{_SEP}(?:code|verification{_SEP}(?:code|value)))(?![^\W_])"
 )
 # A code may be spaced out, like "7 3 7", or (row 18a, BE-07 F3) written digit by digit with
-# punctuation, like "1, 2, 3", "1.2.3" or "7 / 3 / 7": single digits only, so "sizes 10, 12" is
-# not one.
+# punctuation, like "1, 2, 3", "1.2.3", "7 / 3 / 7" or "7–3–7": single digits only, so "sizes 10,
+# 12" is not one.
+# Security L5: comma, dot, semicolon, colon, slash, hyphen or any dash, a space either side or not.
+_CODE_SEP = "[,.;:/\\-\u2010-\u2015]"
 _CVV_DIGITS = (
     r"(?:(?<!\d)\d(?:[ -]?\d){2,3}(?!\d)"
-    r"|(?<!\d)(?<!\d[,.;/])(?<!\d[,.;/] )(?<!\d [,.;/])(?<!\d [,.;/] )"
-    r"\d(?: ?[,.;/] ?\d){2,3}(?!\d| ?[,.;/] ?\d| \d))"
+    rf"|(?<!\d)(?<!\d{_CODE_SEP})(?<!\d{_CODE_SEP} )(?<!\d {_CODE_SEP})(?<!\d {_CODE_SEP} )"
+    rf"\d(?: ?{_CODE_SEP} ?\d){{2,3}}(?!\d| ?{_CODE_SEP} ?\d| \d))"
 )
 MAX_CVV_GAP = 40
 _CVV = re.compile(

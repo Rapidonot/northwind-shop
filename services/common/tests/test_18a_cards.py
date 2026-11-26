@@ -58,3 +58,22 @@ def test_the_codes_found_before_are_still_found(text: str) -> None:
 )
 def test_a_card_split_between_an_order_number_and_a_digit_key_is_card_data() -> None:
     assert holds_card_data({"order_id": "O411111", "idempotency_key": "1111111111"})
+
+
+# ---- security review L5: other spacings and separators -----------------------------------------
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["CVV 1 , 2 , 3", "CVV 1 - 2 - 3", "CVV 7–3–7", "CVV 1:2:3", "security code 7 – 3 – 7"],
+)
+def test_a_code_with_other_spacing_or_separators_is_card_data(text: str) -> None:
+    assert contains_cvv(text)
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["CVV: 10 - 12 - 14", "Where is the CVV? Sizes 1 - 2 - 34.", "CVV 1 : 2 : 3 : 4 : 5"],
+)
+def test_a_near_miss_with_other_separators_is_no_card_data(text: str) -> None:
+    assert not contains_cvv(text)
