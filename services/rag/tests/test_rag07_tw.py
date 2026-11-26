@@ -21,7 +21,7 @@ QUESTIONS: list[tuple[str, frozenset[str]]] = [
     ("What is the exchange window for boots?", frozenset({POLICY})),
 ]
 
-# The user's decision (2026-11-26, stop 5, option A): the router stays frozen, so these stay failing.
+# The user's decision (2026-11-26, stop 5, option A): the router stays frozen; these stay failing.
 COLON = (
     "Known gap, RH7-059's class: a `key: value` directive is not read as text aimed at the "
     "system. Any row that wires the router fixes these first."
