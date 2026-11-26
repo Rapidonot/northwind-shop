@@ -866,6 +866,31 @@ def negated_in_sentence(before: str) -> bool:
     return bool(_NEGATION.search(_NEGATED_ADVERB.sub(",", sentence)))
 
 
+# Row 18a, part 4 (the user's decision, 2026-11-26: any listed over-blocking item, failing first,
+# accepted by step 0). Two stock words that state no stock, shown whatever was checked:
+# - an inability frame directly before "available" or "in stock", and the sentence's end right
+#   after it ("so I can't confirm it's available.", EV-042; "I can't say whether it's in stock
+#   right now.", EV-203);
+# - "available to me/you/us" after an information noun ("the information available to me", RT-004),
+#   unless the sentence names a product ID or a size ("The M is available to you" stays blocked).
+# Read only on the raw stream: `live_backed` feeds nothing, so it never counts them.
+_UNKNOWN_FRAME = re.compile(
+    r"\b(?:i|we)(?:\s{1,3}(?:also|still))?\s{1,3}(?:can['’]?t|cannot|can\s{1,3}not|couldn['’]?t)"
+    r"\s{1,3}(?:confirm|say|tell(?:\s{1,3}you)?)\s{1,3}(?:(?:whether|if|that)\s{1,3})?"
+    r"(?:it['’]s|it\s{1,3}is|they['’]re|they\s{1,3}are)\s{1,3}$"
+)
+_SENTENCE_CLOSE = re.compile(r"(?:\s{1,3}right\s{1,3}now|\s{1,3}now)?[*_`]{0,4}[.!?](?:\s|$)")
+_INFO_SUBJECT = re.compile(
+    r"\b(?:information|info|sources?|documents?|details|data|context|results|records)"
+    r"(?:\s{1,3}(?:that\s{1,3})?(?:is|are))?\s{1,3}$"
+)
+_AVAILABLE_TO = re.compile(r"\s{1,3}to\s{1,3}(?:me|you|us)\b")
+_PRODUCT_MARK = re.compile(r"\bP\d{4}|\bsizes?\b", re.IGNORECASE)  # a product ID, or "size"
+_SIZE_TOKEN = re.compile(r"(?<![\w'’])(?:XXS|XS|S|M|L|XL|XXL|[2-5]XL)(?![\w'’])")
+_IN_STOCK = re.compile(rf"in{_J}stock")
+_MARKS_ONLY = re.compile(r"[*_`]")
+
+
 def stems_of(text: str) -> frozenset[str]:
     return frozenset(POLICY_STEMS.findall(normal(text)))
 
@@ -1172,9 +1197,50 @@ class OutputCheck:
                 return True
             return stock_vouched(word, self.live, negated)
         if pattern.exempt == "live_stock":
+            if self._states_no_stock(view, found, span):
+                return True
             return stock_vouched(span, self.live, self._stock_negation(view, found))
 
         raise ValueError(f"unknown exemption: {pattern.exempt}")  # fail closed on a new kind
+
+    def _states_no_stock(self, view: View, found: re.Match[str], span: str) -> bool:
+        """Row 18a, part 4: a stock word in a sentence that says stock is not known, or that the
+        information is "available to me". Read on the raw stream only, so the text after the word is
+        there and the product check sees the case of a size."""
+        word = span.strip()
+        if not self._raw or not (word == "available" or _IN_STOCK.fullmatch(word)):
+            return False
+        lo, hi = view.raw_span(found.start(), found.end())
+        before = self._view(self._back(lo, L), lo).text
+        after = self._view(hi, min(len(self._raw), hi + 40)).text
+        if _UNKNOWN_FRAME.search(before) and _SENTENCE_CLOSE.match(after):
+            return True
+        if word != "available" or not (_INFO_SUBJECT.search(before) and _AVAILABLE_TO.match(after)):
+            return False
+        # The sentence up to the word, so the stream and the whole text agree: what comes after
+        # it may not have arrived yet. The information noun right before the word is its subject.
+        start = max(0, self._raw.rfind("\n", 0, lo) + 1, lo - 4 * L)
+        stops = [b.end() for b in _BOUNDARY.finditer(self._raw, start, lo)]
+        sentence = self._raw[stops[-1] if stops else start : lo]
+        return not (_SIZE_TOKEN.search(sentence) or _PRODUCT_MARK.search(sentence))
+
+    def _no_stock_pending(self, pattern: Pattern, view: View, found: re.Match[str]) -> bool:
+        """Row 18a, part 4: a frame of `_states_no_stock` stands before the word, and the few
+        characters after it so far could still become its close or "to me"."""
+        if pattern.exempt != "live_stock" or not self._raw:
+            return False
+        word = re.sub(r"\s+", " ", view.text[found.start() : found.end()]).strip()
+        if not (word == "available" or _IN_STOCK.fullmatch(word)):
+            return False
+        lo, hi = view.raw_span(found.start(), found.end())
+        if len(self._raw) - hi > 16:
+            return False
+        before = self._view(self._back(lo, L), lo).text
+        after = re.sub(r"\s+", " ", _MARKS_ONLY.sub("", self._view(hi, len(self._raw)).text))
+        closes = [" right now.", " now."] if _UNKNOWN_FRAME.search(before) else []
+        if word == "available" and _INFO_SUBJECT.search(before):
+            closes += [" to me ", " to you ", " to us "]
+        return any(close.startswith(after) for close in closes)
 
     def _stock_negation(self, view: View, found: re.Match[str]) -> bool | None:
         """`_negated`, then the sentence it does not reach (row 18a, M-B): None when a negation sits
@@ -1388,6 +1454,12 @@ class OutputCheck:
                         continue
                     if not stems or self._vouched(view.text, found):
                         continue
+                if not final and self._no_stock_pending(pattern, view, found):
+                    # Row 18a, part 4: what follows may still close the sentence ("right now.")
+                    # or say "to me": held, as a duration is, until it can be told.
+                    if self._undecided is None or start < self._undecided:
+                        self._undecided = start
+                    continue
                 if self._exempt(pattern, view, found, self._raw[start:end]):
                     continue
                 if best is None or start < best.start:

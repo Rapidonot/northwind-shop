@@ -77,3 +77,11 @@ Failing on base:
 
 Mutants (test_18a_output_check, test_30_tw_gaps, test_30_negation_cut, test_rag09_output_check): 9 of 9 killed
   M1 no sentence rule 17 failed; M2 no reply word 1; M3 restart not spoiled by a later comma 1; M4 no negated-adverb strip 1; M5 no negative polarity for zero/none/no 5; M6 a newline ends the sentence 2; M7 a decimal dot ends it 3; M8 reach 40 5; M9 view text instead of the raw stream 1
+
+## Part 4: services/assistant/tests/test_18a_over_blocking.py
+base: 31 failed, 34 passed; branch: 65 passed
+Failing on base: every listed sentence (shown as written, at every stock level, however the deltas fall).
+Passing on base: the 12 near-misses (blocked both ways) and the live_backed pin.
+Mutants (test_18a_over_blocking + test_18a_output_check): 6 of 6 killed
+  P1 any text after the word closes the sentence 6; P2 no information noun needed 2; P3 no product check 4; P4 no hold 5; P5 the raw-stream guard off 10; P6 the frame not anchored to the word 2
+  (a first P5, a flag that turned the exemption off in live_backed, survived: equivalent, as live_backed feeds nothing; the flag was removed)
