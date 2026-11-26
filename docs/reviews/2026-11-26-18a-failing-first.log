@@ -94,3 +94,11 @@ Mutants (test_scan_18a, test_scan, test_scan_split_secrets, test_scan_reassembly
   S1 no wide PAN 12; S2 no NBSP 5; S3 no Amex/Diners 5; S4 no dedupe 2; S5 no escaped x-api-key 3; S6 CR not split 1; S7 no unknown-delta finding 3; S8 no decoded walk 1 (after the tool-result test was added: it first survived); S9 no json blocks 1; S10 no joined blocks 3; S11 no carry 3; S12 carry not subtracted 2; S13 put keeps no carry 1; S14 carry of 4 4; S15 signature not read 2
 
 Full scan at $0 (cassettes, evals/contexts, evals/fixtures, evals/baselines, data/enrichment, data/embeddings, RAG-12-eval-review.md; canaries loaded): base 0 findings in 8.9 s, branch 0 findings in 24.5 s. A first version joined every earlier call of a test and did not finish in 600 s (backend-replay holds 5,935 calls of one test); replaced by a 256-character carry.
+
+## Part 2: services/common/tests/test_18a_cards.py, services/llm-replay/tests/test_scan_paths_18a.py, test_scan_embeddings.py (widened)
+base: 8 failed, 20 passed, 1 xfail; branch: 28 passed, 1 xfail (L4: D2)
+Failing on base: the 7 punctuated CVV spellings and test_ci_scans_the_cli_default_list (ci.yml named five roots).
+Passing on base: CVV near-misses and the codes found before; Makefile and EVAL_ROOTS pins; the widened embeddings tests (the change is to the test: its old body, a *.jsonl glob with no canaries, is mutant E1/E2 below and fails the new meta test).
+Mutants: 6 of 6 killed. C1 no new CVV form 7; C2 no mid-list guard 1; C3 no end guard 2; C4 multi-digit groups 2; E1 *.jsonl only 1; E2 no canaries 1
+Over-blocking at $0: old and new card checks over every recorded shopper message (7,185) and tool call (15,163): 0 differ.
+Shared cards.py: services/common, mcp-orders, mcp-catalog, mcp-rag, mcp-policy, gateway and backend unit tests (backend-care replay, test_be07_recorded.py, among them): 2,931 passed, 1 xfailed.

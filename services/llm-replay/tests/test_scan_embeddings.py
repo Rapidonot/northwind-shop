@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from northwind_llm_replay.cli import EVAL_ROOTS, cmd_scan
-from northwind_llm_replay.scan import scan_paths
+from northwind_llm_replay.scan import Finding, load_canaries, scan_paths
 
 pytestmark = pytest.mark.req("RAG-03")
 
@@ -59,9 +59,27 @@ def test_a_clean_frozen_file_passes(repo: Path) -> None:
     assert default_scan(repo) == 0
 
 
+def committed_scan(folder: Path, repo: Path) -> list[Finding]:
+    """Row 18a (M8): every file of the folder, whatever its name, with the answer key's canaries."""
+    return scan_paths([folder], canaries=load_canaries(repo, required=True))
+
+
 def test_the_committed_file_scans_clean() -> None:
     """H1 of the plan review: hex digests hold Luhn-valid digit runs, so keys are digit-free and
     numbers are short. Every finding here would fail `make ci`."""
-    files = sorted((REPO / "data" / "embeddings").glob("*.jsonl"))
-    assert files
-    assert scan_paths(files) == []
+    folder = REPO / "data" / "embeddings"
+    assert any(folder.iterdir())
+    assert committed_scan(folder, REPO) == []
+
+
+def test_the_committed_scan_reads_every_file_with_the_canaries(tmp_path: Path) -> None:
+    key = tmp_path / "data" / "fixtures" / "_answer_key.json"
+    key.parent.mkdir(parents=True)
+    key.write_text(json.dumps({"internal_only": [{"canary": "NWCANARY-0ddba11"}]}), "utf-8")
+    folder = tmp_path / "data" / "embeddings"
+    folder.mkdir(parents=True)
+    (folder / "vectors.json").write_text('{"note": "NWCANARY-0ddba11"}', encoding="utf-8")
+    (folder / "README").write_text(f"vector {PAN}", encoding="utf-8")
+    (folder / "clean.jsonl").write_text('{"vector": [0.5]}\n', encoding="utf-8")
+    flagged = {(Path(f.path).name, f.kind) for f in committed_scan(folder, tmp_path)}
+    assert flagged == {("vectors.json", "internal-canary"), ("README", "luhn-valid-pan")}

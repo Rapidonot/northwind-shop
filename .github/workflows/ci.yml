@@ -54,8 +54,10 @@ jobs:
       - run: uv run ruff check
       - run: uv run ruff format --check
       - run: uv run mypy services data evals
-      - name: Secret/PAN scan of cassettes (FOUND-2)
-        run: uv run python -m northwind_llm_replay.cli scan cassettes evals/contexts evals/fixtures evals/baselines docs/reviews/RAG-12-eval-review.md
+      # Row 18a (M8): no paths, so CI scans the one default list `make scan-cassettes` scans (`cli.EVAL_ROOTS`,
+      # cassettes, ledger and proxy log), data/enrichment and data/embeddings included. Pinned by test_scan_paths_18a.py.
+      - name: Secret/PAN scan of cassettes, eval files, enrichment and frozen vectors (FOUND-2)
+        run: uv run python -m northwind_llm_replay.cli scan
       - run: uv run pytest -n auto --dist loadgroup
 
   # DEV-1: the integration tests in their own job, beside `python`, so the two run at the same time. Still
