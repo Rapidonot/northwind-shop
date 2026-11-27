@@ -19,6 +19,8 @@ from typing import Any
 
 import pytest
 
+from northwind_assistant import output_check
+
 pytestmark = pytest.mark.req("A2A-05")
 
 _PATH = Path(__file__).with_name("test_a2a05_partner.py")
@@ -149,11 +151,17 @@ def test_the_unserved_and_narrative_turns_are_the_last_two() -> None:
     }
 
 
-@pytest.mark.parametrize("name", NAMES)
-def test_citations_are_marked_in_shown_in_order_and_come_from_this_turn(name: str) -> None:
+# Row #18 W11 (the user's stop-5 yes, 2026-11-27): the one answer that may carry no citation.
+# Partner turns have no order tools (option B), so the scoped-order turn can answer with this
+# capability refusal alone. An exact-text allowlist, not a claim heuristic: no existing rule
+# detects product claims, so any other uncited answer still fails check 3.
+UNCITED_REFUSALS = frozenset({"Orders can't be placed in chat."})
+
+
+def citation_problems(fixture: dict[str, Any]) -> list[str]:
     """Check 3 (hard rule 5): the citations list is the markers of `shown`, in order of first
-    appearance, and each is a source the turn retrieved."""
-    fixture = fixture_of(name)
+    appearance, and each is a source the turn retrieved. It may be empty only when `shown` is
+    exactly an allowlisted capability refusal and the output check flags nothing in it."""
     shown = fixture["answer"]["shown"]
     order: list[str] = []
     for group in partner.CITATION.findall(shown):
@@ -161,10 +169,50 @@ def test_citations_are_marked_in_shown_in_order_and_come_from_this_turn(name: st
             if part not in order:
                 order.append(part)
     cited = fixture["answer"]["citations"]
-    assert cited, name
-    assert [c for c in order if c in cited] == cited
-    assert partner.check_citations(fixture) == []
-    assert set(cited) <= {c["source_id"] for c in partner.chunks_in(fixture)}
+    problems: list[str] = []
+    if not cited and not (shown in UNCITED_REFUSALS and output_check.hits(shown) == {}):
+        problems.append("no citation, and not an allowlisted refusal")
+    if [c for c in order if c in cited] != cited:
+        problems.append("citations are not the markers of shown, in order")
+    problems += partner.check_citations(fixture)
+    if not set(cited) <= {c["source_id"] for c in partner.chunks_in(fixture)}:
+        problems.append("a citation is not a source of this turn")
+    return problems
+
+
+@pytest.mark.parametrize("name", NAMES)
+def test_citations_are_marked_in_shown_in_order_and_come_from_this_turn(name: str) -> None:
+    """Check 3 (hard rule 5), on every recorded fixture."""
+    assert citation_problems(fixture_of(name)) == [], name
+
+
+def test_the_uncited_scoped_order_answer_is_exactly_the_allowlisted_refusal() -> None:
+    """Row #18 W11 pin (a): order-01's answer is the refusal, word for word, and passes check 3."""
+    fixture = fixture_of("order-01-breakwater")
+    assert fixture["answer"]["shown"] == "Orders can't be placed in chat."
+    assert fixture["answer"]["citations"] == []
+    assert output_check.hits(fixture["answer"]["shown"]) == {}
+    assert citation_problems(fixture) == []
+    assert UNCITED_REFUSALS == {"Orders can't be placed in chat."}
+
+
+@pytest.mark.parametrize(
+    "shown",
+    [
+        "The Corvane Breakwater Shell is fully waterproof, with a membrane rated to 15,000 mm.",
+        "Orders can't be placed in chat. The Breakwater Shell runs true to size.",
+        "Orders can't be placed in chat. ",
+        "orders can't be placed in chat.",
+        "I can't place orders in chat.",
+    ],
+)
+def test_an_uncited_answer_that_is_not_the_exact_refusal_fails_check_3(shown: str) -> None:
+    """Row #18 W11 mutant (b): an uncited product claim, or any text other than the exact refusal,
+    still fails check 3."""
+    for name in ("order-01-breakwater", "pq-01-breakwater-waterproofing"):
+        fixture = json.loads(json.dumps(fixture_of(name)))
+        fixture["answer"].update(shown=shown, sent=shown, citations=[])
+        assert "no citation, and not an allowlisted refusal" in citation_problems(fixture), name
 
 
 def test_the_stale_skip_boundaries() -> None:

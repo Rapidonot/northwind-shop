@@ -84,6 +84,9 @@ W=~/Projects/northwind-shop; R=~/.northwind/runner
 - **`a2a-05-partner` only:** its recorder accepts a turn only when the turn's cassettes are exactly the ones this
   run made (`run_cassette_problems`). Remove the suite's old cassettes before its window, not after it.
   W11's first run was refused for this and cost $0.050441.
+- **After each window, run every test file that reads the suite's fixtures and cassettes** (`git grep -l "<suite>"
+  -- '*.py'`), not just the recorder's. The user's rule, 2026-11-27, after W11: `make record` exited 0, but
+  `test_a2a05_partner_criteria.py`, which the recorder does not run, failed on the fresh `order-01`.
 
 ## 3. The order, with budgets
 Cheapest and least coupled first: the backend suites don't see the assistant's prompt, so a freeze slip there costs

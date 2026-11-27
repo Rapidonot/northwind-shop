@@ -3,16 +3,14 @@
   "answer": {
     "citations": [
       "P0122",
-      "SG-BEDDING",
-      "P0124",
-      "P0126"
+      "SG-BEDDING"
     ],
     "outcome": "answered",
     "resets": 0,
-    "sent": "The Halvardine Home Organic Sateen Sheet Set has a 15-inch pocket depth and a 400 thread count [P0122].\n\n**Does it fit a deep mattress?** It depends on how deep your mattress is. The fitted sheet fits mattresses up to 15 inches deep [P0122]. That is above the standard range, which goes up to 14 inches. But our size guide says a 15-inch pocket is not a deep-pocket sheet. Deep-pocket sheets fit mattresses 16 to 18 inches deep [SG-BEDDING]. Measure your mattress from the bottom seam to the top, including any topper. If it's over 15 inches, this set won't fit.\n\n**Deep-pocket options** that fit up to 18 inches:\n- Larchpell Organic Sateen Deep Sheet Set: 400 thread count, 100% organic cotton sateen. It comes in Twin, Full and King [P0124].\n- Halvardine Home Thistle Sheet Set: 300 thread count, long-staple cotton sateen. It comes in Twin, Full, Queen and King [P0126].\n\nThe Organic Sateen set comes in Full, Queen and King, in Ivory [P0122]. For current prices and stock, please check the product pages.",
-    "shown": "The Halvardine Home Organic Sateen Sheet Set has a 15-inch pocket depth and a 400 thread count [P0122].\n\n**Does it fit a deep mattress?** It depends on how deep your mattress is. The fitted sheet fits mattresses up to 15 inches deep [P0122]. That is above the standard range, which goes up to 14 inches. But our size guide says a 15-inch pocket is not a deep-pocket sheet. Deep-pocket sheets fit mattresses 16 to 18 inches deep [SG-BEDDING]. Measure your mattress from the bottom seam to the top, including any topper. If it's over 15 inches, this set won't fit.\n\n**Deep-pocket options** that fit up to 18 inches:\n- Larchpell Organic Sateen Deep Sheet Set: 400 thread count, 100% organic cotton sateen. It comes in Twin, Full and King [P0124].\n- Halvardine Home Thistle Sheet Set: 300 thread count, long-staple cotton sateen. It comes in Twin, Full, Queen and King [P0126].\n\nThe Organic Sateen set comes in Full, Queen and King, in Ivory [P0122]. For current prices and stock, please check the product pages."
+    "sent": "The Halvardine Home Organic Sateen Sheet Set has a 15-inch pocket depth and a 400 thread count [P0122].\n\nIt isn't a deep-pocket sheet. A 15-inch pocket is above standard, which fits mattresses up to 14 inches. Deep pockets are for mattresses 16 to 18 inches deep [SG-BEDDING]. This set fits mattresses up to 15 inches deep, including any topper [P0122][SG-BEDDING]. It won't fit a deep mattress of 16 inches or more.",
+    "shown": "The Halvardine Home Organic Sateen Sheet Set has a 15-inch pocket depth and a 400 thread count [P0122].\n\nIt isn't a deep-pocket sheet. A 15-inch pocket is above standard, which fits mattresses up to 14 inches. Deep pockets are for mattresses 16 to 18 inches deep [SG-BEDDING]. This set fits mattresses up to 15 inches deep, including any topper [P0122][SG-BEDDING]. It won't fit a deep mattress of 16 inches or more."
   },
-  "assistant_id": "assistant:v1:claude-sonnet-5-5:prompt-eb39dcf5:check-0cb61e75",
+  "assistant_id": "assistant:v1:claude-sonnet-5-5:prompt-26740a49:check-ba8577ea",
   "context": [
     {
       "chunk_id": "product:P0122:0",
@@ -55,13 +53,14 @@
   "name": "pq-05-sateen-sheet-pockets",
   "note": "A2A-05 replays this text by name; never when assistant_id is not current.",
   "provisional": true,
-  "recorded": "2026-11-13",
+  "recorded": "2026-11-27",
   "refinements": [],
   "region": "US",
   "script_sha256": "2ca30e4d19077f4463ad672bb8afc05bc239be181cb5682ef4fe0f168eacf235",
   "suite": "a2a-05-partner",
   "upstream_calls": [
     {
+      "cassette": "ebf0cbc15d2cca67e323649672a9499eaece85c118874dffce6406542487f3b8",
       "model": "claude-sonnet-5-5",
       "stop_reason": "end_turn"
     }

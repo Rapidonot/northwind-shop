@@ -6,10 +6,10 @@
     ],
     "outcome": "answered",
     "resets": 0,
-    "sent": "No, the Corvane Juniper Hiking Pants run slightly large, so you may want to consider sizing down. The inseam is 30 in. [P0072]\n\nThey have a regular fit and four-way stretch fabric. [P0072]",
-    "shown": "No, the Corvane Juniper Hiking Pants run slightly large, so you may want to consider sizing down. The inseam is 30 in. [P0072]\n\nThey have a regular fit and four-way stretch fabric. [P0072]"
+    "sent": "The Corvane Juniper Hiking Pants run slightly large [P0072]. The inseam is 30 in [P0072].",
+    "shown": "The Corvane Juniper Hiking Pants run slightly large [P0072]. The inseam is 30 in [P0072]."
   },
-  "assistant_id": "assistant:v1:claude-sonnet-5-5:prompt-eb39dcf5:check-0cb61e75",
+  "assistant_id": "assistant:v1:claude-sonnet-5-5:prompt-26740a49:check-ba8577ea",
   "context": [
     {
       "chunk_id": "product:P0072:0",
@@ -52,13 +52,14 @@
   "name": "pq-04-juniper-pants-fit",
   "note": "A2A-05 replays this text by name; never when assistant_id is not current.",
   "provisional": true,
-  "recorded": "2026-11-13",
+  "recorded": "2026-11-27",
   "refinements": [],
   "region": "US",
   "script_sha256": "2ca30e4d19077f4463ad672bb8afc05bc239be181cb5682ef4fe0f168eacf235",
   "suite": "a2a-05-partner",
   "upstream_calls": [
     {
+      "cassette": "2ca7856da236d111d83fd044ec07ea2eee1d2230e618f3eaad751be872713c09",
       "model": "claude-sonnet-5-5",
       "stop_reason": "end_turn"
     }

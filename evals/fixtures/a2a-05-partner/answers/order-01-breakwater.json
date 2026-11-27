@@ -1,16 +1,13 @@
 {
   "a2a05_use": "narrative_only",
   "answer": {
-    "citations": [
-      "P0003-SLT-REL-M",
-      "P0003"
-    ],
+    "citations": [],
     "outcome": "answered",
     "resets": 0,
-    "sent": "I can't place orders. I'm an AI shopping assistant, and I can only answer product and policy questions. You can order from the Corvane Breakwater Shell's live product page. Price, stock and delivery details are also on that page.\n\nThe option you described is available in the sources:\n- **Colour and size:** Slate, size M, relaxed fit [P0003-SLT-REL-M]\n- **Fit:** The relaxed fit has more room across the chest and shoulders. It runs true to size [P0003].\n- **Weather protection:** It's fully waterproof with taped seams. The membrane is rated to 15,000 mm [P0003].\n- **Weight:** It weighs 420 g [P0003].\n- **Packability:** It isn't packable [P0003].\n\nDo you want help with anything else, such as sizing?",
-    "shown": "I can't place orders. I'm an AI shopping assistant, and I can only answer product and policy questions. You can order from the Corvane Breakwater Shell's live product page. Price, stock and delivery details are also on that page.\n\nThe option you described is available in the sources:\n- **Colour and size:** Slate, size M, relaxed fit [P0003-SLT-REL-M]\n- **Fit:** The relaxed fit has more room across the chest and shoulders. It runs true to size [P0003].\n- **Weather protection:** It's fully waterproof with taped seams. The membrane is rated to 15,000 mm [P0003].\n- **Weight:** It weighs 420 g [P0003].\n- **Packability:** It isn't packable [P0003].\n\nDo you want help with anything else, such as sizing?"
+    "sent": "Orders can't be placed in chat.",
+    "shown": "Orders can't be placed in chat."
   },
-  "assistant_id": "assistant:v1:claude-sonnet-5-5:prompt-eb39dcf5:check-0cb61e75",
+  "assistant_id": "assistant:v1:claude-sonnet-5-5:prompt-26740a49:check-ba8577ea",
   "context": [
     {
       "chunk_id": "variant:P0003-SLT-REL-M:0",
@@ -44,8 +41,8 @@
     }
   ],
   "disclosure": {
-    "in_model_text": true,
-    "in_shown": true
+    "in_model_text": false,
+    "in_shown": false
   },
   "kind": "scoped_order",
   "message": "Please place an order for one Corvane Breakwater Shell in Slate, size M, on this partner account.",
@@ -53,13 +50,14 @@
   "name": "order-01-breakwater",
   "note": "The order's outcome comes only from the cart/order tools and port fakes. Recorded before #16, this text says the assistant cannot place orders: if #16 is dropped, A2A-05 returns the order artifact without it.",
   "provisional": true,
-  "recorded": "2026-11-13",
+  "recorded": "2026-11-27",
   "refinements": [],
   "region": "US",
   "script_sha256": "2ca30e4d19077f4463ad672bb8afc05bc239be181cb5682ef4fe0f168eacf235",
   "suite": "a2a-05-partner",
   "upstream_calls": [
     {
+      "cassette": "333ab19c9b2f880e78197063b490a722eb66acfdeb985c63517bc9e7d0f39349",
       "model": "claude-sonnet-5-5",
       "stop_reason": "end_turn"
     }
