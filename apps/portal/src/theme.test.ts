@@ -91,9 +91,11 @@ describe("[SA-01] the Bold utility look", () => {
     expect(grids.some((b) => /repeat\(4,/.test(b))).toBe(true);
   });
 
-  it("underlines the selected department with 2px of ink", () => {
+  // SA-01 PR 2 (home-tabs.png): the PR 1 underline became a tab filled black, as the user asked.
+  it("fills the selected department tab with ink, its text on the ground colour", () => {
     const selected = RULES.find((r) => r.selector === '.departments a[aria-current="page"]')?.body ?? "";
-    expect(selected).toMatch(/border-bottom:\s*2px solid var\(--ink\)/);
+    expect(selected).toMatch(/background:\s*var\(--ink\)/);
+    expect(selected).toMatch(/color:\s*var\(--ground\)/);
   });
 
   it("separates product-page sections with 8px grey", () => {

@@ -1,5 +1,5 @@
 import { href } from "./router";
-import { displayName, formatMoney, heroImage, tileImage, type Tile } from "./shopApi";
+import { displayName, heroImage, priceText, tileImage, type Tile } from "./shopApi";
 
 /** Every image box is 1:1 with the photo contained, never cropped, on the tile grey (rule 3 of the
  * trial build). With no photo, the box stays plain. The alt text is the full catalog name. */
@@ -18,7 +18,7 @@ export function ProductTile({ tile }: { tile: Tile }) {
         <ProductImage id={tile.product_id} name={tile.name} photo={tile.photo} size="tile" />
         <span className="tile-brand">{tile.brand}</span>
         <span className="tile-name">{displayName(tile.brand, tile.name)}</span>
-        <span className="tile-price">{tile.from_price ? `From ${formatMoney(tile.from_price)}` : "Not sold in your region"}</span>
+        <span className="tile-price">{priceText(tile)}</span>
       </a>
     </li>
   );

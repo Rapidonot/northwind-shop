@@ -1,5 +1,6 @@
 import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { AiDisclosure } from "./AiDisclosure";
+import { mightBeCardData } from "./cardGuard";
 import {
   type ChatEvent,
   type ErrorCode,
@@ -127,12 +128,15 @@ export const MAX_HANDOFF_TURN_CHARS = 2000;
 
 /** `onTurnEnd` (row #16): called when a turn has ended, however it ended, so the cart can be read
  * again. `handoffStatus` (row #23): tells the chat when a person has taken over; by default no one
- * ever does, because no staff side exists yet. */
+ * ever does, because no staff side exists yet. `suggestions` (SA-01 PR 2): questions offered as
+ * buttons; a click starts a new conversation, then sends the question exactly as written. */
 export function Chat({
   onTurnEnd,
   handoffStatus = NO_STAFF_YET,
-}: { onTurnEnd?: () => void; handoffStatus?: HandoffStatus } = {}) {
+  suggestions = [],
+}: { onTurnEnd?: () => void; handoffStatus?: HandoffStatus; suggestions?: readonly string[] } = {}) {
   const [message, setMessage] = useState("");
+  const [asked, setAsked] = useState<string | null>(null);
   const [turn, setTurn] = useState<Turn>(EMPTY);
   const [busy, setBusy] = useState(false);
   const [handoff, setHandoff] = useState<HandoffState>({ kind: "idle" });
@@ -170,14 +174,31 @@ export function Chat({
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    await ask(message);
+  }
+
+  /** SA-01 PR 2: a fresh conversation, as the recordings were made. Nothing of the last one is kept:
+   * the shown turn, the question box and the turns a handoff would send. The gateway keeps no
+   * conversation (`/api/chat` takes one message), so this is all a new conversation needs. */
+  async function suggest(question: string) {
+    unwatch.current();
+    unwatch.current = () => {};
+    history.current = [];
+    setHandoff({ kind: "idle" });
+    setMessage("");
+    await ask(question);
+  }
+
+  async function ask(question: string) {
     setBusy(true);
     setTurn(EMPTY);
-    const asked = message;
+    // Shown back only if it can't be card data; a refused message is dropped from the screen too.
+    setAsked(mightBeCardData(question) ? null : question);
     let shown = "";
     let refused = false;
     let handedOff = false;
     try {
-      await sendMessage(asked, (chatEvent) => {
+      await sendMessage(question, (chatEvent) => {
         if (chatEvent.type === "token") shown += chatEvent.text;
         else if (chatEvent.type === "reset") shown = "";
         else if (chatEvent.type === "refused") refused = true;
@@ -188,7 +209,8 @@ export function Chat({
       setTurn((current) => apply(current, { type: "error", code: "internal" }));
     } finally {
       // A refused message was never sent, so it is never part of a handoff either (hard rule 1).
-      if (!refused) remember({ role: "shopper", text: asked }, { role: "assistant", text: shown });
+      if (refused) setAsked(null);
+      else remember({ role: "shopper", text: question }, { role: "assistant", text: shown });
       setBusy(false);
       onTurnEnd?.();
     }
@@ -229,6 +251,11 @@ export function Chat({
         Talk to a person
       </button>
       <HandoffNotice state={handoff} onRetry={() => void startHandoff(lastTrigger.current)} />
+      {asked !== null && (
+        <p className="chat-asked" aria-label="Your message">
+          {asked}
+        </p>
+      )}
       <p data-testid="answer" aria-live="polite">
         {linked(turn.answer, cited)}
       </p>
@@ -252,6 +279,22 @@ export function Chat({
             );
           })}
         </ul>
+      )}
+      {suggestions.length > 0 && (
+        <div className="chat-suggestions" role="group" aria-label="Suggested questions">
+          <p className="muted">Suggested questions (each starts a new conversation):</p>
+          {suggestions.map((question) => (
+            <button
+              key={question}
+              type="button"
+              className="suggestion"
+              disabled={busy || handoffOpen}
+              onClick={() => void suggest(question)}
+            >
+              {question}
+            </button>
+          ))}
+        </div>
       )}
     </section>
   );
