@@ -160,7 +160,9 @@ export async function fetchOrders(): Promise<OrdersState> {
     const response = await sessionFetch("/api/orders", { credentials: "same-origin" });
     if (response.status === 401) return { kind: "signed-out" };
     if (!response.ok) return { kind: "unavailable" };
-    const body = (await response.json()) as { orders?: unknown };
+    const body = (await response.json()) as { orders?: unknown; signed_in?: unknown };
+    // Signed out is a 200 with `signed_in: false` and no list: never read as "no orders".
+    if (body.signed_in === false && !("orders" in body)) return { kind: "signed-out" };
     return Array.isArray(body.orders) ? { kind: "ready", orders: body.orders as OrderEntry[] } : { kind: "unavailable" };
   } catch {
     return { kind: "unavailable" };

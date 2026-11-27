@@ -172,6 +172,7 @@ describe("[SA-01] cartApi: a failed read is never a valid empty result", () => {
   it("fetchOrders tells signed-out (401), failed (503, malformed, thrown) and a genuinely empty list apart", async () => {
     const cases: Array<[() => Response, string]> = [
       [() => new Response("{}", { status: 401 }), "signed-out"],
+      [() => Response.json({ signed_in: false, message: "Sign in to see your orders." }), "signed-out"],
       [() => new Response("", { status: 503 }), "unavailable"],
       [() => Response.json({ orders: null }), "unavailable"],
       [() => Response.json({ total: 0 }), "unavailable"],

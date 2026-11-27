@@ -28,7 +28,9 @@ def w(monkeypatch: pytest.MonkeyPatch) -> Iterator[World]:
 @pytest.mark.parametrize("probe", ["?shopper_id=S0001", "?shopper=S0001&customer_id=S0001"])
 def test_a_query_parameter_never_chooses_whose_orders_are_shown(w: World, probe: str) -> None:
     anonymous = w.run(lambda c: c.get(f"/api/orders{probe}", headers={"cookie": session_cookie(A)}))
-    assert anonymous.status_code == 401 and "orders" not in anonymous.json()
+    # SA-01 PR 2: signed out is 200 with signed_in false (no failed request in the browser).
+    assert anonymous.status_code == 200 and anonymous.json()["signed_in"] is False
+    assert "orders" not in anonymous.json()
     other = w.run(
         lambda c: c.get(f"/api/orders{probe}", headers={"cookie": signed_in(B, OTHER_SHOPPER)})
     )

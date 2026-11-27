@@ -30,9 +30,10 @@ test.describe("[SA-01] [CHK-02] add → quantity → checkout → Pay (demo) →
     const lines = page.getByRole("list", { name: "Bag items" }).getByRole("listitem");
     await expect(lines).toHaveCount(1);
     await lines.first().getByRole("button", { name: "Increase quantity" }).click();
-    await expect(lines.first().getByLabel("Quantity")).toHaveText("2");
+    // Exact: the control's group and its − / + buttons also have "quantity" in their names.
+    await expect(lines.first().getByLabel("Quantity", { exact: true })).toHaveText("2");
     await lines.first().getByRole("button", { name: "Decrease quantity" }).click();
-    await expect(lines.first().getByLabel("Quantity")).toHaveText("1");
+    await expect(lines.first().getByLabel("Quantity", { exact: true })).toHaveText("1");
 
     await page.getByRole("link", { name: "PROCEED TO CHECKOUT" }).click();
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Checkout");

@@ -5,8 +5,10 @@ agent, `shopper-portal`, with the shopper ID from the signed sign-in cookie in t
 never from a request value. Orders placed with Pay (demo) come from `demo_orders` for the same
 shopper. Newest first.
 
-- Not signed in: a fixed `permission` 401, "Sign in to see your orders." (the portal shows a
-  sign-in prompt), never an empty list (hard rule 10).
+- Not signed in: 200 `{"signed_in": false, "message": "Sign in to see your orders."}`, with no
+  `orders` key, so it can never be read as an empty list (hard rule 10). Signed out is a normal
+  state of a normal page, not an error: a 4xx would make the browser log a failed request on every
+  anonymous visit (the e2e "no errors" journey found it). The portal shows a sign-in prompt.
 - Any failure: one fixed `transient` 503; nothing beyond its type name reaches a log.
 """
 
@@ -140,7 +142,7 @@ async def orders(
     lister: Annotated[OrdersLister | None, Depends(orders_lister)],
 ) -> JSONResponse:
     if caller.shopper_id is None:
-        return envelope(401, "permission", False, SIGN_IN)
+        return JSONResponse(content={"signed_in": False, "message": SIGN_IN}, headers=NO_STORE)
     if lister is None:
         log.error("orders read failed: no key")
         return envelope(503, "transient", True, UNAVAILABLE)
@@ -152,4 +154,5 @@ async def orders(
     placed = demo_orders().of(caller.shopper_id)
     every = [*placed, *seeded]
     every.sort(key=lambda o: (o["placed_on"] or "", o["order_id"]), reverse=True)
-    return JSONResponse(content={"orders": every, "total": len(every)}, headers=NO_STORE)
+    body = {"signed_in": True, "orders": every, "total": len(every)}
+    return JSONResponse(content=body, headers=NO_STORE)

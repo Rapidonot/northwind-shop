@@ -17,6 +17,7 @@ from typing import Any
 
 import pytest
 
+from northwind_common import tool_scopes
 from northwind_common.catalog_tool import unlabel
 from northwind_common.errors import ENVELOPE_KEYS
 from northwind_mcp_catalog.cart_store import CartStore
@@ -200,19 +201,29 @@ def test_the_session_id_never_appears_in_any_output(url: str, store: FixtureCata
         assert session not in "".join(blocks)
 
 
-def test_the_staff_agent_and_the_portal_agent_cannot_write_a_cart(url: str) -> None:
+def test_the_staff_agent_cannot_write_a_cart_and_the_portal_writes_exactly_the_three(
+    url: str, store: FixtureCatalog
+) -> None:
+    """Row #16: the staff agent never touches a cart. SA-01 PR 2 (the user's stop 5 yes,
+    2026-11-27): the portal's agent writes its own session's cart with exactly the three cart
+    tools, for the bag's controls, and holds no other write."""
     session = new_session()
     staff = call(url, None, "get_cart", {}, agent="catalog-subagent", region=None)
     assert_error(staff, "permission", "not_allowed")
     for name in WRITES:
         assert_error(
-            call(url, session, name, ARGS[name], agent="shopper-portal"),
+            call(url, None, name, ARGS[name], agent="catalog-subagent", region=None),
             "permission",
             "not_allowed",
         )
+    stock(store, V, 5)  # the module's store is shared; another test may have emptied V
+    for name in ("add_to_cart", "set_cart_quantity", "remove_from_cart"):
+        assert data(call(url, session, name, ARGS[name], agent="shopper-portal"), name)
     assert (
         data(call(url, session, "get_cart", {}, agent="shopper-portal"), "get_cart")["lines"] == []
     )
+    portal = tool_scopes.allowed_tools("shopper-portal", "northwind-catalog")
+    assert portal - tool_scopes.PORTAL_CATALOG_TOOLS == set(WRITES)  # its reads, plus exactly these
 
 
 # ---- R3, R10: live stock and live prices -------------------------------------------------------

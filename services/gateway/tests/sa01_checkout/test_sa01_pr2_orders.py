@@ -35,8 +35,10 @@ def w(monkeypatch: pytest.MonkeyPatch) -> Iterator[World]:
 
 def test_anonymous_gets_the_sign_in_prompt_never_an_empty_list(w: World) -> None:
     got = w.run(lambda c: c.get("/api/orders", headers={"cookie": session_cookie(A)}))
-    assert got.status_code == 401
-    assert got.json()["errorCategory"] == "permission" and got.json()["message"] == SIGN_IN
+    # Signed out is a state, not an error: 200, so the browser logs no failed request on a normal
+    # page (the e2e "no errors" journey), and never an empty list (hard rule 10).
+    assert got.status_code == 200
+    assert got.json() == {"signed_in": False, "message": SIGN_IN}
     assert "orders" not in got.json()
 
 
@@ -86,7 +88,7 @@ def test_a_failed_read_is_the_fixed_503_never_an_empty_list(w: World) -> None:
 def test_a_forged_sign_in_is_anonymous(w: World) -> None:
     forged = signed_in(A).rsplit(".", 1)[0] + "." + "0" * 64
     got = w.run(lambda c: c.get("/api/orders", headers={"cookie": forged}))
-    assert got.status_code == 401
+    assert got.status_code == 200 and got.json() == {"signed_in": False, "message": SIGN_IN}
 
 
 def test_the_demo_statuses_use_the_same_plain_words_as_mcp_orders() -> None:
