@@ -27,7 +27,13 @@ test.describe("[SA-01] suggested questions replay after an answer", () => {
     await page.goto("/");
     const panel = page.getByRole("complementary", { name: "Ask Northwind" });
     const suggestions = panel.getByRole("group", { name: "Suggested questions" });
+    // Wait for the whole answer, as the smoke test does: a cold first turn in replay can take tens
+    // of seconds, far past expect's 5 s (39.8 s in the user's run of 2026-11-27).
+    const first = page.waitForResponse("**/api/chat");
     await suggestions.getByRole("button", { name: questions.product }).click();
+    const firstBody = await (await first).text();
+    expect(firstBody).not.toMatch(/replay_miss/);
+    expect(firstBody).toMatch(/^event: done$/m);
     await expect(panel.getByTestId("answer")).not.toBeEmpty();
     await expect(suggestions).toHaveCount(0);
     await expect(panel.getByRole("alert")).toHaveCount(0); // a replay miss would show here

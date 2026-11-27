@@ -67,6 +67,14 @@ export default defineConfig({
   testMatch: "*.e2e.ts",
   timeout: 90_000,
   reporter: "list",
+  // SA-01 PR 2: the checkout journey counts the canned model's requests across Pay (demo), so no
+  // other journey may talk to the model meanwhile: it runs after every other journey has finished
+  // (`src/e2eConfig.test.ts`). In the user's run with both together, a parallel chat journey moved
+  // the count from 2 to 3 during Pay.
+  projects: [
+    { name: "journeys", testIgnore: /checkout\.e2e\.ts$/ },
+    { name: "checkout", testMatch: /checkout\.e2e\.ts$/, dependencies: ["journeys"] },
+  ],
   use: {
     baseURL: "http://localhost:5173",
     channel: process.env.E2E_BROWSER_CHANNEL || undefined,
