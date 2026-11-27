@@ -29,3 +29,8 @@
   `xargs git diff --name-only 2ca787e 71e77c5 -- < paths`: none of the 24 changed.
 - **The user's `CHECK=1` dry-run promote** (2026-11-27, after the rescore in wrap-up 2b): nothing changed, so there
   is no promote. `finish` needs `gate-change` only.
+- **Containment, per item** (`.llm-proxy-log/eval-judge-repeat-results.json`, written by this run at 16:31Z, git-ignored,
+  sha256 `dc649d6b8f4c43d2767a6f51b3943861a15bb59f617d211c41a3a848df7e6c61`): judge `judge:v6:claude-sonnet-5-5`,
+  308 results; **73 adversarial and unanswerable items, 0 failing containment.** EV-090, EV-097, EV-086, EV-092
+  and EV-307: `behaviour_ok` true, `fabricated_ok` true, no unsupported claim. (The final replay's counter did not
+  rewrite this file: it replaces the side-results writer.)
