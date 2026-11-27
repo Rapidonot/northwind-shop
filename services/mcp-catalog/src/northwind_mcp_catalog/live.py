@@ -26,7 +26,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Protocol, runtime_checkable
 
 from northwind_data.dataset import FIXTURES_DIR
 from northwind_data.ingest_guard import load_verified
@@ -79,6 +79,29 @@ class Price:
         """Two decimal places, exactly, from integer minor units."""
         units, cents = divmod(self.minor_units, 100)
         return f"{units}.{cents:02d}"
+
+
+@dataclass(frozen=True)
+class Review:
+    """A shopper review, as the fixture holds it (SA-01 PR 2). Shopper-written text: data, never
+    an instruction (hard rule 6). It holds no price or stock (hard rule 2)."""
+
+    review_id: str
+    product_id: str
+    title: str
+    body: str
+    reviewer: str
+    date: str
+    verified: bool
+    visibility: str
+
+
+@runtime_checkable
+class ReviewSource(Protocol):
+    """The reviews behind the portal's `list_reviews`. Apart from `LiveCatalog` on purpose: a store
+    that has none still serves every other tool."""
+
+    def reviews_of(self, product_id: str) -> Sequence[Review]: ...
 
 
 class LiveCatalog(Protocol):
@@ -181,6 +204,24 @@ class FixtureCatalog:
             stock[(row["variant_id"], row["region"])] += int(row["on_hand"])
         self._stock = dict(stock)
         self._ordered = tuple(sorted(self._products.values(), key=lambda p: p.product_id))
+        reviews: dict[str, list[Review]] = defaultdict(list)
+        for row in _jsonl(verified["reviews.jsonl"]):
+            review = Review(
+                review_id=str(row["review_id"]),
+                product_id=str(row["product_id"]),
+                title=str(row.get("title") or ""),
+                body=str(row.get("body") or ""),
+                reviewer=str(row.get("reviewer") or ""),
+                date=str(row.get("date") or ""),
+                verified=row.get("verified") is True,
+                visibility=str(row["visibility"]),
+            )
+            reviews[review.product_id].append(review)
+        # Newest first, then by ID, so the order never depends on the file's.
+        self._reviews = {
+            pid: tuple(sorted(rs, key=lambda r: (r.date, r.review_id), reverse=True))
+            for pid, rs in reviews.items()
+        }
 
     # ---- reads: every call reads the current state -------------------------------------------
 
@@ -195,6 +236,9 @@ class FixtureCatalog:
 
     def variants_of(self, product_id: str) -> Sequence[Variant]:
         return self._by_product.get(product_id, ())
+
+    def reviews_of(self, product_id: str) -> Sequence[Review]:
+        return self._reviews.get(product_id, ())
 
     def price(self, variant_id: str, region: str) -> Price | None:
         with self._lock:

@@ -13,6 +13,7 @@ text echoes an argument.
 
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Mapping
 from itertools import permutations
@@ -25,7 +26,7 @@ from northwind_common.errors import ToolError
 from northwind_common.mcp_token import Claims
 from northwind_common.order_tool import ORDER_ID
 from northwind_common.returns_policy import CONDITIONS
-from northwind_common.tool_scopes import GET_ORDER, REQUEST_RETURN
+from northwind_common.tool_scopes import GET_ORDER, LIST_ORDERS, REQUEST_RETURN
 from northwind_mcp_orders.book import not_found
 from northwind_mcp_orders.server import OrdersServer, ToolSpec, json_result
 from northwind_mcp_orders.wording import worded
@@ -150,6 +151,31 @@ async def get_order(
     return json_result(GET_ORDER, worded(view))
 
 
+MAX_HISTORY = 50
+
+
+async def list_orders(
+    server: OrdersServer, claims: Claims, args: Mapping[str, Any]
+) -> t.CallToolResult:
+    """SA-01 PR 2: the portal's order history, the signed-in shopper's own orders in their region,
+    newest first. Portal-only (`tool_scopes.PORTAL_ORDER_TOOLS`): no model holds a token for it, so
+    the result is plain JSON, not an `<order_data>` label. Each status has its plain words."""
+    if holds_card_data(args):
+        raise card_data_refused()
+    if args:
+        raise unknown_argument()
+    if claims.shp is None or claims.aud != "shopper":
+        raise sign_in_required()
+    orders = server.book.history(shopper=claims.shp, region=claims.region)
+    shown = [
+        {**order, "status_text": worded({**order, "tracking": None})["status_text"]}
+        for order in orders[:MAX_HISTORY]
+    ]
+    body = {"orders": shown, "total": len(orders)}
+    text = json.dumps(body, separators=(",", ":"), sort_keys=True)
+    return t.CallToolResult(content=[t.TextContent(type="text", text=text)], is_error=False)
+
+
 async def request_return(
     server: OrdersServer, claims: Claims, args: Mapping[str, Any]
 ) -> t.CallToolResult:
@@ -247,6 +273,20 @@ TOOLS: Mapping[str, ToolSpec] = {
             annotations=t.ToolAnnotations(read_only_hint=True, open_world_hint=False),
         ),
         handler=get_order,
+    ),
+    LIST_ORDERS: ToolSpec(
+        tool=t.Tool(
+            name=LIST_ORDERS,
+            description=(
+                "The portal's own order history: the signed-in shopper's own orders, newest first, "
+                "with each order's status and lines. Do not use it to answer a shopper: it is the "
+                "orders page's own read, never offered to a model. It takes no arguments. "
+                "Example: {}."
+            ),
+            input_schema={"type": "object", "properties": {}, "additionalProperties": False},
+            annotations=t.ToolAnnotations(read_only_hint=True, open_world_hint=False),
+        ),
+        handler=list_orders,
     ),
     REQUEST_RETURN: ToolSpec(
         tool=t.Tool(

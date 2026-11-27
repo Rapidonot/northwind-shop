@@ -68,16 +68,25 @@ def test_only_staff_may_read_the_index_manifest() -> None:
 
 @pytest.mark.req("CHK-06")
 def test_get_order_is_the_assistants_alone() -> None:
-    """Row #27: no other agent has `get_order` or any northwind-orders tool, and no agent has an
-    order write: no list, refund or cancel tool exists on the server. PR 2: its one write is
-    `request_return`, the shopper's own request."""
+    """Row #27: no other agent has `get_order`, and no agent has an order write: no refund or cancel
+    tool exists on the server. PR 2: its one write is `request_return`, the shopper's own request.
+    SA-01 PR 2 (the user's stop 5 yes, 2026-11-27): the portal's agent holds exactly the read-only
+    `list_orders` there, for the order history, and nothing else."""
     holders = {
         agent
         for agent in tool_scopes.agents()
         if tool_scopes.allowed_tools(agent, "northwind-orders")
     }
-    assert holders == {"shopper-assistant"}
+    assert holders == {"shopper-assistant", "shopper-portal"}
+    assert tool_scopes.AGENT_TOOLS["shopper-portal"]["northwind-orders"] == frozenset(
+        {"list_orders"}
+    )
     assert tool_scopes.ORDER_TOOLS == frozenset({"get_order", "request_return"})
+    assert {
+        agent
+        for agent in tool_scopes.agents()
+        if "get_order" in tool_scopes.allowed_tools(agent, "northwind-orders")
+    } == {"shopper-assistant"}
     for agent in tool_scopes.agents():
         for server, tools in tool_scopes.AGENT_TOOLS[agent].items():
             if server != "northwind-orders":

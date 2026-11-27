@@ -335,9 +335,13 @@ ORDER_WORDS = ("order", "checkout", "pay", "purchase", "refund", "capture", "ass
 
 
 def test_the_registry_holds_the_catalog_reads_and_the_four_cart_tools_and_nothing_else() -> None:
-    # Row #11 (approved under stop 5): plus the server-only live filter, read-only.
+    # Row #11 (approved under stop 5): plus the server-only live filter, read-only. SA-01 PR 1
+    # (approved by the user under stop 5, 2026-11-26): plus the portal's two reads, by name.
     assert set(TOOLS) == set(tool_scopes.CATALOG_READ_TOOLS) | set(CART_TOOLS) | {
-        tool_scopes.ELIGIBLE_PRODUCTS
+        tool_scopes.ELIGIBLE_PRODUCTS,
+        "browse_products",
+        "get_prices",
+        "list_reviews",  # SA-01 PR 2 (Amendment 3, approved by the user 2026-11-27)
     }
     assert tool_scopes.CART_TOOLS == frozenset(CART_TOOLS)
     for name in TOOLS:
@@ -348,13 +352,18 @@ def test_the_registry_holds_the_catalog_reads_and_the_four_cart_tools_and_nothin
 # northwind-orders, a read of the signed-in shopper's own order that cannot place one (read-only, no
 # write tool on that server). Flagged to the user under stop 5 with the row #27 report.
 READ_ONLY_ORDER_TOOL = ("shopper-assistant", "northwind-orders", "get_order")
+# SA-01 PR 2 (the user's stop 5 yes, 2026-11-27): the portal's read-only order history, exactly.
+READ_ONLY_ORDER_TOOLS = {
+    READ_ONLY_ORDER_TOOL,
+    ("shopper-portal", "northwind-orders", "list_orders"),
+}
 
 
 def test_no_agent_is_scoped_to_a_tool_that_could_place_an_order() -> None:
     for agent, servers in tool_scopes.AGENT_TOOLS.items():
         for server, names in servers.items():
             for name in names:
-                if (agent, server, name) == READ_ONLY_ORDER_TOOL:
+                if (agent, server, name) in READ_ONLY_ORDER_TOOLS:
                     continue
                 assert not any(word in name for word in ORDER_WORDS), (agent, name)
 
@@ -363,8 +372,12 @@ def test_the_one_order_read_is_read_only_and_the_orders_server_has_one_request_m
     from northwind_mcp_orders.tools import TOOLS as ORDERS_TOOLS
 
     # Row #27 PR 2 (CHK-07, decision 0024): plus the shopper's own return request, exactly. It
-    # places no order.
-    assert set(ORDERS_TOOLS) == {"get_order", "request_return"} == set(tool_scopes.ORDER_TOOLS)
+    # places no order. SA-01 PR 2 (the user's stop 5 yes, 2026-11-27): plus the portal's read-only
+    # `list_orders`; the assistant's set stays exactly `get_order` and `request_return`.
+    assert set(ORDERS_TOOLS) == {"get_order", "request_return", "list_orders"}
+    assert set(tool_scopes.ORDER_TOOLS) == {"get_order", "request_return"}
+    listed = ORDERS_TOOLS["list_orders"].tool.annotations
+    assert listed is not None and listed.read_only_hint is True
     made = ORDERS_TOOLS["request_return"].tool.annotations
     assert made is not None and made.read_only_hint is False and made.destructive_hint is False
     annotations = ORDERS_TOOLS["get_order"].tool.annotations
@@ -375,13 +388,19 @@ def test_the_one_order_read_is_read_only_and_the_orders_server_has_one_request_m
         for agent, servers in tool_scopes.AGENT_TOOLS.items()
         if servers.get("northwind-orders")
     }
-    assert holders == {"shopper-assistant"}
+    assert holders == {"shopper-assistant", "shopper-portal"}  # SA-01 PR 2, as above
+    assert tool_scopes.AGENT_TOOLS["shopper-portal"]["northwind-orders"] == {"list_orders"}
 
 
 def test_each_agent_gets_exactly_its_cart_tools() -> None:
     catalog = tool_scopes.AGENT_TOOLS
     assert tool_scopes.CART_TOOLS <= catalog["shopper-assistant"]["northwind-catalog"]
-    assert catalog["shopper-portal"]["northwind-catalog"] == frozenset({"get_cart"})
+    # SA-01 PR 1: the portal also reads the catalog for the shop pages. PR 2 (the user's stop 5
+    # yes, 2026-11-27): and exactly the three cart writes, for the bag's controls.
+    assert catalog["shopper-portal"]["northwind-catalog"] == frozenset(
+        {"get_cart", "get_product", "browse_products", "get_prices", "list_reviews"}
+    ) | frozenset({"add_to_cart", "set_cart_quantity", "remove_from_cart"})
+    assert tool_scopes.CART_WRITE_TOOLS == {"add_to_cart", "set_cart_quantity", "remove_from_cart"}
     assert not tool_scopes.CART_TOOLS & catalog["catalog-subagent"]["northwind-catalog"]
     assert catalog["shopper-portal"]["northwind-rag"] == frozenset()
 
@@ -397,7 +416,16 @@ def test_each_agent_lists_only_its_own_tools_on_a_real_server(url: str) -> None:
     portal = asyncio.run(names("shopper-portal", SESSION_A))
     staff = asyncio.run(names("catalog-subagent", None))
     assert set(CART_TOOLS) <= assistant
-    assert portal == {"get_cart"}
+    assert portal == {  # SA-01 PR 1; PR 2 adds `list_reviews` and the three cart writes
+        "get_cart",
+        "get_product",
+        "browse_products",
+        "get_prices",
+        "list_reviews",
+        "add_to_cart",
+        "set_cart_quantity",
+        "remove_from_cart",
+    }
     assert not set(CART_TOOLS) & staff
 
 

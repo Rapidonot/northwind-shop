@@ -1,4 +1,5 @@
 // POST /api/chat, read as a stream. EventSource is GET only, so this reads the body with fetch.
+import { sessionFetch } from "./session";
 
 export type ErrorCode =
   | "retrieval_failed"
@@ -104,7 +105,8 @@ export async function sendMessage(
   message: string,
   onEvent: (event: ChatEvent) => void,
 ): Promise<void> {
-  const response = await fetch("/api/chat", {
+  // SA-01: a message sent before the page's first session response waits for it (session.ts).
+  const response = await sessionFetch("/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ message }),
@@ -157,7 +159,7 @@ export async function requestHandoff(
   trigger: "button" | "message",
 ): Promise<HandoffResult> {
   try {
-    const response = await fetch("/api/handoff", {
+    const response = await sessionFetch("/api/handoff", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ turns, trigger }),

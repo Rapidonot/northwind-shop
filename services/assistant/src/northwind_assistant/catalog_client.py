@@ -69,12 +69,16 @@ class CartReader:
             session=caller.session,
         )
         quiet_client_logs()
-        http = httpx2.AsyncClient(
-            headers=bearer(token),
-            timeout=httpx2.Timeout(MCP_DEFAULT_TIMEOUT, read=MCP_DEFAULT_SSE_READ_TIMEOUT),
-            trust_env=False,  # an HTTP_PROXY in the environment must never carry the token
-        )
-        async with Client(streamable_http_client(self.url, http_client=http)) as client:
+        # Closed here: `streamable_http_client` leaves a client it was given open, so each read
+        # leaked a connection pool (SA-01 PR 1 security review F4, fixed in PR 2).
+        async with (
+            httpx2.AsyncClient(
+                headers=bearer(token),
+                timeout=httpx2.Timeout(MCP_DEFAULT_TIMEOUT, read=MCP_DEFAULT_SSE_READ_TIMEOUT),
+                trust_env=False,  # an HTTP_PROXY in the environment must never carry the token
+            ) as http,
+            Client(streamable_http_client(self.url, http_client=http)) as client,
+        ):
             result = await client.call_tool(GET_CART, {})
         if result.is_error or len(result.content) != 1:
             return None

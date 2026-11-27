@@ -495,4 +495,7 @@ QUERY_TOOLS: Mapping[str, ToolSpec] = {
 # (decision 0019). Imported last: `cart` uses the checks above.
 from northwind_mcp_catalog.cart import CART_SPECS  # noqa: E402
 
-TOOLS: Mapping[str, ToolSpec] = {**READ_TOOLS, **CART_SPECS, **QUERY_TOOLS}
+# SA-01 PR 1: the portal's own reads for the shop pages, scoped to `shopper-portal` only.
+from northwind_mcp_catalog.portal import PORTAL_SPECS  # noqa: E402
+
+TOOLS: Mapping[str, ToolSpec] = {**READ_TOOLS, **CART_SPECS, **QUERY_TOOLS, **PORTAL_SPECS}

@@ -19,6 +19,11 @@ shopper in the token (`shp`), so a session with no sign-in gets no order. No oth
 Row #27 PR 2 (CHK-07, decision 0024): northwind-policy and its one read tool,
 `evaluate_return_eligibility` (PRD §7), for the assistant only. Its policy resources are for
 `shopper-portal` (the gateway, never a model); the assistant still gets no resource (D14).
+
+SA-01 PR 1 (the shop pages): `shopper-portal` also reads the catalog for the pages, through
+`get_product` and two portal-only reads, `browse_products` and `get_prices`. No model holds a
+token for them: the assistant's sets above are unchanged, so its tool list is too. The two portal
+tools are in no other agent's row.
 """
 
 from __future__ import annotations
@@ -54,12 +59,28 @@ ELIGIBLE_PRODUCTS = "eligible_products"
 # Each region's own currency: a price filter in another currency is never converted.
 REGION_CURRENCY: Mapping[str, str] = {"US": "USD", "CA": "CAD", "UK": "GBP", "EU": "EUR"}
 
+# SA-01 PR 1: the portal's own reads for the shop pages, never offered to a model. `browse_products`
+# lists public products with each one's live lowest price in the token's region; `get_prices` gives
+# one product's live price per variant (hard rule 2: the live store, never the index).
+BROWSE_PRODUCTS = "browse_products"
+GET_PRICES = "get_prices"
+# SA-01 PR 2: a product's public shopper reviews for the product page, shown as plain text, never
+# offered to a model (the assistant reads reviews only as labelled, retrieved data).
+LIST_REVIEWS = "list_reviews"
+PORTAL_ONLY_TOOLS = frozenset({BROWSE_PRODUCTS, GET_PRICES, LIST_REVIEWS})
+PORTAL_CATALOG_TOOLS = frozenset({GET_CART, "get_product", *PORTAL_ONLY_TOOLS})
+
 # Row #27 (CHK-06). One read of the signed-in shopper's own order; no list.
 GET_ORDER = "get_order"
 # PR 2 (CHK-07, decision 0024): the shopper's own return request. Outside PRD §7's list, by the
 # user's decision (D6): non-monetary, and no label, refund or case.
 REQUEST_RETURN = "request_return"
 ORDER_TOOLS = frozenset({GET_ORDER, REQUEST_RETURN})
+# SA-01 PR 2 (the user's stop 5 yes, 2026-11-27): the portal's order history, the signed-in
+# shopper's own orders in their region, read-only, never offered to a model. The assistant keeps
+# `get_order`, one order by number, and no list.
+LIST_ORDERS = "list_orders"
+PORTAL_ORDER_TOOLS = frozenset({LIST_ORDERS})
 
 # Row #27 PR 2 (CHK-07). One read: is one line of the shopper's own order returnable.
 EVALUATE_RETURN = "evaluate_return_eligibility"
@@ -78,7 +99,15 @@ AGENT_TOOLS: Mapping[str, Mapping[str, frozenset[str]]] = {
         "northwind-orders": ORDER_TOOLS,  # row #27 (CHK-06), attached only when signed in
         "northwind-policy": POLICY_TOOLS,  # row #27 PR 2 (CHK-07), likewise; PRD §7
     },
-    "shopper-portal": {"northwind-rag": frozenset(), "northwind-catalog": frozenset({GET_CART})},
+    # Row #16: get_cart for the chat panel; SA-01 PR 1: the shop pages' reads. SA-01 PR 2 (approved
+    # plan; the user's stop 5 yes, 2026-11-27): the bag's quantity controls and ADD TO BAG, through
+    # exactly the three cart writes, each with an idempotency key (hard rule 9). No payment,
+    # checkout, order or return write: Pay (demo) runs in the gateway, on the fakes.
+    "shopper-portal": {
+        "northwind-rag": frozenset(),
+        "northwind-catalog": PORTAL_CATALOG_TOOLS | CART_WRITE_TOOLS,
+        "northwind-orders": PORTAL_ORDER_TOOLS,  # SA-01 PR 2: order history, signed in only
+    },
     # Row #11: one read-only tool that returns product IDs only (RAG-04, hard rule 2).
     "shopper-query": {
         "northwind-rag": frozenset(),
