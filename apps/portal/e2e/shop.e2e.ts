@@ -2,7 +2,8 @@
 // calls the model. Each journey ends with the AI disclosure on screen (journey.ts).
 import { expect, test } from "./journey";
 
-const DEPARTMENTS = ["Base Layers", "Bath", "Bedding", "Dining", "Fleece", "Jackets", "Knitwear", "Living", "Pants", "Shirts"];
+// SA-01 PR 2 (look round 1): catalog order, the order each department first appears.
+const DEPARTMENTS = ["Jackets", "Fleece", "Base Layers", "Pants", "Shirts", "Knitwear", "Bedding", "Bath", "Living", "Dining"];
 const BANNER = "Demo store. AI assistant. No real orders, payments or deliveries.";
 // SA-01 PR 2: a tile shows one live price or a low–high range, in the region's currency.
 const PRICE = /(\$|CA\$|£|€)\d+\.\d{2}/;

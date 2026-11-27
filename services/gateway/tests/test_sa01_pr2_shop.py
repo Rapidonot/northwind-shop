@@ -104,7 +104,19 @@ def test_the_nav_counts_every_department_and_reads_no_price(
     for p in PUBLIC:
         expected[p["department"]] = expected.get(p["department"], 0) + 1
     assert body["counts"] == expected
-    assert body["departments"] == sorted(expected)
+    assert body["departments"] == list(expected)  # catalog order, as first seen
+    assert body["departments"] == [
+        "Jackets",
+        "Fleece",
+        "Base Layers",
+        "Pants",
+        "Shirts",
+        "Knitwear",
+        "Bedding",
+        "Bath",
+        "Living",
+        "Dining",
+    ]
     assert body["total"] == len(PUBLIC) == 199
     assert store.priced == set()
 

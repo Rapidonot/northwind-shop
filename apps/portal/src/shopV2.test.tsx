@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
+import { Cart } from "./Cart";
 import type { CartState } from "./cartApi";
 import { CartPage, HomePage, ProductPage, REVIEWS_UNAVAILABLE } from "./pages";
 import { FEATURED, type Product, type Review, type Tile } from "./shopApi";
@@ -302,5 +303,18 @@ describe("[SA-01] the bag", () => {
     expect(within(summary).getByRole("link", { name: "PROCEED TO CHECKOUT" })).toHaveAttribute("href", "#/checkout");
     // Delivery comes from the gateway at checkout, never a number made up here (hard rule 2).
     expect(summary.textContent).not.toMatch(/shipping \$|\$0\.00/i);
+  });
+});
+
+describe("[SA-01] [CHK-01] the panel's cart block", () => {
+  it("is headed Cart (N) with the server's count, and keeps the Cart region", () => {
+    render(<Cart state={{ kind: "ready", cart: { region: "US", lines: [], item_count: 3, subtotal: null, currency: null } }} />);
+    const region = screen.getByRole("region", { name: "Cart" });
+    expect(within(region).getByRole("heading")).toHaveTextContent(/^Cart \(3\)$/);
+  });
+
+  it("is headed Cart alone until the cart is read", () => {
+    render(<Cart state={{ kind: "loading" }} />);
+    expect(screen.getByRole("heading")).toHaveTextContent(/^Cart$/);
   });
 });

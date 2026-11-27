@@ -14,8 +14,10 @@ function money(amount: string | null, currency: string | null): string {
 /** The cart in the chat panel (row #16, CHK-01): only what GET /api/cart returned. */
 export function Cart({ state }: { state: CartState }) {
   return (
-    <section aria-label="Cart">
-      <h2>Your cart</h2>
+    // SA-01 PR 2 (look round 1): a compact block at the bottom of the panel; the region, texts and
+    // list are the ones the CHK-01 journey reads.
+    <section aria-label="Cart" className="chat-cart">
+      <h2>Cart{state.kind === "ready" ? ` (${state.cart.item_count})` : ""}</h2>
       {state.kind === "loading" && <p>Loading cart…</p>}
       {state.kind === "unavailable" && <p role="status">{CART_UNAVAILABLE}</p>}
       {state.kind === "ready" && state.cart.lines.length === 0 && <p>{CART_EMPTY}</p>}

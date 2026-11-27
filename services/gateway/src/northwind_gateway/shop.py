@@ -6,7 +6,8 @@
 - `GET /api/product?id=`: one public product's record, with each variant's live price.
 
 SA-01 PR 2 (only the products on screen are priced, hard rule 2):
-- `GET /api/departments` also gives each department's count and the total. It reads no price.
+- `GET /api/departments` also gives each department's count and the total, in catalog order (the
+  order departments first appear in the catalog). It reads no price.
 - `GET /api/products` takes `offset`/`limit` (a page of at most 48) and `ids` (up to 48 product IDs,
   for the home hero and the bag). With either, the gateway lists every match unpriced
   (`priced: false`), orders it (photos first, or in the order of `ids`), takes the page and prices
@@ -290,7 +291,8 @@ async def departments(caller: Shopper, reader: Reader) -> JSONResponse:
     except Exception as error:  # noqa: BLE001 - its text must not reach the shopper or a log
         log.error("shop read failed: %s", type(error).__name__)
         return unavailable()
-    names = sorted(counts)
+    # Catalog order, the order departments first appear in the catalog (the user's look round 1).
+    names = list(counts)
     body = {"departments": names, "counts": counts, "total": sum(counts.values())}
     return JSONResponse(content=body, headers=NO_STORE)
 

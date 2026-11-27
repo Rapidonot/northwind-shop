@@ -92,7 +92,8 @@ def _assert_envelope(response: Any, status: int, category: str, message: str) ->
 def test_the_nav_lists_all_ten_departments(client: TestClient) -> None:
     response = client.get("/api/departments")
     assert response.status_code == 200
-    assert response.json()["departments"] == sorted({p["department"] for p in PUBLIC})
+    # SA-01 PR 2 (the user's look round 1): catalog order, the order each first appears.
+    assert response.json()["departments"] == list(dict.fromkeys(p["department"] for p in PUBLIC))
     assert len(response.json()["departments"]) == 10
 
 

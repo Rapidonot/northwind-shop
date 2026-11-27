@@ -7,7 +7,8 @@ import { SUGGESTIONS } from "./suggestions";
 
 // SA-01 PR 2: the assistant panel's suggested questions. They are recorded smoke questions, word for
 // word, and each replays only as the first message of a fresh conversation (the user's change to
-// Amendment 3), so a click starts a new conversation and sends exactly the question.
+// Amendment 3). Look round 1: they show only while the chat is empty; "New conversation" empties it
+// again, and a click sends exactly the question.
 
 const frame = (name: string, data: unknown) => `event: ${name}\ndata: ${JSON.stringify(data)}\n\n`;
 
@@ -72,7 +73,21 @@ describe("[SA-01] suggested questions are the recorded ones, word for word", () 
   });
 });
 
-describe("[SA-01] a suggestion after an answer starts a fresh conversation", () => {
+describe("[SA-01] a suggestion after an answer is a fresh conversation's first message", () => {
+  it("shows the suggestions only while the chat is empty, and New conversation brings them back", async () => {
+    serve();
+    render(<Chat suggestions={SUGGESTIONS} />);
+    expect(screen.getByRole("group", { name: "Suggested questions" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "New conversation" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: questions.care }));
+    await screen.findByText("Answer 1.");
+    expect(screen.queryByRole("group", { name: "Suggested questions" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "New conversation" }));
+    expect(screen.getByRole("group", { name: "Suggested questions" })).toBeInTheDocument();
+    expect(screen.queryByText("Answer 1.")).toBeNull();
+    expect(screen.queryByLabelText("Your message")).toBeNull();
+  });
+
   it("drops the last question and answer, and sends the same request as a first message", async () => {
     const calls = serve();
     render(<Chat suggestions={SUGGESTIONS} />);
@@ -81,6 +96,7 @@ describe("[SA-01] a suggestion after an answer starts a fresh conversation", () 
     expect(await screen.findByText("Answer 1.")).toBeInTheDocument();
     expect(screen.getByLabelText("Your message")).toHaveTextContent("Do you sell tents?");
 
+    fireEvent.click(screen.getByRole("button", { name: "New conversation" }));
     fireEvent.click(screen.getByRole("button", { name: questions.product }));
     expect(await screen.findByText("Answer 2.")).toBeInTheDocument();
     expect(screen.queryByText("Answer 1.")).toBeNull();
@@ -98,6 +114,7 @@ describe("[SA-01] a suggestion after an answer starts a fresh conversation", () 
     fireEvent.change(screen.getByLabelText("Your question"), { target: { value: "Do you sell tents?" } });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
     await screen.findByText("Answer 1.");
+    fireEvent.click(screen.getByRole("button", { name: "New conversation" }));
     fireEvent.click(screen.getByRole("button", { name: questions.false_policy }));
     await screen.findByText("Answer 2.");
     fireEvent.click(screen.getByRole("button", { name: "Talk to a person" }));
@@ -112,7 +129,7 @@ describe("[SA-01] a suggestion after an answer starts a fresh conversation", () 
     });
   });
 
-  it("suggestions wait while an answer is streaming", async () => {
+  it("nothing can start a new conversation while an answer is streaming", async () => {
     let release: (r: Response) => void = () => {};
     vi.stubGlobal(
       "fetch",
@@ -120,12 +137,11 @@ describe("[SA-01] a suggestion after an answer starts a fresh conversation", () 
     );
     render(<Chat suggestions={SUGGESTIONS} />);
     fireEvent.click(screen.getByRole("button", { name: questions.care }));
-    for (const button of within(screen.getByRole("group", { name: "Suggested questions" })).getAllByRole("button")) {
-      expect(button).toBeDisabled();
-    }
+    expect(screen.queryByRole("group", { name: "Suggested questions" })).toBeNull();
+    expect(screen.getByRole("button", { name: "New conversation" })).toBeDisabled();
     release(answer("Done."));
     expect(await screen.findByText("Done.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: questions.care })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "New conversation" })).toBeEnabled();
   });
 
   it("a question that looks like card data is never shown back", async () => {
