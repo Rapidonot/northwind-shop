@@ -106,7 +106,9 @@ export default defineConfig({
       command: "uv run uvicorn northwind_gateway.app:app --port 8000",
       port: 8000,
       cwd: repo,
-      env: { ...modelEnv, ...ragEnv, ...catalogEnv, ...ordersEnv, ...policyEnv },
+      // SA-01 PR 2: the demo sign-in is on, as in `make dev`, for the checkout journey; every other
+      // journey stays anonymous (sign-in happens only on its own POST).
+      env: { ...modelEnv, ...ragEnv, ...catalogEnv, ...ordersEnv, ...policyEnv, NORTHWIND_DEMO_SIGNIN: "1" },
       timeout: 60_000,
     },
     { command: "./node_modules/.bin/vite --port 5173 --strictPort", port: 5173, cwd: here },

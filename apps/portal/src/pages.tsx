@@ -3,7 +3,7 @@
 // SA-01 PR 2: the v2 look (docs/design/*.png) and only the products on screen are priced: every
 // grid asks for one page, the hero and the bag for their own IDs.
 import { useEffect, useMemo, useState } from "react";
-import type { CartLine, CartState } from "./cartApi";
+import { addToBag, type CartLine, type CartState, removeFromBag, setQuantity } from "./cartApi";
 import { ProductGrid, ProductImage } from "./ProductTile";
 import { href } from "./router";
 import {
@@ -28,8 +28,7 @@ export const SHOP_UNAVAILABLE = "The shop isn't available right now.";
 export const NO_RESULTS = "No products match.";
 export const NOT_FOUND = "We couldn't find that page.";
 export const REVIEWS_UNAVAILABLE = "Reviews aren't available right now.";
-// Part A of PR 2 is the look; the cart writes come with part B (Amendment 3).
-export const NOT_YET = "Changing the bag from the shop pages comes in the next step of this PR.";
+export const ADDED = "Added to your bag.";
 
 function useLoaded<T>(load: () => Promise<Loaded<T>>, key: string): Loaded<T> {
   const [state, setState] = useState<{ key: string; value: Loaded<T> }>({ key, value: { kind: "loading" } });
@@ -222,9 +221,19 @@ function ReviewList({ id }: { id: string }) {
   );
 }
 
-function ProductView({ product }: { product: Product }) {
+function ProductView({ product, onCartChanged }: { product: Product; onCartChanged: () => void }) {
   const [variantId, setVariantId] = useState<string | null>(product.variants[0]?.variant_id ?? null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+  const add = async (id: string) => {
+    setAdding(true);
+    setNotice(null);
+    const done = await addToBag(id);
+    setAdding(false);
+    // The gateway's own fixed text on a refusal (live stock, hard rule 2), never a guess here.
+    setNotice(done.ok ? ADDED : done.message);
+    if (done.ok) onCartChanged();
+  };
   const variant = product.variants.find((v) => v.variant_id === variantId) ?? null;
   const colours = useMemo(() => [...new Set(product.variants.map((v) => v.colour))], [product]);
   const sizes = useMemo(
@@ -291,7 +300,12 @@ function ProductView({ product }: { product: Product }) {
               </div>
             </div>
           )}
-          <button type="button" className="btn btn-short add-to-bag" disabled={!variant?.price} onClick={() => setNotice(NOT_YET)}>
+          <button
+            type="button"
+            className="btn btn-short add-to-bag"
+            disabled={!variant?.price || adding}
+            onClick={() => variant && void add(variant.variant_id)}
+          >
             ADD TO BAG
           </button>
           {notice && <p role="status">{notice}</p>}
@@ -315,12 +329,24 @@ function ProductView({ product }: { product: Product }) {
   );
 }
 
-export function ProductPage({ id }: { id: string }) {
+export function ProductPage({ id, onCartChanged = () => {} }: { id: string; onCartChanged?: () => void }) {
   const state = useLoaded(() => fetchProduct(id), `p:${id}`);
-  return state.kind === "ready" ? <ProductView key={id} product={state.value} /> : <Status state={state} />;
+  return state.kind === "ready" ? <ProductView key={id} product={state.value} onCartChanged={onCartChanged} /> : <Status state={state} />;
 }
 
-function BagLine({ line, tile, onChange }: { line: CartLine; tile: Tile | undefined; onChange: () => void }) {
+type BagChange = { kind: "quantity"; quantity: number } | { kind: "remove" };
+
+function BagLine({
+  line,
+  tile,
+  busy,
+  onChange,
+}: {
+  line: CartLine;
+  tile: Tile | undefined;
+  busy: boolean;
+  onChange: (change: BagChange) => void;
+}) {
   const brand = tile?.brand;
   const each = line.unit_price && line.currency ? `${formatMoney({ amount: line.unit_price, currency: line.currency })} each` : null;
   return (
@@ -339,11 +365,21 @@ function BagLine({ line, tile, onChange }: { line: CartLine; tile: Tile | undefi
         </a>
         <span className="muted">{[line.colour, line.size && `Size ${line.size}`, each].filter(Boolean).join(" · ")}</span>
         <div className="qty" role="group" aria-label={`Quantity of ${line.name}`}>
-          <button type="button" aria-label="Decrease quantity" onClick={onChange}>
+          <button
+            type="button"
+            aria-label="Decrease quantity"
+            disabled={busy}
+            onClick={() => onChange(line.quantity > 1 ? { kind: "quantity", quantity: line.quantity - 1 } : { kind: "remove" })}
+          >
             −
           </button>
           <span aria-label="Quantity">{line.quantity}</span>
-          <button type="button" aria-label="Increase quantity" onClick={onChange}>
+          <button
+            type="button"
+            aria-label="Increase quantity"
+            disabled={busy || line.quantity >= 10}
+            onClick={() => onChange({ kind: "quantity", quantity: line.quantity + 1 })}
+          >
             +
           </button>
         </div>
@@ -353,7 +389,7 @@ function BagLine({ line, tile, onChange }: { line: CartLine; tile: Tile | undefi
         <span className="bag-line-total">
           {line.line_total && line.currency ? formatMoney({ amount: line.line_total, currency: line.currency }) : "Not sold in your region"}
         </span>
-        <button type="button" className="link-button" onClick={onChange}>
+        <button type="button" className="link-button" disabled={busy} onClick={() => onChange({ kind: "remove" })}>
           Remove
         </button>
       </div>
@@ -364,7 +400,7 @@ function BagLine({ line, tile, onChange }: { line: CartLine; tile: Tile | undefi
 /** The bag (bag.png). A cart line has no brand or photo (`get_cart` is the assistant's tool,
  * unchanged), so the bag reads its own lines' products, and only those (rule 4). Until they are
  * read, or if they can't be, the full catalog name is shown. Totals are the server's. */
-export function CartPage({ cart }: { cart: CartState }) {
+export function CartPage({ cart, onCartChanged = () => {} }: { cart: CartState; onCartChanged?: () => void }) {
   const ids = cart.kind === "ready" ? [...new Set(cart.cart.lines.map((l) => l.product_id))] : [];
   const products = useLoaded<TilePage>(
     () => (ids.length > 0 ? fetchProducts({ ids }) : Promise.resolve({ kind: "ready", value: { total: 0, products: [] } })),
@@ -372,6 +408,15 @@ export function CartPage({ cart }: { cart: CartState }) {
   );
   const tiles = new Map(products.kind === "ready" ? products.value.products.map((p) => [p.product_id, p]) : []);
   const [notice, setNotice] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const change = async (line: CartLine, what: BagChange) => {
+    setBusy(true);
+    setNotice(null);
+    const done = what.kind === "remove" ? await removeFromBag(line.variant_id) : await setQuantity(line.variant_id, what.quantity);
+    setBusy(false);
+    if (!done.ok) setNotice(done.message); // the gateway's fixed text (live stock, hard rule 2)
+    onCartChanged(); // read the bag again either way: the server's bag is the one shown
+  };
   return (
     <section aria-label="Bag" className="bag">
       <div className="page-head">
@@ -385,7 +430,7 @@ export function CartPage({ cart }: { cart: CartState }) {
         <div className="bag-layout">
           <ul className="bag-lines" aria-label="Bag items">
             {cart.cart.lines.map((line) => (
-              <BagLine key={line.variant_id} line={line} tile={tiles.get(line.product_id)} onChange={() => setNotice(NOT_YET)} />
+              <BagLine key={line.variant_id} line={line} tile={tiles.get(line.product_id)} busy={busy} onChange={(what) => void change(line, what)} />
             ))}
           </ul>
           <aside className="order-summary" aria-label="Order summary">

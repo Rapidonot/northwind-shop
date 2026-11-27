@@ -717,6 +717,85 @@ p {
   font-size: 14px;
 }
 
+/* ---- checkout and orders (SA-01 PR 2) ---------------------------------------------------------- */
+
+.summary-lines {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.summary-lines .summary-row {
+  gap: 12px;
+}
+
+.summary-total {
+  border-bottom: 0;
+  font-size: 17px;
+}
+
+.pay-demo {
+  margin-top: 12px;
+  padding: 16px;
+}
+
+.checkout-issues,
+.checkout-refusal {
+  margin: 0 0 16px;
+  padding: 12px 16px;
+  border: 1px solid var(--ink);
+  border-radius: 2px;
+}
+
+.checkout-issues {
+  list-style: none;
+}
+
+.checkout-refusal ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+}
+
+.sign-in {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.order-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--hairline);
+}
+
+.order {
+  padding: 16px 20px;
+}
+
+.order + .order {
+  border-top: 1px solid var(--hairline);
+}
+
+.order-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 16px;
+}
+
+.order-lines {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+
+.order-total {
+  margin: 6px 0 0;
+  font-weight: 600;
+}
+
 /* ---- the assistant: a slide-in panel with Close (assistant-panel.png) ------------------------ */
 
 /* On desktop the open panel narrows the page (round 2); on phone it covers the screen. It is a

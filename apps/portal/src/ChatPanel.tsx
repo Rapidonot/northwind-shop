@@ -9,7 +9,8 @@ import { Chat } from "./Chat";
 export function ChatPanel({
   onCart,
   suggestions,
-}: { onCart?: (cart: CartState) => void; suggestions?: readonly string[] } = {}) {
+  round = 0,
+}: { onCart?: (cart: CartState) => void; suggestions?: readonly string[]; round?: number } = {}) {
   const [cart, setCart] = useState<CartState>({ kind: "loading" });
   const refresh = useCallback(() => {
     void fetchCart().then((next) => {
@@ -18,7 +19,8 @@ export function ChatPanel({
     });
   }, [onCart]);
 
-  useEffect(refresh, [refresh]);
+  // `round` (SA-01 PR 2): a shop page changed the bag, so read it again.
+  useEffect(refresh, [refresh, round]);
 
   return (
     <div aria-label="Chat panel">

@@ -1,14 +1,14 @@
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useState } from "react";
 import type { CartState } from "./cartApi";
 import { CARD_REFUSED, mightBeCardData } from "./cardGuard";
 import { ChatPanel } from "./ChatPanel";
+import { CheckoutPage, OrdersPage } from "./checkoutPages";
 import { DepartmentTabs } from "./DepartmentTabs";
 import {
   CartPage,
   DepartmentPage,
   HomePage,
   NotFoundPage,
-  PlaceholderPage,
   ProductPage,
   SearchPage,
 } from "./pages";
@@ -48,7 +48,7 @@ function label(health: Health): string {
   }
 }
 
-function Page({ route, cart }: { route: Route; cart: CartState }) {
+function Page({ route, cart, onCartChanged }: { route: Route; cart: CartState; onCartChanged: () => void }) {
   switch (route.page) {
     case "home":
       return <HomePage />;
@@ -57,13 +57,13 @@ function Page({ route, cart }: { route: Route; cart: CartState }) {
     case "search":
       return <SearchPage q={route.q} />;
     case "product":
-      return <ProductPage id={route.id} />;
+      return <ProductPage id={route.id} onCartChanged={onCartChanged} />;
     case "cart":
-      return <CartPage cart={cart} />;
+      return <CartPage cart={cart} onCartChanged={onCartChanged} />;
     case "checkout":
-      return <PlaceholderPage heading="Checkout" />;
+      return <CheckoutPage onCartChanged={onCartChanged} />;
     case "orders":
-      return <PlaceholderPage heading="Orders" />;
+      return <OrdersPage />;
     case "not-found":
       return <NotFoundPage />;
   }
@@ -117,6 +117,10 @@ export function App() {
     if (sessionReady) void fetchDepartments().then(setDepartments);
   }, [sessionReady]);
 
+  // SA-01 PR 2: after a shop page changes the bag, the chat panel reads it again; its read also
+  // sets the bag count (`onCart`), so the panel and the count never disagree.
+  const [cartRound, setCartRound] = useState(0);
+  const refreshCart = useCallback(() => setCartRound((n) => n + 1), []);
   const count = cart.kind === "ready" ? cart.cart.item_count : null;
 
   return (
@@ -138,7 +142,7 @@ export function App() {
         </header>
         <DepartmentTabs departments={departments} route={route} />
         <main className="content">
-          {sessionReady ? <Page route={route} cart={cart} /> : <p className="muted">Loading…</p>}
+          {sessionReady ? <Page route={route} cart={cart} onCartChanged={refreshCart} /> : <p className="muted">Loading…</p>}
         </main>
         <footer className="footer">
           <div>
@@ -157,7 +161,7 @@ export function App() {
             Close
           </button>
         </div>
-        <ChatPanel onCart={setCart} suggestions={SUGGESTIONS} />
+        <ChatPanel onCart={setCart} suggestions={SUGGESTIONS} round={cartRound} />
       </aside>
       <button type="button" className="btn btn-short chat-button" aria-expanded={chatOpen} onClick={() => setChatOpen(true)}>
         ASK NORTHWIND
