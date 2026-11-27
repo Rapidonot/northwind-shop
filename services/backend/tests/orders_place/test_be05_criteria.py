@@ -744,7 +744,9 @@ def test_a_port_that_raises_is_a_doubtful_write_never_called_again(after_effect:
                 super().confirm(**kwargs)
             raise RuntimeError("secret detail 4111111111111111")
 
-    ports = Ports(ports.payment, ports.fraud, ports.catalog, Boom(state=world.orders))
+    ports = Ports(
+        ports.payment, ports.fraud, ports.catalog, Boom(state=world.orders), ports.inventory
+    )
     tools = [*HAPPY, "confirm_order", "confirm_order", "escalate_order"]
     _, replies, result = drive(world, world.task(row), tools, ports=ports)
     assert len(calls) == 1, "a doubtful write was called again"

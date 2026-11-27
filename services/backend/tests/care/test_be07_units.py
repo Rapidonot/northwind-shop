@@ -49,7 +49,8 @@ RECOMMENDED_SHA = "f9b263fd3749922e6511234d953f7b588c031bffe705da5d9963c770ff5d3
 
 
 def test_the_twelve_existing_actions_are_byte_identical_after_the_move() -> None:
-    existing = {k: v for k, v in RECOMMENDED.items() if k != NOT_ESCALATED}
+    # Row #25 (M12) adds `invalid_line`; the twelve row #21 wrote are still checked byte for byte.
+    existing = {k: v for k, v in RECOMMENDED.items() if k not in (NOT_ESCALATED, "invalid_line")}
     assert len(existing) == 12
     body = json.dumps(existing, sort_keys=True).encode()
     assert hashlib.sha256(body).hexdigest() == RECOMMENDED_SHA

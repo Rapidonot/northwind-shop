@@ -27,6 +27,13 @@ What the model decides is the order of calls. Everything that matters is decided
   claim after authorize and after capture, and an escalation of a paying order stores whichever
   view of the payment shows more money moved, so a hold or a capture is reported unless both
   views are stale (a failed report and a crashed owner); the audit still has it (re-review N1).
+- Stock (row #25, BE-04): after the claim and before the first authorization the run reserves the
+  order's lines (`inventory.reserve`, key `O000123:inventory.reserve`), so no payment is taken for
+  stock another order holds. A refusal escalates the order by code (`out_of_stock`) and the model
+  gets the same `order_escalated` text as any other code escalation. The hold is committed just
+  before capture, so money is never captured for units the order no longer holds, and released when
+  the order is escalated. A successful reservation changes no tool result (the $0 pin in
+  `tests/orders_place/test_be04_wiring.py`).
 - The escalation reason and context are built from the run's state, never from model text (#20 C1):
   amounts come from step values. A run that ends with the order neither confirmed nor escalated is
   escalated by code (`not_finished`, or `duplicate_in_progress` when another run's claim holds it),
@@ -60,12 +67,21 @@ from northwind_backend.confirmations import check_reference
 from northwind_backend.errors import (
     AUDIT_UNAVAILABLE,
     AgentResult,
+    ErrorCategory,
     Ok,
     Result,
     ToolError,
     business,
 )
 from northwind_backend.fakes._base import NOT_PERMITTED
+from northwind_backend.inventory.model import (
+    MAX_LINES,
+    MAX_QUANTITY,
+    HoldStatus,
+    InventoryPort,
+    Line,
+    Reservation,
+)
 from northwind_backend.ports import (
     CatalogPort,
     FraudAssessment,
@@ -89,10 +105,12 @@ from northwind_backend.recovery import (
 from northwind_backend.views import (
     CATALOG_READ,
     FRAUD_PLACE,
+    INVENTORY_PLACE,
     ORDERS_PLACE,
     PAYMENT_PLACE,
     AuditedCatalogPort,
     AuditedFraudPort,
+    AuditedInventoryPort,
     AuditedOrderStore,
     AuditedPaymentPort,
 )
@@ -133,6 +151,10 @@ ADDRESS_UNDELIVERABLE = "address_undeliverable"
 OUT_OF_STOCK = "out_of_stock"
 NOT_SOLD = "not_sold_here"
 MIXED_CURRENCY = "mixed_currency"
+# M12 (row #25): a line with a quantity below 1, or a variant on two lines. Checked before any stock
+# read, so duplicate lines can't each pass a stock check their sum would fail, and a negative
+# quantity can't lower the total. The prompt's "any other issue" step escalates it.
+INVALID_LINE = "invalid_line"
 
 SYSTEM_PROMPT = """You are the Orders subagent of Northwind Outfitters, a fictional retailer. \
 You are an AI system. You place exactly one order: the one named in the task.
@@ -223,6 +245,7 @@ Reason = Literal[
     "duplicate_in_progress",
     "fraud_review",
     "out_of_stock",
+    "invalid_line",
     "not_sold_here",
     "address_unresolved",
     "payment_declined",
@@ -234,6 +257,9 @@ Reason = Literal[
 ]
 _DECLINES = frozenset({"soft_decline", "hard_decline"})
 _LIMITS = frozenset({"over_order_limit", "no_order_limit"})
+# Re-review N3: a stock hold that is gone, or a key whose lines changed, has its own reason, never
+# `port_failure` ("retry later" can't help: the key comes from the order).
+_HOLD_LOST = frozenset({"hold_expired", "hold_released"})
 _CONFIRMATION = frozenset(
     {"confirmation_required", "confirmation_mismatch", "confirmation_used", "idempotency_conflict"}
 )
@@ -279,6 +305,11 @@ class Placement:
     authorize_codes: list[str] = field(default_factory=list)
     intent: PaymentIntent | None = None
     captured: PaymentIntent | None = None
+    reservation: Reservation | None = None  # row #25: this run's stock hold
+    committed: bool = False
+    commit_unknown: bool = False  # a commit failed other than by a business refusal (N2)
+    released: bool = False
+    seen: Reservation | None = None  # a same-key reservation that was no longer live (N3)
     confirmed: Order | None = None
     escalated: Order | None = None
     reason: str | None = None
@@ -299,6 +330,7 @@ class Ports:
     fraud: FraudPort
     catalog: CatalogPort
     orders: OrderStorePort
+    inventory: InventoryPort  # row #25 (BE-04)
 
 
 @dataclass(frozen=True, slots=True)
@@ -356,6 +388,7 @@ class _Handlers:
         self.fraud = AuditedFraudPort(ports.fraud, audit, allowed=FRAUD_PLACE)
         self.catalog = AuditedCatalogPort(ports.catalog, audit, allowed=CATALOG_READ)
         self.orders = AuditedOrderStore(ports.orders, audit, allowed=ORDERS_PLACE)
+        self.inventory = AuditedInventoryPort(ports.inventory, audit, allowed=INVENTORY_PLACE)
         self.escalated_by: Literal["agent", "code"] | None = None
         # The run's own identity for the payment claim (F1): random, code-only, never in model
         # input, so no other run, a rerun after a crash included, can present it.
@@ -467,7 +500,21 @@ class _Handlers:
         issues: list[str] = []
         total = 0
         currencies: set[str] = set()
-        for line in order.lines:
+        variants = [line.variant_id for line in order.lines]
+        # Security review L6: the same line rules as `inventory.reserve`, so no order passes here
+        # and is then refused there after the claim.
+        if (
+            len(set(variants)) != len(variants)
+            or not 1 <= len(order.lines) <= MAX_LINES
+            or any(
+                isinstance(line.quantity, bool)
+                or not isinstance(line.quantity, int)
+                or not 1 <= line.quantity <= MAX_QUANTITY
+                for line in order.lines
+            )
+        ):
+            issues.append(INVALID_LINE)
+        for line in () if issues else order.lines:
             variant = line.variant_id
             stock = await self._read(partial(self.catalog.stock, variant, order.region))
             price = await self._read(partial(self.catalog.price, variant, order.region))
@@ -608,6 +655,10 @@ class _Handlers:
                     return self._error(ESCALATE, escalated)
                 return self._refuse(AUTHORIZE, DUPLICATE)
             return self._error(AUTHORIZE, claimed)
+        if p.reservation is None:
+            reserved = await self._reserve(order)
+            if reserved is not None:
+                return reserved
         key = self.task.key("payment.authorize", attempt)
         done = await self._write(
             AUTHORIZE,
@@ -657,6 +708,10 @@ class _Handlers:
             return self._refuse(CAPTURE, OUT_OF_ORDER)
         if p.captured is not None:
             return self._refuse(CAPTURE, ALREADY_DONE)
+        if not p.committed:
+            committed = await self._commit_stock()
+            if committed is not None:
+                return committed
         intent_id = p.intent.intent_id
         key = self.task.key("payment.capture")
         done = await self._write(
@@ -767,7 +822,108 @@ class _Handlers:
         if isinstance(done.result, Ok):
             p.escalated = done.result.value
             self.escalated_by = by
+            await self._release_stock()
         return done
+
+    # ---- stock (row #25, BE-04) ---------------------------------------------------------------
+
+    def _stock_view(self) -> dict[str, Any] | None:
+        """What the order holds in stock, from what this run observed (re-review N2).
+        `restock_needed` is None when it can't be known: a commit or a capture that may have taken
+        effect, or a committed hold found by a rerun."""
+        p = self.placement
+        reservation = p.reservation or p.seen
+        if reservation is None:
+            return None
+        capture_doubtful = any(action == "payment.capture" for action, _ in p.uncertain)
+        restock: bool | None
+        if p.committed:
+            state = "committed"
+            restock = None if capture_doubtful else p.captured is None
+        elif p.commit_unknown:
+            state, restock = "commit_unknown", None
+        elif p.seen is not None:
+            state = p.seen.status.value
+            restock = None if p.seen.status is HoldStatus.COMMITTED else False
+        else:
+            # The handoff is built before the escalation is written, and the hold is released
+            # just after it; one whose release fails expires on its own (`HOLD`).
+            state = "released" if p.released else "release_pending"
+            restock = False
+        return {
+            "reservation": state,
+            "lines": len(reservation.allocations),
+            "restock_needed": restock,
+        }
+
+    def _stock_key(self) -> str:
+        return self.task.key("inventory.reserve")
+
+    async def _reserve(self, order: Order) -> dict[str, Any] | None:
+        """Holds the order's lines. `None` on success, so the tool result is unchanged; otherwise
+        what authorize returns instead."""
+        p = self.placement
+        key = self._stock_key()
+        lines = [Line(line.variant_id, line.quantity) for line in order.lines]
+        done = await self._write(
+            AUTHORIZE,
+            "inventory.reserve",
+            key,
+            lambda: self.inventory.reserve(
+                idempotency_key=key,
+                order_id=order.order_id,
+                region=order.region,
+                postal_code=order.shipping_postal_code,
+                lines=lines,
+            ),
+        )
+        if isinstance(done.result, Ok) and done.result.value.status is HoldStatus.HELD:
+            p.reservation = done.result.value
+            return None
+        if isinstance(done.result, Ok):
+            # Security review L1: a rerun's same key found a hold that is no longer live (expired,
+            # released or committed). It holds nothing, so nothing is authorized against it.
+            p.seen = done.result.value
+            p.codes.append(f"hold_{done.result.value.status.value}")
+            escalated = await self.escalate("code")
+            if not isinstance(escalated.result, Ok):
+                return self._error(ESCALATE, escalated)
+            return self._refuse(AUTHORIZE, ESCALATED)
+        if done.result.code == OUT_OF_STOCK:
+            escalated = await self.escalate("code")
+            if not isinstance(escalated.result, Ok):
+                return self._error(ESCALATE, escalated)
+            return self._refuse(AUTHORIZE, ESCALATED)
+        self._step(AUTHORIZE, done)
+        return self._error(AUTHORIZE, done)
+
+    async def _commit_stock(self) -> dict[str, Any] | None:
+        p = self.placement
+        if p.reservation is None:  # never: authorize reserved before any intent existed
+            return self._refuse(CAPTURE, OUT_OF_ORDER)
+        key = self._stock_key()
+        done = await self._write(
+            CAPTURE, "inventory.commit", key, lambda: self.inventory.commit(idempotency_key=key)
+        )
+        if not isinstance(done.result, Ok):
+            if done.result.error_category is not ErrorCategory.BUSINESS:
+                p.commit_unknown = True  # it may have taken effect (L4)
+            self._step(CAPTURE, done)
+            return self._error(CAPTURE, done)
+        p.committed = True
+        return None
+
+    async def _release_stock(self) -> None:
+        """An escalated order gives its hold back. A committed hold stays: its units left with a
+        captured payment, and staff settle both together."""
+        p = self.placement
+        if p.reservation is None or p.committed:
+            return
+        key = self._stock_key()
+        done = await self._write(
+            ESCALATE, "inventory.release", key, lambda: self.inventory.release(idempotency_key=key)
+        )
+        p.released = isinstance(done.result, Ok)
 
     def handoff(self, stored: Order | None = None) -> dict[str, Any]:
         """What a person needs to act without the transcript. Values come from step results,
@@ -793,6 +949,9 @@ class _Handlers:
             "total": values.get(VALIDATE),
             "payment": payment,
             "error_codes": list(p.codes),
+            # Security review M2: what the order holds in stock, built by code. A committed hold
+            # with no capture means its units left on-hand stock and must be put back by hand.
+            "stock": self._stock_view(),
             "uncertain": [{"action": a, "idempotency_key": k} for a, k in p.uncertain],
             "steps_done": sorted(values),
             "failures": [
@@ -862,8 +1021,10 @@ def reason_for(p: Placement, by: Literal["agent", "code"]) -> str:
     if p.fraud is not None and p.fraud.decision is FraudDecision.REVIEW:
         return "fraud_review"
     issues = set(p.issues or ())
-    if OUT_OF_STOCK in issues:
+    if OUT_OF_STOCK in issues or OUT_OF_STOCK in p.codes or set(p.codes) & _HOLD_LOST:
         return "out_of_stock"
+    if INVALID_LINE in issues or "reservation_conflict" in p.codes:
+        return "invalid_line"
     if NOT_SOLD in issues or MIXED_CURRENCY in issues:
         return "not_sold_here"
     if ADDRESS_UNDELIVERABLE in issues or "no_usable_address_on_file" in p.codes:
@@ -875,6 +1036,8 @@ def reason_for(p: Placement, by: Literal["agent", "code"]) -> str:
         return "confirmation_problem"
     if codes & _DECLINES:
         return "payment_declined"
+    if "hold_committed" in codes:
+        return "not_finished"
     if codes:
         return "port_failure"
     return "agent_requested" if by == "agent" else "not_finished"

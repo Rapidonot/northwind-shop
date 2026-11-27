@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 from collections.abc import Iterator
 from dataclasses import dataclass, field
+from datetime import datetime
 from functools import cache
 from pathlib import Path
 from typing import Any
@@ -22,6 +23,7 @@ from northwind_backend.fakes.fraud import FraudFake, FraudState
 from northwind_backend.fakes.orders import OrderState, OrderStoreFake
 from northwind_backend.fakes.payment import PaymentFake, PaymentState
 from northwind_backend.generate import fraud_flagged_order_ids
+from northwind_backend.inventory import InventoryFake, InventoryState
 from northwind_backend.ports import Money
 
 DATA = Path(__file__).resolve().parents[4] / "data" / "backend"
@@ -59,12 +61,19 @@ def fixed_clock() -> str:
     return FIXED_CLOCK
 
 
+def inventory_clock() -> datetime:
+    return datetime.fromisoformat(FIXED_CLOCK)
+
+
 @dataclass
 class World:
     payment: PaymentState
     fraud: FraudState
     orders: OrderState
     sink: InMemoryAuditSink = field(default_factory=InMemoryAuditSink)
+    # Row #25 (BE-04): one shared stock for every run of this world, on a fixed clock, so a hold
+    # never expires during a replay and nothing depends on the wall clock.
+    inventory: InventoryState = field(default_factory=InventoryState.from_fixtures)
 
     @classmethod
     def make(cls, *, soft_decline_retry_approves: bool = True) -> World:
@@ -81,6 +90,7 @@ class World:
             fraud=FraudFake(state=self.fraud),
             catalog=CatalogTableFake(state=catalog_state()),
             orders=OrderStoreFake(state=self.orders),
+            inventory=InventoryFake(inventory_clock, state=self.inventory),
         )
 
     def confirm(self, order: dict[str, Any]) -> str:

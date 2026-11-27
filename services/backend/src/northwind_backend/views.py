@@ -22,13 +22,14 @@ maps port method names to audit action names (R7).
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 from northwind_backend.audit import AuditContext, AuditWriteError, outcome_ref
 from northwind_backend.cases import Case, CaseDraft, CasePort
 from northwind_backend.errors import AUDIT_INCOMPLETE, AUDIT_UNAVAILABLE, UNEXPECTED, Result
 from northwind_backend.fakes._base import NOT_PERMITTED
+from northwind_backend.inventory.model import InventoryPort, Line, Reservation
 from northwind_backend.ports import (
     CarrierPort,
     CatalogPort,
@@ -58,6 +59,10 @@ FRAUD_PLACE = frozenset({"assess"})
 CATALOG_READ = frozenset({"price", "stock"})
 # `claim_payment`: the payment claim (F1, the user's Option 1; pin change approved, stop 5).
 ORDERS_PLACE = frozenset({"get", "use_address_on_file", "confirm", "escalate", "claim_payment"})
+
+# Row #25 (BE-04): placement holds stock before payment, commits it before capture and releases it
+# when the order is escalated. Code calls these, never the model; no `available` read.
+INVENTORY_PLACE = frozenset({"reserve", "commit", "release"})
 
 # The Care agent (row #26, BE-07; PRD §7 Care row). Its model's one data tool reads the order. Code,
 # never the model, queues the case. No catalog read (the user, row #26).
@@ -317,6 +322,72 @@ class AuditedCatalogPort(_View):
             "catalog.stock",
             {"variant_id": variant_id, "region": region},
             lambda: self._fake.stock(variant_id, region),
+        )
+
+
+class AuditedInventoryPort(_View):
+    """Row #25 (BE-04). Inputs by reference: the key, order, region, line count and `dry_run`;
+    never the postal code or the lines themselves."""
+
+    def __init__(
+        self, fake: InventoryPort, audit: AuditContext, *, allowed: frozenset[str]
+    ) -> None:
+        super().__init__(audit, allowed)
+        self._fake = fake
+
+    def reserve(
+        self,
+        *,
+        idempotency_key: str,
+        order_id: str,
+        region: str,
+        postal_code: str,
+        lines: Sequence[Line],
+        dry_run: bool = False,
+    ) -> Result[Reservation]:
+        inputs = {
+            "idempotency_key": idempotency_key,
+            "order_id": order_id,
+            "region": region,
+            "lines": len(lines),
+            "dry_run": dry_run,
+        }
+        return self._run(
+            "reserve",
+            "inventory.reserve",
+            inputs,
+            lambda: self._fake.reserve(
+                idempotency_key=idempotency_key,
+                order_id=order_id,
+                region=region,
+                postal_code=postal_code,
+                lines=lines,
+                dry_run=dry_run,
+            ),
+        )
+
+    def commit(self, *, idempotency_key: str) -> Result[Reservation]:
+        return self._run(
+            "commit",
+            "inventory.commit",
+            {"idempotency_key": idempotency_key},
+            lambda: self._fake.commit(idempotency_key=idempotency_key),
+        )
+
+    def release(self, *, idempotency_key: str) -> Result[Reservation]:
+        return self._run(
+            "release",
+            "inventory.release",
+            {"idempotency_key": idempotency_key},
+            lambda: self._fake.release(idempotency_key=idempotency_key),
+        )
+
+    def available(self, variant_id: str, node: str) -> Result[int]:
+        return self._run(
+            "available",
+            "inventory.available",
+            {"variant_id": variant_id},
+            lambda: self._fake.available(variant_id, node),
         )
 
 
