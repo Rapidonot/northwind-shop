@@ -372,3 +372,35 @@ def test_the_replay_proxy_sees_zero_requests_during_pay(w: World, llm_proxy: Any
     assert (
         (len(state.calls), len(state.misses), len(state.fallback_attempts)) == before == (0, 0, 0)
     )
+
+
+@pytest.mark.req("CHK-05")
+def test_an_unemptied_paid_bag_is_refused_emptied_then_payable_again(w: World) -> None:
+    """test-writer finding: a paid bag that could not be emptied must never become a second order;
+    the refusal empties it, and once empty the same items can be bought again."""
+    from northwind_gateway.app import app
+    from northwind_gateway.cart_writes import CartWriter, cart_writer
+
+    from ._portal_world import KEY
+
+    cookie = signed_in(A)
+
+    async def go(c: httpx.AsyncClient) -> list[httpx.Response]:
+        shown = await bag_then_summary(c, cookie)
+        app.dependency_overrides[cart_writer] = lambda: CartWriter("http://127.0.0.1:9/mcp", KEY)
+        first = await pay(c, cookie, shown["digest"], n=1)
+        app.dependency_overrides[cart_writer] = lambda: CartWriter(w.catalog_url, KEY)
+        second = await pay(c, cookie, shown["digest"], n=2)
+        bag = await c.get("/api/cart", headers={"cookie": cookie})
+        assert (await add(c, cookie, n=5)).status_code == 200  # a new click: its own key
+        again = (await summary(c, cookie)).json()
+        third = await pay(c, cookie, again["digest"], n=3)
+        return [first, second, bag, third]
+
+    first, second, bag, third = w.run(go)
+    assert first.status_code == 200 and first.json()["bag_emptied"] is False
+    assert second.status_code == 409 and second.json()["code"] == "already_placed"
+    assert second.json()["order_id"] == first.json()["order_id"]
+    assert bag.json()["cart"]["lines"] == []  # the refusal emptied it
+    assert third.status_code == 200 and third.json()["order_id"] != first.json()["order_id"]
+    assert effects("capture") == 2  # exactly the two orders the shopper confirmed

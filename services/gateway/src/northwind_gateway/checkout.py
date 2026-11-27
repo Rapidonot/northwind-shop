@@ -98,6 +98,7 @@ NOT_READY = "Something in your bag can't be ordered. Check the summary."
 OVER_LIMIT = "This order is above the demo's order limit."
 REUSED = "That payment request was already used for a different order summary."
 NO_LONGER = "An item in your bag is no longer available."
+ALREADY_PLACED = "This bag was already paid for. Check your orders."
 DECLINED = "The demo payment was declined. Nothing was charged."
 ON_HOLD = "Your order is on hold: a person will check it. Nothing was charged."
 
@@ -296,6 +297,9 @@ class CheckoutDesk:
     inventory: InventoryState = field(default_factory=InventoryState.from_fixtures)
     sink: InMemoryAuditSink = field(default_factory=InMemoryAuditSink)
     paid: dict[tuple[str, str], tuple[str, int, dict[str, Any]]] = field(default_factory=dict)
+    # test-writer finding (SA-01 PR 2): a placed order whose bag could not be emptied, by shopper
+    # and digest. The same bag can't be paid again with a new key until it is emptied (or changes).
+    unemptied: dict[tuple[str, str], Order] = field(default_factory=dict)
     _next: int = FIRST_ORDER_NUMBER
     _locks: dict[str, asyncio.Lock] = field(default_factory=dict)
     _guard: threading.Lock = field(default_factory=threading.Lock)
@@ -465,6 +469,21 @@ async def pay(
         shown = await _summary(caller, reader)
         if shown is None:
             return envelope(503, "transient", True, UNAVAILABLE)
+        earlier = desk.unemptied.get((shopper, shown.digest))
+        if earlier is not None and shown.digest == body.digest:
+            # This exact bag already became an order and was not emptied: never a second order and
+            # a second charge for it. Empty it now; once that works, the same items can be bought
+            # again later.
+            if await _empty_bag(writer, caller, earlier):
+                desk.unemptied.pop((shopper, shown.digest), None)
+            return envelope(
+                409,
+                "business",
+                False,
+                ALREADY_PLACED,
+                code="already_placed",
+                order_id=earlier.order_id,
+            )
         if "empty" in shown.issues:
             return envelope(409, "business", False, EMPTY, code="empty")
         if shown.digest != body.digest:
@@ -514,6 +533,8 @@ async def _outcome(
     )
     if placed:
         emptied = await _empty_bag(writer, caller, order)
+        if not emptied:
+            desk.unemptied[(order.shopper_id, shown.digest)] = order
         return 200, {
             "result": "placed",
             "order_id": order.order_id,
