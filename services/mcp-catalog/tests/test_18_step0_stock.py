@@ -321,7 +321,11 @@ def _bad(loaded: list[str], forbidden: tuple[str, ...]) -> list[str]:
 
 
 def test_the_catalog_servers_import_closure_has_no_model_code() -> None:
-    """The whole server: no model code. `psycopg` loads here only through `holds.py`, the one
+    """The whole server: no model code. `psycopg` may load here: `holds.py` imports it, and
+    `test_tools.py` checks no other module of this package does. This test no longer forbids it
+    (it did after security review L4); `test_the_substitutes_dependency_alone_is_pure` keeps
+    `psycopg` out of the backend dependency (option B; advisor read 3, finding 2: put to the
+    user)."""The whole server: no model code. `psycopg` loads here only through `holds.py`, the one
     module allowed a driver (the user's option B, 2026-11-27; `test_tools.py` pins which module)."""
     loaded = _loaded("northwind_mcp_catalog.app", "northwind_mcp_catalog.cart")
     assert not _bad(loaded, MODEL_CODE), _bad(loaded, MODEL_CODE)

@@ -95,3 +95,19 @@ told before each window and before each `make ci`.
 - The 13-module allow-list: option 1.
 - Exit 3 **always blocks** a window. BE-04's schema is to be applied to `northwind` from the user's terminal, so
   the guard can return a real 0 before W1.
+
+## Correction (advisor read 3, 2026-11-27)
+The answer above called per-node stock a case "no recorded scenario can offer", because "every recorded cart
+request is quantity 1". Both statements were wrong as written:
+- **The split is real.** The cart journey's one recorded refusal, `P0008-CHR-REL-M` in US at quantity 1, offers
+  `P0001-BLK-REL-M`, `P0003-SLT-REL-M` and `P0004-BLK-REL-M`. All three have their US units at both DC-EAST and
+  DC-WEST (4+47, 54+72 and 30+60). So the user's condition, as worded, is met.
+- **It changes nothing at quantity 1.** Each alternative has a single node holding at least 47 units, so the region
+  total and the single-node maximum choose the same alternatives. Per-node stock would change only refusals of 2 or
+  more units, and RECORD-ALL records none.
+- **The journey also sets quantity 2.** That step raises an in-stock line whose stock the test sets to 5, so it is
+  never refused.
+
+The session read "split" as "no single node can fill the request". That reading is the session's, not the user's,
+so the choice goes back to the user: confirm (a), or build per-node stock now. The commands and output are in the
+log, under "advisor read 3, finding 1".

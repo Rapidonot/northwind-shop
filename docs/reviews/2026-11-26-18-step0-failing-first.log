@@ -232,3 +232,29 @@ restored
 == the guard on the northwind DB after the user applied BE-04's schema, 2026-11-27T08:28:59Z:
 live holds: 0 in database 'northwind'
 exit 0
+== advisor read 3, finding 1: the option-1 condition check, with its commands
+$ uv run --no-sync python $TMPDIR/adds.py   # every add_to_cart tool_use (with quantity) and every stock-refusal tool_result in every cassette suite
+add_to_cart quantities by suite: {('assistant-cart', 1): 2}
+stock refusals inside requests, by suite: {'assistant-cart': 1, 'backend-care': 5, 'backend-replay': 76}
+# the backend-care and backend-replay refusals are BE-04's own reserve (already per node), not the catalog's alternatives
+$ python3 -c (the cart journey steps, apps/portal/e2e/cart.json)
+  in-stock add | add_to_cart | {'variant_id': 'P0001-BLK-REG-M', 'quantity': 1}
+  out-of-stock add | add_to_cart | {'variant_id': 'P0008-CHR-REL-M', 'quantity': 1}
+  change quantity | set_cart_quantity | {'variant_id': 'P0001-BLK-REG-M', 'quantity': 2}
+  remove | remove_from_cart | {'variant_id': 'P0001-BLK-REG-M'}
+# the quantity-2 step raises P0001-BLK-REG-M, whose US stock the test sets to 5: never refused, no alternatives
+# A2A partner script (evals/fixtures/a2a-05-partner/script.json): the one cart request is "one Corvane Breakwater Shell"
+$ uv run --no-sync python $TMPDIR/f8.py   # the journey refusal's alternatives
+region US variant P0008-CHR-REL-M -> [('P0001-BLK-REL-M', True), ('P0003-SLT-REL-M', True), ('P0004-BLK-REL-M', True)]
+$ python3 $TMPDIR/split.py   # each offered alternative's US units by node (data/fixtures/stock.jsonl)
+P0001-BLK-REL-M US by node: {'DC-EAST': 4, 'DC-WEST': 47}; region total 51; single-node max 47
+P0003-SLT-REL-M US by node: {'DC-EAST': 54, 'DC-WEST': 72}; region total 126; single-node max 72
+P0004-BLK-REL-M US by node: {'DC-EAST': 30, 'DC-WEST': 60}; region total 90; single-node max 60
+# Result: all three offered alternatives ARE split across DC-EAST and DC-WEST (the user's wording of the condition is met).
+# The only recorded refusal is at quantity 1, and each alternative's single-node maximum (47, 72, 60) covers 1, so the
+# region total and the single-node rule choose the same alternatives. The earlier record said "no split alternative" and
+# "every recorded cart request is quantity 1"; both were wrong as written (corrected, advisor read 3).
+== advisor read 3, finding 2: M-l4 rerun against the split closure tests (a psycopg import in inventory/model.py)
+FAILED services/mcp-catalog/tests/test_18_step0_stock.py::test_the_substitutes_dependency_alone_is_pure
+1 failed, 1 passed, 22 deselected in 1.17s
+restored
