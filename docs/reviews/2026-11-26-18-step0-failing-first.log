@@ -276,3 +276,28 @@ Mutants of `citation_problems`, each run with -k "citations or uncited or refusa
   M-c1 the no-citation requirement removed (`if False:`)       -> 5 failed, 10 passed  (killed)
   M-c2 refusal matched after .strip().lower()                   -> 2 failed, 13 passed  (killed)
   M-c3 refusal matched as a prefix (startswith)                 -> 2 failed, 13 passed  (killed)
+
+==== Row #18: judge live values in tool_use order (the user's option 1, 2026-11-27) ====
+Before the change (evals/tests/test_18_judge_live_order.py, 4 tests):
+E       TypeError: CatalogLog.add() takes 4 positional arguments but 5 were given
+E       TypeError: CatalogLog.add() takes 4 positional arguments but 5 were given
+E       AssertionError: assert ['P0011-SAG-R...11-SAG-REG-S'] == ['P0011-SAG-R...11-SAG-REG-L']
+E         
+E         At index 0 diff: 'P0011-SAG-REG-L' != 'P0011-SAG-REG-S'
+E         Use -v to get more diff
+FAILED evals/tests/test_18_judge_live_order.py::test_the_judge_request_does_not_depend_on_completion_order
+FAILED evals/tests/test_18_judge_live_order.py::test_live_values_come_in_dispatch_order_and_are_numbered_so
+FAILED evals/tests/test_18_judge_live_order.py::test_the_in_process_catalog_logs_each_calls_progress_token
+3 failed, 1 passed in 1.28s
+  (The end-to-end test fails on behaviour: the three calls came back in finish order, L, M, S. The two unit
+  tests fail because add() takes no order yet; M-o1 below shows them failing on behaviour.)
+After: 4 passed. The 152 tests in the six eval files that use CatalogLog or serve_catalog: passed.
+Mutants (each run against the 4 tests, then restored):
+  M-o1 taken() keeps arrival order                 -> 3 failed, 1 passed (killed)
+  M-o2 serve_catalog passes no dispatch number     -> 1 failed, 3 passed (killed)
+  M-o3 the camelCase key progressToken is read     -> 1 failed, 3 passed (killed)
+  M-o4 results in descending dispatch order        -> 2 failed, 2 passed (killed)
+  (An earlier version read progressToken, then progress_token. M-o3 reading only progress_token survived, so
+  the camelCase lookup was dead code and was removed. The real CLI path gives progress_token.)
+End to end at $0 ($TMPDIR/w13script/ev029_reorder.py): EV-029 alone with get_price finishing in reverse
+  order. Before the fix: 1 miss (eval-judge). After: 0 misses. The control is 0 both times.
