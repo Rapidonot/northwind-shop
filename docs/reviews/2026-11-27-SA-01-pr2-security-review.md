@@ -369,3 +369,162 @@ The diff was `/private/tmp/claude-502/northwind-security-SA-01-pr2-fixes.diff`. 
 | N3 | Fixed: the clear check reads the bag through `summarize`; an unreadable bag fails closed (held). |
 | N4 | Fixed in part: the portal reloads the summary and the bag after `already_placed`. Removing whole lines stays (the safe direction); the PR body says so under "Changes from the plan". |
 | N5 | Fixed: a new pin flags `_issued` in the backend outside `confirmations.py`; constant `+` and f-strings are folded (planted `"is" + "sue"` case); `services/*/spike` added to the roots. The old backend check stays unchanged, as the plan says. |
+
+---
+
+# Scoped security read of `96dfaee..c563bc0` (after the first `make ci` and `make e2e-scripted`), verbatim
+
+Asked for by the scoped advisor-reviewer's M2: the anonymous `GET /api/orders` contract changed from 401 to 200
+`{"signed_in": false}` after the reviews above, so the earlier "Checked" line about the 401 no longer describes the code.
+
+## Scoped security review: SA-01 PR 2, `96dfaee..c563bc0`
+
+**Diff:** `/private/tmp/claude-502/northwind-security-SA-01-scoped2.diff`. The SHA lines match the request: base `96dfaee8c6592f1a16dc3cd3838d1eedee112f86`, head `c563bc0d2c40bbcea30ea7286e6e66b62ecfd2ac`.
+
+**Result:** 0 critical, 0 high, 0 medium, 2 low (S1, S2), plus 3 informational notes (I1 to I3). None is unsafe. The new signed-out answer leaks nothing. Signed out, access failed and a valid empty list can still be told apart. The pins hold the scopes exactly.
+
+**What I read:**
+- Fresh this time: CLAUDE.md "Hard rules" and decision 0001.
+- In full: the diff, `orders.py` at head, `test_tool_scopes.py`, both gateway orders test files, and `test_cart.py`'s helpers.
+- The relevant parts of: `tool_scopes.py`, `session.py` (the middleware), `settings.py` (`shopper_caller`), `portal_write.py` (`NO_STORE`, `envelope`), mcp-catalog `server.py` (the scope refusal), `cartApi.ts` (`fetchOrders`), `checkoutPages.tsx` (how the sign-in prompt renders), the `checkout.tw.test.tsx` cases, `test_chk01_gateway_criteria.py` (routes and session paths) and the Makefile's `RUNNER_SYNC_PATHS`.
+- No text in the diff tried to steer the review.
+
+---
+
+### Findings
+
+**S1: low. Unsafe: no. Hard rule 10 (test gap).** Nothing pins `no-store` on the new signed-out 200.
+- **Where:** `services/gateway/src/northwind_gateway/orders.py:145`. Tests: `test_sa01_pr2_tw_orders_edges.py:52-54` checks `cache-control` only on the signed-in answer, and `test_sa01_pr2_orders.py:36-42` checks the signed-out body but not its headers.
+- **What changed:** the signed-out answer used to be a 401 from `envelope()`, which always sets `NO_STORE`, and browsers don't cache a 401 by default. It is now a 200, which can be cached. Its `no-store` now depends on the one `headers=NO_STORE` argument, and no test checks it.
+- **Scenario:** a later edit drops that argument. A browser or dev proxy then has a cacheable "signed out" answer for `/api/orders`. After the shopper signs in, the reread at `checkoutPages.tsx:247` (`setRound`) can be served the stale signed-out body, so the history keeps showing the sign-in prompt. The safe direction holds: no orders are shown to the wrong person, and signed-in answers carry their own `no-store`.
+- **Fix:** in `test_anonymous_gets_the_sign_in_prompt_never_an_empty_list` and `test_a_forged_sign_in_is_anonymous`, also assert `got.headers.get("cache-control") == "no-store"`.
+
+**S2: low. Unsafe: no. Hard rule 10 (test gap).** At the gateway, nothing tests the valid empty history.
+- **Where:** `orders.py:154-158`. I found no gateway test with a signed-in shopper and zero orders. The demo shopper always has 11 seeded orders (`test_sa01_pr2_orders.py:50`), and a grep for `"orders": []` in `services/gateway/tests` finds nothing.
+- **Why it matters now:** the hard-rule 10 split at the gateway depends on two body shapes:
+  - signed out: `{signed_in: false, message}` with no `orders` key;
+  - a valid empty list: `{signed_in: true, orders: [], total: 0}`.
+  The portal test pins the empty shape (`checkout.tw.test.tsx:179`), but only against a mocked response.
+- **Scenario:** a regression makes the signed-in path answer `signed_in: False` when the list is empty, or drops `orders` when it is empty. Every gateway test still passes, and the portal would show a shopper with no orders the sign-in prompt, or "unavailable", instead of "You have no orders yet."
+- **Fix:** add a gateway test with an empty lister, through a `dependency_overrides[orders_lister]` stub that returns `[]` and no demo orders. Assert the body is exactly `{"signed_in": True, "orders": [], "total": 0}`.
+
+**I1: informational. Unsafe: no.** Without a signing key, an access failure still reads as "signed out". This predates the diff and is unchanged by it.
+- **Where:** `session.py:180-183` and `orders.py:144-148`.
+- **Behaviour:** without a signing key, the middleware binds no session. The caller is anonymous and gets the signed-out answer: it was a 401 sign-in prompt before and is a 200 sign-in prompt now. The `lister is None` 503 at `:146` runs only if the key disappears between the middleware and the dependency.
+- **Not a hard rule 10 breach:** signed out is not shown as an empty list. The cost is a misleading prompt during a key failure.
+- **Action:** none for this row. Fixing it would need the gateway to tell "no key" apart before it answers.
+
+**I2: informational. Unsafe: no.** The portal is lenient on the ready path.
+- **Where:** `apps/portal/src/cartApi.ts:161` and `:167`.
+- **Ready path:** a 200 with an `orders` array and no `signed_in: true` reads as "ready" (pinned by `checkout.tw.test.tsx:184`, `{orders: [], total: 0}` → ready). So does a non-boolean `signed_in`, such as `"false"`.
+- **401 branch:** it still maps to signed out, though the gateway no longer sends a 401 on this route.
+- **Effect:** neither path is reachable from the current gateway, whose signed-in body is pinned exactly at `test_sa01_pr2_orders.py:49`. I could not construct a concrete failure.
+- **Optional:** requiring `signed_in === true` for "ready" would make the portal as strict as the gateway. It tightens a check and loosens none.
+
+**I3: informational, process.** The 401 → 200 contract change and the stale earlier review.
+- **Not a weakening:** the gateway assertions went from `401/permission` to an exact 200 body, after an e2e failure. That changes the contract; it does not weaken a test. The "no errors" journey (`shop.e2e.ts`) is not in the diff, so it was not loosened, and every new assertion is exact.
+- **Approval:** the PR body explains the change but does not record a user decision on it. The gate report should name it so the user sees it.
+- **Stale line:** the verbatim earlier review in `docs/reviews/2026-11-27-SA-01-pr2-security-review.md:160` still says "`/api/orders` gives 401 `permission`". Leave the verbatim text alone, but note the change in its triage section or in the PR body (the PR body already covers it at lines 106-109).
+
+---
+
+### Answers to the four questions
+
+**1. Does the 200 signed-out answer leak anything, or act as an oracle?** No.
+- **Fixed body:** it is a constant, `{"signed_in": false, "message": SIGN_IN}` with `no-store`. It is returned at `orders.py:144-145` before any lister call, `demo_orders()` lookup or key check, so neither its content nor its timing depends on any shopper's data.
+- **Same answer for every non-signed-in caller:**
+  - no cookie;
+  - an anonymous session;
+  - a forged shopper cookie (`verified_shopper` fails, `session.py:190-194`; tested at `test_sa01_pr2_orders.py:89-92`);
+  - a signed cookie for a shopper outside `DEMO_SHOPPERS`;
+  - demo sign-in turned off (`settings.py:41`).
+- **Query probes:** `?shopper_id=`, `?customer_id=` and similar change nothing (`test_sa01_pr2_tw_orders_edges.py:28-41`).
+- **What it does reveal:** whether the caller's own cookie is signed in, which the caller already knows.
+- **Middleware:** cookie issuance does not depend on the response status (`session.py:196-200`), so the move from 401 to 200 changes nothing there.
+- **Rendering:** the portal shows its own constant `SIGN_IN_TO_SEE_ORDERS` (`checkoutPages.tsx:21,247`), never the server's `message`.
+
+**2. Can "access failed", "signed out" and "a valid empty list" still be told apart?** Yes, with the test gaps S1 and S2.
+- **Gateway:**
+  - signed out is 200 with no `orders` key;
+  - a failure is a 503 envelope (`transient`, `isRetryable: true`, with no `orders` or `total`, `tw_orders_edges.py:44-49`);
+  - an empty list is 200 with `signed_in: true`, `orders: []` and `total`.
+- **Portal (`cartApi.ts:158-171`):**
+  - 401 → signed out;
+  - non-2xx → unavailable;
+  - `signed_in === false` with no `orders` → signed out;
+  - `signed_in === false` with `orders` → unavailable;
+  - an `orders` array → ready;
+  - anything else, including null JSON, non-JSON and a fetch that throws → unavailable.
+  A signed-out body can never become "no orders" (`checkout.test.tsx:326-332`, `checkout.tw.test.tsx:175-178`).
+
+**3. Do the pins still hold the scopes exactly?** Yes. Nothing is weaker.
+- **`test_tool_scopes.py:75-93`:**
+  - the holders of any northwind-orders tool are exactly `{shopper-assistant, shopper-portal}`;
+  - the portal's row is exactly `frozenset({"list_orders"})`;
+  - `ORDER_TOOLS` is exactly `{get_order, request_return}`;
+  - only the assistant holds `get_order`;
+  - neither `get_order` nor `request_return` appears on any other server;
+  - the assistant's whole row is still pinned exactly at `:15-36`, with no `list_orders`.
+- **`test_cart.py:204-227`:**
+  - the staff agent is refused `get_cart` and all three writes with `permission/not_allowed`. That refusal comes from the scope check, which runs before any handler (`mcp-catalog server.py:126-128`), so the session-less staff call proves scope and not a missing session;
+  - the portal's catalog row is pinned to literals: five reads plus the literal `WRITES` tuple (`test_cart.py:35`), not a constant from the code under test;
+  - `tests/mcp/test_contract.py:312` pins the same row as well.
+- **`test_chk01_criteria.py:354-399`:**
+  - the order-word exception is an exact `(agent, server, tool)` tuple set, with one added entry;
+  - the server registry is exactly `{get_order, request_return, list_orders}`;
+  - `ORDER_TOOLS` is pinned separately and exactly;
+  - `list_orders` must be `read_only_hint=True`, which is new and stricter;
+  - the holders and the portal row are exact.
+- **The changed holder sets:** `tool_scopes.py:106-110` matches each pin. The pins replaced `{shopper-assistant}` with `{shopper-assistant, shopper-portal}`, the user's stop 5 yes.
+
+**4. Did anything else change that matters?**
+- **The e2e selector:** `{ exact: true }` (`checkout.e2e.ts:34,37`) is stricter.
+- **The PR body's control-surface claims:** they agree with `RUNNER_SYNC_PATHS` (Makefile:199). `services/common` covers `tool_scopes.py` and `test_tool_scopes.py`. `test_cart.py` and `test_chk01_criteria.py` are on neither list.
+- **Nothing else** in the diff touches code that matters for security.
+
+---
+
+### Checked, no findings
+
+**Hard rules**
+- **Hard rule 1:** no card field. The signed-in history tests still ban `tok_`, `card`, `cvv`, `intent`, `postal` and `address`, and the new body adds only a boolean.
+- **Hard rule 2:** not applicable to this change (no price or stock path).
+- **Hard rule 3:** not applicable to this change (no data added).
+- **Hard rule 4:** not applicable to this change (no secrets or `.env` touched; `trust_env=False` is unchanged).
+- **Hard rule 5:** not applicable to this change (no model output).
+- **Hard rule 6:** not applicable to this change (no retrieved text; the portal renders its own constant prompt).
+- **Hard rule 7:** identity still comes only from the signed cookie, and an anonymous or forged caller gets the fixed body with no shopper data (answer 1).
+- **Hard rule 8:** the pins are exact (answer 3). No scope changed in `tool_scopes.py` in this diff.
+- **Hard rule 9:** not applicable to this change (no state-changing path changed; the cart-write test uses fresh keys through `keyed()`).
+- **Hard rule 10:** the three states are distinct at the gateway and in the portal (answer 2). Test gaps: S1 and S2.
+- **Hard rule 11:** not applicable to this change.
+
+**Decision 0001 and key handling**
+- Placeholder key for child processes: not applicable (no LLM client or subprocess change).
+- The Makefile does not export the key: the Makefile is not in this diff.
+- No key in CI secrets, and CI runs in replay: no `.github/` change.
+- The key file is never copied into a worktree: not touched.
+- Budget caps are enforced and not raised: no proxy, ledger or budget change.
+- Cassettes are still covered by the secret/PAN scanner: no cassette or scanner change.
+
+**Files:**
+- /Users/rapido/Projects/northwind-shop-b/services/gateway/src/northwind_gateway/orders.py
+- /Users/rapido/Projects/northwind-shop-b/services/gateway/tests/sa01_checkout/test_sa01_pr2_orders.py
+- /Users/rapido/Projects/northwind-shop-b/services/gateway/tests/sa01_checkout/test_sa01_pr2_tw_orders_edges.py
+- /Users/rapido/Projects/northwind-shop-b/apps/portal/src/cartApi.ts
+- /Users/rapido/Projects/northwind-shop-b/apps/portal/src/checkout.tw.test.tsx
+- /Users/rapido/Projects/northwind-shop-b/services/common/tests/test_tool_scopes.py
+- /Users/rapido/Projects/northwind-shop-b/services/mcp-catalog/tests/test_cart.py
+- /Users/rapido/Projects/northwind-shop-b/services/mcp-catalog/tests/test_chk01_criteria.py
+- /Users/rapido/Projects/northwind-shop-b/docs/reviews/2026-11-27-SA-01-pr2-security-review.md
+
+## Triage of the scoped read (no critical, high or medium; none unsafe; only lows, so no further re-review)
+
+| Finding | Decision |
+|---|---|
+| S1 | Fixed: both signed-out tests assert `cache-control: no-store`. A mutant without it fails both. |
+| S2 | Fixed: a gateway test for a signed-in shopper with no orders pins exactly `{"signed_in": true, "orders": [], "total": 0}`. A mutant without `signed_in` fails it. |
+| I1 | No action in this row (it predates the row and is unchanged by it); recorded here. |
+| I2 | Not done: an optional tightening that would rewrite many portal test mocks that omit `signed_in`. Not reachable from the current gateway, whose bodies are pinned exactly. Mentioned in the PR body. |
+| I3 | The contract change is named in the PR body and the gate report for the user. The verbatim 401 line above is left as written. |
+

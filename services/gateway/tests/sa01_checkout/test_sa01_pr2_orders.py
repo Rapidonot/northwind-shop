@@ -40,6 +40,8 @@ def test_anonymous_gets_the_sign_in_prompt_never_an_empty_list(w: World) -> None
     assert got.status_code == 200
     assert got.json() == {"signed_in": False, "message": SIGN_IN}
     assert "orders" not in got.json()
+    # A 200 can be cached, so it must say not to (scoped security read S1).
+    assert got.headers.get("cache-control") == "no-store"
 
 
 def test_the_signed_in_shopper_gets_their_seeded_orders_newest_first(w: World) -> None:
@@ -90,8 +92,24 @@ def test_a_forged_sign_in_is_anonymous(w: World) -> None:
     forged = signed_in(A).rsplit(".", 1)[0] + "." + "0" * 64
     got = w.run(lambda c: c.get("/api/orders", headers={"cookie": forged}))
     assert got.status_code == 200 and got.json() == {"signed_in": False, "message": SIGN_IN}
+    assert got.headers.get("cache-control") == "no-store"
 
 
 def test_the_demo_statuses_use_the_same_plain_words_as_mcp_orders() -> None:
     for status, words in STATUS_TEXT.items():
         assert STATUS_WORDING[status] == words
+
+
+def test_a_signed_in_shopper_with_no_orders_gets_a_valid_empty_list(w: World) -> None:
+    """Scoped security read S2: the third state, distinct from signed out (no `orders` key) and from
+    access failed (503): signed in, with an empty list."""
+
+    class NoOrders:
+        async def list(self, caller: object) -> list[dict[str, object]]:
+            return []
+
+    app.dependency_overrides[orders_lister] = lambda: NoOrders()
+    got = w.run(lambda c: c.get("/api/orders", headers={"cookie": signed_in(A)}))
+    assert got.status_code == 200
+    assert got.json() == {"signed_in": True, "orders": [], "total": 0}
+    assert got.headers.get("cache-control") == "no-store"
