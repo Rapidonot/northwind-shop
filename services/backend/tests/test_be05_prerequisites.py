@@ -219,6 +219,11 @@ ISSUER_ROOTS = (
     *(p for p in sorted((REPO / "services").glob("*/src")) if p.parent.name != "backend"),
     REPO / "agents-external",
     REPO / "partner-agent",
+    # Security review F8: every other tree of repo Python outside the tests.
+    REPO / "evals" / "src",
+    REPO / "data" / "src",
+    REPO / "tools",
+    *(p for p in sorted((REPO / "services").glob("*/e2e"))),
 )
 ALLOWED_ISSUE = ("services/gateway/src/northwind_gateway/checkout.py", "pay")
 
@@ -231,19 +236,15 @@ def confirmation_sites(tree: ast.AST) -> list[tuple[str, int]]:
         if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
             function = node.name
         hit = False
-        if isinstance(node, ast.Attribute) and node.attr == "issue":
+        # F8: the book's own store too (`_issued`), which a direct write would use to skip `issue`.
+        if isinstance(node, ast.Attribute) and node.attr in {"issue", "_issued"}:
             hit = True
+        elif isinstance(node, ast.Constant) and node.value in {"issue", "_issued"}:
+            hit = True  # getattr(book, "issue"), operator.attrgetter("issue") and the like
         elif (
             isinstance(node, ast.Call)
             and isinstance(node.func, ast.Name)
             and node.func.id == "issue"
-        ):
-            hit = True
-        elif (
-            isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Name)
-            and node.func.id == "getattr"
-            and any(isinstance(a, ast.Constant) and a.value == "issue" for a in node.args)
         ):
             hit = True
         elif isinstance(node, ast.ImportFrom) and (
@@ -283,6 +284,8 @@ def test_the_gateways_pay_route_is_the_only_confirmation_issuer_outside_the_back
         "from northwind_backend.confirmations import ConfirmationBook\n",
         "import northwind_backend.confirmations as c\n",
         "from x import issue\ndef f():\n    return issue('O1', 1)\n",
+        "import operator\ndef f(book):\n    return operator.attrgetter('issue')(book)('O1', 1)\n",
+        "def f(book):\n    book._issued['cf_X'] = 1\n",
     ],
 )
 def test_a_planted_issuer_is_caught(source: str) -> None:

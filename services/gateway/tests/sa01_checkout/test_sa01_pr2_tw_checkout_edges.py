@@ -130,7 +130,8 @@ def test_the_digest_is_stable_between_reads_and_follows_the_bag_and_the_price(w:
     first, again, more, cheaper = w.run(go)
     assert first == again
     assert len({first, more, cheaper}) == 3
-    assert all(len(d) == 32 and set(d) <= set("0123456789abcdef") for d in (first, more, cheaper))
+    # Security review F3: letters a-p only, so a digest can never look like a card number.
+    assert all(len(d) == 32 and set(d) <= set("abcdefghijklmnop") for d in (first, more, cheaper))
 
 
 def test_the_summary_never_carries_stock_counts_or_card_or_token_fields(w: World) -> None:
@@ -227,7 +228,7 @@ def test_every_order_the_desk_holds_has_exactly_one_confirmation_bound_to_it(w: 
         {"digest": "D" * 32, "idempotency_key": "k" * 20},  # upper-case hex
         {"digest": "d" * 31, "idempotency_key": "k" * 20},
         {"digest": "d" * 33, "idempotency_key": "k" * 20},
-        {"digest": "g" * 32, "idempotency_key": "k" * 20},
+        {"digest": "q" * 32, "idempotency_key": "k" * 20},  # outside a-p (security review F3)
         {"digest": 12345678901234567890123456789012, "idempotency_key": "k" * 20},
         {"digest": None, "idempotency_key": "k" * 20},
         {"digest": "d" * 32, "idempotency_key": "k" * 15},

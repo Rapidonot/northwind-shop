@@ -1,6 +1,9 @@
 """The guard on every portal write (SA-01 PR 2: the bag's controls, ADD TO BAG and Pay (demo)).
 
-A write must come from the portal's own page, never from another site or a link:
+A write must come from the portal's own page, not from another site's page or a link. What this
+checks (security review F7: it trusts the `Host` header, so a DNS-rebinding page can pass it, though
+only with a new session of its own and never a victim's cookie; a `Host` allow-list is an open item
+for the whole gateway, as /api/chat and /api/handoff share the class):
 - `Content-Type: application/json`: a cross-site page can send a form or text body without a
   preflight, never a JSON one (as POST /api/handoff, security review M1);
 - the fixed header `X-Northwind-Portal: 1`: a custom header also needs a preflight, which the

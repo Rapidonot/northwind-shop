@@ -70,7 +70,7 @@ from northwind_backend.inventory.model import StockOut
 from northwind_backend.ports import Money, Order, OrderLine, PriceQuote, StockLevel
 from northwind_common.cards import contains_card_data
 from northwind_gateway.cart import cart_reader
-from northwind_gateway.cart_writes import CartWriter, Refusal, cart_writer
+from northwind_gateway.cart_writes import CartWriter, cart_writer
 from northwind_gateway.chat import CardNumberRefused
 from northwind_gateway.demo_orders import demo_orders
 from northwind_gateway.portal_write import KEY, NO_STORE, envelope, from_portal, refused
@@ -85,7 +85,9 @@ CHECKOUT_PATHS = (SUMMARY_PATH, PAY_PATH)
 
 ACTOR = "portal-checkout"
 FIRST_ORDER_NUMBER = 900_001  # demo orders never share a number with the seeded ones
-DIGEST = re.compile(r"[0-9a-f]{32}", re.ASCII)
+# Letters only (security review F3): a hex digest can hold a Luhn-valid run of digits, which the
+# card screen would refuse for that bag forever. Each hex nibble is one letter a-p.
+DIGEST = re.compile(r"[a-p]{32}", re.ASCII)
 AMOUNT = re.compile(r"\d{1,7}\.\d{2}", re.ASCII)
 DELIVERY = "Standard delivery. This demo charges nothing for it and gives no date."
 
@@ -98,7 +100,13 @@ NOT_READY = "Something in your bag can't be ordered. Check the summary."
 OVER_LIMIT = "This order is above the demo's order limit."
 REUSED = "That payment request was already used for a different order summary."
 NO_LONGER = "An item in your bag is no longer available."
-ALREADY_PLACED = "This bag was already paid for. Check your orders."
+ALREADY_PLACED = (
+    "Your bag still holds items from an order you already paid for. They are being removed; "
+    "check your orders and your bag."
+)
+FULL = "This demo has taken all the orders it can for now."
+MAX_ORDERS_PER_SHOPPER = 200  # security review F5: bounds every per-pay structure of the desk
+LAST_ORDER_NUMBER = 999_999  # security review F4: `O` and six digits, as `OrderPlacementTask` needs
 DECLINED = "The demo payment was declined. Nothing was charged."
 ON_HOLD = "Your order is on hold: a person will check it. Nothing was charged."
 
@@ -157,7 +165,8 @@ class Summary:
             "lines": [[ln.variant_id, ln.quantity, ln.unit_price] for ln in self.lines],
         }
         text = json.dumps(shown, sort_keys=True, separators=(",", ":"))
-        return hashlib.sha256(text.encode("utf-8")).hexdigest()[:32]
+        hexed = hashlib.sha256(text.encode("utf-8")).hexdigest()[:32]
+        return "".join(chr(ord("a") + int(nibble, 16)) for nibble in hexed)
 
     def view(self, signed_in: bool) -> dict[str, Any]:
         return {
@@ -297,12 +306,25 @@ class CheckoutDesk:
     inventory: InventoryState = field(default_factory=InventoryState.from_fixtures)
     sink: InMemoryAuditSink = field(default_factory=InMemoryAuditSink)
     paid: dict[tuple[str, str], tuple[str, int, dict[str, Any]]] = field(default_factory=dict)
-    # test-writer finding (SA-01 PR 2): a placed order whose bag could not be emptied, by shopper
-    # and digest. The same bag can't be paid again with a new key until it is emptied (or changes).
-    unemptied: dict[tuple[str, str], Order] = field(default_factory=dict)
+    # test-writer finding and security review F1/F6: placed orders whose lines may still be in the
+    # bag, by shopper and session. While the bag holds any variant of one, Pay is refused.
+    unemptied: dict[tuple[str, str], list[Order]] = field(default_factory=dict)
+    # F2: each attempt to empty a bag after an order uses fresh keys.
+    clear_attempts: dict[str, int] = field(default_factory=dict)
     _next: int = FIRST_ORDER_NUMBER
     _locks: dict[str, asyncio.Lock] = field(default_factory=dict)
     _guard: threading.Lock = field(default_factory=threading.Lock)
+
+    def can_order(self, shopper: str) -> bool:
+        """Security review F4/F5: refused before any confirmation, never a silent drop."""
+        with self._guard:
+            if self._next > LAST_ORDER_NUMBER:
+                return False
+        own = sum(1 for o in self.orders.orders.values() if o.shopper_id == shopper)
+        return own < MAX_ORDERS_PER_SHOPPER
+
+    def hold_bag(self, shopper: str, session: str, order: Order) -> None:
+        self.unemptied.setdefault((shopper, session), []).append(order)
 
     def lock_for(self, shopper: str) -> asyncio.Lock:
         with self._guard:
@@ -395,22 +417,39 @@ async def place(desk: CheckoutDesk, order: Order, ref: str, summary: Summary) ->
     return await finish(h, AgentResult(RunStatus.COMPLETE, (), (), cid))
 
 
-async def _empty_bag(writer: CartWriter | None, caller: Caller, order: Order) -> bool:
-    """The bag after a placed order: each line removed, keyed by the order (a retry is a no-op)."""
-    if writer is None:
+async def _empty_bag(
+    desk: CheckoutDesk,
+    writer: CartWriter | None,
+    reader: CartReader | None,
+    caller: Caller,
+    order: Order,
+) -> bool:
+    """The bag after a placed order: every one of the order's lines is removed, with fresh keys on
+    each attempt (security review F2), and `not_in_cart` counts as removed. True only when a fresh
+    read of the bag holds none of the order's variants (F1): never on a write's word alone."""
+    if writer is None or reader is None:
         return False
-    try:
-        for n, line in enumerate(order.lines):
-            key = f"{order.order_id}-paid-{n:02d}-remove"
-            done = await writer.write(
+    attempt = desk.clear_attempts.get(order.order_id, 0) + 1
+    desk.clear_attempts[order.order_id] = attempt
+    for n, line in enumerate(order.lines):
+        key = f"{order.order_id}-clear-{attempt}-{n:02d}"
+        try:
+            await writer.write(
                 caller, "remove_from_cart", {"variant_id": line.variant_id, "idempotency_key": key}
             )
-            if isinstance(done, Refusal):
-                return False
+        except Exception as error:  # noqa: BLE001 - the read below decides
+            log.error("checkout bag clear failed: %s", type(error).__name__)
+    try:
+        bag = await reader.read(caller)
+        held = {
+            str(line.get("variant_id"))
+            for line in (bag or {}).get("lines", [])
+            if isinstance(line, dict)
+        }
     except Exception as error:  # noqa: BLE001
-        log.error("checkout bag clear failed: %s", type(error).__name__)
+        log.error("checkout bag check failed: %s", type(error).__name__)
         return False
-    return True
+    return bag is not None and not held & {line.variant_id for line in order.lines}
 
 
 # ---- routes ------------------------------------------------------------------------------------
@@ -469,21 +508,25 @@ async def pay(
         shown = await _summary(caller, reader)
         if shown is None:
             return envelope(503, "transient", True, UNAVAILABLE)
-        earlier = desk.unemptied.get((shopper, shown.digest))
-        if earlier is not None and shown.digest == body.digest:
-            # This exact bag already became an order and was not emptied: never a second order and
-            # a second charge for it. Empty it now; once that works, the same items can be bought
-            # again later.
-            if await _empty_bag(writer, caller, earlier):
-                desk.unemptied.pop((shopper, shown.digest), None)
+        session = caller.session or ""
+        pending = desk.unemptied.get((shopper, session), [])
+        in_bag = {ln.variant_id for ln in shown.lines}
+        lingering = [o for o in pending if in_bag & {ln.variant_id for ln in o.lines}]
+        if lingering:
+            # Paid lines are still in this bag (F1): never a second order and a second charge for
+            # them, whatever else changed. Empty them; the shopper checks the bag and pays again.
+            kept = [o for o in lingering if not await _empty_bag(desk, writer, reader, caller, o)]
+            desk.unemptied[(shopper, session)] = kept
             return envelope(
                 409,
                 "business",
                 False,
                 ALREADY_PLACED,
                 code="already_placed",
-                order_id=earlier.order_id,
+                order_id=lingering[0].order_id,
             )
+        if pending:
+            desk.unemptied.pop((shopper, session), None)  # none of their lines is in the bag
         if "empty" in shown.issues:
             return envelope(409, "business", False, EMPTY, code="empty")
         if shown.digest != body.digest:
@@ -492,6 +535,8 @@ async def pay(
             return envelope(409, "business", False, OVER_LIMIT, code="over_order_limit")
         if shown.issues or shown.currency is None or shown.total is None:
             return envelope(409, "business", False, NOT_READY, code="not_ready")
+        if not desk.can_order(shopper):
+            return envelope(409, "business", False, FULL, code="demo_full")
         order = desk.new_order(shopper, shown)
         if order is None:
             return envelope(503, "transient", True, UNAVAILABLE)
@@ -504,8 +549,22 @@ async def pay(
         ref = desk.payment.confirmations.issue(
             order.order_id, Money(shown.total_minor, shown.currency)
         )
-        result = await place(desk, order, ref, shown)
-        status, content = await _outcome(desk, caller, writer, order, shown, result)
+        try:
+            result = await place(desk, order, ref, shown)
+            status, content = await _outcome(desk, caller, writer, reader, order, shown, result)
+        except Exception as error:  # noqa: BLE001 - security review F4
+            # Money may have moved: hold this bag (no second order for it) and answer with the
+            # fixed envelope, never a bare 500. The order stays in the desk for a person.
+            log.error("checkout placement failed: %s", type(error).__name__)
+            desk.hold_bag(shopper, caller.session or "", order)
+            status = 503
+            content = {
+                "isError": True,
+                "errorCategory": "transient",
+                "isRetryable": False,
+                "message": UNAVAILABLE,
+                "order_id": order.order_id,
+            }
         desk.paid[(shopper, body.idempotency_key)] = (body.digest, status, content)
         return JSONResponse(status_code=status, content=content, headers=NO_STORE)
 
@@ -514,6 +573,7 @@ async def _outcome(
     desk: CheckoutDesk,
     caller: Caller,
     writer: CartWriter | None,
+    reader: CartReader | None,
     order: Order,
     shown: Summary,
     result: PlacementResult,
@@ -532,9 +592,9 @@ async def _outcome(
         total=total,
     )
     if placed:
-        emptied = await _empty_bag(writer, caller, order)
+        emptied = await _empty_bag(desk, writer, reader, caller, order)
         if not emptied:
-            desk.unemptied[(order.shopper_id, shown.digest)] = order
+            desk.hold_bag(order.shopper_id, caller.session or "", order)
         return 200, {
             "result": "placed",
             "order_id": order.order_id,
