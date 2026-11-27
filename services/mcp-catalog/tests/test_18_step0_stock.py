@@ -265,14 +265,34 @@ def test_one_holds_read_per_refusal() -> None:
     assert holds.reads - before == 1
 
 
-def test_the_tool_list_is_unchanged() -> None:
-    """Step 0 (b) and (c) keep the model's tool list as it was, `add_to_cart`'s description
-    included: the alternatives' source changed, not what any tool says (sha256 at `bcc135b`)."""
+def test_the_model_visible_tool_list_is_unchanged() -> None:
+    """Step 0 (b) and (c) keep the tool list a model can see as it was, `add_to_cart`'s
+    description included: the alternatives' source changed, not what any tool says (sha256 at
+    `bcc135b`). Row #18 after the main merge (the user's stop-5 yes, 2026-11-27): SA-01 added the
+    portal-only specs to the server's registry, which no model holds a token for, so the pin covers
+    `TOOLS` without `PORTAL_SPECS`. The next test holds that only portal-only tools are left out."""
     import hashlib
 
-    dump = [tools.TOOLS[n].tool.model_dump(mode="json") for n in sorted(tools.TOOLS)]
+    from northwind_mcp_catalog.portal import PORTAL_SPECS
+
+    visible = sorted(n for n in tools.TOOLS if n not in PORTAL_SPECS)
+    dump = [tools.TOOLS[n].tool.model_dump(mode="json") for n in visible]
     digest = hashlib.sha256(json.dumps(dump, sort_keys=True).encode()).hexdigest()
     assert digest == "fc86e9e8ab4944583a460d96de5d091fde2728dba3c282fa75ac90b3a8a87756"
+
+
+def test_the_pin_leaves_out_only_the_portal_only_tools() -> None:
+    """What the pin above skips is exactly the portal-only set in `tool_scopes`, which no model
+    agent's scope names: a model tool cannot leave the pin by being added to `PORTAL_SPECS`."""
+    from northwind_common import tool_scopes
+    from northwind_mcp_catalog.portal import PORTAL_SPECS
+
+    assert set(PORTAL_SPECS) == set(tool_scopes.PORTAL_ONLY_TOOLS)
+    for agent, servers in tool_scopes.AGENT_TOOLS.items():
+        if agent == "shopper-portal":
+            continue
+        for names in servers.values():
+            assert not set(names) & set(PORTAL_SPECS), agent
 
 
 # ---- the dependency is the substitutes module only (the user's condition 2) ------------------

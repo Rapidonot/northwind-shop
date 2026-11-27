@@ -1,7 +1,8 @@
 # Row #18, W12c: `eval-answers-r3` (2026-11-27), stopped: containment failed on EV-092
 
 - **Window:** opened by the user at `65be143` with `RUN_BUDGET=6.00` and 120 minutes. The freeze is at `2ca787e`.
-- **Hold guard before the window** (12:30:29Z): `live holds: 0 in database 'northwind'`, exit 0.
+- **Hold guard before the window** (12:30:29Z): `live holds: 0 in database 'northwind'`, exit 0. The eval run's
+  mcp-catalog is built in process with `NoHolds` (no `DATABASE_URL`), so it reads no database (N2, A3-5).
 - **Count at $0 before the window:** no `eval-answers-r3` cassette existed, so all 308 items would miss. No eval
   input changed since the freeze.
 - **Run:** `make eval-live EVAL_SLICE=308 EVAL_SUITE=eval-answers-r3` with `FASTEMBED_CACHE_PATH` set,
@@ -12,9 +13,11 @@
   behaviour_ok 0.975, fabricated_ok 0.975. Judge `judge:v6:claude-sonnet-5-5`.
 - **Spend:** $36.042725 before, $39.329836 after, so **$3.287111**. The row's real spend so far is **$6.625804**.
 - **Proxy hit log:** 656 lines, all `recorded`. **Cassettes:** 0 before, 656 added (13 MB), none removed.
-  **Not committed:** waiting on the user.
+  Committed at `d6d51ab`, by the user's decision (option 1).
 - **Tests that read the suite:** `test_rag12_judged_extra.py` and `test_rag12_side_runs.py`, 61 passed.
-  **Scan:** clean. **Freeze:** 24 OK. (`shasum -a 256 -c`, the real check.**Correction (2026-11-27, the user's request):** the `git diff` named here matched no path. zsh passed the 24 paths as one argument, so it proved nothing. The real evidence was `shasum -a 256 -c` on the 24 frozen files. Rechecked correctly (`xargs git diff --name-only 2ca787e <commit> -- < paths`): 0 frozen files changed at every commit from `2ca787e` to `71e77c5`, and the control `bcc135b..2ca787e` shows 6.)
+  **Scan:** clean. **Freeze:** `shasum -a 256 -c` gave 24 OK; that was the real check, and this record named no `git diff`.
+  Rechecked after the fact (`xargs git diff --name-only 2ca787e <commit> -- < paths`): 0 frozen files changed at every commit
+  from `2ca787e` to `71e77c5` (control `bcc135b..2ca787e`: 6).
 
 ## EV-092
 

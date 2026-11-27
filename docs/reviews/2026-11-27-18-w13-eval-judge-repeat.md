@@ -2,7 +2,8 @@
 
 - **Window:** opened by the user at `71e77c5` with `RUN_BUDGET=4.00`, after SA-01 PR 2 shipped. The freeze is at
   `2ca787e`, with amendment 1 (`answerers.py`).
-- **Hold guard before the window** (16:15:55Z): `live holds: 0 in database 'northwind'`, exit 0.
+- **Hold guard before the window** (16:15:55Z): `live holds: 0 in database 'northwind'`, exit 0. The eval run's
+  mcp-catalog is built in process with `NoHolds` (no `DATABASE_URL`), so it reads no database (N2, A3-5).
 - **Count at $0 before the window:** 275 of 308 judge requests miss, 33 hit (`2026-11-27-18-wrapup.md` §1).
   Amendment 1 did not change the count.
 - **Run:** `make eval-live EVAL_SLICE=308 EVAL_SUITE=eval-judge-repeat` with `FASTEMBED_CACHE_PATH` set,

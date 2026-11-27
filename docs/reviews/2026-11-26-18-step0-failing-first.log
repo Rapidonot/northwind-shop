@@ -301,3 +301,16 @@ Mutants (each run against the 4 tests, then restored):
   the camelCase lookup was dead code and was removed. The real CLI path gives progress_token.)
 End to end at $0 ($TMPDIR/w13script/ev029_reorder.py): EV-029 alone with get_price finishing in reverse
   order. Before the fix: 1 miss (eval-judge). After: 0 misses. The control is 0 both times.
+
+==== Row #18 after the main merge: the model-visible tool-list pin (advisor H1; the user's stop-5 yes, 2026-11-27) ====
+At the head 22a65bc (the merge brought SA-01's PORTAL_SPECS into tools.TOOLS):
+  FAILED services/mcp-catalog/tests/test_18_step0_stock.py::test_the_tool_list_is_unchanged
+  AssertionError: assert '2b2bc06c1543...a6e05679cbba6' == 'fc86e9e8ab49...c90b3a8a87756'
+  1 failed, 23 passed
+TOOLS without PORTAL_SPECS (browse_products, get_prices, list_reviews == tool_scopes.PORTAL_ONLY_TOOLS) hashes to
+  fc86e9e8ab4944583a460d96de5d091fde2728dba3c282fa75ac90b3a8a87756, the value at bcc135b.
+After: test_the_model_visible_tool_list_is_unchanged + test_the_pin_leaves_out_only_the_portal_only_tools: 25 passed.
+Mutants (each restored; tools.py back at amendment 2's 3172127e..., portal.py unchanged):
+  M-h1 check_stock's model-visible description changed in tools.py   -> 1 failed, 1 passed (killed)
+  M-h2 get_price slipped into PORTAL_SPECS (portal.py)               -> 2 failed (killed)
+  M-h3 the pin over all of TOOLS again (the old pin)                  -> 1 failed (killed)
