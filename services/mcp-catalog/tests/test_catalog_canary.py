@@ -104,13 +104,20 @@ def arguments() -> list[tuple[str, dict[str, Any]]]:
 
 
 def portal_arguments() -> list[tuple[str, dict[str, Any]]]:
-    """`browse_products` and `get_prices` with every canary value, P0009's ID included."""
+    """`browse_products`, `get_prices` and `list_reviews` with every canary value, P0009's ID
+    included."""
     calls: list[tuple[str, dict[str, Any]]] = [("browse_products", {})]
     for value in VALUES:
         for key in ("text", "department"):
             calls.append(("browse_products", {key: value}))
         calls.append(("get_prices", {"product_id": value}))
+        calls.append(("list_reviews", {"product_id": value}))  # SA-01 PR 2
     calls.append(("get_prices", {"product_id": "P0009"}))
+    # SA-01 PR 2: the reviews read and browse's new arguments, P0009's ID included.
+    calls.append(("list_reviews", {"product_id": "P0009", "limit": 50}))
+    calls.append(("browse_products", {"product_ids": ["P0009"]}))
+    calls.append(("browse_products", {"product_ids": ["P0009", "P0001"], "priced": False}))
+    calls.append(("browse_products", {"priced": False}))
     return calls
 
 

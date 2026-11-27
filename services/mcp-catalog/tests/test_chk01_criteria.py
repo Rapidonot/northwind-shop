@@ -341,6 +341,7 @@ def test_the_registry_holds_the_catalog_reads_and_the_four_cart_tools_and_nothin
         tool_scopes.ELIGIBLE_PRODUCTS,
         "browse_products",
         "get_prices",
+        "list_reviews",  # SA-01 PR 2 (Amendment 3, approved by the user 2026-11-27)
     }
     assert tool_scopes.CART_TOOLS == frozenset(CART_TOOLS)
     for name in TOOLS:
@@ -386,7 +387,7 @@ def test_each_agent_gets_exactly_its_cart_tools() -> None:
     assert tool_scopes.CART_TOOLS <= catalog["shopper-assistant"]["northwind-catalog"]
     # SA-01 PR 1: the portal also reads the catalog for the shop pages; still no cart write.
     assert catalog["shopper-portal"]["northwind-catalog"] == frozenset(
-        {"get_cart", "get_product", "browse_products", "get_prices"}
+        {"get_cart", "get_product", "browse_products", "get_prices", "list_reviews"}
     )
     assert not tool_scopes.CART_WRITE_TOOLS & catalog["shopper-portal"]["northwind-catalog"]
     assert not tool_scopes.CART_TOOLS & catalog["catalog-subagent"]["northwind-catalog"]
@@ -404,7 +405,13 @@ def test_each_agent_lists_only_its_own_tools_on_a_real_server(url: str) -> None:
     portal = asyncio.run(names("shopper-portal", SESSION_A))
     staff = asyncio.run(names("catalog-subagent", None))
     assert set(CART_TOOLS) <= assistant
-    assert portal == {"get_cart", "get_product", "browse_products", "get_prices"}  # SA-01 PR 1
+    assert portal == {  # SA-01 PR 1; PR 2 adds `list_reviews`
+        "get_cart",
+        "get_product",
+        "browse_products",
+        "get_prices",
+        "list_reviews",
+    }
     assert not set(CART_TOOLS) & staff
 
 

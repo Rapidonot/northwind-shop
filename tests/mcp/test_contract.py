@@ -69,6 +69,8 @@ SERVER_ONLY_TOOLS: dict[str, str] = {"eligible_products": "shopper-query"}
 PORTAL_ONLY_TOOLS: dict[str, str] = {
     "browse_products": "shopper-portal",
     "get_prices": "shopper-portal",
+    # SA-01 PR 2 (Amendment 3, approved by the user 2026-11-27): the product page's reviews.
+    "list_reviews": "shopper-portal",
 }
 PORTAL_CATALOG_TOOLS = frozenset({"get_cart", "get_product", *PORTAL_ONLY_TOOLS})
 CALLER_KEYS = {

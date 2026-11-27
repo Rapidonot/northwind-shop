@@ -64,7 +64,10 @@ REGION_CURRENCY: Mapping[str, str] = {"US": "USD", "CA": "CAD", "UK": "GBP", "EU
 # one product's live price per variant (hard rule 2: the live store, never the index).
 BROWSE_PRODUCTS = "browse_products"
 GET_PRICES = "get_prices"
-PORTAL_ONLY_TOOLS = frozenset({BROWSE_PRODUCTS, GET_PRICES})
+# SA-01 PR 2: a product's public shopper reviews for the product page, shown as plain text, never
+# offered to a model (the assistant reads reviews only as labelled, retrieved data).
+LIST_REVIEWS = "list_reviews"
+PORTAL_ONLY_TOOLS = frozenset({BROWSE_PRODUCTS, GET_PRICES, LIST_REVIEWS})
 PORTAL_CATALOG_TOOLS = frozenset({GET_CART, "get_product", *PORTAL_ONLY_TOOLS})
 
 # Row #27 (CHK-06). One read of the signed-in shopper's own order; no list.

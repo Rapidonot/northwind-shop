@@ -21,6 +21,7 @@ from northwind_common.tool_scopes import (
     AGENT_TOOLS,
     BROWSE_PRODUCTS,
     GET_PRICES,
+    LIST_REVIEWS,
     PORTAL_ONLY_TOOLS,
     agents,
     allowed_tools,
@@ -116,7 +117,7 @@ def test_the_assistants_allowed_tools_are_unchanged_since_the_base() -> None:
 
 @pytest.mark.req("NFR-01")
 def test_only_the_portal_agent_holds_the_portal_tools() -> None:
-    assert PORTAL_ONLY_TOOLS == {BROWSE_PRODUCTS, GET_PRICES}
+    assert PORTAL_ONLY_TOOLS == {BROWSE_PRODUCTS, GET_PRICES, LIST_REVIEWS}  # PR 2: reviews
     for agent in agents():
         for server, tools in AGENT_TOOLS[agent].items():
             held = tools & PORTAL_ONLY_TOOLS
@@ -132,7 +133,12 @@ def test_only_the_portal_agent_holds_the_portal_tools() -> None:
 @pytest.mark.req("NFR-01")
 @pytest.mark.parametrize("agent", ["shopper-assistant", "shopper-query", "catalog-subagent"])
 @pytest.mark.parametrize(
-    ("tool", "args"), [(BROWSE_PRODUCTS, {}), (GET_PRICES, {"product_id": "P0001"})]
+    ("tool", "args"),
+    [
+        (BROWSE_PRODUCTS, {}),
+        (GET_PRICES, {"product_id": "P0001"}),
+        (LIST_REVIEWS, {"product_id": "P0001"}),  # SA-01 PR 2
+    ],
 )
 def test_every_other_agent_is_refused(
     url: str, agent: str, tool: str, args: dict[str, Any]
@@ -146,14 +152,24 @@ def test_every_other_agent_is_refused(
 # ---- browse_products ----------------------------------------------------------------------------
 
 
-def _lowest(product_id: str, region: str) -> dict[str, str] | None:
-    prices = [
+def _prices(product_id: str, region: str) -> list[Any]:
+    return [
         p
         for v in STORE.variants_of(product_id)
         if v.visibility == "public" and (p := STORE.price(v.variant_id, region)) is not None
     ]
+
+
+def _lowest(product_id: str, region: str) -> dict[str, str] | None:
+    prices = _prices(product_id, region)
     low = min(prices, key=lambda p: p.minor_units) if prices else None
     return None if low is None else {"amount": low.amount, "currency": low.currency}
+
+
+def _highest(product_id: str, region: str) -> dict[str, str] | None:
+    prices = _prices(product_id, region)
+    high = max(prices, key=lambda p: p.minor_units) if prices else None
+    return None if high is None else {"amount": high.amount, "currency": high.currency}
 
 
 @pytest.mark.req("RAG-11")
@@ -164,6 +180,7 @@ def test_browse_lists_every_public_product_with_its_live_lowest_price(url: str) 
     assert body["total"] == len(public) and body["region"] == "UK"
     for product in body["products"]:
         assert product["from_price"] == _lowest(product["product_id"], "UK")
+        assert product["to_price"] == _highest(product["product_id"], "UK")  # SA-01 PR 2
         assert set(product) == {
             "product_id",
             "name",
@@ -172,6 +189,7 @@ def test_browse_lists_every_public_product_with_its_live_lowest_price(url: str) 
             "department",
             "subcategory",
             "from_price",
+            "to_price",
         }
 
 
