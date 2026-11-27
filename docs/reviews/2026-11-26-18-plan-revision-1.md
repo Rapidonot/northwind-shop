@@ -86,3 +86,12 @@ wired, that reads as 0 live holds, if the user agrees.
 ## Next (unchanged)
 Commit the advisor's fixes, then the user's go, then `make ci`, then the freeze commit, then W1. The user is
 told before each window and before each `make ci`.
+
+## The user's answers (2026-11-27)
+- Holds reader: **B** (built in `b188b05`).
+- Per-node stock: **option 1 (a)**. No recorded scenario can offer a split alternative, because every recorded cart
+  request is quantity 1. Per-node stock for refusals of 2 or more units is an open item owned by #21.
+- Router limits: the median of 3, with 6x and 30 s.
+- The 13-module allow-list: option 1.
+- Exit 3 **always blocks** a window. BE-04's schema is to be applied to `northwind` from the user's terminal, so
+  the guard can return a real 0 before W1.
