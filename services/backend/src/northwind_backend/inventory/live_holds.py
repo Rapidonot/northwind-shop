@@ -14,9 +14,9 @@ plain "0"):
 - 0: the tables exist and no hold is live;
 - 1: some hold is live, so the window must not open;
 - 2: not checked (the database can't be reached, or any other database error);
-- 3: BE-04's tables don't exist in this database, so no hold can exist here. The window record
-  names the database, so a wrong `DATABASE_URL` is visible. While the catalog server has no holds
-  reader wired (`NoHolds`), it reads no database holds, so 3 cannot change a recording either.
+- 3: BE-04's tables don't exist in this database: its schema isn't applied there, or
+  `DATABASE_URL` names the wrong database. **Exit 3 always blocks a window** (the user's decision,
+  2026-11-27): only a real 0 opens one. The line names the database.
 It reads only; it never sweeps or releases a hold.
 """
 

@@ -412,6 +412,7 @@ READ_TOOLS: Mapping[str, ToolSpec] = {
             annotations=_READ_ONLY,
         ),
         handler=handler,
+        reads_stock=name == CHECK_STOCK,
     )
     for name, handler in _HANDLERS.items()
 }
@@ -457,7 +458,7 @@ async def eligible_products(
         price_min=low,
         price_max=high,
         in_stock=in_stock,
-        held=server.holds.live(region) if in_stock else None,
+        held=server.held(region) if in_stock else None,
     )
     # Plain JSON, not a `<catalog_data>` label: that format is for the model's own tools
     # (`catalog_tool.TOOL_NAMES`), and this one is never in a model's tool list.
@@ -486,6 +487,7 @@ QUERY_TOOLS: Mapping[str, ToolSpec] = {
             annotations=_READ_ONLY,
         ),
         handler=eligible_products,
+        reads_stock=True,
     )
 }
 

@@ -20,6 +20,7 @@ catalog. The live store's `set_price` and `set_stock` are not tools, so no reque
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
@@ -38,7 +39,7 @@ from northwind_common.mcp_gate import ASGIApp
 from northwind_common.mcp_token import CATALOG_SERVER, Claims
 from northwind_common.tool_scopes import allowed_tools
 from northwind_mcp_catalog.cart_store import CartStore
-from northwind_mcp_catalog.holds import Holds, NoHolds, subtract
+from northwind_mcp_catalog.holds import Holds, NoHolds, subtract, unavailable
 from northwind_mcp_catalog.live import LiveCatalog
 
 log = logging.getLogger("northwind_mcp_catalog")
@@ -63,6 +64,9 @@ ToolHandler = Callable[["CatalogServer", Claims, Mapping[str, Any]], Awaitable[t
 class ToolSpec:
     tool: t.Tool
     handler: ToolHandler
+    # Row #18 step 0, security review M2 of option B: the call reads stock, so the server takes its
+    # one holds reading before the handler runs, off the event loop.
+    reads_stock: bool = False
 
 
 def error_result(error: ToolError) -> t.CallToolResult:
@@ -96,7 +100,9 @@ def claims_of(ctx: Any) -> Claims:
 
 
 # The holds reading of the tool call being handled (`CatalogServer.reading`): (region, reading).
-_READING: ContextVar[tuple[str, Mapping[str, int]] | None] = ContextVar(
+# A reading is None when the reader failed: the call raises `unavailable()` only if it reads stock
+# (option B's re-review N-L1), so a validation error or a price-only filter answers as before.
+_READING: ContextVar[tuple[str, Mapping[str, int] | None] | None] = ContextVar(
     "holds_reading", default=None
 )
 
@@ -105,13 +111,12 @@ class _Reading:
     """A plain context manager, not `contextlib.contextmanager`: that one sets `__traceback__` on
     the exception leaving the block, and a `ToolError` is a frozen dataclass."""
 
-    def __init__(self, held: Mapping[str, int], region: str) -> None:
+    def __init__(self, held: Mapping[str, int] | None, region: str) -> None:
         self.held, self.region = held, region
-        self._token: Token[tuple[str, Mapping[str, int]] | None] | None = None
+        self._token: Token[tuple[str, Mapping[str, int] | None] | None] | None = None
 
-    def __enter__(self) -> Mapping[str, int]:
+    def __enter__(self) -> None:
         self._token = _READING.set((self.region, self.held))
-        return self.held
 
     def __exit__(self, *exc: object) -> None:
         if self._token is not None:
@@ -148,6 +153,8 @@ class CatalogServer:
         """The call's holds reading for `region` (`reading`), or a fresh one outside it."""
         taken = _READING.get()
         if taken is not None and taken[0] == region:
+            if taken[1] is None:
+                raise unavailable()
             return taken[1]
         return self.holds.live(region)
 
@@ -155,7 +162,7 @@ class CatalogServer:
         """One holds reading for a whole tool call, taken before the call changes anything: a cart
         write takes it before its lock, so a reader that fails fails the call before the cart moves,
         and the result's view can't fail after the write (row #18 step 0, security review M1)."""
-        return _Reading(self.holds.live(region), region)
+        return _Reading(self.held(region), region)  # the call's reading, when it has one
 
     def _offered(self, claims: Claims) -> list[str]:
         allowed = allowed_tools(claims.agent, SERVER_NAME)
@@ -175,7 +182,17 @@ class CatalogServer:
                 log.warning("tool refused: permission")
                 raise not_allowed()
             self.calls += 1
-            return await self._tools[params.name].handler(self, claims, params.arguments or {})
+            spec = self._tools[params.name]
+            if spec.reads_stock and claims.region and not isinstance(self.holds, NoHolds):
+                # A database read blocks: never on the one event loop every shopper shares (M2).
+                held: Mapping[str, int] | None
+                try:
+                    held = await asyncio.to_thread(self.holds.live, claims.region)
+                except ToolError:
+                    held = None  # raised only if the handler reads stock (N-L1)
+                with _Reading(held, claims.region):
+                    return await spec.handler(self, claims, params.arguments or {})
+            return await spec.handler(self, claims, params.arguments or {})
         except ToolError as error:
             return error_result(error)
         except Exception as error:  # noqa: BLE001 - its text must not reach the caller

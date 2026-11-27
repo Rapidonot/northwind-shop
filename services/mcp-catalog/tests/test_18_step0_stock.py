@@ -277,14 +277,14 @@ def test_the_tool_list_is_unchanged() -> None:
 
 # ---- the dependency is the substitutes module only (the user's condition 2) ------------------
 
-FORBIDDEN = (
+MODEL_CODE = (
     "northwind_common.llm",
     "northwind_backend.agents",
     "northwind_assistant",
     "anthropic",
     "claude_agent_sdk",
-    "psycopg",
 )
+FORBIDDEN = (*MODEL_CODE, "psycopg")
 # What the substitutes module pulls in today, all pure (security review L4): a new module here is a
 # change to the user's condition and fails this test until it is looked at.
 BACKEND_ALLOWED = frozenset(
@@ -306,22 +306,36 @@ BACKEND_ALLOWED = frozenset(
 )
 
 
-def test_the_catalog_servers_import_closure_has_no_model_code() -> None:
-    script = (
-        "import json, sys\n"
-        "import northwind_mcp_catalog.app\n"
-        "import northwind_mcp_catalog.cart\n"
-        "import northwind_mcp_catalog.tools\n"
-        "print(json.dumps(sorted(sys.modules)))\n"
-    )
+def _loaded(*modules: str) -> list[str]:
+    script = "import json, sys\n" + "".join(f"import {m}\n" for m in modules)
+    script += "print(json.dumps(sorted(sys.modules)))\n"
     done = subprocess.run(  # noqa: S603 - this interpreter, a fixed script
         [sys.executable, "-c", script], capture_output=True, text=True, check=True, timeout=120
     )
-    loaded = json.loads(done.stdout)
-    bad = [m for m in loaded for f in FORBIDDEN if m == f or m.startswith(f + ".")]
-    assert not bad, bad
+    found: list[str] = json.loads(done.stdout)
+    return found
+
+
+def _bad(loaded: list[str], forbidden: tuple[str, ...]) -> list[str]:
+    return [m for m in loaded for f in forbidden if m == f or m.startswith(f + ".")]
+
+
+def test_the_catalog_servers_import_closure_has_no_model_code() -> None:
+    """The whole server: no model code. `psycopg` loads here only through `holds.py`, the one
+    module allowed a driver (the user's option B, 2026-11-27; `test_tools.py` pins which module)."""
+    loaded = _loaded("northwind_mcp_catalog.app", "northwind_mcp_catalog.cart")
+    assert not _bad(loaded, MODEL_CODE), _bad(loaded, MODEL_CODE)
     backend = {m for m in loaded if m.startswith("northwind_backend")}
     assert "northwind_backend.inventory.substitutes" in backend
+    assert backend <= BACKEND_ALLOWED, sorted(backend - BACKEND_ALLOWED)
+
+
+def test_the_substitutes_dependency_alone_is_pure() -> None:
+    """What mcp-catalog takes from northwind-backend loads no driver and no model code, and only
+    today's 13 pure modules (security review L4; the user's option 1 for condition 2)."""
+    loaded = _loaded("northwind_backend.inventory.substitutes")
+    assert not _bad(loaded, FORBIDDEN), _bad(loaded, FORBIDDEN)
+    backend = {m for m in loaded if m.startswith("northwind_backend")}
     assert backend <= BACKEND_ALLOWED, sorted(backend - BACKEND_ALLOWED)
 
 

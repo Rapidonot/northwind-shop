@@ -1,6 +1,6 @@
-# Row #18 step 0: failing-first log (branch req/18-record-all from bcc135b; 2026-11-26)
+# Row #18 step 0: failing-first log (branch req/18-record-all from bcc135b; 2026-11-26/27)
 # Each mutant was applied to the working tree, its tests run as one file, and the file restored (cmp against the pre-mutant copy).
-# Entries after the security review (M-m1, M-a2, the M-a1 rerun), the re-review (M-n1, M-n3) and the advisor reviews (M-r1, M-r1b, M-l4, M-l5a, M-l5b, M-t1, M-l6, the CPU-hog runs, the base hash, F8, R1's 6x/30 s runs, the "ignore " measurement) are against the fixed tests.
+# Later entries (after each review; option B's M-p1..M-p8 and its reviews' M-q1..M-q5 on 2026-11-27) are against the fixed tests.
 == (a) mutant M-a1: _back always returns 0 (look back to the start)
  services/assistant/src/northwind_assistant/output_check.py | 2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)
@@ -59,11 +59,6 @@ FAILED services/backend/tests/inventory/test_18_live_holds_guard.py::test_a_sett
 2 failed, 3 passed in 1.02s
 restored
 == M1 mutant M-m1: no call-wide holds reading before the cart write
-                # was passed to throw().  This prevents a StopIteration
-                # Don't re-raise the passed in exception. (issue27122)
-                # was passed to throw() and later wrapped into a RuntimeError
-                # passed to throw(), because __exit__() must not raise
-                # an exception unless __exit__() itself failed.  But throw()
 FAILED services/mcp-catalog/tests/test_18_step0_stock.py::test_a_reader_that_fails_leaves_the_cart_as_it_was[set_cart_quantity-args2]
 FAILED services/mcp-catalog/tests/test_18_step0_stock.py::test_a_reader_that_fails_leaves_the_cart_as_it_was[remove_from_cart-args3]
 FAILED services/mcp-catalog/tests/test_18_step0_stock.py::test_a_write_reads_holds_once_so_a_later_failure_cannot_follow_it[1]
@@ -175,3 +170,62 @@ region US variant P0008-CHR-REL-M -> [('P0001-BLK-REL-M', True), ('P0003-SLT-REL
 'x': median 50K 0.066 s, 200K 0.610 s, ratio 9.24
 restored
 # Not an early exit: "ignore " has the router's largest linear cost (about 5.5x "x"'s), so the same quadratic pass lifts its ratio only to 5.5. That is the ratio test's stated limit (the first pass's L3 and the scoped read).
+== option B: M-p1, the reader ignores expiry
+FAILED services/mcp-catalog/tests/test_18_postgres_holds.py::test_released_committed_and_expired_holds_are_not_read
+1 failed, 6 passed in 0.81s
+restored
+== option B: M-p2, the reader ignores the region
+FAILED services/mcp-catalog/tests/test_18_postgres_holds.py::test_the_reader_agrees_with_bes_store_region_by_region
+FAILED services/mcp-catalog/tests/test_18_postgres_holds.py::test_released_committed_and_expired_holds_are_not_read
+FAILED services/mcp-catalog/tests/test_18_postgres_holds.py::test_the_reader_cannot_write
+3 failed, 4 passed in 0.70s
+restored
+== option B: M-p3, an unreachable database reads as no holds
+FAILED services/mcp-catalog/tests/test_18_postgres_holds.py::test_an_unreachable_database_is_a_transient_error_never_a_zero
+1 failed, 6 passed in 0.80s
+restored
+== option B: M-p4, the reader's connection not read-only
+FAILED services/mcp-catalog/tests/test_18_postgres_holds.py::test_the_reader_cannot_write
+1 failed, 6 passed in 0.84s
+restored
+== option B: M-p5, the app never wires the reader
+FAILED services/mcp-catalog/tests/test_18_postgres_holds.py::test_the_app_wires_the_reader_only_when_database_url_is_set
+1 failed, 2 passed, 4 deselected in 0.49s
+restored
+== option B: M-p6, a second module imports the driver (tools.py)
+FAILED services/mcp-catalog/tests/test_tools.py::test_the_catalog_source_never_touches_the_index
+1 failed, 66 deselected in 0.48s
+restored
+== option B: M-p7, the reader's SQL names the index table
+FAILED services/mcp-catalog/tests/test_tools.py::test_the_catalog_source_never_touches_the_index
+FAILED services/mcp-catalog/tests/test_tools.py::test_the_one_database_module_names_only_inventory_tables
+2 failed, 65 deselected in 0.47s
+restored
+== option B: M-p8, the reader's module writes
+FAILED services/mcp-catalog/tests/test_tools.py::test_the_one_database_module_names_only_inventory_tables
+1 failed, 66 deselected in 0.43s
+restored
+== option B review M1: mutant M-q1, sold units not subtracted (the committed clause dropped)
+FAILED services/mcp-catalog/tests/test_18_postgres_holds.py::test_released_and_expired_holds_are_not_read_but_a_sale_stays_subtracted
+FAILED services/mcp-catalog/tests/test_18_postgres_holds.py::test_the_catalog_reads_fixture_stock_less_sold_and_held
+2 failed, 8 passed in 2.99s
+restored
+== option B review M2: mutant M-q2, no lock or statement timeout
+(first try discarded: this repo has no pytest timeout plugin, so `--timeout` was refused; the mutant was rerun after M-q3, below)
+restored
+== option B review M2: mutant M-q3, the reading taken on the event loop (no to_thread)
+FAILED services/mcp-catalog/tests/test_18_postgres_holds.py::test_the_server_reads_holds_off_the_event_loop_once_per_stock_call
+1 failed, 9 deselected in 0.49s
+restored
+== M-q2, rerun under a 30 s watchdog: ( the test hung past 30 s and was killed, so it does not pass; M-q2 killed)
+restored
+== option B re-review N-L1: mutant M-q4, a failed reading fails every stock call up front
+FAILED services/mcp-catalog/tests/test_18_postgres_holds.py::test_a_down_reader_never_hides_a_non_transient_answer[check_stock-args0-not_found]
+FAILED services/mcp-catalog/tests/test_18_postgres_holds.py::test_a_down_reader_never_hides_a_non_transient_answer[check_stock-args1-None]
+FAILED services/mcp-catalog/tests/test_18_postgres_holds.py::test_a_down_reader_fails_only_the_calls_that_read_stock
+3 failed, 4 passed, 6 deselected in 0.55s
+restored
+== option B re-review N-L2: mutant M-q5, a comma join to an index table in the reader's SQL
+FAILED services/mcp-catalog/tests/test_tools.py::test_the_one_database_module_names_only_inventory_tables
+1 failed, 66 deselected in 0.44s
+restored

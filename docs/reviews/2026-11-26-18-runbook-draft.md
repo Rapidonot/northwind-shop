@@ -54,9 +54,9 @@ user its output line:
 - Exit 0 means none live; the window may open.
 - Exit 1 means some hold is live; stop, and the window does not open.
 - Exit 2 means not checked; stop.
-- Exit 3 means BE-04's tables do not exist in the named database. While mcp-catalog has no holds
-  reader (`NoHolds`), that reads as 0 live holds, if the user agrees. Once a reader is wired, 3 blocks
-  the window (Open items, "From #18 step 0, re-review N2").
+- Exit 3 means BE-04's tables do not exist in the named database: its schema isn't applied there, or
+  `DATABASE_URL` names the wrong database. **Exit 3 always blocks the window** (the user's decision,
+  2026-11-27). Only a real 0 opens one.
 
 The session also tells the user before each window, because window B's `make check` or `make ci` must
 not overlap one.

@@ -577,6 +577,7 @@ CART_SPECS: Mapping[str, ToolSpec] = {
             annotations=_READ if name == GET_CART else _WRITE,
         ),
         handler=handler,
+        reads_stock=True,
     )
     for name, handler in _HANDLERS.items()
 }
