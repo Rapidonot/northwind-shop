@@ -227,7 +227,8 @@ def test_the_portal_agent_cannot_write_even_with_a_valid_session(keyed: None) ->
             async with catalog_testing.connect(url, portal) as client:
                 return {t.name for t in (await client.list_tools()).tools}
 
-        assert asyncio.run(names()) == {"get_cart"}
+        # SA-01 PR 1: the shop pages' reads too; still no cart write.
+        assert asyncio.run(names()) == {"get_cart", "get_product", "browse_products", "get_prices"}
 
 
 def test_without_the_key_the_real_reader_gives_the_fixed_503_not_a_500(

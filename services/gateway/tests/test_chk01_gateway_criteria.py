@@ -91,12 +91,16 @@ def test_the_gateway_has_no_route_that_places_an_order_or_writes_a_cart() -> Non
 
 def test_the_session_paths_are_the_chat_the_cart_the_sign_in_and_the_handoff() -> None:
     # Row #27 (CHK-06): the demo sign-in binds its shopper to the session. Row #23 (SA-06): the
-    # handoff names its session or shopper. Still exact.
+    # handoff names its session or shopper. SA-01 PR 1: the shop pages' reads, so a signed-in
+    # shopper's pages price in their own region. Still exact.
     assert set(SESSION_PATHS) == {
         "/api/chat",
         "/api/cart",
         "/api/session/shopper",
         "/api/handoff",
+        "/api/departments",
+        "/api/products",
+        "/api/product",
     }
 
 

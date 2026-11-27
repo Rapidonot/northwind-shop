@@ -63,6 +63,14 @@ SHOPPER_TOOLS = READ_ONLY_TOOLS | CART_READ_TOOLS | WRITE_TOOLS
 # Row #11 (RAG-04, decision 0022; approved by the user under stop 5): one server-only tool, outside
 # PRD §7's shopper set, granted to exactly one agent that no model holds. Read-only, IDs only.
 SERVER_ONLY_TOOLS: dict[str, str] = {"eligible_products": "shopper-query"}
+# SA-01 PR 1 (approved by the user under stop 5, 2026-11-26): the shop pages' two reads, outside PRD
+# §7's shopper set, granted only to `shopper-portal`, the gateway's own agent, which no model holds.
+# Read-only. Exact: that agent's catalog row is these, `get_cart` and `get_product`, nothing else.
+PORTAL_ONLY_TOOLS: dict[str, str] = {
+    "browse_products": "shopper-portal",
+    "get_prices": "shopper-portal",
+}
+PORTAL_CATALOG_TOOLS = frozenset({"get_cart", "get_product", *PORTAL_ONLY_TOOLS})
 CALLER_KEYS = {
     "audience",
     "region",
@@ -140,7 +148,8 @@ def test_tools_list_is_within_the_agents_scope_and_read_only(server: str, agent:
     assert names == allowed_tools(agent, server) & set(SERVERS[server][1])
     # Row #11: a server-only tool is listed to its one agent and to nobody else.
     server_only = {name for name, owner in SERVER_ONLY_TOOLS.items() if owner == agent}
-    assert names <= SHOPPER_TOOLS | server_only
+    portal_only = {name for name, owner in PORTAL_ONLY_TOOLS.items() if owner == agent}  # SA-01
+    assert names <= SHOPPER_TOOLS | server_only | portal_only
     for tool in listed:  # read-only, except exactly the cart writes (row #16) and request_return
         assert tool.annotations is not None
         assert tool.annotations.read_only_hint is (tool.name not in WRITE_TOOLS)
@@ -150,12 +159,19 @@ def test_tools_list_is_within_the_agents_scope_and_read_only(server: str, agent:
 @pytest.mark.parametrize("server", sorted(SERVERS))
 def test_no_scope_grants_a_tool_outside_prd_sevens_read_only_set(server: str) -> None:
     granted = {name for row in AGENT_TOOLS.values() for name in row.get(server, frozenset())}
-    assert granted <= SHOPPER_TOOLS | set(SERVER_ONLY_TOOLS)
+    assert granted <= SHOPPER_TOOLS | set(SERVER_ONLY_TOOLS) | set(PORTAL_ONLY_TOOLS)
     # Row #11: each server-only tool is granted to its one agent, which is granted nothing else.
     for name, owner in SERVER_ONLY_TOOLS.items():
         holders = {a for a, row in AGENT_TOOLS.items() if name in row.get(server, frozenset())}
         assert holders <= {owner}
         assert AGENT_TOOLS[owner].get(server, frozenset()) <= {name}
+    # SA-01 PR 1: each portal-only tool is granted to exactly its owner, on mcp-catalog only, and
+    # that owner's catalog row is exactly the portal's set.
+    for name, owner in PORTAL_ONLY_TOOLS.items():
+        holders = {a for a, row in AGENT_TOOLS.items() if name in row.get(server, frozenset())}
+        assert holders == ({owner} if server == CATALOG else set()), name
+    if server == CATALOG:
+        assert AGENT_TOOLS["shopper-portal"][CATALOG] == PORTAL_CATALOG_TOOLS
     # Row #16: only the assistant may write a cart; the portal's agent only reads it.
     writers = {a for a, row in AGENT_TOOLS.items() if CART_WRITE_TOOLS & row.get(server, set())}
     assert writers <= {"shopper-assistant"}
@@ -246,7 +262,8 @@ def test_the_catalog_listing_is_within_the_five_read_only_tools(agent: str) -> N
     names = {tool.name for tool in listed}
     cart = CART_READ_TOOLS | CART_WRITE_TOOLS
     server_only = {name for name, owner in SERVER_ONLY_TOOLS.items() if owner == agent}
-    assert names <= FIVE_CATALOG_TOOLS | cart | server_only  # row #11: only its one agent
+    portal_only = {name for name, owner in PORTAL_ONLY_TOOLS.items() if owner == agent}  # SA-01
+    assert names <= FIVE_CATALOG_TOOLS | cart | server_only | portal_only  # only its one agent
     assert not {"set_price", "set_stock"} & names
     for tool in listed:  # read-only, except exactly the cart writes (row #16)
         assert tool.annotations is not None
@@ -254,7 +271,9 @@ def test_the_catalog_listing_is_within_the_five_read_only_tools(agent: str) -> N
     if agent == "shopper-assistant":
         assert names == FIVE_CATALOG_TOOLS | cart
     if agent == "shopper-portal":
-        assert names == CART_READ_TOOLS
+        assert names == PORTAL_CATALOG_TOOLS  # SA-01 PR 1; row #16 had `get_cart` only
+    else:
+        assert not set(PORTAL_ONLY_TOOLS) & names
     if agent == "shopper-query":
         assert names == {"eligible_products"}
     else:
@@ -263,10 +282,13 @@ def test_the_catalog_listing_is_within_the_five_read_only_tools(agent: str) -> N
 
 def test_the_catalog_registry_is_exactly_the_five_read_only_tools() -> None:
     cart = CART_READ_TOOLS | CART_WRITE_TOOLS  # row #16
-    # Row #11: plus the one server-only tool, for its one agent.
-    assert set(CATALOG_TOOLS) == FIVE_CATALOG_TOOLS | cart | set(SERVER_ONLY_TOOLS)
+    # Row #11: plus the one server-only tool, for its one agent. SA-01 PR 1: plus the two
+    # portal-only reads, for `shopper-portal` only.
+    assert set(CATALOG_TOOLS) == (
+        FIVE_CATALOG_TOOLS | cart | set(SERVER_ONLY_TOOLS) | set(PORTAL_ONLY_TOOLS)
+    )
     assert allowed_tools("shopper-assistant", CATALOG) == FIVE_CATALOG_TOOLS | cart
-    assert allowed_tools("shopper-portal", CATALOG) == CART_READ_TOOLS
+    assert allowed_tools("shopper-portal", CATALOG) == PORTAL_CATALOG_TOOLS
     assert allowed_tools("catalog-subagent", CATALOG) == frozenset()
     assert allowed_tools("shopper-query", CATALOG) == frozenset(SERVER_ONLY_TOOLS)
 

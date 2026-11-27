@@ -5,6 +5,7 @@ SA-02: the chat endpoint, in `northwind_gateway.chat`.
 Row #16 (CHK-01): the shopper's session (`northwind_gateway.session`) and GET /api/cart
 (`northwind_gateway.cart`).
 Row #23 (SA-06): POST /api/handoff (`northwind_gateway.handoff`).
+SA-01 PR 1: the shop pages' reads (`northwind_gateway.shop`).
 """
 
 import logging
@@ -19,6 +20,7 @@ from pydantic import BaseModel
 
 from northwind_assistant.usage import TELEMETRY_LOGGER
 from northwind_common.localenv import announce_database
+from northwind_gateway import access_log
 from northwind_gateway.cart import router as cart_router
 from northwind_gateway.chat import (
     CardNumberRefused,
@@ -30,7 +32,12 @@ from northwind_gateway.handoff import handoff_desk
 from northwind_gateway.handoff import router as handoff_router
 from northwind_gateway.session import SessionMiddleware
 from northwind_gateway.settings import database_url
+from northwind_gateway.shop import router as shop_router
 from northwind_gateway.signin import router as signin_router
+
+# SA-01 PR 1 (security review F1): no query string in uvicorn's access log, so card data typed
+# into the shop's search never reaches it (hard rule 1). Again at startup, below.
+access_log.install()
 
 # OpenTelemetry comes later: for now the per-answer line goes to stderr (RAG-13).
 _telemetry = logging.getLogger(TELEMETRY_LOGGER)
@@ -43,6 +50,7 @@ if not _telemetry.handlers:
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     # Row #16: the database the health check reads, by name only (the scratch-database proof).
     announce_database("gateway", database_url())
+    access_log.install()
     yield
     # Row #23 (SA-06, security review M1): open handoff builds get a bounded wait, then are
     # cancelled, so no Care run outlives the process unseen.
@@ -55,6 +63,7 @@ app.include_router(router)
 app.include_router(cart_router)
 app.include_router(signin_router)  # row #27: the demo sign-in, behind NORTHWIND_DEMO_SIGNIN
 app.include_router(handoff_router)  # row #23 (SA-06): the shopper asks for a person
+app.include_router(shop_router)  # SA-01 PR 1: the shop pages' reads
 app.add_middleware(SessionMiddleware)
 app.add_exception_handler(RequestValidationError, invalid_request)
 app.add_exception_handler(CardNumberRefused, card_refused)

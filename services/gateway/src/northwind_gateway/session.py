@@ -46,7 +46,9 @@ COOKIE = "nw_session"
 STATE_KEY = "northwind_session"
 SIGNIN_PATH = "/api/session/shopper"  # row #27
 HANDOFF_PATH = "/api/handoff"  # row #23 (SA-06)
-SESSION_PATHS = ("/api/chat", "/api/cart", SIGNIN_PATH, HANDOFF_PATH)
+# SA-01 PR 1: the shop pages' reads, so a signed-in shopper's pages price in their own region.
+SHOP_PATHS = ("/api/departments", "/api/products", "/api/product")
+SESSION_PATHS = ("/api/chat", "/api/cart", SIGNIN_PATH, HANDOFF_PATH, *SHOP_PATHS)
 LABEL = b"northwind-session-v1"
 # Row #27 (CHK-06): the demo sign-in.
 SHOPPER_COOKIE = "nw_shopper"
