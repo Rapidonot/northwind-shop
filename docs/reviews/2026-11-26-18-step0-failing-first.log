@@ -1,6 +1,6 @@
 # Row #18 step 0: failing-first log (branch req/18-record-all from bcc135b; 2026-11-26/27)
 # Each mutant was applied to the working tree, its tests run as one file, and the file restored (cmp against the pre-mutant copy).
-# Later entries (after each review; option B's M-p1..M-p8 and its reviews' M-q1..M-q5 on 2026-11-27) are against the fixed tests.
+# Later entries (after each review; option B's M-p1..M-p8, its reviews' M-q1..M-q5, M-s-tools and M-s-cart on 2026-11-27) are against the fixed tests.
 == (a) mutant M-a1: _back always returns 0 (look back to the start)
  services/assistant/src/northwind_assistant/output_check.py | 2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)
@@ -257,4 +257,12 @@ P0004-BLK-REL-M US by node: {'DC-EAST': 30, 'DC-WEST': 60}; region total 90; sin
 == advisor read 3, finding 2: M-l4 rerun against the split closure tests (a psycopg import in inventory/model.py)
 FAILED services/mcp-catalog/tests/test_18_step0_stock.py::test_the_substitutes_dependency_alone_is_pure
 1 failed, 1 passed, 22 deselected in 1.17s
+restored
+== the user's condition for the import-check split: mutant M-s-tools, `import psycopg` added to tools.py; test_tools.py run alone
+FAILED services/mcp-catalog/tests/test_tools.py::test_the_catalog_source_never_touches_the_index
+1 failed, 66 passed in 4.00s
+restored
+== the user's condition for the import-check split: mutant M-s-cart, `import psycopg` added to cart.py; test_tools.py run alone
+FAILED services/mcp-catalog/tests/test_tools.py::test_the_catalog_source_never_touches_the_index
+1 failed, 66 passed in 3.98s
 restored

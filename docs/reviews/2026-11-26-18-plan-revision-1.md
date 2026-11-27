@@ -111,3 +111,9 @@ request is quantity 1". Both statements were wrong as written:
 The session read "split" as "no single node can fill the request". That reading is the session's, not the user's,
 so the choice goes back to the user: confirm (a), or build per-node stock now. The commands and output are in the
 log, under "advisor read 3, finding 1".
+
+## The user's answers to the correction (2026-11-27)
+- (a) is confirmed: region totals, with per-node stock for refusals of 2 or more units owned by #21.
+- The import-check split is accepted, because the psycopg-import mutants in `tools.py` and `cart.py` both fail
+  `test_tools.py`.
+- From now on, lint passes before every commit.
