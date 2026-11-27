@@ -94,7 +94,7 @@ ORDER_AND_CART_WRITE_ROUTES = {
 }
 
 
-def test_the_gateway_has_no_route_that_places_an_order_or_writes_a_cart() -> None:
+def test_the_gateway_has_exactly_the_approved_order_and_cart_write_routes() -> None:
     schema = app.openapi()["paths"]
     for path in schema:
         if path in ORDER_AND_CART_WRITE_ROUTES:

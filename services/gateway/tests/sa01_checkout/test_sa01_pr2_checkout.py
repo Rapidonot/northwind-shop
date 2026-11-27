@@ -226,6 +226,7 @@ def test_the_same_key_with_another_summary_is_refused(w: World) -> None:
 
 
 @pytest.mark.req("BE-04")
+@pytest.mark.req("CHK-05")  # the plan's condition (2) (advisor-reviewer L3)
 def test_two_shoppers_racing_for_the_last_unit_make_one_reservation(w: World) -> None:
     rows = checkout_desk().inventory.rows
     mine_only = sorted(k for k, row in rows.items() if k[0] == VARIANT and row.region == "US")

@@ -304,3 +304,87 @@ def test_n3_an_unreadable_bag_after_an_order_is_held_never_called_empty(
     paid = w.run(go)
     assert paid.status_code == 200 and paid.json()["bag_emptied"] is False
     assert any(checkout_desk().unemptied.values())  # held: the next Pay is refused, not placed
+
+
+@pytest.mark.parametrize(
+    ("host", "name"),
+    [
+        ("localhost:5173", "localhost"),
+        ("127.0.0.1:8000", "127.0.0.1"),
+        ("[::1]:8000", "[::1]"),
+        ("LOCALHOST", "localhost"),
+        ("evil.example:8000", "evil.example"),
+        ("", ""),
+    ],
+)
+def test_f7_host_names_are_read_without_their_port(host: str, name: str) -> None:
+    from northwind_gateway.portal_write import host_name
+
+    assert host_name(host) == name
+
+
+def test_f7_a_rebinding_host_is_refused_even_with_a_matching_origin(w: World) -> None:
+    """A page on evil.example that resolves to the gateway: same-origin metadata and a matching
+    Origin, but its Host is not an allowed name, so nothing is written."""
+    cookie = signed_in(A)
+
+    async def go(c: httpx.AsyncClient) -> tuple[httpx.Response, dict[str, Any]]:
+        sent = await c.post(
+            "/api/cart/items",
+            headers={
+                **PORTAL,
+                "cookie": cookie,
+                "host": "evil.example:8000",
+                "origin": "http://evil.example:8000",
+            },
+            json={"variant_id": VARIANT, "quantity": 1, "idempotency_key": key(1)},
+        )
+        bag = (await c.get("/api/cart", headers={"cookie": cookie})).json()["cart"]
+        return sent, bag
+
+    sent, bag = w.run(go)
+    assert sent.status_code == 403 and sent.json()["errorCategory"] == "permission"
+    assert bag["lines"] == []
+
+
+def test_f7_the_default_hosts_are_the_local_ones_on_any_port(
+    w: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("PORTAL_ALLOWED_HOSTS")  # the default: localhost, 127.0.0.1, [::1]
+    cookie = signed_in(A)
+
+    async def go(c: httpx.AsyncClient) -> list[int]:
+        codes = []
+        for n, host in enumerate(("localhost:5173", "127.0.0.1:8000", "testserver")):
+            sent = await c.post(
+                "/api/cart/items",
+                headers={**PORTAL, "cookie": cookie, "host": host},
+                json={"variant_id": VARIANT, "quantity": 1, "idempotency_key": key(n + 20)},
+            )
+            codes.append(sent.status_code)
+        return codes
+
+    assert w.run(go) == [200, 200, 403]
+
+
+@pytest.mark.req("NFR-04")
+@pytest.mark.parametrize("field", ["variant_id", "idempotency_key"])
+def test_card_data_is_refused_by_the_gateway_before_any_cart_tool_is_called(
+    w: World, monkeypatch: pytest.MonkeyPatch, field: str
+) -> None:
+    """Hard rule 1, the gateway's own check: a card number never reaches mcp-catalog at all
+    (mcp-catalog refuses it too, but this layer must not rely on that)."""
+    calls: list[str] = []
+
+    async def spy(self: CartWriter, caller: Any, tool: str, args: dict[str, Any]) -> Any:
+        calls.append(tool)
+        raise AssertionError("a cart tool was called")
+
+    monkeypatch.setattr(CartWriter, "write", spy)
+    body: dict[str, Any] = {"variant_id": VARIANT, "quantity": 1, "idempotency_key": key(3)}
+    body[field] = "4111111111111111"
+    sent = w.run(
+        lambda c: c.post("/api/cart/items", headers={**PORTAL, "cookie": signed_in(A)}, json=body)
+    )
+    assert sent.status_code == 422 and "4111" not in sent.text
+    assert calls == []

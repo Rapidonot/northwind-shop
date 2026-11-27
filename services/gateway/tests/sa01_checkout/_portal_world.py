@@ -77,6 +77,7 @@ def world(monkeypatch: pytest.MonkeyPatch) -> Iterator[World]:
     monkeypatch.setenv(KEY_ENV, KEY.decode())
     monkeypatch.setenv("DEV_SHOPPER_REGION", "US")
     monkeypatch.setenv("NORTHWIND_DEMO_SIGNIN", "1")
+    monkeypatch.setenv("PORTAL_ALLOWED_HOSTS", "testserver")  # the ASGI client's own host
     monkeypatch.setitem(DEMO_SHOPPERS, OTHER_SHOPPER, "US")
     store = FixtureCatalog()
     checkout_module.checkout_desk.cache_clear()

@@ -14,8 +14,10 @@ portal's checkout on them.
 ## Decision
 1. **The gateway is the one confirmation issuer.** `POST /api/checkout/pay` (`northwind_gateway.checkout.pay`) is the only
    call site of the confirmation book's `issue` in the repo. The backend's own pin stays as it was for `services/backend/src`;
-   a second pin covers every other `src` tree, the external agents and the partner agent, catches aliases, attribute chains,
-   `getattr` and imports, and allows exactly that one site.
+   a second pin covers every other repo Python root (`services/*/src`, `services/*/e2e`, `services/*/spike`, `evals/src`,
+   `data/src`, `tools`, the external agents and the partner agent), catches aliases, attribute chains, the book's `_issued`
+   store, imports and string constants (folded across `+` and f-strings, so `getattr` and `attrgetter` are caught), and
+   allows exactly that one site. A third pin flags `_issued` anywhere in the backend but `confirmations.py`.
 2. **CHK-02's control is the Pay (demo) button.** The shopper sees the summary (`GET /api/checkout/summary`: lines, total,
    delivery, the region's returns policy, a digest of what is shown) and presses Pay (demo). The route reads the live bag again
    and refuses a changed digest, an issue, an amount over the order limit or stock already short, all before issuing. Signed in
@@ -32,7 +34,14 @@ portal's checkout on them.
    allow-listed fields only, and join the shopper's history beside mcp-orders' `list_orders`. The assistant's `get_order`
    does not see them: a known limit.
 6. **One result per (shopper, key), under one lock per shopper.** The same key with another digest is refused; two keys racing
-   on one bag make one order; the bag is emptied after a placed order with keys from the order ID.
+   on one bag make one order. After a placed order every line is removed, with fresh keys on each attempt, and only a fresh read
+   of the bag says it is empty. While a session's bag still holds any line of a paid order it could not empty, Pay is refused
+   (`already_placed`) and the refusal removes those lines; the hold is per shopper and session, in the gateway's memory (a
+   reload loses it: an open item for the P4 row that makes the desk durable).
+7. **Caps before any confirmation:** the order limit, a per-shopper order cap and the order-number cap. A failure after the
+   confirmation is a fixed transient envelope, holds the bag, and escalates the order (shown on hold).
+8. **The write guard** (`portal_write.from_portal`): an allowed `Host` name (`PORTAL_ALLOWED_HOSTS`, default the local ones), a
+   JSON body, the portal header, and same-origin fetch metadata or `Origin`.
 
 ## Consequences
 - CHK-02 becomes `partial`: the control exists for the portal; the summary has no delivery date (there is no live delivery

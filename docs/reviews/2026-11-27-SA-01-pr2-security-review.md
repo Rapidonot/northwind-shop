@@ -186,9 +186,9 @@ fixes follow the report, below the line.
 | F2 | low | Fix (a real bug in the row's files): fresh keys per attempt, and the guard dropped only after a fresh `get_cart` shows none of the order's lines. |
 | F3 | low | Fix: a letters-only digest. |
 | F4 | low | Fix: refuse before `issue` at the order-number cap; any exception after `issue` is a transient envelope and holds the bag. |
-| F5 | low | Fix in part: a per-shopper cap on demo orders before `issue` (bounds every per-pay structure). The cart-store churn by cookieless scripts is logged in PROGRESS "Open items" (owner: the next gateway hardening row). Corrected after the re-review: this PR's `POST /api/cart/items` is what makes the churn cheap; it did not predate the row. |
+| F5 | low | Fix in part: a per-shopper cap on demo orders before `issue` (bounds every per-pay structure). The cart-store churn by cookieless scripts is logged in PROGRESS "Open items" (owner: the next gateway hardening row). Corrected after the re-review: this PR's `POST /api/cart/items` is what makes the churn cheap; it did not predate the row. advisor-reviewer M4: under the triage rule this is a real low bug in the row's files, so logging it is a deviation the user must accept, or the row fixes it (a rate limit or per-session cart cap): asked in the gate report. |
 | F6 | low | Fix: the guard is keyed on shopper and session. |
-| F7 | low | Logged in PROGRESS "Open items" (owner: the next gateway hardening row). The same class exists on `/api/chat` and `/api/handoff`, outside this row's files; a `Host` allow-list is app-wide. The `portal_write.py` docstring is corrected to say what the check covers. |
+| F7 | low | First logged; then fixed for this row's writes after advisor-reviewer M4 ("Low: fix it if it is a real bug in the row's files"): `from_portal` refuses a `Host` outside `PORTAL_ALLOWED_HOSTS`. `/api/chat` and `/api/handoff` (outside this row) stay open, owner #17. |
 | F8 | low | Fix: `evals/src` and `tools` added to the roots; `_issued` outside `confirmations.py` and `attrgetter` are flagged. |
 
 ---
@@ -367,5 +367,5 @@ The diff was `/private/tmp/claude-502/northwind-security-SA-01-pr2-fixes.diff`. 
 | N1 | Logged in PROGRESS "Open items" (owner: the P4 payment-port row that makes the desk durable). In-memory by design (decision 0027, Consequences). |
 | N2 | Fixed: the except path records the order as escalated and on hold in the history, with fixed texts that claim no payment and agree with `isRetryable: false`. |
 | N3 | Fixed: the clear check reads the bag through `summarize`; an unreadable bag fails closed (held). |
-| N4 | Fixed in part: the portal reloads the summary and the bag after `already_placed`. Removing whole lines stays (the safe direction), mentioned in the PR body. |
+| N4 | Fixed in part: the portal reloads the summary and the bag after `already_placed`. Removing whole lines stays (the safe direction); the PR body says so under "Changes from the plan". |
 | N5 | Fixed: a new pin flags `_issued` in the backend outside `confirmations.py`; constant `+` and f-strings are folded (planted `"is" + "sue"` case); `services/*/spike` added to the roots. The old backend check stays unchanged, as the plan says. |
