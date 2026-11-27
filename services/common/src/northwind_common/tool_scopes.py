@@ -76,6 +76,11 @@ GET_ORDER = "get_order"
 # user's decision (D6): non-monetary, and no label, refund or case.
 REQUEST_RETURN = "request_return"
 ORDER_TOOLS = frozenset({GET_ORDER, REQUEST_RETURN})
+# SA-01 PR 2 (the user's stop 5 yes, 2026-11-27): the portal's order history, the signed-in
+# shopper's own orders in their region, read-only, never offered to a model. The assistant keeps
+# `get_order`, one order by number, and no list.
+LIST_ORDERS = "list_orders"
+PORTAL_ORDER_TOOLS = frozenset({LIST_ORDERS})
 
 # Row #27 PR 2 (CHK-07). One read: is one line of the shopper's own order returnable.
 EVALUATE_RETURN = "evaluate_return_eligibility"
@@ -101,6 +106,7 @@ AGENT_TOOLS: Mapping[str, Mapping[str, frozenset[str]]] = {
     "shopper-portal": {
         "northwind-rag": frozenset(),
         "northwind-catalog": PORTAL_CATALOG_TOOLS | CART_WRITE_TOOLS,
+        "northwind-orders": PORTAL_ORDER_TOOLS,  # SA-01 PR 2: order history, signed in only
     },
     # Row #11: one read-only tool that returns product IDs only (RAG-04, hard rule 2).
     "shopper-query": {

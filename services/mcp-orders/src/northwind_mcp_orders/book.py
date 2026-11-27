@@ -152,6 +152,33 @@ class OrderBook:
             raise tracking_unavailable()
         return found.value
 
+    def history(self, *, shopper: str, region: str | None) -> list[dict[str, Any]]:
+        """SA-01 PR 2: every order of the caller's own in their region, newest first, with the
+        same allow-listed fields as `view` and no tracking (the order page's history list).
+        `shopper` and `region` come from the verified token, never from an argument."""
+        state = self.orders.state
+        own = [o for o in state.orders.values() if o.shopper_id == shopper and o.region == region]
+        out = []
+        for order in own:
+            tracking = self._tracking(order.order_id)
+            out.append(
+                {
+                    "order_id": order.order_id,
+                    "placed_on": self.placed_on.get(order.order_id),
+                    "status": shopper_status(order.status, tracking),
+                    "lines": [
+                        {
+                            "product_id": line.product_id,
+                            "variant_id": line.variant_id,
+                            "quantity": line.quantity,
+                        }
+                        for line in order.lines
+                    ],
+                }
+            )
+        out.sort(key=lambda o: (o["placed_on"] or "", o["order_id"]), reverse=True)
+        return out
+
     def view(self, order_id: str, *, shopper: str, region: str | None) -> Mapping[str, Any]:
         """The caller's own order, allow-listed fields only, or `not_found`. `shopper` and `region`
         come from the verified token, never from an argument."""

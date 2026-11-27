@@ -76,6 +76,9 @@ PORTAL_CATALOG_TOOLS = frozenset({"get_cart", "get_product", *PORTAL_ONLY_TOOLS}
 # SA-01 PR 2 (the user's stop 5 yes, 2026-11-27): the portal's agent also gets exactly the three
 # cart writes, for the bag's controls; no other write of any kind.
 PORTAL_CATALOG_ROW = PORTAL_CATALOG_TOOLS | CART_WRITE_TOOLS
+# SA-01 PR 2 (the user's stop 5 yes, 2026-11-27): the portal's order history, on mcp-orders only,
+# read-only, granted only to `shopper-portal`, whose orders row is exactly this one tool.
+PORTAL_ORDER_ONLY_TOOLS: dict[str, str] = {"list_orders": "shopper-portal"}
 CALLER_KEYS = {
     "audience",
     "region",
@@ -154,6 +157,7 @@ def test_tools_list_is_within_the_agents_scope_and_read_only(server: str, agent:
     # Row #11: a server-only tool is listed to its one agent and to nobody else.
     server_only = {name for name, owner in SERVER_ONLY_TOOLS.items() if owner == agent}
     portal_only = {name for name, owner in PORTAL_ONLY_TOOLS.items() if owner == agent}  # SA-01
+    portal_only |= {n for n, owner in PORTAL_ORDER_ONLY_TOOLS.items() if owner == agent}  # PR 2
     assert names <= SHOPPER_TOOLS | server_only | portal_only
     for tool in listed:  # read-only, except exactly the cart writes (row #16) and request_return
         assert tool.annotations is not None
@@ -164,7 +168,8 @@ def test_tools_list_is_within_the_agents_scope_and_read_only(server: str, agent:
 @pytest.mark.parametrize("server", sorted(SERVERS))
 def test_no_scope_grants_a_tool_outside_prd_sevens_read_only_set(server: str) -> None:
     granted = {name for row in AGENT_TOOLS.values() for name in row.get(server, frozenset())}
-    assert granted <= SHOPPER_TOOLS | set(SERVER_ONLY_TOOLS) | set(PORTAL_ONLY_TOOLS)
+    portal_only = set(PORTAL_ONLY_TOOLS) | set(PORTAL_ORDER_ONLY_TOOLS)  # SA-01 PR 1 and PR 2
+    assert granted <= SHOPPER_TOOLS | set(SERVER_ONLY_TOOLS) | portal_only
     # Row #11: each server-only tool is granted to its one agent, which is granted nothing else.
     for name, owner in SERVER_ONLY_TOOLS.items():
         holders = {a for a, row in AGENT_TOOLS.items() if name in row.get(server, frozenset())}
@@ -177,6 +182,12 @@ def test_no_scope_grants_a_tool_outside_prd_sevens_read_only_set(server: str) ->
         assert holders == ({owner} if server == CATALOG else set()), name
     if server == CATALOG:
         assert AGENT_TOOLS["shopper-portal"][CATALOG] == PORTAL_CATALOG_ROW
+    # SA-01 PR 2: the portal's order history tool likewise, on mcp-orders only, and that row is it.
+    for name, owner in PORTAL_ORDER_ONLY_TOOLS.items():
+        holders = {a for a, row in AGENT_TOOLS.items() if name in row.get(server, frozenset())}
+        assert holders == ({owner} if server == ORDERS else set()), name
+    if server == ORDERS:
+        assert AGENT_TOOLS["shopper-portal"][ORDERS] == frozenset(PORTAL_ORDER_ONLY_TOOLS)
     # Row #16: only the assistant may write a cart. SA-01 PR 2 (the user's stop 5 yes, 2026-11-27):
     # and the portal's own agent, for the bag's controls. Exactly these two, on mcp-catalog only.
     writers = {a for a, row in AGENT_TOOLS.items() if CART_WRITE_TOOLS & row.get(server, set())}

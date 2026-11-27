@@ -117,7 +117,10 @@ def test_no_sign_in_and_another_agent_get_nothing(live: tuple[OrdersServer, str]
 
 
 def test_the_server_has_exactly_a_read_and_a_request() -> None:
-    assert set(TOOLS) == {"get_order", "request_return"}
+    # SA-01 PR 2 (the user's stop 5 yes, 2026-11-27): plus the portal's read-only `list_orders`.
+    assert set(TOOLS) == {"get_order", "request_return", "list_orders"}
+    assert TOOLS["list_orders"].tool.annotations is not None
+    assert TOOLS["list_orders"].tool.annotations.read_only_hint is True
     tool = TOOLS["request_return"].tool
     assert tool.annotations is not None
     assert tool.annotations.read_only_hint is False
