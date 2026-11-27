@@ -78,6 +78,12 @@ W=~/Projects/northwind-shop; R=~/.northwind/runner
   - for evals only, `make eval-live EVAL_SLICE=<n> [EVAL_SUITE=...]`.
 - **Never** raise `LLM_BUDGET_USD` ($90, fixed) or a run budget mid-window without asking.
 - **One window per suite.** A suite's fix round is a new window, only after a stop and the user's answer.
+- **The runner closes a window after one `make record`** (observed at W11, 2026-11-27: a second `make record`
+  4 minutes into a 20-minute window got `no runner window is open`). Each run needs its own window, even a run
+  that is expected to replay at $0.
+- **`a2a-05-partner` only:** its recorder accepts a turn only when the turn's cassettes are exactly the ones this
+  run made (`run_cassette_problems`). Remove the suite's old cassettes before its window, not after it.
+  W11's first run was refused for this and cost $0.050441.
 
 ## 3. The order, with budgets
 Cheapest and least coupled first: the backend suites don't see the assistant's prompt, so a freeze slip there costs
