@@ -48,7 +48,17 @@ SIGNIN_PATH = "/api/session/shopper"  # row #27
 HANDOFF_PATH = "/api/handoff"  # row #23 (SA-06)
 # SA-01 PR 1: the shop pages' reads, so a signed-in shopper's pages price in their own region.
 SHOP_PATHS = ("/api/departments", "/api/products", "/api/product")
-SESSION_PATHS = ("/api/chat", "/api/cart", SIGNIN_PATH, HANDOFF_PATH, *SHOP_PATHS)
+# SA-01 PR 2: the bag's cart writes, the order history and the demo checkout. Literal paths here,
+# because this module is imported by those routes' modules' dependencies (no import cycle).
+PR2_PATHS = (
+    "/api/cart/items",
+    "/api/cart/quantity",
+    "/api/cart/remove",
+    "/api/orders",
+    "/api/checkout/summary",
+    "/api/checkout/pay",
+)
+SESSION_PATHS = ("/api/chat", "/api/cart", SIGNIN_PATH, HANDOFF_PATH, *SHOP_PATHS, *PR2_PATHS)
 LABEL = b"northwind-session-v1"
 # Row #27 (CHK-06): the demo sign-in.
 SHOPPER_COOKIE = "nw_shopper"
