@@ -1,0 +1,54 @@
+# OPS-1 failing-first, look fix (2026-11-27): mapLayout.test.ts before the fix, at e46ffe2 plus the new tests
+
+
+ RUN  v5.0.5 /Users/rapido/Projects/northwind-shop-b/apps/portal
+
+ ❯ src/staff/mapLayout.test.ts (16 tests | 2 failed) 27ms
+   ❯ [OPS-1] every text line fits its box's width (2)
+     × fits every title, description and tool line inside its box, at the size it renders 11ms
+     × breaks a tool name too long for its box after an underscore, losing nothing 0ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/staff/mapLayout.test.ts > [OPS-1] every text line fits its box's width > fits every title, description and tool line inside its box, at the size it renders
+AssertionError: expected [ …(4) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "northwind-catalog tool line \"search_products, get_product,\" at 13px: 226.2 > 223",
++   "northwind-catalog tool line \"get_variant, check_stock, get_price,\" at 13px: 280.8 > 223",
++   "northwind-orders tool line \"get_order, request_return\" at 13px: 195.0 > 191",
++   "northwind-policy tool line \"evaluate_return_eligibility\" at 13px: 210.6 > 189",
++ ]
+
+ ❯ src/staff/mapLayout.test.ts:199:23
+    197|       fit(t.tools, rendered("map-node-tools", TYPE.tools), MONO_EM, "t…
+    198|     }
+    199|     expect(overflows).toEqual([]);
+       |                       ^
+    200|   });
+    201|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  src/staff/mapLayout.test.ts > [OPS-1] every text line fits its box's width > breaks a tool name too long for its box after an underscore, losing nothing
+AssertionError: expected 1 to be greater than 1
+ ❯ src/staff/mapLayout.test.ts:205:26
+    203|     const name = "evaluate_return_eligibility";
+    204|     const lines = wrap(name, 100, TYPE.tools, true);
+    205|     expect(lines.length).toBeGreaterThan(1);
+       |                          ^
+    206|     expect(lines.join("")).toBe(name);
+    207|     for (const line of lines.slice(0, -1)) expect(line.endsWith("_")).…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 14 passed (16)
+   Start at  21:36:29
+   Duration  553ms (environment 72%, setup 13%, transform 6%, tests 6%, import 2%, worker 1%)
+

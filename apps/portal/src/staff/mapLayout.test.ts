@@ -159,3 +159,52 @@ describe("[OPS-1] the agent map's look", () => {
     expect(MCP_BAR).toBe(3);
   });
 });
+
+describe("[OPS-1] every text line fits its box's width", () => {
+  const css = readFileSync(join(import.meta.dirname, "..", "theme.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+  const rules = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((m) => ({ selector: (m[1] ?? "").trim(), body: m[2] ?? "" }));
+
+  /** The size a class renders at: a stylesheet font-size beats the SVG `font-size` attribute. */
+  const rendered = (cls: string, attribute: number) => {
+    let size = attribute;
+    const own = new RegExp(`\\.${cls}(?![\\w-])`);
+    for (const r of rules) {
+      const hit = r.selector.split(",").some((s) => own.test(s.trim().split(/\s+/).pop() ?? ""));
+      const px = /font-size:\s*([\d.]+)px/.exec(r.body);
+      if (hit && px) size = Number(px[1]);
+    }
+    return size;
+  };
+
+  // The reviewer's estimate: 0.6em a character in monospace, 0.55em in sans.
+  const MONO_EM = 0.6;
+  const SANS_EM = 0.55;
+
+  it("fits every title, description and tool line inside its box, at the size it renders", () => {
+    const overflows: string[] = [];
+    for (const node of MAP.nodes) {
+      const box = SLOTS[node.id]!;
+      const t = nodeText(node, box);
+      const room = box.x + box.w - TYPE.pad - t.x;
+      const fit = (lines: string[], size: number, em: number, what: string) => {
+        for (const line of lines) {
+          const width = line.length * size * em;
+          if (width > room) overflows.push(`${node.id} ${what} "${line}" at ${size}px: ${width.toFixed(1)} > ${room}`);
+        }
+      };
+      fit(t.title, rendered("map-node-title", t.titleSize), node.kind === "mcp" ? MONO_EM : SANS_EM, "title");
+      fit(t.sub, rendered("map-node-sub", TYPE.description), SANS_EM, "description");
+      fit(t.tools, rendered("map-node-tools", TYPE.tools), MONO_EM, "tool line");
+    }
+    expect(overflows).toEqual([]);
+  });
+
+  it("breaks a tool name too long for its box after an underscore, losing nothing", () => {
+    const name = "evaluate_return_eligibility";
+    const lines = wrap(name, 100, TYPE.tools, true);
+    expect(lines.length).toBeGreaterThan(1);
+    expect(lines.join("")).toBe(name);
+    for (const line of lines.slice(0, -1)) expect(line.endsWith("_")).toBe(true);
+    for (const line of lines) expect(line.length * TYPE.tools * MONO_EM).toBeLessThanOrEqual(100);
+  });
+});

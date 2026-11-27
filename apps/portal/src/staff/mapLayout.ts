@@ -53,13 +53,24 @@ export function wrap(text: string, width: number, size: number, mono = false): s
   const max = Math.max(4, Math.floor(width / (size * (mono ? MONO : SANS))));
   const lines: string[] = [];
   let line = "";
-  for (const word of text.split(" ")) {
-    const next = line === "" ? word : `${line} ${word}`;
-    if (next.length <= max || line === "") line = next;
-    else {
-      lines.push(line);
-      line = word;
+  const add = (piece: string, joiner: string) => {
+    const next = line === "" ? piece : `${line}${joiner}${piece}`;
+    if (next.length <= max) {
+      line = next;
+      return;
     }
+    if (line !== "") lines.push(line);
+    line = piece;
+  };
+  for (const word of text.split(" ")) {
+    if (word.length <= max) {
+      add(word, " ");
+      continue;
+    }
+    // A name too long for a line breaks after an underscore; a piece still too long breaks at the
+    // width, so no line ever runs past its box.
+    const pieces = word.split(/(?<=_)/).flatMap((piece) => (piece.length <= max ? [piece] : (piece.match(new RegExp(`.{1,${max}}`, "g")) ?? [piece])));
+    pieces.forEach((piece, i) => add(piece, i === 0 ? " " : ""));
   }
   if (line !== "") lines.push(line);
   return lines;

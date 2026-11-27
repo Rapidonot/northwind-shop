@@ -1260,7 +1260,6 @@ p {
 }
 
 .staff .mono,
-.staff .map-node-tools,
 .staff .trace-meta {
   font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
   font-size: 13px;
@@ -1386,6 +1385,8 @@ p {
   font-weight: 600;
 }
 
+/* No font-size on map text: each <text> carries its size (title 13/12px, description 11px, tools
+   10px), and a stylesheet size would override it (the tool lists once rendered at 13px). */
 .staff .map-node-title.is-mono,
 .staff .map-node-tools {
   font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
