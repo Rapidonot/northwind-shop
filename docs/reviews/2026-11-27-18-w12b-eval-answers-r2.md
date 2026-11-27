@@ -25,6 +25,6 @@
   `evals/tests/test_rag12_judged_extra.py` and `evals/tests/test_rag12_side_runs.py`, 61 passed. Both use scripted
   models or the CLI's arguments, so neither reads the new cassettes.
 - **Scan:** `make scan-cassettes` clean (0 findings). The key-fragment check from the runner clone is the user's.
-- **Freeze:** `git diff 2ca787e..HEAD` on the 24 frozen paths is empty, and `shasum -a 256 -c` gives 24 OK.
+- **Freeze:** `git diff 2ca787e..HEAD` on the 24 frozen paths is empty, and `shasum -a 256 -c` gives 24 OK. **Correction (2026-11-27, the user's request):** the `git diff` named here matched no path. zsh passed the 24 paths as one argument, so it proved nothing. The real evidence was `shasum -a 256 -c` on the 24 frozen files. Rechecked correctly (`xargs git diff --name-only 2ca787e <commit> -- < paths`): 0 frozen files changed at every commit from `2ca787e` to `71e77c5`, and the control `bcc135b..2ca787e` shows 6.
 - **For the final proof:** RECORD-ALL's "full replay of every suite with 0 misses" has no command for the variance
   suites. That needs a decision before the final replay (put to the user with W12c).

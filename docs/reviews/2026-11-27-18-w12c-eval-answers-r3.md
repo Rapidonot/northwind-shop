@@ -14,7 +14,7 @@
 - **Proxy hit log:** 656 lines, all `recorded`. **Cassettes:** 0 before, 656 added (13 MB), none removed.
   **Not committed:** waiting on the user.
 - **Tests that read the suite:** `test_rag12_judged_extra.py` and `test_rag12_side_runs.py`, 61 passed.
-  **Scan:** clean. **Freeze:** 24 OK.
+  **Scan:** clean. **Freeze:** 24 OK. (`shasum -a 256 -c`, the real check.**Correction (2026-11-27, the user's request):** the `git diff` named here matched no path. zsh passed the 24 paths as one argument, so it proved nothing. The real evidence was `shasum -a 256 -c` on the 24 frozen files. Rechecked correctly (`xargs git diff --name-only 2ca787e <commit> -- < paths`): 0 frozen files changed at every commit from `2ca787e` to `71e77c5`, and the control `bcc135b..2ca787e` shows 6.)
 
 ## EV-092
 
