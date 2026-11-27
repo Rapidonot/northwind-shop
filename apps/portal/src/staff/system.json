@@ -1,0 +1,731 @@
+{
+  "map": {
+    "nodes": [
+      {
+        "id": "shopper-chat",
+        "kind": "entry",
+        "title": "Shopper chat",
+        "subtitle": "Entry point",
+        "models": [],
+        "tools": [],
+        "collapsed": []
+      },
+      {
+        "id": "query-understanding",
+        "kind": "ai",
+        "title": "Query understanding",
+        "subtitle": "Rules first; a model if unsure",
+        "models": [
+          "Haiku"
+        ],
+        "tools": [],
+        "collapsed": []
+      },
+      {
+        "id": "shopper-assistant",
+        "kind": "ai",
+        "title": "Shopper Assistant",
+        "subtitle": "Customer-facing agent",
+        "models": [
+          "Sonnet"
+        ],
+        "tools": [],
+        "collapsed": []
+      },
+      {
+        "id": "output-check",
+        "kind": "code",
+        "title": "Output check",
+        "subtitle": "Removes unbacked price, stock and policy claims and planted promotions",
+        "models": [],
+        "tools": [],
+        "collapsed": []
+      },
+      {
+        "id": "answer",
+        "kind": "end",
+        "title": "Answer",
+        "subtitle": "Shopper reply",
+        "models": [],
+        "tools": [],
+        "collapsed": []
+      },
+      {
+        "id": "northwind-catalog",
+        "kind": "mcp",
+        "title": "northwind-catalog",
+        "subtitle": "",
+        "models": [],
+        "tools": [
+          "check_stock",
+          "eligible_products",
+          "get_cart",
+          "get_price",
+          "get_product",
+          "get_variant",
+          "search_products"
+        ],
+        "collapsed": [
+          {
+            "label": "cart write tools",
+            "tools": [
+              "add_to_cart",
+              "remove_from_cart",
+              "set_cart_quantity"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "northwind-rag",
+        "kind": "mcp",
+        "title": "northwind-rag",
+        "subtitle": "Hybrid search: catalog, reviews and policies",
+        "models": [],
+        "tools": [
+          "retrieve_context"
+        ],
+        "collapsed": []
+      },
+      {
+        "id": "northwind-orders",
+        "kind": "mcp",
+        "title": "northwind-orders",
+        "subtitle": "Signed-in only · order store + carrier (fake) tracking",
+        "models": [],
+        "tools": [
+          "get_order",
+          "request_return"
+        ],
+        "collapsed": []
+      },
+      {
+        "id": "northwind-policy",
+        "kind": "mcp",
+        "title": "northwind-policy",
+        "subtitle": "Signed-in only · returns & shipping policies",
+        "models": [],
+        "tools": [
+          "evaluate_return_eligibility"
+        ],
+        "collapsed": []
+      },
+      {
+        "id": "talk-to-person",
+        "kind": "entry",
+        "title": "Talk to a person",
+        "subtitle": "Entry point",
+        "models": [],
+        "tools": [],
+        "collapsed": []
+      },
+      {
+        "id": "handoff-trigger",
+        "kind": "code",
+        "title": "Handoff trigger",
+        "subtitle": "Runs before any model call",
+        "models": [],
+        "tools": [],
+        "collapsed": []
+      },
+      {
+        "id": "handoff-desk",
+        "kind": "code",
+        "title": "Handoff desk",
+        "subtitle": "Builds the case",
+        "models": [],
+        "tools": [],
+        "collapsed": []
+      },
+      {
+        "id": "care-subagent",
+        "kind": "ai",
+        "title": "Care agent",
+        "subtitle": "Handoff and escalation summaries",
+        "models": [
+          "Haiku"
+        ],
+        "tools": [],
+        "collapsed": []
+      },
+      {
+        "id": "case-queue",
+        "kind": "fake",
+        "title": "Case queue",
+        "subtitle": "Staff queue",
+        "models": [],
+        "tools": [],
+        "collapsed": []
+      },
+      {
+        "id": "pay-demo",
+        "kind": "entry",
+        "title": "Pay (demo)",
+        "subtitle": "Entry point",
+        "models": [],
+        "tools": [],
+        "collapsed": []
+      },
+      {
+        "id": "checkout-validate",
+        "kind": "code",
+        "title": "Validate",
+        "subtitle": "",
+        "models": [],
+        "tools": [],
+        "collapsed": []
+      },
+      {
+        "id": "checkout-hold",
+        "kind": "code",
+        "title": "Inventory hold",
+        "subtitle": "",
+        "models": [],
+        "tools": [],
+        "collapsed": []
+      },
+      {
+        "id": "checkout-fraud",
+        "kind": "fake",
+        "title": "Fraud",
+        "subtitle": "",
+        "models": [],
+        "tools": [],
+        "collapsed": []
+      },
+      {
+        "id": "checkout-authorize",
+        "kind": "fake",
+        "title": "Payment authorize",
+        "subtitle": "",
+        "models": [],
+        "tools": [],
+        "collapsed": []
+      },
+      {
+        "id": "checkout-commit",
+        "kind": "code",
+        "title": "Inventory commit",
+        "subtitle": "",
+        "models": [],
+        "tools": [],
+        "collapsed": []
+      },
+      {
+        "id": "checkout-capture",
+        "kind": "fake",
+        "title": "Payment capture",
+        "subtitle": "",
+        "models": [],
+        "tools": [],
+        "collapsed": []
+      },
+      {
+        "id": "checkout-confirm",
+        "kind": "code",
+        "title": "Confirm",
+        "subtitle": "",
+        "models": [],
+        "tools": [],
+        "collapsed": []
+      },
+      {
+        "id": "staff-request",
+        "kind": "entry",
+        "title": "Staff request (command)",
+        "subtitle": "Entry point",
+        "models": [],
+        "tools": [],
+        "collapsed": []
+      },
+      {
+        "id": "orchestrator",
+        "kind": "ai",
+        "title": "Orchestrator",
+        "subtitle": "Planner; runs its subagents in parallel",
+        "models": [
+          "Sonnet"
+        ],
+        "tools": [],
+        "collapsed": []
+      },
+      {
+        "id": "orders-subagent",
+        "kind": "ai",
+        "title": "Orders agent",
+        "subtitle": "Read-only: fraud and payment",
+        "models": [
+          "Haiku"
+        ],
+        "tools": [],
+        "collapsed": []
+      },
+      {
+        "id": "returns-subagent",
+        "kind": "ai",
+        "title": "Returns agent",
+        "subtitle": "",
+        "models": [
+          "Haiku"
+        ],
+        "tools": [],
+        "collapsed": []
+      },
+      {
+        "id": "order-fraud",
+        "kind": "fake",
+        "title": "Fraud",
+        "subtitle": "",
+        "models": [],
+        "tools": [],
+        "collapsed": []
+      },
+      {
+        "id": "order-payment",
+        "kind": "fake",
+        "title": "Payment",
+        "subtitle": "",
+        "models": [],
+        "tools": [],
+        "collapsed": []
+      },
+      {
+        "id": "order-carrier",
+        "kind": "fake",
+        "title": "Carrier",
+        "subtitle": "",
+        "models": [],
+        "tools": [],
+        "collapsed": []
+      },
+      {
+        "id": "escalated-order",
+        "kind": "entry",
+        "title": "Escalated order (command)",
+        "subtitle": "Entry point",
+        "models": [],
+        "tools": [],
+        "collapsed": []
+      },
+      {
+        "id": "escalation",
+        "kind": "code",
+        "title": "Escalation",
+        "subtitle": "Recommended action",
+        "models": [],
+        "tools": [],
+        "collapsed": []
+      },
+      {
+        "id": "judge",
+        "kind": "eval",
+        "title": "Judge",
+        "subtitle": "Eval only: offline scoring, no live arrows",
+        "models": [
+          "Sonnet"
+        ],
+        "tools": [],
+        "collapsed": []
+      }
+    ],
+    "edges": [
+      {
+        "from": "shopper-chat",
+        "to": "query-understanding",
+        "label": null,
+        "dashed": false
+      },
+      {
+        "from": "query-understanding",
+        "to": "northwind-catalog",
+        "label": "eligible_products",
+        "dashed": true
+      },
+      {
+        "from": "query-understanding",
+        "to": "shopper-assistant",
+        "label": null,
+        "dashed": false
+      },
+      {
+        "from": "shopper-assistant",
+        "to": "northwind-catalog",
+        "label": null,
+        "dashed": false
+      },
+      {
+        "from": "shopper-assistant",
+        "to": "northwind-orders",
+        "label": null,
+        "dashed": false
+      },
+      {
+        "from": "shopper-assistant",
+        "to": "northwind-policy",
+        "label": null,
+        "dashed": false
+      },
+      {
+        "from": "shopper-assistant",
+        "to": "northwind-rag",
+        "label": null,
+        "dashed": false
+      },
+      {
+        "from": "shopper-assistant",
+        "to": "output-check",
+        "label": null,
+        "dashed": false
+      },
+      {
+        "from": "output-check",
+        "to": "answer",
+        "label": null,
+        "dashed": false
+      },
+      {
+        "from": "talk-to-person",
+        "to": "handoff-trigger",
+        "label": null,
+        "dashed": false
+      },
+      {
+        "from": "handoff-trigger",
+        "to": "handoff-desk",
+        "label": null,
+        "dashed": false
+      },
+      {
+        "from": "handoff-trigger",
+        "to": "northwind-catalog",
+        "label": "get_cart, no order",
+        "dashed": false
+      },
+      {
+        "from": "handoff-desk",
+        "to": "care-subagent",
+        "label": null,
+        "dashed": false
+      },
+      {
+        "from": "care-subagent",
+        "to": "case-queue",
+        "label": null,
+        "dashed": false
+      },
+      {
+        "from": "pay-demo",
+        "to": "checkout-validate",
+        "label": null,
+        "dashed": false
+      },
+      {
+        "from": "pay-demo",
+        "to": "northwind-catalog",
+        "label": "get_cart · remove_from_cart",
+        "dashed": false
+      },
+      {
+        "from": "checkout-validate",
+        "to": "checkout-hold",
+        "label": null,
+        "dashed": false
+      },
+      {
+        "from": "checkout-hold",
+        "to": "checkout-fraud",
+        "label": null,
+        "dashed": false
+      },
+      {
+        "from": "checkout-fraud",
+        "to": "checkout-authorize",
+        "label": null,
+        "dashed": false
+      },
+      {
+        "from": "checkout-authorize",
+        "to": "checkout-commit",
+        "label": null,
+        "dashed": false
+      },
+      {
+        "from": "checkout-commit",
+        "to": "checkout-capture",
+        "label": null,
+        "dashed": false
+      },
+      {
+        "from": "checkout-capture",
+        "to": "checkout-confirm",
+        "label": null,
+        "dashed": false
+      },
+      {
+        "from": "staff-request",
+        "to": "orchestrator",
+        "label": null,
+        "dashed": false
+      },
+      {
+        "from": "orchestrator",
+        "to": "orders-subagent",
+        "label": null,
+        "dashed": false
+      },
+      {
+        "from": "orchestrator",
+        "to": "returns-subagent",
+        "label": null,
+        "dashed": false
+      },
+      {
+        "from": "orders-subagent",
+        "to": "order-fraud",
+        "label": "code port",
+        "dashed": false
+      },
+      {
+        "from": "orders-subagent",
+        "to": "order-payment",
+        "label": "code port",
+        "dashed": false
+      },
+      {
+        "from": "returns-subagent",
+        "to": "order-carrier",
+        "label": "code port",
+        "dashed": false
+      },
+      {
+        "from": "escalated-order",
+        "to": "escalation",
+        "label": null,
+        "dashed": false
+      },
+      {
+        "from": "escalation",
+        "to": "care-subagent",
+        "label": "escalation case",
+        "dashed": false
+      }
+    ],
+    "legend": [
+      "ai",
+      "mcp",
+      "code",
+      "fake",
+      "eval"
+    ]
+  },
+  "traces": [
+    {
+      "id": "chat",
+      "entry": "shopper-chat",
+      "kind": "Chat question",
+      "title": "Is the Tidewick Harbor Rain Jacket waterproof, and is it in stock in Large?",
+      "refs": [
+        "P0001"
+      ],
+      "outcome": "ok",
+      "no_ai": false,
+      "steps": [
+        {
+          "node": "shopper-chat",
+          "label": "The shopper asks"
+        },
+        {
+          "node": "query-understanding",
+          "label": "Rules read a size filter (L) and an availability filter"
+        },
+        {
+          "node": "northwind-catalog",
+          "label": "eligible_products: which products have L in stock, IDs only"
+        },
+        {
+          "node": "shopper-assistant",
+          "label": "Plans its tool calls"
+        },
+        {
+          "node": "northwind-rag",
+          "label": "retrieve_context: the jacket's specs and care guide"
+        },
+        {
+          "node": "northwind-catalog",
+          "label": "check_stock: live stock for size L"
+        },
+        {
+          "node": "output-check",
+          "label": "Every claim backed by a source or a live tool"
+        },
+        {
+          "node": "answer",
+          "label": "The cited answer"
+        }
+      ],
+      "sample": true
+    },
+    {
+      "id": "handoff",
+      "entry": "shopper-chat",
+      "kind": "Damaged parcel + handoff",
+      "title": "My parcel for order O000800 arrived damaged. → Talk to a person",
+      "refs": [
+        "O000800"
+      ],
+      "outcome": "escalated",
+      "no_ai": false,
+      "steps": [
+        {
+          "node": "shopper-chat",
+          "label": "The signed-in shopper: my parcel for order O000800 arrived damaged"
+        },
+        {
+          "node": "query-understanding",
+          "label": "No product filters: rules only"
+        },
+        {
+          "node": "shopper-assistant",
+          "label": "Looks the order up"
+        },
+        {
+          "node": "northwind-orders",
+          "label": "get_order: O000800, the shopper's own order, delivered"
+        },
+        {
+          "node": "northwind-policy",
+          "label": "evaluate_return_eligibility: can the damaged line be returned"
+        },
+        {
+          "node": "output-check",
+          "label": "Order and policy claims backed by the tools"
+        },
+        {
+          "node": "answer",
+          "label": "The options, and the offer of a person"
+        },
+        {
+          "node": "talk-to-person",
+          "label": "if the shopper presses Talk to a person"
+        },
+        {
+          "node": "handoff-trigger",
+          "label": "Matched before any model call"
+        },
+        {
+          "node": "handoff-desk",
+          "label": "Intent, root cause and amounts from the order store, by code"
+        },
+        {
+          "node": "care-subagent",
+          "label": "One-line summary, labelled model-written"
+        },
+        {
+          "node": "case-queue",
+          "label": "Case queued for staff"
+        }
+      ],
+      "sample": true
+    },
+    {
+      "id": "checkout",
+      "entry": "pay-demo",
+      "kind": "Web checkout",
+      "title": "Pay (demo) on a 2-line bag → order shown in history",
+      "refs": [
+        "O001001"
+      ],
+      "outcome": "ok",
+      "no_ai": true,
+      "steps": [
+        {
+          "node": "pay-demo",
+          "label": "The signed-in shopper presses Pay (demo)"
+        },
+        {
+          "node": "northwind-catalog",
+          "label": "get_cart: the bag read live"
+        },
+        {
+          "node": "checkout-validate",
+          "label": "Digest matches; total under the order limit"
+        },
+        {
+          "node": "checkout-hold",
+          "label": "Stock held"
+        },
+        {
+          "node": "checkout-fraud",
+          "label": "Low risk"
+        },
+        {
+          "node": "checkout-authorize",
+          "label": "Sandbox token authorized"
+        },
+        {
+          "node": "checkout-commit",
+          "label": "Stock committed"
+        },
+        {
+          "node": "checkout-capture",
+          "label": "Captured"
+        },
+        {
+          "node": "checkout-confirm",
+          "label": "Order confirmed"
+        },
+        {
+          "node": "northwind-catalog",
+          "label": "remove_from_cart: the bag emptied"
+        }
+      ],
+      "sample": true
+    },
+    {
+      "id": "staff",
+      "entry": "staff-request",
+      "kind": "Backend staff request",
+      "title": "O000002: was it charged, and where is it? → one answer from two subagents",
+      "refs": [
+        "O000002"
+      ],
+      "outcome": "ok",
+      "no_ai": false,
+      "steps": [
+        {
+          "node": "staff-request",
+          "label": "Staff run the orchestrator command with the request"
+        },
+        {
+          "node": "orchestrator",
+          "label": "The planner splits it: payment and fraud, and tracking"
+        },
+        {
+          "node": "orders-subagent",
+          "label": "payment_fraud, read-only"
+        },
+        {
+          "node": "order-payment",
+          "label": "get_payment_status: no payment intent yet, a valid empty answer"
+        },
+        {
+          "node": "order-fraud",
+          "label": "get_fraud_assessments: none yet, a valid empty answer"
+        },
+        {
+          "node": "returns-subagent",
+          "label": "tracking, read-only"
+        },
+        {
+          "node": "order-carrier",
+          "label": "The carrier's scans for O000002"
+        },
+        {
+          "node": "orchestrator",
+          "label": "One answer from both sections"
+        }
+      ],
+      "sample": true
+    }
+  ]
+}

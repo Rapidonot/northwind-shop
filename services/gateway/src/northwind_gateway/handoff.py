@@ -25,6 +25,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import logging
+from dataclasses import dataclass
 from functools import lru_cache
 from typing import Annotated, Any, Literal
 
@@ -103,21 +104,44 @@ def session_ref(token_key: bytes, session: str) -> str:
     return "".join(_LETTERS[b >> 4] + _LETTERS[b & 15] for b in digest)
 
 
+@dataclass(frozen=True)
+class HandoffStores:
+    """OPS-1: the stores of the desk `handoff_desk` built, kept so the read-only demo staff console
+    can read them. Nothing here writes."""
+
+    handoffs: HandoffState
+    cases: CaseState
+    audit: InMemoryAuditSink
+
+
+_stores: HandoffStores | None = None
+
+
+def handoff_stores() -> HandoffStores | None:
+    """The stores of this process's desk, or None before its first handoff built it (no handoffs
+    yet: a valid empty answer, not an error)."""
+    return _stores
+
+
 @lru_cache(maxsize=1)
 def handoff_desk() -> HandoffDesk:
     """Once per process, on BE-07's fakes (decision 0025): the order store seeded read-only from
     `data/backend`, an in-memory case queue and handoff queue, and an in-memory audit. Each Care run
-    shares one agent runtime, through the LLM proxy."""
+    shares one agent runtime, through the LLM proxy. OPS-1: the stores are registered for the
+    demo staff console."""
+    global _stores
+    stores = HandoffStores(handoffs=HandoffState(), cases=CaseState(), audit=InMemoryAuditSink())
+    _stores = stores
     care = CarePorts(
         orders=OrderStoreFake(state=OrderState.from_data(DATA)),
-        cases=CaseQueueFake(state=CaseState()),
+        cases=CaseQueueFake(state=stores.cases),
     )
-    audit = AuditContext(InMemoryAuditSink(), correlation_id="gateway", actor="shopper-portal")
+    audit = AuditContext(stores.audit, correlation_id="gateway", actor="shopper-portal")
     # One runtime for the desk, as `chat_services` has one: each `agent_runtime()` makes a temp
     # directory (security review M1). The desk caps open handoffs and concurrent Care runs.
     runtime = agent_runtime()
     return HandoffDesk(
-        queue=HandoffQueueFake(state=HandoffState()),
+        queue=HandoffQueueFake(state=stores.handoffs),
         care=care,
         audit=audit,
         runtime=lambda: runtime,

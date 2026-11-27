@@ -56,6 +56,16 @@ class DemoOrders:
         with self._lock:
             self._by_shopper.setdefault(shopper, []).append(entry)
 
+    def everyone(self) -> list[tuple[str, dict[str, Any]]]:
+        """OPS-1: every shopper's demo orders, as (shopper, copy of the entry), for the read-only
+        demo staff console. Copies, so a reader cannot change the history."""
+        with self._lock:
+            return [
+                (shopper, dict(entry))
+                for shopper, entries in self._by_shopper.items()
+                for entry in entries
+            ]
+
     def of(self, shopper: str) -> list[dict[str, Any]]:
         with self._lock:
             return [dict(entry) for entry in self._by_shopper.get(shopper, [])]

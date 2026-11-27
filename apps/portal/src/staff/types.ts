@@ -89,7 +89,8 @@ export interface Money {
 
 export interface Handoff {
   reference: string;
-  time: string;
+  /** The queue keeps no time, so this is null today; never a guessed one. */
+  time: string | null;
   intent: string;
   order_id: string | null;
   summary: string;

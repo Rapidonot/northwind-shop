@@ -28,14 +28,15 @@ export function count(n: number): string {
   return n.toLocaleString("en-US");
 }
 
-export function clock(iso: string): string {
+export function clock(iso: string | null): string {
+  if (iso === null) return "–";
   const at = new Date(iso);
   if (Number.isNaN(at.getTime())) return "–";
   return at.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
 }
 
-export function shortClock(iso: string): string {
-  return clock(iso).slice(0, 5);
+export function shortClock(iso: string | null): string {
+  return iso === null ? "–" : clock(iso).slice(0, 5);
 }
 
 export function money(value: Money | null): string {
