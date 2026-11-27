@@ -2,6 +2,7 @@
 // request (hard rule 2); the page shows them exactly as sent and never computes one. Any failure is
 // "unavailable", never an empty list; an unknown product is "not-found".
 import { mightBeCardData } from "./cardGuard";
+import { sessionFetch } from "./session";
 
 export type Money = { amount: string; currency: string };
 
@@ -50,7 +51,7 @@ async function getJson(url: string): Promise<{ status: number; body: unknown } |
   // Never put possible card data in a URL (security review F1); the route guards this too.
   if (mightBeCardData(url) || mightBeCardData(safeDecode(url.replaceAll("+", " ")))) return null;
   try {
-    const response = await fetch(url, { credentials: "same-origin" });
+    const response = await sessionFetch(url, { credentials: "same-origin" });
     return { status: response.status, body: response.ok ? await response.json() : null };
   } catch {
     return null;

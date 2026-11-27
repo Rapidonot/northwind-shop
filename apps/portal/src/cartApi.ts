@@ -1,6 +1,8 @@
 // GET /api/cart (row #16, CHK-01): the shopper's cart as the gateway read it from mcp-catalog. The
 // panel shows these values exactly as sent: prices and totals are the server's, read live.
 
+import { sessionFetch } from "./session";
+
 export type CartLine = {
   variant_id: string;
   product_id: string;
@@ -35,7 +37,7 @@ function isCart(value: unknown): value is Cart {
 /** Any failure is "unavailable", never an empty cart. */
 export async function fetchCart(): Promise<CartState> {
   try {
-    const response = await fetch("/api/cart", { credentials: "same-origin" });
+    const response = await sessionFetch("/api/cart", { credentials: "same-origin" });
     if (!response.ok) return { kind: "unavailable" };
     const body = (await response.json()) as { cart?: unknown };
     return isCart(body.cart) ? { kind: "ready", cart: body.cart } : { kind: "unavailable" };
