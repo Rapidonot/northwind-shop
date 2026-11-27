@@ -385,11 +385,12 @@ def test_the_one_order_read_is_read_only_and_the_orders_server_has_one_request_m
 def test_each_agent_gets_exactly_its_cart_tools() -> None:
     catalog = tool_scopes.AGENT_TOOLS
     assert tool_scopes.CART_TOOLS <= catalog["shopper-assistant"]["northwind-catalog"]
-    # SA-01 PR 1: the portal also reads the catalog for the shop pages; still no cart write.
+    # SA-01 PR 1: the portal also reads the catalog for the shop pages. PR 2 (the user's stop 5
+    # yes, 2026-11-27): and exactly the three cart writes, for the bag's controls.
     assert catalog["shopper-portal"]["northwind-catalog"] == frozenset(
         {"get_cart", "get_product", "browse_products", "get_prices", "list_reviews"}
-    )
-    assert not tool_scopes.CART_WRITE_TOOLS & catalog["shopper-portal"]["northwind-catalog"]
+    ) | frozenset({"add_to_cart", "set_cart_quantity", "remove_from_cart"})
+    assert tool_scopes.CART_WRITE_TOOLS == {"add_to_cart", "set_cart_quantity", "remove_from_cart"}
     assert not tool_scopes.CART_TOOLS & catalog["catalog-subagent"]["northwind-catalog"]
     assert catalog["shopper-portal"]["northwind-rag"] == frozenset()
 
@@ -405,12 +406,15 @@ def test_each_agent_lists_only_its_own_tools_on_a_real_server(url: str) -> None:
     portal = asyncio.run(names("shopper-portal", SESSION_A))
     staff = asyncio.run(names("catalog-subagent", None))
     assert set(CART_TOOLS) <= assistant
-    assert portal == {  # SA-01 PR 1; PR 2 adds `list_reviews`
+    assert portal == {  # SA-01 PR 1; PR 2 adds `list_reviews` and the three cart writes
         "get_cart",
         "get_product",
         "browse_products",
         "get_prices",
         "list_reviews",
+        "add_to_cart",
+        "set_cart_quantity",
+        "remove_from_cart",
     }
     assert not set(CART_TOOLS) & staff
 

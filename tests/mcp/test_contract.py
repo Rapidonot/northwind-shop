@@ -73,6 +73,9 @@ PORTAL_ONLY_TOOLS: dict[str, str] = {
     "list_reviews": "shopper-portal",
 }
 PORTAL_CATALOG_TOOLS = frozenset({"get_cart", "get_product", *PORTAL_ONLY_TOOLS})
+# SA-01 PR 2 (the user's stop 5 yes, 2026-11-27): the portal's agent also gets exactly the three
+# cart writes, for the bag's controls; no other write of any kind.
+PORTAL_CATALOG_ROW = PORTAL_CATALOG_TOOLS | CART_WRITE_TOOLS
 CALLER_KEYS = {
     "audience",
     "region",
@@ -173,10 +176,15 @@ def test_no_scope_grants_a_tool_outside_prd_sevens_read_only_set(server: str) ->
         holders = {a for a, row in AGENT_TOOLS.items() if name in row.get(server, frozenset())}
         assert holders == ({owner} if server == CATALOG else set()), name
     if server == CATALOG:
-        assert AGENT_TOOLS["shopper-portal"][CATALOG] == PORTAL_CATALOG_TOOLS
-    # Row #16: only the assistant may write a cart; the portal's agent only reads it.
+        assert AGENT_TOOLS["shopper-portal"][CATALOG] == PORTAL_CATALOG_ROW
+    # Row #16: only the assistant may write a cart. SA-01 PR 2 (the user's stop 5 yes, 2026-11-27):
+    # and the portal's own agent, for the bag's controls. Exactly these two, on mcp-catalog only.
     writers = {a for a, row in AGENT_TOOLS.items() if CART_WRITE_TOOLS & row.get(server, set())}
-    assert writers <= {"shopper-assistant"}
+    assert writers == ({"shopper-assistant", "shopper-portal"} if server == CATALOG else set())
+    # The portal's agent never holds any other write: no return request, and no payment, checkout
+    # or order tool exists on any server for it.
+    portal = AGENT_TOOLS["shopper-portal"].get(server, frozenset())
+    assert not (WRITE_TOOLS - CART_WRITE_TOOLS) & portal
 
 
 @pytest.mark.parametrize(("server", "name"), TOOL_CASES)
@@ -273,7 +281,7 @@ def test_the_catalog_listing_is_within_the_five_read_only_tools(agent: str) -> N
     if agent == "shopper-assistant":
         assert names == FIVE_CATALOG_TOOLS | cart
     if agent == "shopper-portal":
-        assert names == PORTAL_CATALOG_TOOLS  # SA-01 PR 1; row #16 had `get_cart` only
+        assert names == PORTAL_CATALOG_ROW  # SA-01 PR 1 reads; PR 2 the cart writes
     else:
         assert not set(PORTAL_ONLY_TOOLS) & names
     if agent == "shopper-query":
@@ -290,7 +298,7 @@ def test_the_catalog_registry_is_exactly_the_five_read_only_tools() -> None:
         FIVE_CATALOG_TOOLS | cart | set(SERVER_ONLY_TOOLS) | set(PORTAL_ONLY_TOOLS)
     )
     assert allowed_tools("shopper-assistant", CATALOG) == FIVE_CATALOG_TOOLS | cart
-    assert allowed_tools("shopper-portal", CATALOG) == PORTAL_CATALOG_TOOLS
+    assert allowed_tools("shopper-portal", CATALOG) == PORTAL_CATALOG_ROW  # SA-01 PR 2
     assert allowed_tools("catalog-subagent", CATALOG) == frozenset()
     assert allowed_tools("shopper-query", CATALOG) == frozenset(SERVER_ONLY_TOOLS)
 

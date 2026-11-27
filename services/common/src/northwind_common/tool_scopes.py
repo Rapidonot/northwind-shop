@@ -94,8 +94,14 @@ AGENT_TOOLS: Mapping[str, Mapping[str, frozenset[str]]] = {
         "northwind-orders": ORDER_TOOLS,  # row #27 (CHK-06), attached only when signed in
         "northwind-policy": POLICY_TOOLS,  # row #27 PR 2 (CHK-07), likewise; PRD §7
     },
-    # Row #16: get_cart for the chat panel; SA-01 PR 1: the shop pages' reads.
-    "shopper-portal": {"northwind-rag": frozenset(), "northwind-catalog": PORTAL_CATALOG_TOOLS},
+    # Row #16: get_cart for the chat panel; SA-01 PR 1: the shop pages' reads. SA-01 PR 2 (approved
+    # plan; the user's stop 5 yes, 2026-11-27): the bag's quantity controls and ADD TO BAG, through
+    # exactly the three cart writes, each with an idempotency key (hard rule 9). No payment,
+    # checkout, order or return write: Pay (demo) runs in the gateway, on the fakes.
+    "shopper-portal": {
+        "northwind-rag": frozenset(),
+        "northwind-catalog": PORTAL_CATALOG_TOOLS | CART_WRITE_TOOLS,
+    },
     # Row #11: one read-only tool that returns product IDs only (RAG-04, hard rule 2).
     "shopper-query": {
         "northwind-rag": frozenset(),
