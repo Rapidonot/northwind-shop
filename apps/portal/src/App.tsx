@@ -2,6 +2,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import type { CartState } from "./cartApi";
 import { CARD_REFUSED, mightBeCardData } from "./cardGuard";
 import { ChatPanel } from "./ChatPanel";
+import { DepartmentTabs } from "./DepartmentTabs";
 import {
   CartPage,
   DepartmentPage,
@@ -68,34 +69,6 @@ function Page({ route, cart }: { route: Route; cart: CartState }) {
   }
 }
 
-/** The department tabs are the only department picker (rule 1 of the trial build): All, then every
- * department with its count of products, the selected tab filled black (SA-01 PR 2, home-tabs.png).
- * Counts are the gateway's; a department without one shows its name only. */
-function DepartmentTabs({ departments, route }: { departments: Loaded<Departments>; route: Route }) {
-  if (departments.kind !== "ready") return <nav aria-label="Departments" className="departments" />;
-  const { names, counts, total } = departments.value;
-  const selected = route.page === "department" ? route.name : null;
-  return (
-    <nav aria-label="Departments" className="departments">
-      <ul>
-        <li>
-          <a href={href({ page: "home" })} aria-current={route.page === "home" ? "page" : undefined}>
-            All <span className="tab-count">{total}</span>
-          </a>
-        </li>
-        {names.map((name) => (
-          <li key={name}>
-            <a href={href({ page: "department", name })} aria-current={name === selected ? "page" : undefined}>
-              {name}
-              {counts[name] !== undefined && <span className="tab-count"> {counts[name]}</span>}
-            </a>
-          </li>
-        ))}
-      </ul>
-    </nav>
-  );
-}
-
 function SearchBox({ initial }: { initial: string }) {
   const [q, setQ] = useState(initial);
   const [refused, setRefused] = useState(false);
@@ -126,9 +99,10 @@ export function App() {
   const [health, setHealth] = useState<Health>({ state: "loading" });
   const [departments, setDepartments] = useState<Loaded<Departments>>({ kind: "loading" });
   const [cart, setCart] = useState<CartState>({ kind: "loading" });
-  // SA-01 PR 2: the assistant is a slide-in panel. On desktop it starts open, so the AI disclosure is
-  // on screen from the first load (NFR-08, and every journey's closing check); Close slides it away
-  // and ASK NORTHWIND brings it back. On phone it starts closed and opens full screen.
+  // SA-01 PR 2: the assistant is a slide-in side panel that narrows the page (assistant-panel.png;
+  // look round 2). On desktop it starts open, so the AI disclosure is on screen from the first load
+  // (NFR-08, and every journey's closing check); Close slides it away and ASK NORTHWIND brings it
+  // back. On phone it starts closed and opens full screen.
   const [chatOpen, setChatOpen] = useState(() => window.matchMedia?.("(min-width: 900px)").matches ?? false);
 
   // The chat panel's cart read is the first request on a session path; the page and the nav wait

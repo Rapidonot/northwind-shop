@@ -98,6 +98,22 @@ test.describe("[SA-01] shop pages", () => {
   });
 });
 
+test.describe("[SA-01] the tab bar at 1440px with the panel open", () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  // Look round 2: all 11 tabs fit beside the open panel, so the bar has nothing to scroll.
+  test("every tab fits beside the open panel, with no scroll buttons", async ({ page }) => {
+    await page.goto("/#/d/Dining");
+    await expect(page.getByRole("complementary", { name: "Ask Northwind" })).toBeVisible();
+    const nav = page.getByRole("navigation", { name: "Departments" });
+    await expect(nav.getByRole("link")).toHaveCount(11);
+    const fits = await nav.locator(".tab-scroller").evaluate((el) => el.scrollWidth <= el.clientWidth);
+    expect(fits).toBe(true);
+    await expect(nav.getByRole("button")).toHaveCount(0);
+    await expect(nav.getByRole("link", { name: /^Dining/ })).toBeInViewport();
+  });
+});
+
 test.describe("[SA-01] chat on a phone", () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
