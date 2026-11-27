@@ -13,7 +13,6 @@ from typing import Any
 import httpx2
 import pytest
 
-from northwind_assistant import catalog_client
 from northwind_assistant.caller import Caller
 from northwind_assistant.catalog_client import CartReader
 from northwind_mcp_catalog import testing as catalog_testing
@@ -42,7 +41,7 @@ def clients(monkeypatch: pytest.MonkeyPatch) -> list[Any]:
             super().__init__(*args, **kwargs)
             made.append(self)
 
-    monkeypatch.setattr(catalog_client.httpx2, "AsyncClient", Tracked)
+    monkeypatch.setattr(httpx2, "AsyncClient", Tracked)  # the module catalog_client reads it from
     return made
 
 
