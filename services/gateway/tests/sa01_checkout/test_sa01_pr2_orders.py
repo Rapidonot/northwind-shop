@@ -46,6 +46,7 @@ def test_the_signed_in_shopper_gets_their_seeded_orders_newest_first(w: World) -
     got = w.run(lambda c: c.get("/api/orders", headers={"cookie": signed_in(A)}))
     assert got.status_code == 200
     body = got.json()
+    assert set(body) == {"signed_in", "orders", "total"} and body["signed_in"] is True
     assert body["total"] == len(SEEDED) == 11
     assert {o["order_id"] for o in body["orders"]} == {o["order_id"] for o in SEEDED}
     dates = [o["placed_on"] for o in body["orders"]]

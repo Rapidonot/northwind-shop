@@ -223,7 +223,8 @@ def test_the_staff_agent_cannot_write_a_cart_and_the_portal_writes_exactly_the_t
         data(call(url, session, "get_cart", {}, agent="shopper-portal"), "get_cart")["lines"] == []
     )
     portal = tool_scopes.allowed_tools("shopper-portal", "northwind-catalog")
-    assert portal - tool_scopes.PORTAL_CATALOG_TOOLS == set(WRITES)  # its reads, plus exactly these
+    reads = {"get_cart", "get_product", "browse_products", "get_prices", "list_reviews"}
+    assert portal == reads | set(WRITES)  # literals (advisor-reviewer L3): its reads and the three
 
 
 # ---- R3, R10: live stock and live prices -------------------------------------------------------

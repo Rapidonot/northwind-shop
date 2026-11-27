@@ -323,6 +323,14 @@ describe("[SA-01] order history", () => {
     expect(screen.queryByText("You have no orders yet.")).toBeNull();
   });
 
+  it("asks a signed-out shopper to sign in on the gateway's 200 signed_in:false, never an empty list", async () => {
+    serve({ "GET /api/orders": () => Response.json({ signed_in: false, message: "Sign in to see your orders." }) });
+    render(<OrdersPage />);
+    expect(await screen.findByText(SIGN_IN_TO_SEE_ORDERS)).toBeInTheDocument();
+    expect(screen.queryByText("You have no orders yet.")).toBeNull();
+    expect(screen.queryByRole("list", { name: "Your orders" })).toBeNull();
+  });
+
   it("says unavailable when the read fails", async () => {
     serve({});
     render(<OrdersPage />);

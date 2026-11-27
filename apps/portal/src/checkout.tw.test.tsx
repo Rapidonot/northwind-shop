@@ -173,6 +173,10 @@ describe("[SA-01] cartApi: a failed read is never a valid empty result", () => {
     const cases: Array<[() => Response, string]> = [
       [() => new Response("{}", { status: 401 }), "signed-out"],
       [() => Response.json({ signed_in: false, message: "Sign in to see your orders." }), "signed-out"],
+      // advisor-reviewer L1: a body that says signed out but carries a list is a contradiction:
+      // unavailable, never "no orders".
+      [() => Response.json({ signed_in: false, orders: [] }), "unavailable"],
+      [() => Response.json({ signed_in: true, orders: [], total: 0 }), "ready"],
       [() => new Response("", { status: 503 }), "unavailable"],
       [() => Response.json({ orders: null }), "unavailable"],
       [() => Response.json({ total: 0 }), "unavailable"],
@@ -483,6 +487,24 @@ describe("[SA-01] order history: edges", () => {
     expect(within(list).getByText("$160.00")).toBeInTheDocument();
     expect(list).toHaveTextContent("on hold"); // a missing date leaves no 'null' or 'undefined'
     expect(list.textContent).not.toMatch(/null|undefined/);
+  });
+
+  it("signing in from the history rereads it on the gateway's 200 signed_in:false contract", async () => {
+    let signedIn = false;
+    const calls = serve({
+      "GET /api/orders": () =>
+        signedIn
+          ? Response.json({ signed_in: true, orders: [{ order_id: "O000801", placed_on: "2026-10-02", status: "delivered", status_text: "delivered", lines: [] }], total: 1 })
+          : Response.json({ signed_in: false, message: "Sign in to see your orders." }),
+      "POST /api/session/shopper": () => {
+        signedIn = true;
+        return Response.json({ signed_in: true });
+      },
+    });
+    render(<OrdersPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "Sign in (demo)" }));
+    expect(await screen.findByRole("list", { name: "Your orders" })).toHaveTextContent("O000801");
+    expect(calls.filter((c) => c.url === "/api/orders")).toHaveLength(2);
   });
 
   it("signing in from the history rereads it and then lists the orders", async () => {
