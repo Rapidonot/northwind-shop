@@ -3,18 +3,25 @@
 // models (llm.py), order rows (data/backend/orders.jsonl), intents and labels (the handoff desk) and
 // action names (views.py) are copied from the repo; the events, holds and stock numbers are
 // illustrative. It is a fixture: the console shows the gateway's data, never this.
-import type { ActivityEvent, AgentMap, MapNode, OrderRow, StaffViews } from "./types";
+import type { ActivityEvent, AgentMap, MapEdge, MapNode, OrderRow, StaffViews, ToolGroup } from "./types";
 
 const STARTED = "2026-11-27T14:00:00Z";
 
-const node = (id: string, kind: MapNode["kind"], title: string, subtitle = "", models: string[] = [], tools: string[] = []): MapNode => ({
+const node = (id: string, kind: MapNode["kind"], title: string, subtitle = "", models: string[] = [], tools: string[] = [], collapsed: ToolGroup[] = []): MapNode => ({
   id,
   kind,
   title,
   subtitle,
   models,
   tools,
+  collapsed,
 });
+
+const edge = (from: string, to: string, label: string | null = null, dashed = false): MapEdge => ({ from, to, label, dashed });
+
+// tool_scopes.py: CATALOG_READ_TOOLS, get_cart and eligible_products; the writes collapse to one
+// line, named from catalog_tool.CART_TOOL_NAMES less the read `get_cart`.
+const CART_WRITES = ["add_to_cart", "remove_from_cart", "set_cart_quantity"];
 
 export const MAP: AgentMap = {
   legend: ["ai", "mcp", "code", "fake", "eval"],
@@ -22,22 +29,20 @@ export const MAP: AgentMap = {
     node("shopper-chat", "entry", "Shopper chat", "Entry point"),
     node("query-understanding", "ai", "Query understanding", "Rules first; Haiku if unsure", ["Haiku"]),
     node("shopper-assistant", "ai", "Shopper Assistant", "Customer-facing agent", ["Sonnet"]),
-    node("output-check", "code", "Output check", "Removes unbacked price, stock and policy claims"),
-    node("northwind-catalog", "mcp", "northwind-catalog", "Live catalog, stock and cart", [], [
-      "search_products",
-      "get_product",
-      "get_variant",
-      "check_stock",
-      "get_price",
-      "get_cart",
-      "add_to_cart",
-      "remove_from_cart",
-      "set_cart_quantity",
-      "eligible_products",
-    ]),
-    node("northwind-rag", "mcp", "northwind-rag", "Hybrid search: catalog, reviews and policies", [], ["retrieve_context"]),
-    node("northwind-orders", "mcp", "northwind-orders", "Signed-in only · order store and carrier (fake) tracking", [], ["get_order", "request_return"]),
-    node("northwind-policy", "mcp", "northwind-policy", "Signed-in only · returns and shipping policy resources", [], ["evaluate_return_eligibility"]),
+    node("output-check", "code", "Output check", "Drops unbacked price, stock, policy claims"),
+    node("answer", "end", "Answer", "Shopper reply"),
+    node(
+      "northwind-catalog",
+      "mcp",
+      "northwind-catalog",
+      "",
+      [],
+      ["search_products", "get_product", "get_variant", "check_stock", "get_price", "get_cart", "eligible_products"],
+      [{ label: "cart write tools", tools: CART_WRITES }],
+    ),
+    node("northwind-rag", "mcp", "northwind-rag", "Hybrid search: catalog, reviews, policies", [], ["retrieve_context"]),
+    node("northwind-orders", "mcp", "northwind-orders", "Signed-in only · order store + carrier (fake) tracking", [], ["get_order", "request_return"]),
+    node("northwind-policy", "mcp", "northwind-policy", "Signed-in only · returns & shipping policies", [], ["evaluate_return_eligibility"]),
     node("talk-to-person", "entry", "Talk to a person", "Entry point"),
     node("handoff-trigger", "code", "Handoff trigger", "Runs before any model call"),
     node("handoff-desk", "code", "Handoff desk", "Builds the case"),
@@ -51,7 +56,7 @@ export const MAP: AgentMap = {
     node("checkout-commit", "code", "Inventory commit"),
     node("checkout-capture", "fake", "Payment capture"),
     node("checkout-confirm", "code", "Confirm"),
-    node("order-events", "entry", "Order events", "Entry point · backend pipeline"),
+    node("order-events", "entry", "Order events", "Entry point · backend"),
     node("orchestrator", "ai", "Orchestrator", "Sonnet planner", ["Sonnet"]),
     node("orders-subagent", "ai", "Orders agent", "Backend order pipeline", ["Haiku"]),
     node("returns-subagent", "ai", "Returns agent", "Return tracking", ["Haiku"]),
@@ -60,49 +65,38 @@ export const MAP: AgentMap = {
     node("order-inventory", "code", "Inventory"),
     node("order-carrier", "fake", "Carrier"),
     node("escalation", "code", "Escalation", "High risk or an issue"),
-    node("judge", "eval", "Judge", "Eval only: offline scoring, no live arrows", ["Sonnet"]),
-  ],
-  lanes: [
-    {
-      id: "chat",
-      title: null,
-      steps: [["shopper-chat"], ["query-understanding"], ["shopper-assistant"], ["output-check"]],
-      servers: ["northwind-catalog", "northwind-rag", "northwind-orders", "northwind-policy"],
-    },
-    { id: "handoff", title: "Handoff path · no MCP", steps: [["talk-to-person"], ["handoff-trigger"], ["handoff-desk"], ["care-subagent"], ["case-queue"]], servers: [] },
-    {
-      id: "checkout",
-      title: "Checkout steps · no AI anywhere on this path",
-      steps: [["pay-demo"], ["checkout-validate"], ["checkout-hold"], ["checkout-fraud"], ["checkout-authorize"], ["checkout-commit"], ["checkout-capture"], ["checkout-confirm"]],
-      servers: [],
-    },
-    {
-      id: "orders",
-      title: "Backend order pipeline · ports in code, not MCP",
-      steps: [["order-events"], ["orchestrator"], ["orders-subagent", "returns-subagent"], ["order-fraud", "order-payment", "order-inventory", "order-carrier"], ["escalation"]],
-      servers: [],
-    },
-    { id: "eval", title: "Eval only", steps: [["judge"]], servers: [] },
+    node("judge", "eval", "Judge", "Eval only: offline scoring", ["Sonnet"]),
   ],
   edges: [
-    { from: "shopper-chat", to: "query-understanding", label: null },
-    { from: "query-understanding", to: "northwind-catalog", label: "eligible_products" },
-    { from: "query-understanding", to: "shopper-assistant", label: null },
-    { from: "shopper-assistant", to: "northwind-catalog", label: null },
-    { from: "shopper-assistant", to: "northwind-rag", label: null },
-    { from: "shopper-assistant", to: "northwind-orders", label: null },
-    { from: "shopper-assistant", to: "northwind-policy", label: null },
-    { from: "shopper-assistant", to: "output-check", label: null },
-    { from: "talk-to-person", to: "handoff-trigger", label: null },
-    { from: "handoff-trigger", to: "handoff-desk", label: null },
-    { from: "handoff-desk", to: "care-subagent", label: null },
-    { from: "care-subagent", to: "case-queue", label: null },
-    { from: "pay-demo", to: "checkout-validate", label: null },
-    { from: "order-events", to: "orchestrator", label: null },
-    { from: "orchestrator", to: "orders-subagent", label: null },
-    { from: "orders-subagent", to: "order-fraud", label: "code port" },
-    { from: "order-fraud", to: "escalation", label: null },
-    { from: "escalation", to: "care-subagent", label: "escalation case" },
+    edge("shopper-chat", "query-understanding"),
+    edge("query-understanding", "shopper-assistant"),
+    edge("query-understanding", "northwind-catalog", "eligible_products only", true),
+    edge("shopper-assistant", "northwind-catalog"),
+    edge("shopper-assistant", "northwind-rag"),
+    edge("shopper-assistant", "northwind-orders"),
+    edge("shopper-assistant", "northwind-policy"),
+    edge("shopper-assistant", "output-check"),
+    edge("output-check", "answer"),
+    edge("talk-to-person", "handoff-trigger"),
+    edge("handoff-trigger", "handoff-desk"),
+    edge("handoff-desk", "care-subagent"),
+    edge("care-subagent", "case-queue"),
+    edge("pay-demo", "checkout-validate"),
+    edge("checkout-validate", "checkout-hold"),
+    edge("checkout-hold", "checkout-fraud"),
+    edge("checkout-fraud", "checkout-authorize"),
+    edge("checkout-authorize", "checkout-commit"),
+    edge("checkout-commit", "checkout-capture"),
+    edge("checkout-capture", "checkout-confirm"),
+    edge("order-events", "orchestrator"),
+    edge("orchestrator", "orders-subagent"),
+    edge("orchestrator", "returns-subagent"),
+    edge("orders-subagent", "order-fraud"),
+    edge("orders-subagent", "order-payment"),
+    edge("orders-subagent", "order-inventory"),
+    edge("orders-subagent", "order-carrier"),
+    edge("orders-subagent", "escalation"),
+    edge("escalation", "care-subagent", "escalation case"),
   ],
 };
 
@@ -190,6 +184,7 @@ export const FIXTURE: StaffViews = {
           { node: "northwind-rag", label: "retrieve_context: the jacket's specs and care guide" },
           { node: "northwind-catalog", label: "check_stock: live stock for size L" },
           { node: "output-check", label: "Every claim backed by a source or a live tool" },
+          { node: "answer", label: "The cited answer" },
         ],
       },
       {

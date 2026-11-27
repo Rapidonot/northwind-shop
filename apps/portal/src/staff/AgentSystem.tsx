@@ -1,10 +1,12 @@
-// OPS-1: the "Agent system" view (docs/design/staff/, the first two screenshots). The map is drawn
-// from what the gateway generates from the tool scopes and the model constants; nothing here names
-// an agent, a tool or a model. The traces are sample data and say so.
+// OPS-1: the "Agent system" view (docs/design/staff/, the 8.25.57 PM and 8.26.08 PM screenshots).
+// The nodes and edges are what the gateway generates from the tool scopes and the model constants;
+// where each box sits is the layout table (layout.json), and every line is routed from it
+// (mapLayout.ts). Nothing here names an agent, a tool or a model. The traces are sample data.
 import { useState } from "react";
 import { KIND_LABEL } from "./format";
+import { type Box, pathOf, place, route, type Placed } from "./mapLayout";
 import { OutcomePill, SampleBadge } from "./parts";
-import type { AgentMap, MapLane, MapNode, SampleTrace, SystemView } from "./types";
+import type { AgentMap, MapNode, SampleTrace, SystemView } from "./types";
 
 const BADGE: Record<MapNode["kind"], string | null> = {
   entry: null,
@@ -13,79 +15,94 @@ const BADGE: Record<MapNode["kind"], string | null> = {
   code: "Code",
   fake: "Fake",
   eval: null,
+  end: null,
 };
 
-function Badges({ node }: { node: MapNode }) {
+/** Lit, dimmed, or neither: only a selected trace dims anything. */
+type Light = "lit" | "dim" | null;
+
+const lightClass = (light: Light) => (light === "lit" ? " is-lit" : light === "dim" ? " is-dim" : "");
+
+function Node({ node, box, light }: { node: MapNode; box: Box; light: Light }) {
   const fixed = BADGE[node.kind];
   return (
-    <div className="node-badges">
-      {node.models.map((model) => (
-        <span key={model} className="node-badge">
-          AI · {model}
-        </span>
-      ))}
-      {fixed && <span className={`node-badge node-badge-${node.kind}`}>{fixed}</span>}
-    </div>
-  );
-}
-
-function Node({ node, lit }: { node: MapNode; lit: boolean | null }) {
-  const state = lit === null ? "" : lit ? " is-lit" : " is-dim";
-  return (
-    <div className={`map-node map-node-${node.kind}${state}`} data-node={node.id} aria-current={lit ? "step" : undefined}>
+    <div
+      className={`map-node map-node-${node.kind}${lightClass(light)}`}
+      data-node={node.id}
+      aria-current={light === "lit" ? "step" : undefined}
+      style={{ left: box.x, top: box.y, width: box.w, height: box.h }}
+    >
       <p className="map-node-title">{node.title}</p>
       {node.subtitle && <p className="map-node-sub">{node.subtitle}</p>}
-      {node.tools.length > 0 && <p className="map-node-tools">{node.tools.join(", ")}</p>}
-      <Badges node={node} />
+      {(node.tools.length > 0 || node.collapsed.length > 0) && (
+        <p className="map-node-tools">
+          {node.tools.join(", ")}
+          {node.collapsed.map((group) => (
+            <span key={group.label} className="map-node-more" title={group.tools.join(", ")}>
+              {" "}
+              + {group.label}
+            </span>
+          ))}
+        </p>
+      )}
+      {(node.models.length > 0 || fixed) && (
+        <div className="node-badges">
+          {node.models.map((model) => (
+            <span key={model} className="node-badge">
+              AI · {model}
+            </span>
+          ))}
+          {fixed && <span className={`node-badge node-badge-${node.kind}`}>{fixed}</span>}
+        </div>
+      )}
     </div>
   );
 }
 
-function callers(map: AgentMap, byId: Map<string, MapNode>, server: string): string {
-  const names = map.edges
-    .filter((edge) => edge.to === server)
-    .map((edge) => byId.get(edge.from)?.title)
-    .filter((name): name is string => name !== undefined);
-  return names.length > 0 ? `from ${names.join(" · ")}` : "";
-}
-
-function Lane({ lane, map, byId, lit }: { lane: MapLane; map: AgentMap; byId: Map<string, MapNode>; lit: Set<string> | null }) {
-  const state = (id: string) => (lit === null ? null : lit.has(id));
+function Canvas({ map, placed, lit }: { map: AgentMap; placed: Placed; lit: Set<string> | null }) {
+  const byId = new Map(map.nodes.map((n) => [n.id, n]));
+  const routes = route(map.edges, placed);
+  const nodeLight = (id: string): Light => (lit === null ? null : lit.has(id) ? "lit" : "dim");
+  const edgeLight = (from: string, to: string): Light => (lit === null ? null : lit.has(from) && lit.has(to) ? "lit" : "dim");
   return (
-    <section className="map-lane" aria-label={lane.title ?? "Shopper chat"}>
-      {lane.title && <h3 className="map-lane-title">{lane.title}</h3>}
-      <div className="map-flow">
-        {lane.steps.map((column, index) => (
-          <div className="map-step" key={column.join("+")}>
-            {index > 0 && (
-              <span className="map-arrow" aria-hidden="true">
-                →
-              </span>
-            )}
-            <div className="map-column">
-              {column.map((id) => {
-                const node = byId.get(id);
-                return node ? <Node key={id} node={node} lit={state(id)} /> : null;
-              })}
-            </div>
-          </div>
+    <div className="map-canvas" style={{ width: placed.canvasWidth, height: placed.height }}>
+      {placed.rows
+        .filter((row) => row.title !== null)
+        .map((row) => (
+          <p key={row.id} className="map-row-title" style={{ top: row.titleY }}>
+            {row.title}
+          </p>
         ))}
-      </div>
-      {lane.servers.length > 0 && (
-        <div className="map-servers">
-          {lane.servers.map((id) => {
-            const node = byId.get(id);
-            if (!node) return null;
-            return (
-              <div key={id} className="map-server">
-                <p className="map-server-from">{callers(map, byId, id)}</p>
-                <Node node={node} lit={state(id)} />
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </section>
+      <svg className="map-lines" width={placed.canvasWidth} height={placed.height} aria-hidden="true">
+        <defs>
+          <marker id="map-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" />
+          </marker>
+        </defs>
+        {routes.map(({ edge, points, label, route: kind }) => (
+          <g key={`${edge.from}->${edge.to}`} className={`map-edge map-edge-${kind}${lightClass(edgeLight(edge.from, edge.to))}`} data-edge={`${edge.from}->${edge.to}`}>
+            <path d={pathOf(points)} fill="none" strokeDasharray={edge.dashed ? "5 4" : undefined} markerEnd="url(#map-arrow)" />
+            {edge.label && label && (
+              <text x={label.x} y={label.y} textAnchor={label.anchor}>
+                {edge.label}
+              </text>
+            )}
+          </g>
+        ))}
+      </svg>
+      {map.nodes.map((node) => {
+        const box = placed.boxes.get(node.id);
+        return box ? <Node key={node.id} node={node} box={box} light={nodeLight(node.id)} /> : null;
+      })}
+      <ul className="visually-hidden" aria-label="Connections">
+        {map.edges.map((edge) => (
+          <li key={`${edge.from}->${edge.to}`}>
+            {byId.get(edge.from)?.title ?? edge.from} → {byId.get(edge.to)?.title ?? edge.to}
+            {edge.label ? ` (${edge.label})` : ""}
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
@@ -113,9 +130,7 @@ function TraceCard({ trace, selected, onSelect }: { trace: SampleTrace; selected
         </span>
       </span>
       <span className="trace-title">{trace.title}</span>
-      <span className="trace-meta">
-        {[...trace.refs, `${trace.steps.length} steps`].join(" · ")}
-      </span>
+      <span className="trace-meta">{[...trace.refs, `${trace.steps.length} steps`].join(" · ")}</span>
     </button>
   );
 }
@@ -142,6 +157,7 @@ export function AgentSystem({ view }: { view: SystemView }) {
   const { map, traces } = view;
   const [selected, setSelected] = useState<string | null>(null);
   const byId = new Map(map.nodes.map((node) => [node.id, node]));
+  const placed = place(map.nodes.map((n) => n.id));
   const trace = traces.find((t) => t.id === selected) ?? null;
   const lit = trace ? new Set(trace.steps.map((step) => step.node)) : null;
 
@@ -156,11 +172,17 @@ export function AgentSystem({ view }: { view: SystemView }) {
       <div className="map">
         <div className="map-legend-bar">
           <Legend kinds={map.legend} />
-          <span className="muted">Full architecture</span>
+          {trace ? (
+            <button type="button" className="btn btn-outline" onClick={() => setSelected(null)}>
+              Full architecture
+            </button>
+          ) : (
+            <span className="muted">Full architecture</span>
+          )}
         </div>
-        {map.lanes.map((lane) => (
-          <Lane key={lane.id} lane={lane} map={map} byId={byId} lit={lit} />
-        ))}
+        <div className="map-scroll">
+          <Canvas map={map} placed={placed} lit={lit} />
+        </div>
       </div>
       <p className="callout">Money and stock are decided by code, never by a model.</p>
       <section className="traces" aria-label="Trace one action">

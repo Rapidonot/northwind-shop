@@ -112,34 +112,64 @@ describe("[OPS-1] the console's chrome", () => {
 });
 
 describe("[OPS-1] the agent system view", () => {
-  it("draws every node and its legend from the map it is given", async () => {
+  it("draws every node, a line for every edge, and its legend, from the map it is given", async () => {
     renderConsole("system");
     await screen.findByRole("heading", { name: "Agent system" });
     for (const node of FIXTURE.system.map.nodes) {
-      expect(document.querySelector(`[data-node="${node.id}"]`)).not.toBeNull();
+      expect(document.querySelector(`[data-node="${node.id}"]`), node.id).not.toBeNull();
     }
+    const drawn = [...document.querySelectorAll("[data-edge]")].map((g) => g.getAttribute("data-edge"));
+    expect(drawn.sort()).toEqual(FIXTURE.system.map.edges.map((e) => `${e.from}->${e.to}`).sort());
     const legend = screen.getByRole("list", { name: "Legend" });
     expect(within(legend).getAllByRole("listitem").map((li) => li.textContent)).toEqual(FIXTURE.system.map.legend.map((k) => KIND_LABEL[k]));
-    expect(screen.getByText("retrieve_context")).toBeInTheDocument();
     expect(screen.getAllByText("AI · Sonnet").length).toBeGreaterThan(0);
+  });
+
+  it("draws a dashed line only for a scoped call, with its label on the line", async () => {
+    renderConsole("system");
+    await screen.findByRole("heading", { name: "Agent system" });
+    const dashed = [...document.querySelectorAll("[data-edge] path[stroke-dasharray]")].map((p) => p.parentElement?.getAttribute("data-edge"));
+    expect(dashed).toEqual(FIXTURE.system.map.edges.filter((e) => e.dashed).map((e) => `${e.from}->${e.to}`));
+    const scoped = document.querySelector('[data-edge="query-understanding->northwind-catalog"]');
+    expect(scoped?.textContent).toBe("eligible_products only");
+  });
+
+  it("lists the catalog's reads and folds its cart writes into one line", async () => {
+    renderConsole("system");
+    await screen.findByRole("heading", { name: "Agent system" });
+    const catalog = document.querySelector('[data-node="northwind-catalog"] .map-node-tools');
+    expect(catalog?.textContent).toContain("search_products, get_product, get_variant, check_stock, get_price, get_cart, eligible_products");
+    expect(catalog?.textContent).toContain("+ cart write tools");
+    expect(catalog?.textContent).not.toMatch(/add_to_cart|remove_from_cart|set_cart_quantity/);
+    expect(catalog?.querySelector("[title]")?.getAttribute("title")).toBe("add_to_cart, remove_from_cart, set_cart_quantity");
+  });
+
+  it("dims nothing in the full architecture view", async () => {
+    renderConsole("system");
+    await screen.findByRole("heading", { name: "Agent system" });
+    expect(document.querySelector(".is-dim")).toBeNull();
+    expect(document.querySelector(".is-lit")).toBeNull();
+    expect(document.querySelector('[data-node="northwind-orders"]')?.className).toBe("map-node map-node-mcp");
   });
 
   it("marks the traces as sample data and highlights exactly the selected trace's path", async () => {
     renderConsole("system");
     const traces = await screen.findByRole("region", { name: "Trace one action" });
     expect(within(traces).getAllByText("Sample data").length).toBeGreaterThan(0);
-    expect(document.querySelector(".is-lit")).toBeNull();
 
     const checkout = FIXTURE.system.traces.find((t) => t.id === "checkout");
     if (!checkout) throw new Error("fixture lost its checkout trace");
     fireEvent.click(within(traces).getByRole("button", { name: /Web checkout/ }));
-    const lit = [...document.querySelectorAll(".is-lit")].map((el) => el.getAttribute("data-node"));
-    expect(lit.sort()).toEqual(checkout.steps.map((s) => s.node).sort());
+    const path = new Set(checkout.steps.map((s) => s.node));
+    const lit = [...document.querySelectorAll(".map-node.is-lit")].map((el) => el.getAttribute("data-node"));
+    expect(lit.sort()).toEqual([...path].sort());
+    const litEdges = [...document.querySelectorAll(".map-edge.is-lit")].map((g) => g.getAttribute("data-edge"));
+    expect(litEdges.sort()).toEqual(FIXTURE.system.map.edges.filter((e) => path.has(e.from) && path.has(e.to)).map((e) => `${e.from}->${e.to}`).sort());
+    expect(document.querySelectorAll(".is-dim").length).toBeGreaterThan(0);
     expect(within(traces).getByText("No AI on this path")).toBeInTheDocument();
-    expect(within(traces).getByRole("list")).toBeInTheDocument();
 
-    fireEvent.click(within(traces).getByRole("button", { name: /Web checkout/ }));
-    expect(document.querySelector(".is-lit")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Full architecture" }));
+    expect(document.querySelector(".is-lit, .is-dim")).toBeNull();
   });
 
   it("shows no invented timings on a trace", async () => {

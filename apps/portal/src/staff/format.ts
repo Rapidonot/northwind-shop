@@ -21,6 +21,7 @@ export const KIND_LABEL: Record<NodeKind, string> = {
   code: "Code (not a tool)",
   fake: "Fake service",
   eval: "Eval only (greyed)",
+  end: "End of a path",
 };
 
 export function count(n: number): string {

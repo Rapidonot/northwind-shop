@@ -4,8 +4,15 @@
 
 export type Outcome = "ok" | "escalated" | "refused" | "error";
 
-/** How a box on the agent map is drawn. `eval` is greyed: it scores offline, with no live arrows. */
-export type NodeKind = "entry" | "ai" | "mcp" | "code" | "fake" | "eval";
+/** How a box on the agent map is drawn. `eval` is greyed: it scores offline, with no live arrows.
+ * `end` is a plain box that ends a path (the shopper's answer). */
+export type NodeKind = "entry" | "ai" | "mcp" | "code" | "fake" | "eval" | "end";
+
+/** Tools shown as one line, such as "+ cart write tools", with their names kept for the tooltip. */
+export interface ToolGroup {
+  label: string;
+  tools: string[];
+}
 
 export interface MapNode {
   id: string;
@@ -16,26 +23,20 @@ export interface MapNode {
   models: string[];
   /** An MCP server's tool names, from the tool scopes; empty for anything else. */
   tools: string[];
-}
-
-export interface MapLane {
-  id: string;
-  /** "Handoff path · no MCP"; null for the first lane. */
-  title: string | null;
-  /** Columns left to right, joined by arrows; a column with several nodes is stacked. */
-  steps: string[][];
-  /** Servers drawn under the lane, reached by the agents named in the edges. */
-  servers: string[];
+  /** Tools listed as one line: northwind-catalog's cart writes, from CART_TOOL_NAMES. */
+  collapsed: ToolGroup[];
 }
 
 export interface MapEdge {
   from: string;
   to: string;
   label: string | null;
+  /** A call scoped to part of a server (query understanding reaches only `eligible_products`). */
+  dashed: boolean;
 }
 
+/** Nodes and edges only: where each node sits is the portal's layout table (layout.json). */
 export interface AgentMap {
-  lanes: MapLane[];
   nodes: MapNode[];
   edges: MapEdge[];
   /** The node kinds present, in legend order. */
