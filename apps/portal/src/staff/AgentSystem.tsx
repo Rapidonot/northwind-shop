@@ -1,14 +1,14 @@
-// OPS-1: the "Agent system" view (docs/design/staff/, the 8.25.57 PM and 8.26.08 PM screenshots).
-// The nodes and edges are what the gateway generates from the tool scopes and the model constants;
-// where each box sits is the layout table (layout.json), and every line is routed from it
-// (mapLayout.ts). Nothing here names an agent, a tool or a model. The traces are sample data.
+// OPS-1: the "Agent system" view (docs/design/staff/, the 8.25.57 PM and 8.26.08 PM screenshots):
+// one compact SVG. The nodes and edges are what the gateway generates from the tool scopes and the
+// model constants; each box and each elbow route is the layout table's (layout.json, measured from
+// the reference). Nothing here names an agent, a tool or a model. The traces are sample data.
 import { useState } from "react";
 import { KIND_LABEL } from "./format";
-import { type Box, pathOf, place, route, type Placed } from "./mapLayout";
+import { type Box, chipWidth, edgeKey, LANE_TITLES, MCP_BAR, MIN_WIDTH, nodeText, pathOf, ROUTES, SEPARATORS, SLOTS, TYPE, VIEW_BOX } from "./mapLayout";
 import { OutcomePill, SampleBadge } from "./parts";
-import type { AgentMap, MapNode, SampleTrace, SystemView } from "./types";
+import type { AgentMap, MapEdge, MapNode, SampleTrace, SystemView } from "./types";
 
-const BADGE: Record<MapNode["kind"], string | null> = {
+const CHIP: Record<MapNode["kind"], string | null> = {
   entry: null,
   ai: null,
   mcp: "MCP",
@@ -23,86 +23,141 @@ type Light = "lit" | "dim" | null;
 
 const lightClass = (light: Light) => (light === "lit" ? " is-lit" : light === "dim" ? " is-dim" : "");
 
-function Node({ node, box, light }: { node: MapNode; box: Box; light: Light }) {
-  const fixed = BADGE[node.kind];
+
+function Lines({ lines, x, y, size, step, className }: { lines: string[]; x: number; y: number; size: number; step: number; className: string }) {
   return (
-    <div
-      className={`map-node map-node-${node.kind}${lightClass(light)}`}
-      data-node={node.id}
-      aria-current={light === "lit" ? "step" : undefined}
-      style={{ left: box.x, top: box.y, width: box.w, height: box.h }}
-    >
-      <p className="map-node-title">{node.title}</p>
-      {node.subtitle && <p className="map-node-sub">{node.subtitle}</p>}
-      {(node.tools.length > 0 || node.collapsed.length > 0) && (
-        <p className="map-node-tools">
-          {node.tools.join(", ")}
-          {node.collapsed.map((group) => (
-            <span key={group.label} className="map-node-more" title={group.tools.join(", ")}>
-              {" "}
-              + {group.label}
-            </span>
-          ))}
-        </p>
-      )}
-      {(node.models.length > 0 || fixed) && (
-        <div className="node-badges">
-          {node.models.map((model) => (
-            <span key={model} className="node-badge">
-              AI · {model}
-            </span>
-          ))}
-          {fixed && <span className={`node-badge node-badge-${node.kind}`}>{fixed}</span>}
-        </div>
-      )}
-    </div>
+    <text className={className} x={x} y={y} fontSize={size}>
+      {lines.map((line, i) => (
+        <tspan key={i} x={x} dy={i === 0 ? 0 : step}>
+          {line}
+        </tspan>
+      ))}
+    </text>
   );
 }
 
-function Canvas({ map, placed, lit }: { map: AgentMap; placed: Placed; lit: Set<string> | null }) {
-  const byId = new Map(map.nodes.map((n) => [n.id, n]));
-  const routes = route(map.edges, placed);
-  const nodeLight = (id: string): Light => (lit === null ? null : lit.has(id) ? "lit" : "dim");
-  const edgeLight = (from: string, to: string): Light => (lit === null ? null : lit.has(from) && lit.has(to) ? "lit" : "dim");
+export function chipLabels(node: MapNode): string[] {
+  return [...node.models.map((m) => `AI · ${m}`), ...(CHIP[node.kind] ? [CHIP[node.kind]!] : [])];
+}
+
+function Chips({ node, box, y, right }: { node: MapNode; box: Box; y: number; right: boolean }) {
+  const labels = chipLabels(node);
+  const widths = labels.map(chipWidth);
+  const row = widths.reduce((sum, w) => sum + w + 6, -6);
+  const left = right ? box.x + box.w - TYPE.pad - row : box.x + TYPE.pad + (node.kind === "mcp" ? MCP_BAR : 0);
+  const xs = widths.map((_, i) => left + widths.slice(0, i).reduce((sum, w) => sum + w + 6, 0));
   return (
-    <div className="map-canvas" style={{ width: placed.canvasWidth, height: placed.height }}>
-      {placed.rows
-        .filter((row) => row.title !== null)
-        .map((row) => (
-          <p key={row.id} className="map-row-title" style={{ top: row.titleY }}>
-            {row.title}
-          </p>
-        ))}
-      <svg className="map-lines" width={placed.canvasWidth} height={placed.height} aria-hidden="true">
+    <>
+      {labels.map((label, i) => (
+        <g key={label} className={`map-chip map-chip-${label.startsWith("AI") ? "ai" : node.kind}`}>
+          <rect x={xs[i]} y={y} width={widths[i]} height={TYPE.chipHeight} rx={2} />
+          <text x={xs[i]! + widths[i]! / 2} y={y + 13} fontSize={TYPE.chip} textAnchor="middle">
+            {label}
+          </text>
+        </g>
+      ))}
+    </>
+  );
+}
+
+function Node({ node, box, light }: { node: MapNode; box: Box; light: Light }) {
+  const t = nodeText(node, box);
+  const names = node.tools.length > 0 ? t.tools.length - node.collapsed.length : 0;
+  return (
+    <g className={`map-node map-node-${node.kind}${lightClass(light)}`} data-node={node.id} aria-current={light === "lit" ? "step" : undefined}>
+      <rect className="map-node-box" x={box.x} y={box.y} width={box.w} height={box.h} />
+      {node.kind === "mcp" && <rect className="map-node-bar" x={box.x} y={box.y} width={MCP_BAR} height={box.h} />}
+      <Lines className={node.kind === "mcp" ? "map-node-title is-mono" : "map-node-title"} lines={t.title} x={t.x} y={t.titleY} size={t.titleSize} step={t.titleSize + 3} />
+      {t.sub.length > 0 && <Lines className="map-node-sub" lines={t.sub} x={t.x} y={t.subY} size={TYPE.description} step={TYPE.description + 3} />}
+      {t.tools.length > 0 && (
+        <text className="map-node-tools" x={t.x} y={t.toolsY} fontSize={TYPE.tools}>
+          {t.tools.slice(0, names).map((line, i) => (
+            <tspan key={i} x={t.x} dy={i === 0 ? 0 : TYPE.tools + 3}>
+              {line}
+            </tspan>
+          ))}
+          {node.collapsed.map((group, i) => (
+            <tspan key={group.label} className="map-node-more" x={t.x} dy={names === 0 && i === 0 ? 0 : TYPE.tools + 3}>
+              <title>{group.tools.join(", ")}</title>+ {group.label}
+            </tspan>
+          ))}
+        </text>
+      )}
+      <Chips node={node} box={box} y={t.chipY} right={t.chipsRight} />
+    </g>
+  );
+}
+
+/** A label shared by several edges from one source ("code port") is drawn once, where the layout
+ * table gives it a place; every edge keeps its label as its line's tooltip. */
+function visibleLabels(edges: readonly MapEdge[]): Set<string> {
+  const shown = new Set<string>();
+  const groups = new Set<string>();
+  for (const edge of edges) {
+    if (!edge.label || !ROUTES[edgeKey(edge)]?.label) continue;
+    const group = `${edge.from}|${edge.label}`;
+    if (groups.has(group)) continue;
+    groups.add(group);
+    shown.add(edgeKey(edge));
+  }
+  return shown;
+}
+
+function Canvas({ map, lit }: { map: AgentMap; lit: Set<string> | null }) {
+  const [width, height] = VIEW_BOX;
+  const byId = new Map(map.nodes.map((n) => [n.id, n]));
+  const labelled = visibleLabels(map.edges);
+  const nodeLight = (id: string): Light => (lit === null ? null : lit.has(id) ? "lit" : "dim");
+  const edgeLight = (e: MapEdge): Light => (lit === null ? null : lit.has(e.from) && lit.has(e.to) ? "lit" : "dim");
+  return (
+    <>
+      <svg className="map-svg" viewBox={`0 0 ${width} ${height}`} width="100%" style={{ minWidth: MIN_WIDTH }} role="img" aria-label="Agent system map">
         <defs>
-          <marker id="map-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <marker id="map-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto-start-reverse">
             <path d="M 0 0 L 10 5 L 0 10 z" />
           </marker>
         </defs>
-        {routes.map(({ edge, points, label, route: kind }) => (
-          <g key={`${edge.from}->${edge.to}`} className={`map-edge map-edge-${kind}${lightClass(edgeLight(edge.from, edge.to))}`} data-edge={`${edge.from}->${edge.to}`}>
-            <path d={pathOf(points)} fill="none" strokeDasharray={edge.dashed ? "5 4" : undefined} markerEnd="url(#map-arrow)" />
-            {edge.label && label && (
-              <text x={label.x} y={label.y} textAnchor={label.anchor}>
-                {edge.label}
-              </text>
-            )}
-          </g>
+        {SEPARATORS.map((y) => (
+          <line key={y} className="map-separator" x1={0} x2={width} y1={y} y2={y} />
         ))}
+        {LANE_TITLES.map((t) => (
+          <text key={t.text} className="map-lane-title" x={t.x} y={t.y} fontSize={TYPE.description}>
+            {t.text}
+          </text>
+        ))}
+        {map.edges.map((edge) => {
+          const key = edgeKey(edge);
+          const route = ROUTES[key];
+          if (!route) return null;
+          return (
+            <g key={key} className={`map-edge${lightClass(edgeLight(edge))}`} data-edge={key}>
+              <title>
+                {byId.get(edge.from)?.title ?? edge.from} → {byId.get(edge.to)?.title ?? edge.to}
+                {edge.label ? ` (${edge.label})` : ""}
+              </title>
+              <path d={pathOf(route.points)} fill="none" strokeDasharray={edge.dashed ? "5 4" : undefined} markerEnd="url(#map-arrow)" />
+              {edge.label && route.label && labelled.has(key) && (
+                <text className="map-edge-label" x={route.label.x} y={route.label.y} textAnchor={route.label.anchor} fontSize={TYPE.tools}>
+                  {edge.label}
+                </text>
+              )}
+            </g>
+          );
+        })}
+        {map.nodes.map((node) => {
+          const box = SLOTS[node.id];
+          return box ? <Node key={node.id} node={node} box={box} light={nodeLight(node.id)} /> : null;
+        })}
       </svg>
-      {map.nodes.map((node) => {
-        const box = placed.boxes.get(node.id);
-        return box ? <Node key={node.id} node={node} box={box} light={nodeLight(node.id)} /> : null;
-      })}
       <ul className="visually-hidden" aria-label="Connections">
         {map.edges.map((edge) => (
-          <li key={`${edge.from}->${edge.to}`}>
+          <li key={edgeKey(edge)}>
             {byId.get(edge.from)?.title ?? edge.from} → {byId.get(edge.to)?.title ?? edge.to}
             {edge.label ? ` (${edge.label})` : ""}
           </li>
         ))}
       </ul>
-    </div>
+    </>
   );
 }
 
@@ -157,7 +212,6 @@ export function AgentSystem({ view }: { view: SystemView }) {
   const { map, traces } = view;
   const [selected, setSelected] = useState<string | null>(null);
   const byId = new Map(map.nodes.map((node) => [node.id, node]));
-  const placed = place(map.nodes.map((n) => n.id));
   const trace = traces.find((t) => t.id === selected) ?? null;
   const lit = trace ? new Set(trace.steps.map((step) => step.node)) : null;
 
@@ -181,7 +235,7 @@ export function AgentSystem({ view }: { view: SystemView }) {
           )}
         </div>
         <div className="map-scroll">
-          <Canvas map={map} placed={placed} lit={lit} />
+          <Canvas map={map} lit={lit} />
         </div>
       </div>
       <p className="callout">Money and stock are decided by code, never by a model.</p>

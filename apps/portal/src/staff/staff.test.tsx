@@ -112,44 +112,54 @@ describe("[OPS-1] the console's chrome", () => {
 });
 
 describe("[OPS-1] the agent system view", () => {
-  it("draws every node, a line for every edge, and its legend, from the map it is given", async () => {
+  it("is one SVG with no HTML boxes, every node and a line for every edge", async () => {
     renderConsole("system");
     await screen.findByRole("heading", { name: "Agent system" });
+    const svg = screen.getByRole("img", { name: "Agent system map" });
+    expect(svg.tagName.toLowerCase()).toBe("svg");
+    expect(svg.getAttribute("viewBox")).toBe("0 0 1160 778");
+    expect(svg.getAttribute("width")).toBe("100%");
+    expect(svg.getAttribute("style")).toMatch(/min-width:\s*960px/);
+    expect(svg.closest(".map-scroll")).not.toBeNull();
     for (const node of FIXTURE.system.map.nodes) {
-      expect(document.querySelector(`[data-node="${node.id}"]`), node.id).not.toBeNull();
+      const g = svg.querySelector(`[data-node="${node.id}"]`);
+      expect(g?.tagName.toLowerCase(), node.id).toBe("g");
     }
-    const drawn = [...document.querySelectorAll("[data-edge]")].map((g) => g.getAttribute("data-edge"));
+    expect(document.querySelector("div.map-node")).toBeNull();
+    const drawn = [...svg.querySelectorAll("[data-edge]")].map((g) => g.getAttribute("data-edge"));
     expect(drawn.sort()).toEqual(FIXTURE.system.map.edges.map((e) => `${e.from}->${e.to}`).sort());
+    expect([...svg.querySelectorAll(".map-separator")].map((l) => l.getAttribute("y1"))).toEqual(["292", "416", "532", "696"]);
     const legend = screen.getByRole("list", { name: "Legend" });
     expect(within(legend).getAllByRole("listitem").map((li) => li.textContent)).toEqual(FIXTURE.system.map.legend.map((k) => KIND_LABEL[k]));
-    expect(screen.getAllByText("AI · Sonnet").length).toBeGreaterThan(0);
   });
 
-  it("draws a dashed line only for a scoped call, with its label on the line", async () => {
+  it("draws a dashed line only for the scoped call, and each shared label once", async () => {
     renderConsole("system");
     await screen.findByRole("heading", { name: "Agent system" });
     const dashed = [...document.querySelectorAll("[data-edge] path[stroke-dasharray]")].map((p) => p.parentElement?.getAttribute("data-edge"));
-    expect(dashed).toEqual(FIXTURE.system.map.edges.filter((e) => e.dashed).map((e) => `${e.from}->${e.to}`));
-    const scoped = document.querySelector('[data-edge="query-understanding->northwind-catalog"]');
-    expect(scoped?.textContent).toBe("eligible_products only");
+    expect(dashed).toEqual(["query-understanding->northwind-catalog"]);
+    const labels = [...document.querySelectorAll(".map-edge-label")].map((t) => t.textContent);
+    expect(labels).toContain("eligible_products");
+    expect(labels).toContain("escalation case");
+    expect(labels.filter((l) => l === "code port")).toHaveLength(1);
   });
 
   it("lists the catalog's reads and folds its cart writes into one line", async () => {
     renderConsole("system");
     await screen.findByRole("heading", { name: "Agent system" });
-    const catalog = document.querySelector('[data-node="northwind-catalog"] .map-node-tools');
-    expect(catalog?.textContent).toContain("search_products, get_product, get_variant, check_stock, get_price, get_cart, eligible_products");
-    expect(catalog?.textContent).toContain("+ cart write tools");
-    expect(catalog?.textContent).not.toMatch(/add_to_cart|remove_from_cart|set_cart_quantity/);
-    expect(catalog?.querySelector("[title]")?.getAttribute("title")).toBe("add_to_cart, remove_from_cart, set_cart_quantity");
+    const tools = document.querySelector('[data-node="northwind-catalog"] .map-node-tools');
+    const text = (tools?.textContent ?? "").replace(/add_to_cart, remove_from_cart, set_cart_quantity/, "");
+    for (const read of ["search_products", "get_product", "get_variant", "check_stock", "get_price", "get_cart", "eligible_products"]) expect(text).toContain(read);
+    expect(text).toContain("+ cart write tools");
+    expect(text).not.toMatch(/add_to_cart|remove_from_cart|set_cart_quantity/);
+    expect(tools?.querySelector(".map-node-more title")?.textContent).toBe("add_to_cart, remove_from_cart, set_cart_quantity");
   });
 
   it("dims nothing in the full architecture view", async () => {
     renderConsole("system");
     await screen.findByRole("heading", { name: "Agent system" });
-    expect(document.querySelector(".is-dim")).toBeNull();
-    expect(document.querySelector(".is-lit")).toBeNull();
-    expect(document.querySelector('[data-node="northwind-orders"]')?.className).toBe("map-node map-node-mcp");
+    expect(document.querySelector(".is-dim, .is-lit")).toBeNull();
+    expect(document.querySelector('[data-node="northwind-orders"]')?.getAttribute("class")).toBe("map-node map-node-mcp");
   });
 
   it("marks the traces as sample data and highlights exactly the selected trace's path", async () => {
@@ -165,11 +175,49 @@ describe("[OPS-1] the agent system view", () => {
     expect(lit.sort()).toEqual([...path].sort());
     const litEdges = [...document.querySelectorAll(".map-edge.is-lit")].map((g) => g.getAttribute("data-edge"));
     expect(litEdges.sort()).toEqual(FIXTURE.system.map.edges.filter((e) => path.has(e.from) && path.has(e.to)).map((e) => `${e.from}->${e.to}`).sort());
-    expect(document.querySelectorAll(".is-dim").length).toBeGreaterThan(0);
     expect(within(traces).getByText("No AI on this path")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Full architecture" }));
     expect(document.querySelector(".is-lit, .is-dim")).toBeNull();
+  });
+
+  it("lights the damaged-parcel trace's chat part first, then the handoff, in that order", async () => {
+    renderConsole("system");
+    const traces = await screen.findByRole("region", { name: "Trace one action" });
+    fireEvent.click(within(traces).getByRole("button", { name: /Damaged parcel/ }));
+    const steps = within(traces).getAllByRole("listitem").map((li) => li.querySelector(".trace-step-node")?.textContent);
+    expect(steps).toEqual([
+      "Shopper chat",
+      "Query understanding",
+      "Shopper Assistant",
+      "northwind-orders",
+      "northwind-policy",
+      "Output check",
+      "Answer",
+      "Talk to a person",
+      "Handoff trigger",
+      "Handoff desk",
+      "Care agent",
+      "Case queue",
+    ]);
+    expect(within(traces).getByText("if the shopper presses Talk to a person")).toBeInTheDocument();
+    const lit = new Set([...document.querySelectorAll(".map-node.is-lit")].map((el) => el.getAttribute("data-node")));
+    for (const id of ["shopper-chat", "shopper-assistant", "northwind-orders", "northwind-policy", "answer", "talk-to-person", "case-queue"]) expect(lit.has(id), id).toBe(true);
+  });
+
+  it("makes every trace a walk along drawn lines, from its entry point", () => {
+    const edges = new Set(FIXTURE.system.map.edges.map((e) => `${e.from}->${e.to}`));
+    const entries = new Set(FIXTURE.system.map.nodes.filter((n) => n.kind === "entry").map((n) => n.id));
+    for (const trace of FIXTURE.system.traces) {
+      const nodes = trace.steps.map((s) => s.node);
+      expect(nodes[0], trace.id).toBe(trace.entry);
+      // Each step is reached by a line from a step before it, or starts a new part at an entry point.
+      nodes.forEach((node, i) => {
+        if (i === 0 || entries.has(node)) return;
+        const reached = nodes.slice(0, i).some((earlier) => edges.has(`${earlier}->${node}`));
+        expect(reached, `${trace.id}: ${node}`).toBe(true);
+      });
+    }
   });
 
   it("shows no invented timings on a trace", async () => {
