@@ -48,7 +48,7 @@ function Body<V extends ViewName>({ view, data }: { view: V; data: StaffViews[V]
   return null;
 }
 
-export function StaffConsole({ view, overview, load, banner }: { view: ViewName; overview: Overview; load: Loader; banner?: string }) {
+export function StaffConsole({ view, overview, load }: { view: ViewName; overview: Overview; load: Loader }) {
   const [state, setState] = useState<{ view: ViewName; loaded: Loaded<StaffViews[ViewName]> }>({ view, loaded: { kind: "loading" } });
 
   useEffect(() => {
@@ -71,11 +71,6 @@ export function StaffConsole({ view, overview, load, banner }: { view: ViewName;
           Catalog {count(overview.catalog.products)} · Variants {count(overview.catalog.variants)} · Orders {count(overview.catalog.orders)}
         </p>
       </div>
-      {banner && (
-        <p className="staff-preview-banner" role="note">
-          {banner}
-        </p>
-      )}
       <header className="staff-masthead">
         <a className="wordmark" href={staffHref("system")}>
           Northwind staff

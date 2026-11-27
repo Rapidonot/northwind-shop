@@ -1,4 +1,4 @@
-// OPS-1: the "Agent system" view (docs/design/staff/, the 8.25.57 PM and 8.26.08 PM screenshots):
+// OPS-1: the "Agent system" view (docs/design/staff/staff-01-agent-system.png and staff-02-agent-system-traces.png):
 // one compact SVG. The nodes and edges are what the gateway generates from the tool scopes and the
 // model constants; each box and each elbow route is the layout table's (layout.json, measured from
 // the reference). Nothing here names an agent, a tool or a model. The traces are sample data.

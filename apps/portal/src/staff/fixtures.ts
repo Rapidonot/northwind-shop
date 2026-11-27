@@ -1,5 +1,4 @@
-// OPS-1: one fixture of every staff view, for the tests and the dev-only look preview
-// (staff-preview.html). Its shapes are the gateway's contract (`types.ts`). The tool names (tool_scopes.py),
+// OPS-1: one fixture of every staff view, for the tests. Its shapes are the gateway's contract (`types.ts`). The tool names (tool_scopes.py),
 // models (llm.py), order rows (data/backend/orders.jsonl), intents and labels (the handoff desk) and
 // action names (views.py) are copied from the repo; the events, holds and stock numbers are
 // illustrative. It is a fixture: the console shows the gateway's data, never this.
@@ -197,16 +196,16 @@ export const FIXTURE: StaffViews = {
         id: "handoff",
         entry: "shopper-chat",
         kind: "Damaged parcel + handoff",
-        title: "My parcel for order O000406 arrived damaged. → Talk to a person",
-        refs: ["O000406"],
+        title: "My parcel for order O000800 arrived damaged. → Talk to a person",
+        refs: ["O000800"],
         outcome: "escalated",
         no_ai: false,
         sample: true,
         steps: [
-          { node: "shopper-chat", label: "The signed-in shopper: my parcel for order O000406 arrived damaged" },
+          { node: "shopper-chat", label: "The signed-in shopper: my parcel for order O000800 arrived damaged" },
           { node: "query-understanding", label: "No product filters: rules only" },
           { node: "shopper-assistant", label: "Looks the order up" },
-          { node: "northwind-orders", label: "get_order: O000406, the shopper's own order" },
+          { node: "northwind-orders", label: "get_order: O000800, the shopper's own order, delivered" },
           { node: "northwind-policy", label: "evaluate_return_eligibility: can the damaged line be returned" },
           { node: "output-check", label: "Order and policy claims backed by the tools" },
           { node: "answer", label: "The options, and the offer of a person" },
@@ -269,7 +268,7 @@ export const FIXTURE: StaffViews = {
         reference: "H000001",
         time: "2026-11-27T14:58:42Z",
         intent: "order_issue",
-        order_id: "O000141",
+        order_id: "O000800",
         summary: "Shopper reports the parcel arrived damaged and asks for a replacement.",
         summary_label: "written by the Care agent (an AI model) from an untrusted transcript",
         amount: { minor: 24400, currency: "USD" },
