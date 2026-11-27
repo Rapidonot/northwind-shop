@@ -6,6 +6,8 @@ Row #16 (CHK-01): the shopper's session (`northwind_gateway.session`) and GET /a
 (`northwind_gateway.cart`).
 Row #23 (SA-06): POST /api/handoff (`northwind_gateway.handoff`).
 SA-01 PR 1: the shop pages' reads (`northwind_gateway.shop`).
+SA-01 PR 2: the bag's cart writes (`cart_writes`), the order history (`orders`) and the demo
+checkout, CHK-02's portal confirmation control (`checkout`, decision 0027).
 """
 
 import logging
@@ -22,14 +24,17 @@ from northwind_assistant.usage import TELEMETRY_LOGGER
 from northwind_common.localenv import announce_database
 from northwind_gateway import access_log
 from northwind_gateway.cart import router as cart_router
+from northwind_gateway.cart_writes import router as cart_writes_router
 from northwind_gateway.chat import (
     CardNumberRefused,
     card_refused,
     invalid_request,
     router,
 )
+from northwind_gateway.checkout import router as checkout_router
 from northwind_gateway.handoff import handoff_desk
 from northwind_gateway.handoff import router as handoff_router
+from northwind_gateway.orders import router as orders_router
 from northwind_gateway.session import SessionMiddleware
 from northwind_gateway.settings import database_url
 from northwind_gateway.shop import router as shop_router
@@ -64,6 +69,9 @@ app.include_router(cart_router)
 app.include_router(signin_router)  # row #27: the demo sign-in, behind NORTHWIND_DEMO_SIGNIN
 app.include_router(handoff_router)  # row #23 (SA-06): the shopper asks for a person
 app.include_router(shop_router)  # SA-01 PR 1: the shop pages' reads
+app.include_router(cart_writes_router)  # SA-01 PR 2: the bag's controls and ADD TO BAG
+app.include_router(orders_router)  # SA-01 PR 2: the order history, signed in only
+app.include_router(checkout_router)  # SA-01 PR 2: the demo checkout, Pay (demo) (CHK-02)
 app.add_middleware(SessionMiddleware)
 app.add_exception_handler(RequestValidationError, invalid_request)
 app.add_exception_handler(CardNumberRefused, card_refused)

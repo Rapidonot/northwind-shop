@@ -1,18 +1,20 @@
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useState } from "react";
 import type { CartState } from "./cartApi";
 import { CARD_REFUSED, mightBeCardData } from "./cardGuard";
 import { ChatPanel } from "./ChatPanel";
+import { CheckoutPage, OrdersPage } from "./checkoutPages";
+import { DepartmentTabs } from "./DepartmentTabs";
 import {
   CartPage,
   DepartmentPage,
   HomePage,
   NotFoundPage,
-  PlaceholderPage,
   ProductPage,
   SearchPage,
 } from "./pages";
 import { href, type Route, useRoute } from "./router";
-import { fetchDepartments, type Loaded } from "./shopApi";
+import { type Departments, fetchDepartments, type Loaded } from "./shopApi";
+import { SUGGESTIONS } from "./suggestions";
 
 export const BANNER = "Demo store. AI assistant. No real orders, payments or deliveries.";
 
@@ -46,7 +48,7 @@ function label(health: Health): string {
   }
 }
 
-function Page({ route, cart }: { route: Route; cart: CartState }) {
+function Page({ route, cart, onCartChanged }: { route: Route; cart: CartState; onCartChanged: () => void }) {
   switch (route.page) {
     case "home":
       return <HomePage />;
@@ -55,35 +57,16 @@ function Page({ route, cart }: { route: Route; cart: CartState }) {
     case "search":
       return <SearchPage q={route.q} />;
     case "product":
-      return <ProductPage id={route.id} />;
+      return <ProductPage id={route.id} onCartChanged={onCartChanged} />;
     case "cart":
-      return <CartPage cart={cart} />;
+      return <CartPage cart={cart} onCartChanged={onCartChanged} />;
     case "checkout":
-      return <PlaceholderPage heading="Checkout" />;
+      return <CheckoutPage onCartChanged={onCartChanged} />;
     case "orders":
-      return <PlaceholderPage heading="Orders" />;
+      return <OrdersPage />;
     case "not-found":
       return <NotFoundPage />;
   }
-}
-
-/** The top nav is the only department picker (rule 1 of the trial build): every department, the
- * selected one underlined. */
-function DepartmentNav({ departments, selected }: { departments: Loaded<string[]>; selected: string | null }) {
-  if (departments.kind !== "ready") return <nav aria-label="Departments" className="departments" />;
-  return (
-    <nav aria-label="Departments" className="departments">
-      <ul>
-        {departments.value.map((name) => (
-          <li key={name}>
-            <a href={href({ page: "department", name })} aria-current={name === selected ? "page" : undefined}>
-              {name}
-            </a>
-          </li>
-        ))}
-      </ul>
-    </nav>
-  );
 }
 
 function SearchBox({ initial }: { initial: string }) {
@@ -102,7 +85,10 @@ function SearchBox({ initial }: { initial: string }) {
   };
   return (
     <form role="search" className="search" onSubmit={submit}>
-      <input aria-label="Search products" type="search" value={q} maxLength={64} onChange={(e) => setQ(e.target.value)} placeholder="Search" />
+      <input aria-label="Search products" type="search" value={q} maxLength={64} onChange={(e) => setQ(e.target.value)} placeholder="Search jackets, fleece, bedding…" />
+      <button type="submit" className="search-button">
+        Search
+      </button>
       {refused && <p role="alert">{CARD_REFUSED}</p>}
     </form>
   );
@@ -111,9 +97,13 @@ function SearchBox({ initial }: { initial: string }) {
 export function App() {
   const route = useRoute();
   const [health, setHealth] = useState<Health>({ state: "loading" });
-  const [departments, setDepartments] = useState<Loaded<string[]>>({ kind: "loading" });
+  const [departments, setDepartments] = useState<Loaded<Departments>>({ kind: "loading" });
   const [cart, setCart] = useState<CartState>({ kind: "loading" });
-  const [chatOpen, setChatOpen] = useState(false);
+  // SA-01 PR 2: the assistant is a slide-in side panel that narrows the page (assistant-panel.png;
+  // look round 2). On desktop it starts open, so the AI disclosure is on screen from the first load
+  // (NFR-08, and every journey's closing check); Close slides it away and ASK NORTHWIND brings it
+  // back. On phone it starts closed and opens full screen.
+  const [chatOpen, setChatOpen] = useState(() => window.matchMedia?.("(min-width: 900px)").matches ?? false);
 
   // The chat panel's cart read is the first request on a session path; the page and the nav wait
   // for it, so a first visit opens one session, not three (security review F3).
@@ -127,45 +117,55 @@ export function App() {
     if (sessionReady) void fetchDepartments().then(setDepartments);
   }, [sessionReady]);
 
+  // SA-01 PR 2: after a shop page changes the bag, the chat panel reads it again; its read also
+  // sets the bag count (`onCart`), so the panel and the count never disagree.
+  const [cartRound, setCartRound] = useState(0);
+  const refreshCart = useCallback(() => setCartRound((n) => n + 1), []);
   const count = cart.kind === "ready" ? cart.cart.item_count : null;
-  const selected = route.page === "department" ? route.name : null;
 
   return (
     <div className={chatOpen ? "shell chat-open" : "shell"}>
-      <p className="banner">{BANNER}</p>
-      <header className="masthead">
-        <a className="wordmark" href="#/">
-          NORTHWIND
-        </a>
-        <SearchBox key={route.page === "search" ? route.q : ""} initial={route.page === "search" ? route.q : ""} />
-        <a className="masthead-link" href={href({ page: "orders" })}>
-          Orders
-        </a>
-        <a className="bag-link" href={href({ page: "cart" })} aria-label={count === null ? "Bag" : `Bag, ${count} items`}>
-          Bag <span className="bag-count">{count ?? "–"}</span>
-        </a>
-      </header>
-      <DepartmentNav departments={departments} selected={selected} />
-      <div className="layout">
-        <main className="content">
-          {sessionReady ? <Page route={route} cart={cart} /> : <p className="muted">Loading…</p>}
-        </main>
-        <aside className="chat-dock" aria-label="Ask Northwind">
-          <div className="chat-dock-head">
-            <h2>Ask Northwind</h2>
-            <button type="button" className="btn btn-short chat-close" onClick={() => setChatOpen(false)}>
-              CLOSE
-            </button>
+      <div className="page">
+        <header className="masthead">
+          <a className="wordmark" href="#/">
+            NORTHWIND
+          </a>
+          <SearchBox key={route.page === "search" ? route.q : ""} initial={route.page === "search" ? route.q : ""} />
+          <div className="masthead-links">
+            <a className="masthead-link" href={href({ page: "orders" })}>
+              Orders
+            </a>
+            <a className="bag-link" href={href({ page: "cart" })} aria-label={count === null ? "Bag" : `Bag, ${count} items`}>
+              Bag <span className="bag-count">{count ?? "–"}</span>
+            </a>
           </div>
-          <ChatPanel onCart={setCart} />
-        </aside>
+        </header>
+        <DepartmentTabs departments={departments} route={route} />
+        <main className="content">
+          {sessionReady ? <Page route={route} cart={cart} onCartChanged={refreshCart} /> : <p className="muted">Loading…</p>}
+        </main>
+        <footer className="footer">
+          <div>
+            <p>NORTHWIND — demo storefront</p>
+            <p role="status" className="health">
+              {label(health)}
+            </p>
+          </div>
+          <p className="banner">{BANNER}</p>
+        </footer>
       </div>
+      <aside className="chat-dock" aria-label="Ask Northwind" inert={!chatOpen}>
+        <div className="chat-dock-head">
+          <h2>Northwind AI assistant</h2>
+          <button type="button" className="btn btn-outline chat-close" onClick={() => setChatOpen(false)}>
+            Close
+          </button>
+        </div>
+        <ChatPanel onCart={setCart} suggestions={SUGGESTIONS} round={cartRound} />
+      </aside>
       <button type="button" className="btn btn-short chat-button" aria-expanded={chatOpen} onClick={() => setChatOpen(true)}>
         ASK NORTHWIND
       </button>
-      <footer className="footer">
-        <p role="status">{label(health)}</p>
-      </footer>
     </div>
   );
 }

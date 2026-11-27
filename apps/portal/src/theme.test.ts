@@ -91,13 +91,29 @@ describe("[SA-01] the Bold utility look", () => {
     expect(grids.some((b) => /repeat\(4,/.test(b))).toBe(true);
   });
 
-  it("underlines the selected department with 2px of ink", () => {
+  // SA-01 PR 2 (home-tabs.png): the PR 1 underline became a tab filled black, as the user asked.
+  it("fills the selected department tab with ink, its text on the ground colour", () => {
     const selected = RULES.find((r) => r.selector === '.departments a[aria-current="page"]')?.body ?? "";
-    expect(selected).toMatch(/border-bottom:\s*2px solid var\(--ink\)/);
+    expect(selected).toMatch(/background:\s*var\(--ink\)/);
+    expect(selected).toMatch(/color:\s*var\(--ground\)/);
   });
 
   it("separates product-page sections with 8px grey", () => {
     expect(RULES.find((r) => r.selector === ".product-section")?.body).toMatch(/border-top:\s*var\(--gap\) solid var\(--tile\)/);
     expect(CSS).toMatch(/--gap:\s*8px/);
+  });
+
+  // Look round 2: the open panel narrows the page (assistant-panel.png); it never overlays it.
+  it("narrows the page beside the open panel on desktop", () => {
+    const narrowed = RULES.find((r) => r.selector === ".chat-open .page")?.body ?? "";
+    expect(narrowed).toMatch(/margin-right:\s*var\(--panel\)/);
+  });
+
+  it("scrolls the tab bar with outlined arrow buttons, never a fade", () => {
+    expect(RULES.find((r) => r.selector === ".tab-scroller")?.body).toMatch(/overflow-x:\s*auto/);
+    const arrow = RULES.find((r) => r.selector === ".tab-scroll")?.body ?? "";
+    expect(arrow).toMatch(/border:\s*1px solid var\(--hairline\)/);
+    expect(arrow).toMatch(/background:\s*var\(--ground\)/);
+    expect(CSS).not.toMatch(/mask-image|gradient\(/);
   });
 });

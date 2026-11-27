@@ -2,8 +2,13 @@
 // calls the model. Each journey ends with the AI disclosure on screen (journey.ts).
 import { expect, test } from "./journey";
 
-const DEPARTMENTS = ["Base Layers", "Bath", "Bedding", "Dining", "Fleece", "Jackets", "Knitwear", "Living", "Pants", "Shirts"];
+// SA-01 PR 2 (look round 1): catalog order, the order each department first appears.
+const DEPARTMENTS = ["Jackets", "Fleece", "Base Layers", "Pants", "Shirts", "Knitwear", "Bedding", "Bath", "Living", "Dining"];
 const BANNER = "Demo store. AI assistant. No real orders, payments or deliveries.";
+// SA-01 PR 2: a tile shows one live price or a low–high range, in the region's currency.
+const PRICE = /(\$|CA\$|£|€)\d+\.\d{2}/;
+// SA-01 PR 2 (home-tabs.png): All first, then every department, each with its count.
+const TABS = [/^All \d+$/, ...DEPARTMENTS.map((name) => new RegExp(`^${name} \\d+$`))];
 
 test.describe("[SA-01] shop pages", () => {
   test("home → department → product → bag, with live prices and no errors", async ({ page }) => {
@@ -16,8 +21,9 @@ test.describe("[SA-01] shop pages", () => {
     await page.goto("/");
     await expect(page.getByText(BANNER)).toBeVisible();
     const nav = page.getByRole("navigation", { name: "Departments" });
-    await expect(nav.getByRole("link")).toHaveText(DEPARTMENTS);
+    await expect(nav.getByRole("link")).toHaveText(TABS);
     await expect(page.getByRole("region", { name: "Featured" })).toBeVisible();
+    await expect(page.getByRole("list", { name: "Featured products" }).getByRole("listitem")).toHaveCount(3);
 
     await nav.getByRole("link", { name: "Jackets" }).click();
     await expect(page).toHaveURL(/#\/d\/Jackets$/);
@@ -25,14 +31,20 @@ test.describe("[SA-01] shop pages", () => {
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Jackets");
     await expect(page.getByText("33 items")).toBeVisible();
     const tiles = page.getByRole("list", { name: "Products" }).getByRole("listitem");
+    // SA-01 PR 2: one page of 24 is read and priced; Show more reads the rest.
+    await expect(tiles).toHaveCount(24);
+    await page.getByRole("button", { name: "Show more" }).click();
     await expect(tiles).toHaveCount(33);
-    await expect(tiles.first()).toContainText(/From (\$|CA\$|£|€)\d+\.\d{2}/);
+    await expect(tiles.first()).toContainText(PRICE);
 
     await tiles.first().getByRole("link").click();
     await expect(page).toHaveURL(/#\/p\/P\d{4}$/);
     await expect(page.getByRole("article", { name: "Product" })).toBeVisible();
     await expect(page.getByTestId("price")).toHaveText(/^(\$|CA\$|£|€)\d+\.\d{2}$|^Not sold in your region$/);
-    await expect(page.getByRole("region", { name: "Description" })).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "Breadcrumb" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "ADD TO BAG" })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Specifications" })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Customer reviews" })).toBeVisible();
 
     await page.getByRole("link", { name: /^Bag/ }).click();
     await expect(page.getByRole("region", { name: "Bag" })).toBeVisible();
@@ -55,13 +67,13 @@ test.describe("[SA-01] shop pages", () => {
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Results for “rain jacket”");
     const tiles = page.getByRole("list", { name: "Products" }).getByRole("listitem");
     await expect(tiles.first()).toBeVisible();
-    for (const text of await tiles.allInnerTexts()) expect(text).toMatch(/From |Not sold in your region/);
+    for (const text of await tiles.allInnerTexts()) expect(text).toMatch(new RegExp(`${PRICE.source}|Not sold in your region`));
   });
 
   test("photos come first, uncropped in 1:1 boxes, with the full name as alt text", async ({ page }) => {
     await page.goto("/#/d/Jackets");
     const tiles = page.getByRole("list", { name: "Products" }).getByRole("listitem");
-    await expect(tiles).toHaveCount(33);
+    await expect(tiles).toHaveCount(24); // the first page; photos first across pages (gateway tests)
     const withPhoto = await tiles.evaluateAll((items) => items.map((item) => item.querySelector("img") !== null));
     const firstPlain = withPhoto.indexOf(false);
     if (firstPlain !== -1) expect(withPhoto.slice(firstPlain)).not.toContain(true);
@@ -83,6 +95,22 @@ test.describe("[SA-01] shop pages", () => {
     await expect(page.getByRole("main").getByRole("status")).toHaveText("We couldn't find that page.");
     await page.goto("/#/nowhere");
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("We couldn't find that page.");
+  });
+});
+
+test.describe("[SA-01] the tab bar at 1440px with the panel open", () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  // Look round 2: all 11 tabs fit beside the open panel, so the bar has nothing to scroll.
+  test("every tab fits beside the open panel, with no scroll buttons", async ({ page }) => {
+    await page.goto("/#/d/Dining");
+    await expect(page.getByRole("complementary", { name: "Ask Northwind" })).toBeVisible();
+    const nav = page.getByRole("navigation", { name: "Departments" });
+    await expect(nav.getByRole("link")).toHaveCount(11);
+    const fits = await nav.locator(".tab-scroller").evaluate((el) => el.scrollWidth <= el.clientWidth);
+    expect(fits).toBe(true);
+    await expect(nav.getByRole("button")).toHaveCount(0);
+    await expect(nav.getByRole("link", { name: /^Dining/ })).toBeInViewport();
   });
 });
 

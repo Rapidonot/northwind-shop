@@ -194,8 +194,9 @@ def test_a_dry_run_checks_the_reference_and_uses_nothing() -> None:
 
 
 def test_nothing_under_src_issues_a_confirmation() -> None:
-    """Until CHK-02, only a test fixture stands in for the portal control: no agent, view or port
-    issues one. `confirmations.py` may define `issue`; nothing under `src` may call it."""
+    """No agent, view or port in the backend issues one: `confirmations.py` may define `issue`;
+    nothing under `services/backend/src` may call it. SA-01 PR 2 built CHK-02's portal control in
+    the gateway, which the next pin allows at exactly one site."""
     found: list[str] = []
     for path in sorted(SRC.rglob("*.py")):
         tree = ast.parse(path.read_text(), str(path))
@@ -205,6 +206,140 @@ def test_nothing_under_src_issues_a_confirmation() -> None:
             if isinstance(node, ast.Name) and node.id == "issue":
                 found.append(f"{path.relative_to(SRC)}:{node.lineno}")
     assert found == []
+
+
+# SA-01 PR 2 (the approved plan; the user's stop 5 yes): CHK-02's portal control is built. The check
+# above stays as it is for `services/backend/src`. This one covers every other `src` tree, the
+# external agents and the partner agent: an import of the confirmations module or its book, any
+# `.issue` attribute (so an alias like `f = book.issue` is caught too), any call of a bare `issue`,
+# and `getattr(..., "issue")`. Exactly one site is allowed: the call in the gateway's `pay` route.
+# A local variable named `issue` (session.py's) is not a call and is not flagged.
+REPO = Path(__file__).resolve().parents[3]
+ISSUER_ROOTS = (
+    *(p for p in sorted((REPO / "services").glob("*/src")) if p.parent.name != "backend"),
+    REPO / "agents-external",
+    REPO / "partner-agent",
+    # Security review F8: every other tree of repo Python outside the tests.
+    REPO / "evals" / "src",
+    REPO / "data" / "src",
+    REPO / "tools",
+    *(p for p in sorted((REPO / "services").glob("*/e2e"))),
+    *(p for p in sorted((REPO / "services").glob("*/spike"))),  # re-review N5
+)
+ISSUER_NAMES = {"issue", "_issued"}
+
+
+def folded(node: ast.AST) -> str | None:
+    """A string an expression always has: a constant, constants joined with `+`, or an f-string
+    of constants only (re-review N5: `"is" + "sue"`)."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+        left, right = folded(node.left), folded(node.right)
+        return None if left is None or right is None else left + right
+    if isinstance(node, ast.FormattedValue) and node.conversion == -1 and node.format_spec is None:
+        return folded(node.value)  # f"{'ue'}"
+    if isinstance(node, ast.JoinedStr):
+        parts = [folded(v) for v in node.values]
+        return None if any(part is None for part in parts) else "".join(p or "" for p in parts)
+    return None
+
+
+ALLOWED_ISSUE = ("services/gateway/src/northwind_gateway/checkout.py", "pay")
+
+
+def confirmation_sites(tree: ast.AST) -> list[tuple[str, int]]:
+    """Every place in a module that could issue a confirmation: (enclosing function, line)."""
+    found: list[tuple[str, int]] = []
+
+    def visit(node: ast.AST, function: str) -> None:
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+            function = node.name
+        hit = False
+        # F8: the book's own store too (`_issued`), which a direct write would use to skip `issue`.
+        if isinstance(node, ast.Attribute) and node.attr in {"issue", "_issued"}:
+            hit = True
+        elif folded(node) in ISSUER_NAMES and not isinstance(
+            getattr(node, "_parent", None), ast.BinOp | ast.JoinedStr
+        ):
+            hit = True  # getattr(book, "issue"), attrgetter("issue"), "is" + "sue" and the like
+        elif (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "issue"
+        ):
+            hit = True
+        elif isinstance(node, ast.ImportFrom) and (
+            (node.module or "").endswith("confirmations")
+            or any(alias.name in {"ConfirmationBook", "issue"} for alias in node.names)
+        ):
+            hit = True
+        elif isinstance(node, ast.Import) and any(
+            alias.name.endswith("confirmations") for alias in node.names
+        ):
+            hit = True
+        if hit:
+            found.append((function, getattr(node, "lineno", 0)))
+        for child in ast.iter_child_nodes(node):
+            visit(child, function)
+
+    for parent in ast.walk(tree):  # so a folded part isn't counted again on its own
+        for child in ast.iter_child_nodes(parent):
+            child._parent = parent  # type: ignore[attr-defined]
+    visit(tree, "<module>")
+    return found
+
+
+def test_the_gateways_pay_route_is_the_only_confirmation_issuer_outside_the_backend() -> None:
+    sites: list[tuple[str, str]] = []
+    for root in ISSUER_ROOTS:
+        for path in sorted(root.rglob("*.py")) if root.exists() else ():
+            tree = ast.parse(path.read_text(), str(path))
+            for function, _ in confirmation_sites(tree):
+                sites.append((path.relative_to(REPO).as_posix(), function))
+    assert sites == [ALLOWED_ISSUE]
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "def f(desk):\n    return desk.payment.confirmations.issue('O1', 1)\n",
+        "def f(book):\n    make = book.issue\n    return make('O1', 1)\n",
+        "def f(book):\n    return getattr(book, 'issue')('O1', 1)\n",
+        "from northwind_backend.confirmations import ConfirmationBook\n",
+        "import northwind_backend.confirmations as c\n",
+        "from x import issue\ndef f():\n    return issue('O1', 1)\n",
+        "import operator\ndef f(book):\n    return operator.attrgetter('issue')(book)('O1', 1)\n",
+        "def f(book):\n    book._issued['cf_X'] = 1\n",
+        "def f(book):\n    return getattr(book, 'is' + 'sue')('O1', 1)\n",
+        "def f(book):\n    return getattr(book, f'iss{\"ue\"}')('O1', 1)\n",
+    ],
+)
+def test_a_planted_issuer_is_caught(source: str) -> None:
+    assert confirmation_sites(ast.parse(source)) != []
+
+
+def test_nothing_in_the_backend_but_confirmations_touches_the_book_store() -> None:
+    """Re-review N5: the backend's own check above flags `issue`; this one flags the book's store,
+    `_issued` (attribute or folded string), anywhere under `services/backend/src` but
+    `confirmations.py`, which owns it."""
+    found = []
+    for path in sorted(SRC.rglob("*.py")):
+        if path.name == "confirmations.py":
+            continue
+        tree = ast.parse(path.read_text(), str(path))
+        for node in ast.walk(tree):
+            if (isinstance(node, ast.Attribute) and node.attr == "_issued") or folded(
+                node
+            ) == "_issued":
+                found.append(f"{path.relative_to(SRC)}:{getattr(node, 'lineno', 0)}")
+    assert found == []
+
+
+def test_a_local_variable_named_issue_is_not_a_call() -> None:
+    session = REPO / "services/gateway/src/northwind_gateway/session.py"
+    assert "issue = session is None" in session.read_text()
+    assert confirmation_sites(ast.parse(session.read_text())) == []
 
 
 def test_the_reference_is_written_to_the_audit_as_type_and_length_only() -> None:

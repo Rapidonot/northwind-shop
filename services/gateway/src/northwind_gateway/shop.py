@@ -5,6 +5,18 @@
   each with its live lowest price. Products with a photo come first, otherwise in catalog order.
 - `GET /api/product?id=`: one public product's record, with each variant's live price.
 
+SA-01 PR 2 (only the products on screen are priced, hard rule 2):
+- `GET /api/departments` also gives each department's count and the total, in catalog order (the
+  order departments first appear in the catalog). It reads no price.
+- `GET /api/products` takes `offset`/`limit` (a page of at most 48) and `ids` (up to 48 product IDs,
+  for the home hero and the bag). With either, the gateway lists every match unpriced
+  (`priced: false`), orders it (photos first, or in the order of `ids`), takes the page and prices
+  only that page (`product_ids`). Without either it is PR 1's full listing, which the portal no
+  longer asks for.
+- `GET /api/reviews?id=&limit=`: a public product's public reviews, newest first, and the total,
+  through the portal-only `list_reviews`. Shopper text, shown by the page as plain text (hard rule
+  6); every field is type-checked here.
+
 The gateway reads mcp-catalog itself, as its own agent, `shopper-portal`, never through a model. It
 uses `get_product` and two portal-only tools, `browse_products` and `get_prices`
 (`tool_scopes.PORTAL_CATALOG_TOOLS`). The region comes from the server: `shopper_caller`, from the
@@ -51,7 +63,7 @@ from northwind_common import catalog_tool
 from northwind_common.cards import contains_card_data
 from northwind_common.localenv import mcp_catalog_url
 from northwind_common.mcp_token import CATALOG_SERVER, TokenKeyError, bearer, mint, signing_key
-from northwind_common.tool_scopes import BROWSE_PRODUCTS, GET_PRICES
+from northwind_common.tool_scopes import BROWSE_PRODUCTS, GET_PRICES, LIST_REVIEWS
 from northwind_gateway.chat import CardNumberRefused
 from northwind_gateway.settings import shopper_caller
 
@@ -63,6 +75,10 @@ PRODUCT_ID = re.compile(r"P\d{4}", re.ASCII)
 VARIANT_ID = re.compile(r"P\d{4}(?:-[A-Z0-9]{1,16}){1,4}", re.ASCII)
 PHOTO_NAME = re.compile(r"(P\d{4})\.webp", re.ASCII)
 MAX_QUERY_CHARS = 64
+MAX_PAGE = 48  # browse_products' own cap on `product_ids`
+MAX_REVIEWS = 50
+REVIEW_ID = re.compile(r"R\d{5}", re.ASCII)
+DATE = re.compile(r"\d{4}-\d{2}-\d{2}", re.ASCII)
 NO_STORE = {"Cache-Control": "no-store"}
 
 UNAVAILABLE = "The shop isn't available right now."
@@ -223,8 +239,16 @@ def _tile(product: Any, photos: frozenset[str]) -> dict[str, Any]:
         "brand": str(product.get("brand", "")),
         "department": str(product.get("department", "")),
         "from_price": _money(product.get("from_price")),
+        "to_price": _money(product.get("to_price")),
         "photo": product["product_id"] in photos,
     }
+
+
+def _summary_id(product: Any) -> str:
+    product_id = product.get("product_id") if isinstance(product, dict) else None
+    if not isinstance(product_id, str) or not PRODUCT_ID.fullmatch(product_id):
+        raise Unreadable  # it goes into a priced read, an image URL and a link (review F2)
+    return product_id
 
 
 async def _browse(reader: ShopReader, caller: Caller, args: dict[str, Any]) -> list[Any]:
@@ -256,12 +280,78 @@ async def departments(caller: Shopper, reader: Reader) -> JSONResponse:
         log.error("shop read failed: no key")
         return unavailable()
     try:
-        products = await _browse(reader, caller, {})
-        names = sorted({_tile(p, frozenset())["department"] for p in products} - {""})
+        # SA-01 PR 2: counted unpriced; no price is read for the nav.
+        products = await _browse(reader, caller, {"priced": False})
+        counts: dict[str, int] = {}
+        for product in products:
+            _summary_id(product)
+            name = str(product.get("department", ""))
+            if name:
+                counts[name] = counts.get(name, 0) + 1
     except Exception as error:  # noqa: BLE001 - its text must not reach the shopper or a log
         log.error("shop read failed: %s", type(error).__name__)
         return unavailable()
-    return JSONResponse(content={"departments": names}, headers=NO_STORE)
+    # Catalog order, the order departments first appear in the catalog (the user's look round 1).
+    names = list(counts)
+    body = {"departments": names, "counts": counts, "total": sum(counts.values())}
+    return JSONResponse(content=body, headers=NO_STORE)
+
+
+def _int_value(value: str | None, low: int, high: int) -> int | None:
+    if value is None:
+        return None
+    if contains_card_data(value):
+        raise CardNumberRefused
+    if not value.isascii() or not value.isdigit() or len(value) > 4:
+        raise ValueError("not a small number")
+    number = int(value)
+    if not low <= number <= high:
+        raise ValueError("out of range")
+    return number
+
+
+def _ids_value(value: str | None) -> list[str] | None:
+    text = _query_value(value)
+    if text is None:
+        return None
+    ids = [part.strip() for part in text.split(",")]
+    if not 1 <= len(ids) <= MAX_PAGE or not all(PRODUCT_ID.fullmatch(i) for i in ids):
+        raise ValueError("bad ids")
+    return list(dict.fromkeys(ids))  # once each, first order kept
+
+
+async def _page(
+    reader: ShopReader,
+    caller: Caller,
+    args: dict[str, Any],
+    ids: list[str] | None,
+    offset: int,
+    limit: int,
+) -> tuple[int, list[dict[str, Any]]]:
+    """Every match listed unpriced and ordered, then only the page priced (hard rule 2)."""
+    photos = photo_ids()
+    listing = [
+        _summary_id(p)
+        for p in await _browse(reader, caller, {**args, "priced": False, **_id_args(ids)})
+    ]
+    if ids is not None:
+        listed = set(listing)
+        ordered = [i for i in ids if i in listed]
+    else:
+        ordered = sorted(listing, key=lambda pid: pid not in photos)  # stable: catalog order
+    page = ordered[offset : offset + limit]
+    if not page:
+        return len(ordered), []
+    priced = {
+        tile["product_id"]: tile
+        for tile in (_tile(p, photos) for p in await _browse(reader, caller, {"product_ids": page}))
+    }
+    # A product hidden between the two reads is dropped, never shown unpriced.
+    return len(ordered), [priced[pid] for pid in page if pid in priced]
+
+
+def _id_args(ids: list[str] | None) -> dict[str, Any]:
+    return {} if ids is None else {"product_ids": ids}
 
 
 @router.get("/api/products")
@@ -270,9 +360,15 @@ async def products(
     reader: Reader,
     department: Annotated[str | None, Query()] = None,
     q: Annotated[str | None, Query()] = None,
+    ids: Annotated[str | None, Query()] = None,
+    offset: Annotated[str | None, Query()] = None,
+    limit: Annotated[str | None, Query()] = None,
 ) -> JSONResponse:
     try:
         wanted_department, text = _query_value(department), _query_value(q)
+        wanted_ids = _ids_value(ids)
+        start = _int_value(offset, 0, 9999)
+        size = _int_value(limit, 1, MAX_PAGE)
     except ValueError:
         return invalid()
     if reader is None:
@@ -283,6 +379,21 @@ async def products(
         args["department"] = wanted_department
     if text is not None:
         args["text"] = text
+    if wanted_ids is not None or size is not None or start is not None:
+        try:
+            total, page = await _page(
+                reader,
+                caller,
+                args,
+                wanted_ids,
+                start or 0,
+                size or (len(wanted_ids) if wanted_ids else MAX_PAGE),
+            )
+        except Exception as error:  # noqa: BLE001
+            log.error("shop read failed: %s", type(error).__name__)
+            return unavailable()
+        body = {"region": caller.region, "total": total, "offset": start or 0, "products": page}
+        return JSONResponse(content=body, headers=NO_STORE)
     try:
         photos = photo_ids()
         tiles = [_tile(p, photos) for p in await _browse(reader, caller, args)]
@@ -347,6 +458,10 @@ def _product_view(record: Any, prices: Any, caller: Caller, product_id: str) -> 
         "name": str(record.get("name", "")),
         "brand": str(record.get("brand", "")),
         "department": str(record.get("department", "")),
+        # SA-01 PR 2: the specifications grid's record fields, as the record has them.
+        "subcategory": _text_or_none(record.get("subcategory")),
+        "gender": _text_or_none(record.get("gender")),
+        "fits": [f for f in record.get("fits", []) if isinstance(f, str)],
         "description": str(record.get("description", "")),
         "attributes": attributes if isinstance(attributes, dict) else {},
         "colours": [c for c in record.get("colours", []) if isinstance(c, str)],
@@ -355,3 +470,71 @@ def _product_view(record: Any, prices: Any, caller: Caller, product_id: str) -> 
         "variants": variants,
         "photo": product_id in photo_ids(),
     }
+
+
+def _text_or_none(value: Any) -> str | None:
+    return value if isinstance(value, str) and value else None
+
+
+def _review_view(review: Any) -> dict[str, Any]:
+    if not isinstance(review, dict):
+        raise Unreadable
+    review_id = review.get("review_id")
+    if not isinstance(review_id, str) or not REVIEW_ID.fullmatch(review_id):
+        raise Unreadable
+    date = review.get("date")
+    if not isinstance(date, str) or not DATE.fullmatch(date):
+        raise Unreadable
+    texts = [review.get(key) for key in ("title", "body", "reviewer")]
+    if not all(isinstance(text, str) for text in texts) or not isinstance(
+        review.get("verified"), bool
+    ):
+        raise Unreadable
+    return {
+        "review_id": review_id,
+        "title": review["title"],
+        "body": review["body"],
+        "reviewer": review["reviewer"],
+        "date": date,
+        "verified": review["verified"],
+    }
+
+
+@router.get("/api/reviews")
+async def reviews(
+    caller: Shopper,
+    reader: Reader,
+    id: Annotated[str | None, Query()] = None,
+    limit: Annotated[str | None, Query()] = None,
+) -> JSONResponse:
+    try:
+        product_id = _query_value(id)
+        size = _int_value(limit, 1, MAX_REVIEWS)
+    except ValueError:
+        return invalid()
+    if product_id is None or not PRODUCT_ID.fullmatch(product_id):
+        return invalid()
+    if reader is None:
+        log.error("shop read failed: no key")
+        return unavailable()
+    args: dict[str, Any] = {"product_id": product_id}
+    if size is not None:
+        args["limit"] = size
+    try:
+        body = await reader.call(caller, LIST_REVIEWS, args)
+        if not isinstance(body, dict) or body.get("product_id") != product_id:
+            raise Unreadable
+        total, listed = body.get("total"), body.get("reviews")
+        if isinstance(total, bool) or not isinstance(total, int) or not isinstance(listed, list):
+            raise Unreadable
+        view = {
+            "product_id": product_id,
+            "total": total,
+            "reviews": [_review_view(r) for r in listed],
+        }
+    except NotFound:
+        return not_found()
+    except Exception as error:  # noqa: BLE001
+        log.error("shop read failed: %s", type(error).__name__)
+        return unavailable()
+    return JSONResponse(content=view, headers=NO_STORE)

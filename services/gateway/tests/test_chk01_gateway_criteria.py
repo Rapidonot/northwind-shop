@@ -82,17 +82,34 @@ def test_the_cart_route_is_read_only(spy: Spy, method: str) -> None:
     assert spy.callers == []
 
 
-def test_the_gateway_has_no_route_that_places_an_order_or_writes_a_cart() -> None:
+# SA-01 PR 2 (the user's stop 5 yes, 2026-11-27): exactly these order, checkout and cart-write
+# routes, each with exactly its one method. Any other such route fails the pin below.
+ORDER_AND_CART_WRITE_ROUTES = {
+    "/api/orders": {"get"},
+    "/api/checkout/summary": {"get"},
+    "/api/checkout/pay": {"post"},
+    "/api/cart/items": {"post"},
+    "/api/cart/quantity": {"post"},
+    "/api/cart/remove": {"post"},
+}
+
+
+def test_the_gateway_has_exactly_the_approved_order_and_cart_write_routes() -> None:
     schema = app.openapi()["paths"]
     for path in schema:
-        assert not re.search(r"order|checkout|payment|purchase", path), path
+        if path in ORDER_AND_CART_WRITE_ROUTES:
+            assert set(schema[path]) == ORDER_AND_CART_WRITE_ROUTES[path], path
+        else:
+            assert not re.search(r"order|checkout|payment|purchase|cart/", path), path
+    assert set(ORDER_AND_CART_WRITE_ROUTES) <= set(schema)
     assert set(schema["/api/cart"]) == {"get"}
 
 
 def test_the_session_paths_are_the_chat_the_cart_the_sign_in_and_the_handoff() -> None:
     # Row #27 (CHK-06): the demo sign-in binds its shopper to the session. Row #23 (SA-06): the
     # handoff names its session or shopper. SA-01 PR 1: the shop pages' reads, so a signed-in
-    # shopper's pages price in their own region. Still exact.
+    # shopper's pages price in their own region. SA-01 PR 2 (the user's stop 5 yes, 2026-11-27):
+    # the bag's cart writes, the order history and the demo checkout. Still exact.
     assert set(SESSION_PATHS) == {
         "/api/chat",
         "/api/cart",
@@ -101,6 +118,12 @@ def test_the_session_paths_are_the_chat_the_cart_the_sign_in_and_the_handoff() -
         "/api/departments",
         "/api/products",
         "/api/product",
+        "/api/cart/items",
+        "/api/cart/quantity",
+        "/api/cart/remove",
+        "/api/orders",
+        "/api/checkout/summary",
+        "/api/checkout/pay",
     }
 
 

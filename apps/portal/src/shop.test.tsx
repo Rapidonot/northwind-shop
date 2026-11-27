@@ -135,7 +135,8 @@ describe("[SA-01] department page", () => {
     const mock = serve(() => Response.json({ region: "US", total: 0, products: [] }));
     render(<DepartmentPage name="Base Layers" />);
     expect(await screen.findByText(NO_RESULTS)).toBeInTheDocument();
-    expect(mock).toHaveBeenCalledWith("/api/products?department=Base+Layers", { credentials: "same-origin" });
+    // SA-01 PR 2: one page, so only the products on screen are priced.
+    expect(mock).toHaveBeenCalledWith("/api/products?department=Base+Layers&limit=24", { credentials: "same-origin" });
   });
 
   it("says unavailable, never an empty list, when the read fails", async () => {
@@ -155,7 +156,9 @@ describe("[SA-01] product page", () => {
     expect(screen.getByRole("img")).toHaveAttribute("src", "/products/1600/P0001.webp");
     expect(screen.getByRole("img")).toHaveAttribute("alt", "Tidewick Harbor Rain Jacket");
     expect(screen.getByText("A waterproof shell.")).toBeInTheDocument();
-    expect(screen.getByText("waterproof rating mm")).toBeInTheDocument();
+    // SA-01 PR 2: the specifications grid words its labels and units.
+    expect(screen.getByText("Waterproof rating")).toBeInTheDocument();
+    expect(screen.getByText("10,000 mm")).toBeInTheDocument();
     screen.getByRole("button", { name: "M" }).click();
     await waitFor(() => expect(screen.getByTestId("price")).toHaveTextContent("$91.50"));
     screen.getByRole("button", { name: "Olive" }).click();
@@ -180,7 +183,7 @@ describe("[SA-01] product page", () => {
   });
 });
 
-describe("[SA-01] bag page (read-only in PR 1)", () => {
+describe("[SA-01] bag page", () => {
   it("lists the lines and the subtotal as the server sent them", () => {
     render(
       <CartPage
@@ -212,9 +215,11 @@ describe("[SA-01] bag page (read-only in PR 1)", () => {
       />,
     );
     expect(screen.getByText("2 items")).toBeInTheDocument();
-    expect(screen.getByText("Qty 2")).toBeInTheDocument();
+    // SA-01 PR 2 (bag.png): quantity controls and Remove replace PR 1's read-only "Qty 2".
+    const quantity = screen.getByRole("group", { name: "Quantity of Tidewick Harbor Rain Jacket" });
+    expect(within(quantity).getByLabelText("Quantity")).toHaveTextContent("2");
     expect(screen.getByTestId("bag-subtotal")).toHaveTextContent("$178.00");
-    expect(screen.queryAllByRole("button")).toHaveLength(0);
+    expect(screen.getAllByRole("button").map((b) => b.textContent)).toEqual(["−", "+", "Remove"]);
   });
 
   it("says unavailable, never empty, when the cart read failed", () => {
@@ -243,8 +248,9 @@ describe("[SA-01] the shell", () => {
     expect(screen.getByText(BANNER)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "NORTHWIND" })).toBeInTheDocument();
     const nav = screen.getByRole("navigation", { name: "Departments" });
-    await waitFor(() => expect(within(nav).getAllByRole("link")).toHaveLength(10));
-    expect(within(nav).getAllByRole("link").map((a) => a.textContent)).toEqual(DEPARTMENTS);
+    // SA-01 PR 2 (home-tabs.png): an All tab first, then the ten departments.
+    await waitFor(() => expect(within(nav).getAllByRole("link")).toHaveLength(11));
+    expect(within(nav).getAllByRole("link").map((a) => a.textContent?.replace(/\s*\d+$/, ""))).toEqual(["All", ...DEPARTMENTS]);
   });
 
   it("marks only the selected department, and the department page has no chip row", async () => {
@@ -281,6 +287,7 @@ describe("[SA-01] the shell", () => {
     shop();
     render(<App />);
     const upper = screen.getAllByText(/^[A-Z][A-Z ]{2,}$/).map((e) => e.textContent);
-    expect(upper.sort()).toEqual(["ASK NORTHWIND", "CLOSE", "NORTHWIND"]);
+    // SA-01 PR 2 (assistant-panel.png): Close is in sentence case.
+    expect(upper.sort()).toEqual(["ASK NORTHWIND", "NORTHWIND"]);
   });
 });

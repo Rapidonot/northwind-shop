@@ -179,7 +179,13 @@ def test_the_server_serves_exactly_the_five_tools() -> None:
     # Row #11 (RAG-04; approved under stop 5): plus `eligible_products`, read-only, for
     # `shopper-query` only (tests/mcp/test_contract.py). SA-01 PR 1 (approved by the user under
     # stop 5, 2026-11-26): plus the portal's two reads, read-only, for `shopper-portal` only.
-    assert set(TOOLS) == FIVE | CART | {"eligible_products", "browse_products", "get_prices"}
+    # SA-01 PR 2 (Amendment 3, approved by the user 2026-11-27): plus `list_reviews`.
+    assert set(TOOLS) == FIVE | CART | {
+        "eligible_products",
+        "browse_products",
+        "get_prices",
+        "list_reviews",
+    }
     writes = {
         name
         for name, spec in TOOLS.items()

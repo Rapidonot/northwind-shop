@@ -11,9 +11,11 @@ The rule (the user's, 2026-11-11):
   any other reference is refused, a fresh unused one for the same order included;
 - after a void, a new authorization needs a new confirmation.
 
-Until CHK-02 builds the portal control, only a test fixture calls `issue` (an AST pin keeps every
-`issue(` call out of `src`). A reference is `cf_` and 16 capital letters: random, never in model
-input, never a run of digits, and written by the audit as type and length only.
+SA-01 PR 2 built CHK-02's portal control: the gateway's Pay (demo) route
+(`northwind_gateway.checkout.pay`) is the only issuer in the repo (decision 0027). AST pins keep
+every `issue` call out of the backend's `src` and allow exactly that one site elsewhere. A
+reference is `cf_` and 16 capital letters: random, never in model input, never a run of digits,
+and written by the audit as type and length only.
 
 The book lives on the shared `PaymentState`, so it holds across every port instance (P3). Its
 methods run under the state's idempotency lock, inside the port's effect.
@@ -55,7 +57,7 @@ class ConfirmationBook:
         self._used: set[str] = set()
 
     def issue(self, order_id: str, amount: Money) -> str:
-        """The portal control's side. Called only by tests until CHK-02 (AST-pinned)."""
+        """The portal control's side: the gateway's Pay (demo) route and tests only (AST-pinned)."""
         while True:
             ref = "cf_" + "".join(secrets.choice(_LETTERS) for _ in range(16))
             if ref not in self._issued:

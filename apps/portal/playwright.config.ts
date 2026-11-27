@@ -67,6 +67,14 @@ export default defineConfig({
   testMatch: "*.e2e.ts",
   timeout: 90_000,
   reporter: "list",
+  // SA-01 PR 2: the checkout journey counts the canned model's requests across Pay (demo), so no
+  // other journey may talk to the model meanwhile: it runs after every other journey has finished
+  // (`src/e2eConfig.test.ts`). In the user's run with both together, a parallel chat journey moved
+  // the count from 2 to 3 during Pay.
+  projects: [
+    { name: "journeys", testIgnore: /checkout\.e2e\.ts$/ },
+    { name: "checkout", testMatch: /checkout\.e2e\.ts$/, dependencies: ["journeys"] },
+  ],
   use: {
     baseURL: "http://localhost:5173",
     channel: process.env.E2E_BROWSER_CHANNEL || undefined,
@@ -106,7 +114,9 @@ export default defineConfig({
       command: "uv run uvicorn northwind_gateway.app:app --port 8000",
       port: 8000,
       cwd: repo,
-      env: { ...modelEnv, ...ragEnv, ...catalogEnv, ...ordersEnv, ...policyEnv },
+      // SA-01 PR 2: the demo sign-in is on, as in `make dev`, for the checkout journey; every other
+      // journey stays anonymous (sign-in happens only on its own POST).
+      env: { ...modelEnv, ...ragEnv, ...catalogEnv, ...ordersEnv, ...policyEnv, NORTHWIND_DEMO_SIGNIN: "1" },
       timeout: 60_000,
     },
     { command: "./node_modules/.bin/vite --port 5173 --strictPort", port: 5173, cwd: here },

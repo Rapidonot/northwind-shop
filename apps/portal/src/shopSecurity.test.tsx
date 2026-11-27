@@ -91,7 +91,8 @@ describe("[SA-01] a first visit opens one session", () => {
     const urls = serve();
     window.location.hash = "#/d/Bath";
     render(<App />);
-    await waitFor(() => expect(urls).toContain("/api/products?department=Bath"));
+    // SA-01 PR 2: one page only (only the products on screen are priced).
+    await waitFor(() => expect(urls).toContain("/api/products?department=Bath&limit=24"));
     const sessionPaths = urls.filter((u) => u !== "/api/healthz");
     expect(sessionPaths[0]).toBe("/api/cart");
   });

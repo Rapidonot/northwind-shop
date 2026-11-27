@@ -191,14 +191,20 @@ def test_a_stock_change_never_moves_a_price_and_a_price_change_shows_in_both_too
 
 
 @pytest.mark.req("NFR-01")
-def test_the_listing_for_the_portal_agent_holds_the_portal_tools_and_no_write(url: str) -> None:
+def test_the_listing_for_the_portal_agent_holds_the_portal_tools_and_only_the_cart_writes(
+    url: str,
+) -> None:
     async def listed() -> set[str]:
         async with catalog_testing.connect(url, bearer_for()) as client:
             return {t.name for t in (await client.list_tools()).tools}
 
     names = asyncio.run(listed())
     assert {BROWSE_PRODUCTS, GET_PRICES} <= names
-    assert not names & {"add_to_cart", "set_cart_quantity", "remove_from_cart"}
+    # SA-01 PR 2 (the user's stop 5 yes, 2026-11-27): exactly the three cart writes, no other.
+    writes = {"add_to_cart", "set_cart_quantity", "remove_from_cart"}
+    assert names & writes == writes
+    reads = {"get_cart", "get_product", BROWSE_PRODUCTS, GET_PRICES, "list_reviews"}
+    assert names - writes == reads
 
 
 @pytest.mark.req("NFR-01")

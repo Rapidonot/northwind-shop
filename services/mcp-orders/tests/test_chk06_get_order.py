@@ -249,7 +249,9 @@ def test_only_the_assistant_is_offered_get_order(live: tuple[OrdersServer, str])
             return [tool.name for tool in (await client.list_tools()).tools]
 
     assert asyncio.run(names("shopper-assistant")) == ["get_order", "request_return"]  # CHK-07
-    assert asyncio.run(names("shopper-portal")) == []
+    # SA-01 PR 2 (the user's stop 5 yes, 2026-11-27): the portal's agent is offered only its
+    # order history list, never `get_order`.
+    assert asyncio.run(names("shopper-portal")) == ["list_orders"]
     is_error, _, body = call(url, testing.token(agent="shopper-portal")[0], {"order_id": "O000800"})
     assert is_error and body["code"] == "not_allowed"
 

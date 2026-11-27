@@ -92,7 +92,20 @@ def reply(body: dict[str, Any]) -> Response:
     return Response(content=sse.encode(), media_type="text/event-stream")
 
 
+# SA-01 PR 2: every request this model receives, so the checkout journey can show Pay (demo) makes
+# none (condition (3)). Read with GET /_requests; the count route itself is not counted.
+_REQUESTS = {"count": 0}
+_COUNT_LOCK = threading.Lock()
+
+
+async def requests_seen(_request: Request) -> Response:
+    with _COUNT_LOCK:
+        return JSONResponse({"requests": _REQUESTS["count"]})
+
+
 async def handle(request: Request) -> Response:
+    with _COUNT_LOCK:
+        _REQUESTS["count"] += 1
     headers = {k.lower(): v for k, v in request.headers.items()}
     creds = [headers.get("x-api-key"), headers.get("authorization")]
     if PLACEHOLDER_API_KEY not in creds and f"Bearer {PLACEHOLDER_API_KEY}" not in creds:
@@ -105,7 +118,12 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, required=True)
     args = parser.parse_args()
-    app = Starlette(routes=[Route("/{path:path}", handle, methods=["GET", "POST"])])
+    app = Starlette(
+        routes=[
+            Route("/_requests", requests_seen, methods=["GET"]),
+            Route("/{path:path}", handle, methods=["GET", "POST"]),
+        ]
+    )
     server = ServerThread(app, args.port)
     server.start()
     try:

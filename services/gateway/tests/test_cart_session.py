@@ -215,7 +215,7 @@ def test_the_panel_reads_the_real_cart_as_the_portal_agent(keyed: None) -> None:
     assert PORTAL_AGENT == "shopper-portal"
 
 
-def test_the_portal_agent_cannot_write_even_with_a_valid_session(keyed: None) -> None:
+def test_the_portal_agent_lists_exactly_its_reads_and_the_three_cart_writes(keyed: None) -> None:
     store = FixtureCatalog()
     from northwind_mcp_catalog.server import CatalogServer
     from northwind_mcp_catalog.tools import TOOLS
@@ -227,8 +227,18 @@ def test_the_portal_agent_cannot_write_even_with_a_valid_session(keyed: None) ->
             async with catalog_testing.connect(url, portal) as client:
                 return {t.name for t in (await client.list_tools()).tools}
 
-        # SA-01 PR 1: the shop pages' reads too; still no cart write.
-        assert asyncio.run(names()) == {"get_cart", "get_product", "browse_products", "get_prices"}
+        # SA-01 PR 1: the shop pages' reads too. PR 2: `list_reviews`, and (the user's stop 5
+        # yes, 2026-11-27) exactly the three cart writes, for the bag's controls; nothing else.
+        assert asyncio.run(names()) == {
+            "get_cart",
+            "get_product",
+            "browse_products",
+            "get_prices",
+            "list_reviews",
+            "add_to_cart",
+            "set_cart_quantity",
+            "remove_from_cart",
+        }
 
 
 def test_without_the_key_the_real_reader_gives_the_fixed_503_not_a_500(
