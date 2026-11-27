@@ -64,7 +64,9 @@ describe("[SA-01] [CHK-01] [SA-06] one session on a first visit", () => {
     await Promise.resolve();
     expect(mock).toHaveBeenCalledTimes(1);
     pending[0]!.resolve(emptyCart());
-    await waitFor(() => expect(mock.mock.calls.length).toBeGreaterThanOrEqual(1));
+    // Then the held second mount's read leaves, with the cookie the first response set.
+    await waitFor(() => expect(mock).toHaveBeenCalledTimes(2));
+    expect(mock.mock.calls.map(([url]) => url)).toEqual(["/api/cart", "/api/cart"]);
   });
 
   it("a failed first request does not hold the others back", async () => {
