@@ -10,7 +10,18 @@ export type Route =
   | { page: "cart" }
   | { page: "checkout" }
   | { page: "orders" }
+  | { page: "staff"; view: StaffView }
   | { page: "not-found" };
+
+// OPS-1: the demo staff console's views. The route exists in every build; the console itself only
+// when the gateway answers `/api/staff/overview` (DEMO_STAFF_DASHBOARD=1).
+export const STAFF_VIEWS = ["system", "overview", "activity", "handoffs", "orders", "stock"] as const;
+export type StaffView = (typeof STAFF_VIEWS)[number];
+
+function staffView(value: string | undefined): StaffView | null {
+  if (value === undefined) return "system";
+  return (STAFF_VIEWS as readonly string[]).includes(value) ? (value as StaffView) : null;
+}
 
 const PRODUCT_ID = /^P\d{4}$/;
 
@@ -38,6 +49,10 @@ export function parseHash(hash: string): Route {
     return name ? { page: "department", name } : { page: "not-found" };
   }
   if (head === "p" && arg !== undefined && PRODUCT_ID.test(arg)) return { page: "product", id: arg };
+  if (head === "staff") {
+    const view = staffView(arg);
+    return view ? { page: "staff", view } : { page: "not-found" };
+  }
   if (arg !== undefined) return { page: "not-found" };
   if (head === "search") return { page: "search", q: new URLSearchParams(query).get("q")?.trim() ?? "" };
   if (head === "cart") return { page: "cart" };
@@ -63,6 +78,8 @@ export function href(route: Route): string {
       return "#/checkout";
     case "orders":
       return "#/orders";
+    case "staff":
+      return `#/staff/${route.view}`;
   }
 }
 

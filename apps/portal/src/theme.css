@@ -1097,3 +1097,608 @@ p {
   }
 
 }
+
+/* ---- OPS-1: the demo staff console (docs/design/staff/), in the Bold utility rules above -------
+   Every rule is scoped under .staff, so none reaches the shop. The design's red "escalated" and its
+   uppercase table heads are restyled to fit those rules: escalated is filled ink, heads are small
+   secondary text. Highlighting a sample trace outlines its path and dims the rest. */
+
+.staff {
+  min-height: 100vh;
+}
+
+.staff-topbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 24px;
+  border-top: 4px solid var(--ink);
+  border-bottom: 1px solid var(--hairline);
+  background: var(--tile);
+  font-size: 13px;
+}
+
+.staff-topbar p {
+  margin: 0;
+}
+
+.staff-notice {
+  font-weight: 600;
+}
+
+.staff-preview-banner {
+  margin: 0;
+  padding: 8px 24px;
+  border-bottom: 1px solid var(--ink);
+  font-weight: 600;
+}
+
+.staff-masthead {
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.staff-body {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+}
+
+.staff-nav {
+  border-right: 1px solid var(--hairline);
+  padding: 16px 0;
+}
+
+.staff-nav ul {
+  list-style: none;
+  margin: 0 0 16px;
+  padding: 0;
+}
+
+.staff-nav a {
+  display: flex;
+  justify-content: space-between;
+  padding: 12px 24px;
+  color: var(--secondary);
+  text-decoration: none;
+  border-left: 4px solid transparent;
+}
+
+.staff-nav a[aria-current="page"] {
+  color: var(--ink);
+  font-weight: 600;
+  background: var(--tile);
+  border-left-color: var(--ink);
+}
+
+.staff-nav .nav-count {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.staff-nav-note {
+  margin: 0;
+  padding: 16px 24px 0;
+  border-top: 1px solid var(--hairline);
+  color: var(--secondary);
+  font-size: 13px;
+}
+
+.staff-main {
+  min-width: 0;
+  padding: 24px 32px 48px;
+}
+
+.staff .view-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  padding-bottom: 16px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.staff .view-head p {
+  margin: 0;
+}
+
+.staff .section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin: 28px 0 12px;
+}
+
+.staff .section-head h2 {
+  margin: 0;
+}
+
+.staff .tag {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border: 1px solid var(--hairline);
+  border-radius: 2px;
+  background: var(--tile);
+  color: var(--secondary);
+  font-family: "Inter", system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  vertical-align: middle;
+}
+
+.staff .pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border: 1px solid var(--hairline);
+  border-radius: 2px;
+  background: var(--tile);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.staff .pill-escalated,
+.staff .pill-strong {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--ground);
+  font-weight: 600;
+}
+
+.staff .pill-strong {
+  background: var(--ground);
+  color: var(--ink);
+}
+
+.staff .pill-refused,
+.staff .pill-error {
+  border-color: var(--ink);
+  background: var(--ground);
+}
+
+.staff .callout {
+  margin: 24px 0;
+  padding: 16px 20px;
+  border-left: 4px solid var(--ink);
+  background: var(--tile);
+  font-weight: 600;
+}
+
+.staff .mono,
+.staff .map-node-tools,
+.staff .trace-meta {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-size: 13px;
+}
+
+/* the agent map */
+
+.staff .map {
+  border: 1px solid var(--hairline);
+  background: var(--ground);
+}
+
+.staff .map-legend-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--hairline);
+  background: var(--tile);
+}
+
+.staff .legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 14px;
+}
+
+.staff .legend li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.staff .legend-key {
+  width: 16px;
+  height: 14px;
+  border: 1px solid var(--ink);
+  background: var(--ground);
+}
+
+.staff .legend-key-mcp {
+  border-left-width: 4px;
+}
+
+.staff .legend-key-code,
+.staff .legend-key-entry {
+  border-color: var(--hairline);
+  background: var(--tile);
+}
+
+.staff .legend-key-fake {
+  border-style: dashed;
+}
+
+.staff .legend-key-eval {
+  border-style: dashed;
+  border-color: var(--hairline);
+}
+
+.staff .map-lane {
+  padding: 16px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.staff .map-lane:last-child {
+  border-bottom: 0;
+}
+
+.staff .map-lane-title {
+  margin: 0 0 12px;
+  color: var(--secondary);
+  font-family: "Inter", system-ui, sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.staff .map-flow {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  overflow-x: auto;
+}
+
+.staff .map-step {
+  display: flex;
+  align-items: center;
+}
+
+.staff .map-arrow {
+  padding: 0 8px;
+  color: var(--secondary);
+}
+
+.staff .map-column {
+  display: grid;
+  gap: 8px;
+}
+
+.staff .map-node {
+  min-width: 150px;
+  max-width: 280px;
+  padding: 12px;
+  border: 1px solid var(--ink);
+  border-radius: 0;
+  background: var(--ground);
+}
+
+.staff .map-node p {
+  margin: 0;
+}
+
+.staff .map-node-title {
+  font-weight: 600;
+}
+
+.staff .map-node-sub {
+  color: var(--secondary);
+  font-size: 13px;
+}
+
+.staff .map-node-tools {
+  margin-top: 4px;
+}
+
+.staff .map-node-entry,
+.staff .map-node-code {
+  border-color: var(--hairline);
+  background: var(--tile);
+}
+
+.staff .map-node-mcp {
+  border-left-width: 4px;
+}
+
+.staff .map-node-fake {
+  border-style: dashed;
+}
+
+.staff .map-node-eval {
+  border-style: dashed;
+  border-color: var(--hairline);
+  color: var(--secondary);
+}
+
+.staff .map-node.is-lit {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.staff .map-node.is-dim {
+  opacity: 0.35;
+}
+
+.staff .node-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.staff .node-badge {
+  padding: 2px 8px;
+  border: 1px solid var(--hairline);
+  border-radius: 2px;
+  background: var(--ground);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.staff .node-badge-mcp {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--ground);
+}
+
+.staff .node-badge-fake {
+  border-style: dashed;
+}
+
+.staff .map-servers {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.staff .map-server .map-node {
+  max-width: none;
+}
+
+.staff .map-server-from {
+  margin: 0 0 4px;
+  color: var(--secondary);
+  font-size: 12px;
+}
+
+/* sample traces */
+
+.staff .traces h2 {
+  display: flex;
+  align-items: center;
+}
+
+.staff .trace-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.staff .trace-card {
+  display: grid;
+  gap: 8px;
+  padding: 16px 20px;
+  border: 1px solid var(--hairline);
+  border-radius: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.staff .trace-card.is-selected {
+  border: 2px solid var(--ink);
+  background: var(--tile);
+}
+
+.staff .trace-card-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.staff .trace-kind {
+  color: var(--secondary);
+}
+
+.staff .trace-pills {
+  display: flex;
+  gap: 6px;
+}
+
+.staff .trace-title {
+  font-weight: 600;
+  font-size: 17px;
+}
+
+.staff .trace-meta {
+  color: var(--secondary);
+}
+
+.staff .trace-hint,
+.staff .trace-steps {
+  margin: 12px 0 0;
+  padding: 16px 20px;
+  border: 1px solid var(--hairline);
+  background: var(--tile);
+}
+
+.staff .trace-steps ol {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.staff .trace-steps li {
+  padding: 4px 0;
+}
+
+.staff .trace-step-node {
+  font-weight: 600;
+  margin-right: 8px;
+}
+
+/* tiles, bars and tables */
+
+.staff .tiles {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.staff .tile-stat {
+  padding: 16px 20px;
+  border: 1px solid var(--hairline);
+  background: var(--tile);
+}
+
+.staff .tile-stat p {
+  margin: 0;
+}
+
+.staff .tile-stat-value {
+  margin: 8px 0;
+  font-family: "Archivo", system-ui, sans-serif;
+  font-size: 40px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.staff .tile-stat-value.is-alert {
+  text-decoration: underline;
+  text-decoration-thickness: 3px;
+  text-underline-offset: 6px;
+}
+
+.staff .stats-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  margin-bottom: 16px;
+  padding: 14px 20px;
+  border: 1px solid var(--hairline);
+  background: var(--tile);
+}
+
+.staff .stat-strong {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.staff .toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.staff .segmented {
+  display: flex;
+  border: 1px solid var(--hairline);
+}
+
+.staff .segmented button {
+  padding: 8px 14px;
+  border: 0;
+  border-right: 1px solid var(--hairline);
+  border-radius: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+
+.staff .segmented button:last-child {
+  border-right: 0;
+}
+
+.staff .segmented button[aria-pressed="true"] {
+  background: var(--ink);
+  color: var(--ground);
+}
+
+.staff .picker,
+.staff .filter-search {
+  padding: 8px 12px;
+  border: 1px solid var(--hairline);
+  border-radius: 2px;
+  background: var(--ground);
+  font: inherit;
+}
+
+.staff .filter-search {
+  margin-left: auto;
+  min-width: 240px;
+}
+
+.staff .staff-table {
+  width: 100%;
+  border-collapse: collapse;
+  border: 1px solid var(--hairline);
+}
+
+.staff .staff-table th {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--hairline);
+  background: var(--tile);
+  color: var(--secondary);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-align: left;
+}
+
+.staff .staff-table td {
+  padding: 12px;
+  border-bottom: 1px solid var(--hairline);
+  vertical-align: top;
+}
+
+.staff .cell-sub,
+.staff .summary-label {
+  display: block;
+  color: var(--secondary);
+  font-size: 12px;
+}
+
+.staff .reason {
+  font-weight: 600;
+}
+
+.staff .empty {
+  padding: 20px;
+  border: 1px dashed var(--hairline);
+  color: var(--secondary);
+}
+
+.staff .table-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+@media (max-width: 899px) {
+  .staff-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .staff-nav {
+    border-right: 0;
+    border-bottom: 1px solid var(--hairline);
+  }
+
+  .staff .tiles,
+  .staff .trace-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
