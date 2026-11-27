@@ -250,3 +250,57 @@ def test_f6_another_sessions_held_bag_never_blocks_or_empties_this_one(
 
     held, other = w.run(go)
     assert other.status_code == 200 and other.json()["order_id"] != held.json()["order_id"]
+
+
+def test_n2_a_failed_placement_is_escalated_shown_on_hold_and_claims_no_payment(
+    w: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cookie = signed_in(A)
+
+    async def boom(*_: Any, **__: Any) -> Any:
+        raise RuntimeError("before authorize")
+
+    monkeypatch.setattr(checkout_module, "place", boom)
+
+    async def go(c: httpx.AsyncClient) -> tuple[httpx.Response, httpx.Response]:
+        assert (await add(c, cookie, n=1)).status_code == 200
+        paid = await pay(c, cookie, (await summary(c, cookie)).json()["digest"], n=1)
+        return paid, await c.get("/api/orders", headers={"cookie": cookie})
+
+    paid, orders = w.run(go)
+    body = paid.json()
+    assert paid.status_code == 503 and body["isRetryable"] is False
+    assert body["message"] == checkout_module.BEING_CHECKED
+    assert "try again" not in body["message"].lower() and "paid" not in body["message"].lower()
+    order_id = body["order_id"]
+    assert checkout_desk().orders.orders[order_id].status.value == "escalated"
+    shown = next(o for o in orders.json()["orders"] if o["order_id"] == order_id)
+    assert shown["status"] == "on_hold"
+
+
+def test_n3_an_unreadable_bag_after_an_order_is_held_never_called_empty(
+    w: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from northwind_assistant.catalog_client import CartReader
+
+    cookie = signed_in(A)
+    real_read = CartReader.read
+    reads: list[int] = []
+
+    async def malformed_after_pay(self: CartReader, caller: Any) -> Any:
+        body = await real_read(self, caller)
+        reads.append(1)
+        if checkout_desk().orders.orders and len(reads) >= 2:
+            return {"region": "US"}  # no lines at all: unreadable, never "empty"
+        return body
+
+    monkeypatch.setattr(CartReader, "read", malformed_after_pay)
+
+    async def go(c: httpx.AsyncClient) -> httpx.Response:
+        assert (await add(c, cookie, n=1)).status_code == 200
+        reads.clear()
+        return await pay(c, cookie, (await summary(c, cookie)).json()["digest"], n=1)
+
+    paid = w.run(go)
+    assert paid.status_code == 200 and paid.json()["bag_emptied"] is False
+    assert any(checkout_desk().unemptied.values())  # held: the next Pay is refused, not placed

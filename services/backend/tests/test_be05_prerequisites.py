@@ -224,7 +224,27 @@ ISSUER_ROOTS = (
     REPO / "data" / "src",
     REPO / "tools",
     *(p for p in sorted((REPO / "services").glob("*/e2e"))),
+    *(p for p in sorted((REPO / "services").glob("*/spike"))),  # re-review N5
 )
+ISSUER_NAMES = {"issue", "_issued"}
+
+
+def folded(node: ast.AST) -> str | None:
+    """A string an expression always has: a constant, constants joined with `+`, or an f-string
+    of constants only (re-review N5: `"is" + "sue"`)."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+        left, right = folded(node.left), folded(node.right)
+        return None if left is None or right is None else left + right
+    if isinstance(node, ast.FormattedValue) and node.conversion == -1 and node.format_spec is None:
+        return folded(node.value)  # f"{'ue'}"
+    if isinstance(node, ast.JoinedStr):
+        parts = [folded(v) for v in node.values]
+        return None if any(part is None for part in parts) else "".join(p or "" for p in parts)
+    return None
+
+
 ALLOWED_ISSUE = ("services/gateway/src/northwind_gateway/checkout.py", "pay")
 
 
@@ -239,8 +259,10 @@ def confirmation_sites(tree: ast.AST) -> list[tuple[str, int]]:
         # F8: the book's own store too (`_issued`), which a direct write would use to skip `issue`.
         if isinstance(node, ast.Attribute) and node.attr in {"issue", "_issued"}:
             hit = True
-        elif isinstance(node, ast.Constant) and node.value in {"issue", "_issued"}:
-            hit = True  # getattr(book, "issue"), operator.attrgetter("issue") and the like
+        elif folded(node) in ISSUER_NAMES and not isinstance(
+            getattr(node, "_parent", None), ast.BinOp | ast.JoinedStr
+        ):
+            hit = True  # getattr(book, "issue"), attrgetter("issue"), "is" + "sue" and the like
         elif (
             isinstance(node, ast.Call)
             and isinstance(node.func, ast.Name)
@@ -261,6 +283,9 @@ def confirmation_sites(tree: ast.AST) -> list[tuple[str, int]]:
         for child in ast.iter_child_nodes(node):
             visit(child, function)
 
+    for parent in ast.walk(tree):  # so a folded part isn't counted again on its own
+        for child in ast.iter_child_nodes(parent):
+            child._parent = parent  # type: ignore[attr-defined]
     visit(tree, "<module>")
     return found
 
@@ -286,10 +311,29 @@ def test_the_gateways_pay_route_is_the_only_confirmation_issuer_outside_the_back
         "from x import issue\ndef f():\n    return issue('O1', 1)\n",
         "import operator\ndef f(book):\n    return operator.attrgetter('issue')(book)('O1', 1)\n",
         "def f(book):\n    book._issued['cf_X'] = 1\n",
+        "def f(book):\n    return getattr(book, 'is' + 'sue')('O1', 1)\n",
+        "def f(book):\n    return getattr(book, f'iss{\"ue\"}')('O1', 1)\n",
     ],
 )
 def test_a_planted_issuer_is_caught(source: str) -> None:
     assert confirmation_sites(ast.parse(source)) != []
+
+
+def test_nothing_in_the_backend_but_confirmations_touches_the_book_store() -> None:
+    """Re-review N5: the backend's own check above flags `issue`; this one flags the book's store,
+    `_issued` (attribute or folded string), anywhere under `services/backend/src` but
+    `confirmations.py`, which owns it."""
+    found = []
+    for path in sorted(SRC.rglob("*.py")):
+        if path.name == "confirmations.py":
+            continue
+        tree = ast.parse(path.read_text(), str(path))
+        for node in ast.walk(tree):
+            if (isinstance(node, ast.Attribute) and node.attr == "_issued") or folded(
+                node
+            ) == "_issued":
+                found.append(f"{path.relative_to(SRC)}:{getattr(node, 'lineno', 0)}")
+    assert found == []
 
 
 def test_a_local_variable_named_issue_is_not_a_call() -> None:

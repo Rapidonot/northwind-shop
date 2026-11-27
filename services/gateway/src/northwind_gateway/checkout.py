@@ -35,7 +35,7 @@ import json
 import logging
 import re
 import threading
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from functools import cache
@@ -67,7 +67,14 @@ from northwind_backend.fakes.payment import (
 )
 from northwind_backend.inventory import InventoryFake, InventoryState, Line
 from northwind_backend.inventory.model import StockOut
-from northwind_backend.ports import Money, Order, OrderLine, PriceQuote, StockLevel
+from northwind_backend.ports import (
+    Money,
+    Order,
+    OrderLine,
+    OrderStatus,
+    PriceQuote,
+    StockLevel,
+)
 from northwind_common.cards import contains_card_data
 from northwind_gateway.cart import cart_reader
 from northwind_gateway.cart_writes import CartWriter, cart_writer
@@ -101,8 +108,11 @@ OVER_LIMIT = "This order is above the demo's order limit."
 REUSED = "That payment request was already used for a different order summary."
 NO_LONGER = "An item in your bag is no longer available."
 ALREADY_PLACED = (
-    "Your bag still holds items from an order you already paid for. They are being removed; "
-    "check your orders and your bag."
+    "Your bag still holds items from an earlier order, which may already be paid or is being "
+    "checked. They are being removed: check your orders and your bag before paying again."
+)
+BEING_CHECKED = (
+    "Checkout couldn't finish. A person will check this order; don't pay again for these items."
 )
 FULL = "This demo has taken all the orders it can for now."
 MAX_ORDERS_PER_SHOPPER = 200  # security review F5: bounds every per-pay structure of the desk
@@ -326,6 +336,32 @@ class CheckoutDesk:
     def hold_bag(self, shopper: str, session: str, order: Order) -> None:
         self.unemptied.setdefault((shopper, session), []).append(order)
 
+    def escalate_unfinished(self, order: Order, summary: Summary) -> None:
+        """Re-review N2: an order whose placement raised is escalated in the desk's own store (for a
+        person) and shown on hold in the shopper's history, so the refusal that names it never
+        points at an order the shopper can't see."""
+        stored = self.orders.orders.get(order.order_id, order)
+        if stored.status not in (OrderStatus.CONFIRMED, OrderStatus.ESCALATED):
+            self.orders.orders[order.order_id] = replace(
+                stored, status=OrderStatus.ESCALATED, escalation="placement_error"
+            )
+        if not any(o["order_id"] == order.order_id for o in demo_orders().of(order.shopper_id)):
+            demo_orders().record(
+                shopper=order.shopper_id,
+                order_id=order.order_id,
+                placed_on=_now().date().isoformat(),
+                status="on_hold",
+                lines=[
+                    {
+                        "product_id": ln.product_id,
+                        "variant_id": ln.variant_id,
+                        "quantity": ln.quantity,
+                    }
+                    for ln in order.lines
+                ],
+                total=_money(summary.total or "0.00", summary.currency),
+            )
+
     def lock_for(self, shopper: str) -> asyncio.Lock:
         with self._guard:
             return self._locks.setdefault(shopper, asyncio.Lock())
@@ -441,15 +477,14 @@ async def _empty_bag(
             log.error("checkout bag clear failed: %s", type(error).__name__)
     try:
         bag = await reader.read(caller)
-        held = {
-            str(line.get("variant_id"))
-            for line in (bag or {}).get("lines", [])
-            if isinstance(line, dict)
-        }
-    except Exception as error:  # noqa: BLE001
+        if bag is None:
+            return False
+        # Re-review N3: the same strict reading as the summary, so a malformed bag fails closed.
+        held = {ln.variant_id for ln in summarize(bag).lines}
+    except Exception as error:  # noqa: BLE001 - Unreadable included: the bag is held
         log.error("checkout bag check failed: %s", type(error).__name__)
         return False
-    return bag is not None and not held & {line.variant_id for line in order.lines}
+    return not held & {line.variant_id for line in order.lines}
 
 
 # ---- routes ------------------------------------------------------------------------------------
@@ -557,12 +592,13 @@ async def pay(
             # fixed envelope, never a bare 500. The order stays in the desk for a person.
             log.error("checkout placement failed: %s", type(error).__name__)
             desk.hold_bag(shopper, caller.session or "", order)
+            desk.escalate_unfinished(order, shown)
             status = 503
             content = {
                 "isError": True,
                 "errorCategory": "transient",
                 "isRetryable": False,
-                "message": UNAVAILABLE,
+                "message": BEING_CHECKED,
                 "order_id": order.order_id,
             }
         desk.paid[(shopper, body.idempotency_key)] = (body.digest, status, content)

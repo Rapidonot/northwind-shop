@@ -144,6 +144,11 @@ export function CheckoutPage({ onCartChanged = () => {} }: { onCartChanged?: () 
         : [];
     setOutcome({ kind: "refused", message: done.message, code: done.code, substitutes: ids });
     if (done.code === "summary_changed") reload();
+    if (done.code === "already_placed") {
+      // The gateway removed lines of an earlier order from the bag (re-review N4): show it as it is.
+      onCartChanged();
+      reload();
+    }
   };
 
   if (outcome?.kind === "placed") {

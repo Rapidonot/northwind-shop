@@ -245,6 +245,27 @@ describe("[SA-01] [CHK-02] the demo checkout", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("Your bag changed.");
   });
 
+  it("already placed rereads the bag and the summary, since the gateway removed paid lines (re-review N4)", async () => {
+    let reads = 0;
+    serve({
+      "GET /api/checkout/summary": () => {
+        reads += 1;
+        return Response.json(reads === 1 ? SUMMARY : { ...SUMMARY, lines: [], total: null, issues: ["empty"] });
+      },
+      "POST /api/checkout/pay": () =>
+        Response.json(
+          { isError: true, errorCategory: "business", isRetryable: false, message: "Your bag still holds items from an earlier order.", code: "already_placed", order_id: "O900001" },
+          { status: 409 },
+        ),
+    });
+    const changed = vi.fn();
+    render(<CheckoutPage onCartChanged={changed} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Pay (demo)" }));
+    await waitFor(() => expect(reads).toBe(2));
+    expect(changed).toHaveBeenCalledTimes(1);
+    expect(await screen.findByRole("list", { name: "Issues" })).toHaveTextContent("Your bag is empty.");
+  });
+
   it("an issue in the bag disables Pay (demo) and says what it is", async () => {
     serve({ "GET /api/checkout/summary": () => Response.json({ ...SUMMARY, issues: ["out_of_stock"] }) });
     render(<CheckoutPage />);
