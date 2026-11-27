@@ -229,3 +229,6 @@ restored
 FAILED services/mcp-catalog/tests/test_tools.py::test_the_one_database_module_names_only_inventory_tables
 1 failed, 66 deselected in 0.44s
 restored
+== the guard on the northwind DB after the user applied BE-04's schema, 2026-11-27T08:28:59Z:
+live holds: 0 in database 'northwind'
+exit 0
