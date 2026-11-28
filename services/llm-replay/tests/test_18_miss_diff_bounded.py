@@ -5,8 +5,8 @@ On a miss the proxy reported a diff against the nearest cassette, chosen with
 `SequenceMatcher(autojunk=False).ratio()` over every candidate, inline in its async handler. A Care
 request with no cassette of its own test was compared with all of `assistant-smoke` (18 cassettes
 of 16-20 KB): 18-24 s of CPU, during which a recorded chat request that is served in 0.0 s alone
-took 23.0 s. In CI's e2e job two handoff journeys' Care misses held the second suggestion's chat
-turn past its 90 s timeout.
+took 23.0 s. That is the measured mechanism behind CI's e2e failure (two handoff journeys' Care
+misses beside the suggestions journey); CI's e2e at the fixed head confirms it.
 
 The fix: the diff runs off the event loop, and its cost is bounded. The nearest cassette is chosen
 by `real_quick_ratio` (lengths only) and then `quick_ratio` (a multiset count), only the nearest is

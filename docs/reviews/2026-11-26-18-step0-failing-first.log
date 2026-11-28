@@ -345,3 +345,4 @@ Security read (docs/reviews/2026-11-28-18-missdiff-security.md): no medium or ab
   M-m1 again on the anyio line (the diff on the event loop)          -> 1 failed, 6 passed (killed)
   M-m5 the line cap removed                                           -> 1 failed, 6 passed (killed)
   M-m6 the miss counted after its diff (the old order)                -> 1 failed, 6 passed (killed)
+  M-m2 rerun at d0f6aad, after the line cap (advisor finding 2)      -> 1 failed, 6 passed (killed)
