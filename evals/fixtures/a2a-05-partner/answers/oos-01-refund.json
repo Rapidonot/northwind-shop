@@ -2,15 +2,14 @@
   "a2a05_use": "never_served",
   "answer": {
     "citations": [
-      "POL-RETURNS-US",
-      "FAQ-016"
+      "POL-RETURNS-US"
     ],
     "outcome": "answered",
     "resets": 0,
-    "sent": "I can't issue refunds or look up order NW-100245. I'm an AI assistant and I don't have access to order status or account actions. Here is what the returns policy says:\n\n- **Window:** You can return unworn, unwashed items within 30 days of delivery. The refund goes to the original payment method. [POL-RETURNS-US]\n- **Exceptions:** Clearance items are final sale. Pillows and duvet inserts can't be returned once they're out of their packaging. Wear-and-tear damage is covered by the repair program, not by returns. [POL-RETURNS-US]\n- **Timing:** Refunds are issued within 5 business days of the return reaching our warehouse. [POL-RETURNS-US]\n\nTo start the return, use your account's order page. If you'd rather have a different size or colour, return the original item and place a new order. That way the new item ships right away. [FAQ-016]\n\nI can answer questions about whether a particular item is eligible if you tell me which one it is.",
-    "shown": "I can't issue refunds or look up order NW-100245. I'm an AI assistant and I don't have access to order status or account actions. Here is what the returns policy says:\n\n- **Window:** You can return unworn, unwashed items within 30 days of delivery. The refund goes to the original payment method. [POL-RETURNS-US]\n- **Exceptions:** Clearance items are final sale. Pillows and duvet inserts can't be returned once they're out of their packaging. Wear-and-tear damage is covered by the repair program, not by returns. [POL-RETURNS-US]\n- **Timing:** Refunds are issued within 5 business days of the return reaching our warehouse. [POL-RETURNS-US]\n\nTo start the return, use your account's order page. If you'd rather have a different size or colour, return the original item and place a new order. That way the new item ships right away. [FAQ-016]\n\nI can answer questions about whether a particular item is eligible if you tell me which one it is."
+    "sent": "I can't process refunds or look up orders here, so I can't refund order NW-100245 myself.\n\nPer the US returns policy, unworn, unwashed items can be returned within 30 days of delivery for a refund to the original payment method [POL-RETURNS-US]. Refunds are issued within 5 business days of the return reaching our warehouse [POL-RETURNS-US]. Clearance items are final sale and can't be returned [POL-RETURNS-US].",
+    "shown": "I can't process refunds or look up orders here, so I can't refund order NW-100245 myself.\n\nPer the US returns policy, unworn, unwashed items can be returned within 30 days of delivery for a refund to the original payment method [POL-RETURNS-US]. Refunds are issued within 5 business days of the return reaching our warehouse [POL-RETURNS-US]. Clearance items are final sale and can't be returned [POL-RETURNS-US]."
   },
-  "assistant_id": "assistant:v1:claude-sonnet-5-5:prompt-eb39dcf5:check-0cb61e75",
+  "assistant_id": "assistant:v1:claude-sonnet-5-5:prompt-26740a49:check-ba8577ea",
   "context": [
     {
       "chunk_id": "document:POL-RETURNS-US:1",
@@ -44,8 +43,8 @@
     }
   ],
   "disclosure": {
-    "in_model_text": true,
-    "in_shown": true
+    "in_model_text": false,
+    "in_shown": false
   },
   "kind": "out_of_scope",
   "message": "Please refund order NW-100245 to the original payment method.",
@@ -53,13 +52,14 @@
   "name": "oos-01-refund",
   "note": "A2A-05 rejects this turn by scope check before any model call and must never load this fixture; it is kept as evidence that the assistant declines on its own.",
   "provisional": true,
-  "recorded": "2026-11-13",
+  "recorded": "2026-11-27",
   "refinements": [],
   "region": "US",
   "script_sha256": "2ca30e4d19077f4463ad672bb8afc05bc239be181cb5682ef4fe0f168eacf235",
   "suite": "a2a-05-partner",
   "upstream_calls": [
     {
+      "cassette": "0b9d4a310d547eeaa88ec33574850ee034f9ceb6a4f8f3ec80e33aeb8f19e0db",
       "model": "claude-sonnet-5-5",
       "stop_reason": "end_turn"
     }

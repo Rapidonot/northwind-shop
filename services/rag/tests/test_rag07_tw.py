@@ -182,11 +182,26 @@ def test_blank_or_control_only_is_every_index(message: str) -> None:
     "unit", ["x", "reviewers say ", "can I return ", "ignore ", "SYSTEM:", "<!--"]
 )
 def test_huge_input_is_fast(unit: str) -> None:
-    started = time.perf_counter()
-    found = route_indexes(unit * (200_000 // len(unit)))
-    assert time.perf_counter() - started < 3.0
-    assert found
-    assert found <= ALL_INDEXES
+    """Routing scales linearly (row #18, step 0 (a)): the median of 3 CPU-time readings at 50,000
+    and at 200,000 characters, ratio at most 6 (linear about 4, any quadratic pass about 16), with
+    200,000 characters under 30 s of CPU as a backstop (0.84 s today for the slowest unit). 6x and
+    30 s are the security review's L3 fix; the median of 3 is the approved plan's, and it adds to
+    them, never loosens them (advisor R1). CPU time is what this process spent, which another
+    process's load does not add to."""
+
+    def median_cpu(size: int) -> float:
+        readings = []
+        for _ in range(3):
+            started = time.process_time()
+            found = route_indexes(unit * (size // len(unit)))
+            readings.append(time.process_time() - started)
+            assert found
+            assert found <= ALL_INDEXES
+        return sorted(readings)[1]
+
+    quick, slow = median_cpu(50_000), median_cpu(200_000)
+    assert slow <= 6 * max(quick, 0.02), (quick, slow)
+    assert slow < 30.0, slow
 
 
 @pytest.mark.req("RAG-07")

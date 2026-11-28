@@ -278,9 +278,11 @@ def eligible_products(
     price_min: int | None = None,
     price_max: int | None = None,
     in_stock: bool = False,
+    held: Mapping[str, int] | None = None,
 ) -> list[str]:
     """Public products with at least one variant sold in `region` whose live price, in `currency`,
-    is within the bounds (minor units, inclusive) and, with `in_stock`, that has stock on hand.
+    is within the bounds (minor units, inclusive) and, with `in_stock`, that has stock on hand less
+    `held`, the units BE-04 holds live in the region.
     Price
     and stock must hold for the same variant. IDs only, never a price or a count (row #11, RAG-04;
     hard rule 2: read live on every call, never from the index)."""
@@ -298,7 +300,9 @@ def eligible_products(
                 continue
             if price_max is not None and price.minor_units > price_max:
                 continue
-            if in_stock and (catalog.stock(variant.variant_id, region) or 0) <= 0:
+            stock = catalog.stock(variant.variant_id, region) or 0
+            # Less BE-04's live holds in the region (`holds.py`; row #18, step 0 (c)).
+            if in_stock and stock - (held or {}).get(variant.variant_id, 0) <= 0:
                 continue
             found.append(product.product_id)
             break

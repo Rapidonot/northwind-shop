@@ -5,12 +5,14 @@ description = "northwind-catalog MCP server: read-only catalog, live price and s
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "mcp>=2.3,<3",
+    "northwind-backend",  # only `inventory.substitutes` (row #18, step 0 (b); the user, 2026-11-26)
     "northwind-common",
     "northwind-data",
     "uvicorn[standard]>=0.54.0",
 ]
 
 [tool.uv.sources]
+northwind-backend = { workspace = true }
 northwind-common = { workspace = true }
 northwind-data = { workspace = true }
 

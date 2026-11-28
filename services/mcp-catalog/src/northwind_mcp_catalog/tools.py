@@ -309,7 +309,7 @@ async def check_stock(
     # Sold in a region means priced there; stock with no row there is zero.
     if server.catalog.price(variant_id, region) is None:
         raise not_sold_in_region()
-    on_hand = server.catalog.stock(variant_id, region) or 0  # live, on every call
+    on_hand = server.on_hand(variant_id, region)  # live, less live holds, on every call
     return json_result(
         CHECK_STOCK,
         {"variant_id": variant_id, "region": region, "on_hand": on_hand, "in_stock": on_hand > 0},
@@ -412,6 +412,7 @@ READ_TOOLS: Mapping[str, ToolSpec] = {
             annotations=_READ_ONLY,
         ),
         handler=handler,
+        reads_stock=name == CHECK_STOCK,
     )
     for name, handler in _HANDLERS.items()
 }
@@ -457,6 +458,7 @@ async def eligible_products(
         price_min=low,
         price_max=high,
         in_stock=in_stock,
+        held=server.held(region) if in_stock else None,
     )
     # Plain JSON, not a `<catalog_data>` label: that format is for the model's own tools
     # (`catalog_tool.TOOL_NAMES`), and this one is never in a model's tool list.
@@ -485,6 +487,7 @@ QUERY_TOOLS: Mapping[str, ToolSpec] = {
             annotations=_READ_ONLY,
         ),
         handler=eligible_products,
+        reads_stock=True,
     )
 }
 

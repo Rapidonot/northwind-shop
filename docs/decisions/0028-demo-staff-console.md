@@ -54,6 +54,7 @@ criteria. RECORD-ALL (#18) runs in window A with the assistant, the agent runtim
 - Part 2, after RECORD-ALL: live trace events (no trace ID in anything a model sees; recorded requests byte-identical, pinned),
   durable handoff and audit stores, live highlighting, a demo-order replay command, the demo server's replay opening every
   suite a demo uses, chat text with the public-demo notice, and `make demo-purge`.
-- A frozen-file pin (`test_ops1_frozen.py`) needs origin/main for its merge base; GitHub CI's unit job is a shallow clone, so
-  there it skips and says why. `make check` and `make ci` run it.
+- A frozen-file pin (`test_ops1_frozen.py`) guarded the row while RECORD-ALL ran. On main it would fail any later row that
+  rightly edits a frozen file, so it was deleted in the merge from main after RECORD-ALL shipped (the user, advisor-reviewer
+  finding 4, option (b)); the gate report checks the diff's file list against the freeze list instead.
 - The map's layout table must follow any change to the agents or their imports: the tests fail until it does.

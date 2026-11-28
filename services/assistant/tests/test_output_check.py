@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import ast
 import json
+import sys
+from collections.abc import Callable
 from pathlib import Path
 from re import _parser  # type: ignore[attr-defined]
+from typing import Any
 
 import pytest
 
@@ -527,19 +530,72 @@ def test_h3_a_hangul_filler_cannot_split_a_word() -> None:
     assert check_text("Get a dis\u115fcount.") == PROMO
 
 
-def test_m4_a_long_sentence_is_checked_in_linear_time() -> None:
+def _viewed(text: str, monkeypatch: pytest.MonkeyPatch) -> tuple[int, float]:
+    """Stream `text` in 4-character deltas. Returns the characters every match view reads and
+    every sentence-boundary search (`finditer` and `search`) is given to scan, counted, not timed,
+    so a loaded machine cannot fail it (row #18, step 0 (a)), and the CPU time the stream took.
+    These inputs hold no marker and drop no sentence, so `_cut` and `_reindex` do not run here
+    (step 0's re-review N4)."""
+    from bisect import bisect_left
+    from time import process_time
+
+    from northwind_assistant import output_check
+
+    viewed = 0
+    view, boundary = OutputCheck._view, output_check._BOUNDARY
+
+    def counted(self: OutputCheck, start: int, end: int, *, plain: bool = False) -> object:
+        nonlocal viewed
+        viewed += bisect_left(self._visible, end) - bisect_left(self._visible, start)
+        return view(self, start, end, plain=plain)
+
+    class Scanned:
+        """`_BOUNDARY`, counting the characters each boundary search is given to scan."""
+
+        def finditer(self, text: str, pos: int = 0, endpos: int = sys.maxsize) -> Any:
+            nonlocal viewed
+            viewed += max(0, min(endpos, len(text)) - pos)
+            return boundary.finditer(text, pos, endpos)
+
+        def search(self, text: str, pos: int = 0, endpos: int = sys.maxsize) -> Any:
+            nonlocal viewed
+            viewed += max(0, min(endpos, len(text)) - pos)  # an upper bound on what it scans
+            return boundary.search(text, pos, endpos)
+
+        def __getattr__(self, name: str) -> Any:
+            return getattr(boundary, name)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(OutputCheck, "_view", counted)
+        patch.setattr(output_check, "_BOUNDARY", Scanned())
+        check = OutputCheck(set(), [])
+        began = process_time()
+        for i in range(0, len(text), 4):
+            check.feed(text[i : i + 4])
+        check.finish()
+        spent = process_time() - began
+    assert check.shown == text
+    return viewed, spent
+
+
+def _assert_linear(make: Callable[[int], str], monkeypatch: pytest.MonkeyPatch) -> None:
+    """Four times the text reads at most 5x the characters (linear reads 4x, a check that looks
+    back to the start reads about 16x), and never more than 4L per character. CPU time, which
+    another process's load does not add to, may grow at most 8x (linear 4x, quadratic 16x), and
+    the large input must take under 60 s of CPU (about 5 s today): the ratio catches only a
+    quadratic part that is a large share of the small input's cost (re-review N4)."""
+    small, large = make(1), make(4)
+    (few, quick), (many, slow) = _viewed(small, monkeypatch), _viewed(large, monkeypatch)
+    assert many <= 5 * few, (few, many)
+    assert many <= 4 * L * len(large), (many, len(large))
+    assert slow <= 8 * max(quick, 0.05), (quick, slow)
+    assert slow < 60.0, slow
+
+
+def test_m4_a_long_sentence_is_checked_in_linear_time(monkeypatch: pytest.MonkeyPatch) -> None:
     """Matching looks back at most 2L before what is unsent, so a 30,000-character answer with
     no sentence end costs about the same per delta as a short one (security review, M4)."""
-    import time
-
-    check = OutputCheck(set(), [])
-    text = "soft warm wool throw " * 1500
-    began = time.perf_counter()
-    for i in range(0, len(text), 4):
-        check.feed(text[i : i + 4])
-    check.finish()
-    assert time.perf_counter() - began < 5.0
-    assert check.shown == text
+    _assert_linear(lambda k: "soft warm wool throw " * (375 * k), monkeypatch)
 
 
 ZW = "\u200b" * 130
@@ -562,17 +618,10 @@ def test_n1_invisible_padding_cannot_push_a_payloads_start_out_of_view(
     assert payload not in sent.lower()
 
 
-def test_m4_a_long_run_with_no_whitespace_is_checked_in_linear_time() -> None:
-    import time
-
-    check = OutputCheck(set(), [])
-    text = "x" * 30000 + " done."
-    began = time.perf_counter()
-    for i in range(0, len(text), 4):
-        check.feed(text[i : i + 4])
-    check.finish()
-    assert time.perf_counter() - began < 5.0
-    assert check.shown == text
+def test_m4_a_long_run_with_no_whitespace_is_checked_in_linear_time(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _assert_linear(lambda k: "x" * (7500 * k) + " done.", monkeypatch)
 
 
 def test_n3_a_rewritten_marker_longer_than_the_original_loses_no_text() -> None:

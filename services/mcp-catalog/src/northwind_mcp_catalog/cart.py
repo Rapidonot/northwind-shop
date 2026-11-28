@@ -9,19 +9,22 @@ No schema takes a cart, session or shopper ID, and an unknown argument is refuse
 can't name another shopper's cart. A token without a session gets `session_required`.
 
 **Live stock (hard rule 2).** An add, and a quantity increase, read the live store's stock for the
-caller's region at call time; a cart shows each line's price, total and stock as read when it is
-shown. The cart never stores a price. Stock is checked, not reserved.
+caller's region at call time, less the units BE-04 holds live there (`holds.py`); a cart shows each
+line's price, total and stock as read when it is shown. The cart never stores a price. Stock is
+checked, not reserved.
 
 **Out of stock.** An add the stock can't cover is refused: `business`, `out_of_stock` (none on hand)
 or `insufficient_stock` (some, not enough). The envelope comes alone in the first content block, and
-a second block holds one `<catalog_data>` label with the alternatives *the server* chose:
-1. up to `MAX_SAME_PRODUCT` other variants of the same product, same colour and fit first, then by
-   variant ID;
-2. then similar products, by product ID: same department and subcategory (`search_products`'s own
-   matching), each with its first variant of the same size, then any size, by variant ID.
-
-Up to `MAX_ALTERNATIVES` in all. Every alternative is visible to the caller, sold in the region and
-has stock for the quantity asked. The model never chooses or invents one.
+a second block holds one `<catalog_data>` label with the alternatives *the server* chose. They are
+BE-04's substitutes (`northwind_backend.inventory.substitutes.find`, row #25; row #18, step 0 (b)),
+so the chat offers what BE-04's rules choose: public only, the same department and subcategory, a
+live price in the region within ±20% of the requested variant's, at most one variant per product,
+ranked same product other colour, other product same size, same product other size, then other
+product, and at most `MAX_ALTERNATIVES`. Prices come from this server's live store, and stock is
+this server's region total, less live holds (`holds.py`), covering the quantity asked. BE-04's
+checkout reserves from one node, so an alternative whose units are split across nodes can be offered
+here and still be short at checkout (step 0's security review L1, the user's option 1 (a): owned by
+row #21). The model never chooses or invents one.
 
 **Visibility (hard rule 7).** An unknown or internal variant gets exactly `get_variant`'s
 `not_found`, and alternatives come only from what the caller may see, so P0009 never appears.
@@ -45,9 +48,12 @@ import json
 import re
 from collections.abc import Callable, Mapping
 from typing import Any
+from weakref import WeakKeyDictionary
 
 import mcp.types as t
 
+from northwind_backend.inventory import substitutes
+from northwind_backend.ports import PriceQuote
 from northwind_common import catalog_tool
 from northwind_common.errors import ToolError
 from northwind_common.mcp_token import Claims
@@ -62,8 +68,7 @@ SET_CART_QUANTITY = "set_cart_quantity"
 
 IDEMPOTENCY_KEY = "idempotency_key"
 KEY = re.compile(r"[A-Za-z0-9_-]{8,64}", re.ASCII)
-MAX_SAME_PRODUCT = 3
-MAX_ALTERNATIVES = 5
+MAX_ALTERNATIVES = substitutes.MAX_SUBSTITUTES
 
 
 def _error(category: Any, code: str, message: str) -> ToolError:
@@ -160,8 +165,10 @@ def _amount(minor: int) -> str:
     return f"{units}.{cents:02d}"
 
 
-def _on_hand(server: CatalogServer, variant_id: str, region: str) -> int:
-    return server.catalog.stock(variant_id, region) or 0  # live, on every call
+def _on_hand(
+    server: CatalogServer, variant_id: str, region: str, held: Mapping[str, int] | None = None
+) -> int:
+    return server.on_hand(variant_id, region, held)  # live, less live holds, on every call
 
 
 def _item(product: Product, variant: Variant) -> dict[str, Any]:
@@ -212,52 +219,86 @@ def view(server: CatalogServer, claims: Claims, region: str, cart: Cart) -> dict
 
 
 def _alternative(
-    server: CatalogServer, region: str, product: Product, variant: Variant
+    server: CatalogServer,
+    region: str,
+    product: Product,
+    variant: Variant,
+    held: Mapping[str, int],
 ) -> dict[str, Any]:
-    on_hand = _on_hand(server, variant.variant_id, region)
+    on_hand = _on_hand(server, variant.variant_id, region, held)
     return {**_item(product, variant), "on_hand": on_hand, "in_stock": on_hand > 0}
+
+
+_SUBSTITUTE_CATALOGS: WeakKeyDictionary[CatalogServer, substitutes.SubstituteCatalog] = (
+    WeakKeyDictionary()
+)
+
+
+def _substitute_catalog(server: CatalogServer) -> substitutes.SubstituteCatalog:
+    """BE-04's matching shape, built once per server from this server's verified store (products
+    and variants never change while it runs; only price and stock do)."""
+    found = _SUBSTITUTE_CATALOGS.get(server)
+    if found is None:
+        products = server.catalog.products()
+        found = substitutes.SubstituteCatalog.from_rows(
+            (
+                {
+                    "product_id": p.product_id,
+                    "department": p.department,
+                    "subcategory": p.subcategory,
+                    "attributes": dict(p.attributes),
+                    "visibility": p.visibility,
+                }
+                for p in products
+            ),
+            (
+                {
+                    "variant_id": v.variant_id,
+                    "product_id": v.product_id,
+                    "colour": v.colour,
+                    "size": v.size,
+                    "fit": v.fit,
+                    "visibility": v.visibility,
+                }
+                for p in products
+                for v in server.catalog.variants_of(p.product_id)
+            ),
+        )
+        _SUBSTITUTE_CATALOGS[server] = found
+    return found
 
 
 def alternatives(
     server: CatalogServer, claims: Claims, region: str, refused: Variant, wanted: int
 ) -> list[dict[str, Any]]:
-    """The server's alternatives to `refused`, deterministic for one store state (see the module
-    docstring)."""
-
-    def offerable(variant: Variant) -> bool:
-        return (
-            variant.variant_id != refused.variant_id
-            and _catalog._sees(claims, variant.visibility)
-            and server.catalog.price(variant.variant_id, region) is not None
-            and _on_hand(server, variant.variant_id, region) >= wanted
-        )
-
-    product = _catalog._visible_product(server, claims, refused.product_id)
-    if product is None:
+    """The server's alternatives to `refused`: BE-04's substitutes on this server's live price
+    and stock (see the module docstring), each still checked against what the caller may see."""
+    if _catalog._visible_product(server, claims, refused.product_id) is None:
         return []
-    same = sorted(
-        (v for v in server.catalog.variants_of(product.product_id) if offerable(v)),
-        key=lambda v: (not (v.colour == refused.colour and v.fit == refused.fit), v.variant_id),
+    held = server.held(region)  # one reading for every candidate (the call's, in a write)
+
+    def price(variant_id: str, at: str) -> PriceQuote | None:
+        found = server.catalog.price(variant_id, at)
+        if found is None:
+            return None
+        return PriceQuote(variant_id, at, found.minor_units, found.currency)
+
+    chosen = substitutes.find(
+        refused.variant_id,
+        region,
+        wanted,
+        lambda variant_id: _on_hand(server, variant_id, region, held),
+        catalog=_substitute_catalog(server),
+        price=price,
     )
-    found = [_alternative(server, region, product, v) for v in same[:MAX_SAME_PRODUCT]]
-    like = {
-        "department": _catalog._fold(product.department),
-        "subcategory": _catalog._fold(product.subcategory),
-    }
-    for other in server.catalog.products():
-        if len(found) >= MAX_ALTERNATIVES:
-            break
-        if other.product_id == product.product_id or not _catalog._sees(claims, other.visibility):
+    out: list[dict[str, Any]] = []
+    for substitute in chosen:
+        variant = _catalog._visible_variant(server, claims, substitute.variant_id)
+        product = None if variant is None else server.catalog.product(variant.product_id)
+        if variant is None or product is None or not _catalog._sees(claims, product.visibility):
             continue
-        if not _catalog._matches(other, like):
-            continue
-        choices = sorted(
-            (v for v in server.catalog.variants_of(other.product_id) if offerable(v)),
-            key=lambda v: (v.size != refused.size, v.variant_id),
-        )
-        if choices:
-            found.append(_alternative(server, region, other, choices[0]))
-    return found
+        out.append(_alternative(server, region, product, variant, held))
+    return out
 
 
 def refusal(
@@ -303,7 +344,8 @@ async def get_cart(
     _catalog._checked(args, frozenset())
     session, region = _caller(claims)
     # A read never creates a cart, so reads cannot evict real carts (security review F4).
-    with server.carts.open(session, region, create=False) as cart:
+    # One holds reading for the whole view, so its lines agree (re-review N3).
+    with server.reading(region), server.carts.open(session, region, create=False) as cart:
         value = view(server, claims, region, cart)
     return json_result(GET_CART, value)
 
@@ -399,7 +441,8 @@ def _idempotent(tool: str, arguments: frozenset[str], write: Write) -> Any:
             raise invalid_idempotency_key()
         rest = {k: v for k, v in args.items() if k != IDEMPOTENCY_KEY}
         fingerprint = json.dumps([tool, rest], sort_keys=True, separators=(",", ":"), default=str)
-        with server.carts.open(session, region) as cart:
+        # Holds are read once, before the cart can change (security review M1).
+        with server.reading(region), server.carts.open(session, region) as cart:
             remembered = (claims.turn, key)
             seen = cart.keys.get(remembered)
             if seen is not None:
@@ -534,6 +577,7 @@ CART_SPECS: Mapping[str, ToolSpec] = {
             annotations=_READ if name == GET_CART else _WRITE,
         ),
         handler=handler,
+        reads_stock=True,
     )
     for name, handler in _HANDLERS.items()
 }

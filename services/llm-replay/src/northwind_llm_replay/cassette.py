@@ -56,6 +56,38 @@ class Cassette:
         return cls(**json.loads(text))
 
 
+# Row #18 (the user's stop-8 yes, 2026-11-28): a miss's diff is bounded, because it used to cost
+# 18-24 s of CPU (`SequenceMatcher(autojunk=False).ratio()` against every cassette of a suite) and
+# held every other request the proxy was serving. The nearest cassette is chosen by lengths, then
+# by a multiset count, on a short list; only that one is diffed, by lines, and only below this size
+# (the two canonical forms together; the largest real pair is about 52,000 characters).
+MAX_DIFF_CHARS = 128_000
+# The line diff's cost follows its lines, and `pretty()` puts one scalar per line, so the lines are
+# capped too (security L1); the largest recorded match is 708 lines.
+MAX_DIFF_LINES = 20_000
+NEAREST_SHORTLIST = 8
+
+
+def _nearest(candidates: list[Cassette], want: str) -> Cassette:
+    """The most similar candidate, at a cost linear in the text: `real_quick_ratio` (lengths only)
+    over all of them, then `quick_ratio` (a character multiset count) over the closest few. Never
+    `ratio()`, whose full match is what took 18-24 s."""
+    matcher = difflib.SequenceMatcher(None, autojunk=False)
+    matcher.set_seq2(want)
+
+    def by_length(c: Cassette) -> float:
+        matcher.set_seq1(canonical(c.match))
+        return matcher.real_quick_ratio()
+
+    shortlist = sorted(candidates, key=by_length, reverse=True)[:NEAREST_SHORTLIST]
+
+    def by_content(c: Cassette) -> tuple[float, float]:
+        matcher.set_seq1(canonical(c.match))
+        return matcher.quick_ratio(), matcher.real_quick_ratio()
+
+    return max(shortlist, key=by_content)
+
+
 def pretty(obj: Any) -> list[str]:
     return json.dumps(obj, indent=2, sort_keys=True, ensure_ascii=False).splitlines()
 
@@ -130,16 +162,30 @@ class CassetteStore:
         if not candidates:
             return f"(no cassette in {self.dir} for {match.get('method')} {match.get('path')})"
         want = canonical(match)
-        nearest = max(
-            candidates,
-            key=lambda c: difflib.SequenceMatcher(
-                None, canonical(c.match), want, autojunk=False
-            ).ratio(),
-        )
+        nearest = _nearest(candidates, want)
+        seen = len(canonical(nearest.match)) + len(want)
+        if seen > MAX_DIFF_CHARS:
+            return "\n".join(
+                [
+                    f"--- cassette {nearest.hash[:12]}",
+                    "+++ request",
+                    f"(diff skipped (too large): {seen} characters, cap {MAX_DIFF_CHARS})",
+                ]
+            )
+        before, after = pretty(nearest.match), pretty(match)
+        if len(before) + len(after) > MAX_DIFF_LINES:
+            return "\n".join(
+                [
+                    f"--- cassette {nearest.hash[:12]}",
+                    "+++ request",
+                    f"(diff skipped (too large): {len(before) + len(after)} lines, "
+                    f"cap {MAX_DIFF_LINES})",
+                ]
+            )
         lines = list(
             difflib.unified_diff(
-                pretty(nearest.match),
-                pretty(match),
+                before,
+                after,
                 fromfile=f"cassette {nearest.hash[:12]}",
                 tofile="request",
                 lineterm="",

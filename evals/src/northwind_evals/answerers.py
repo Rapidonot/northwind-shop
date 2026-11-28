@@ -305,11 +305,18 @@ def eval_session(item_id: str) -> str:
 
 class CatalogLog:
     """What the in-process mcp-catalog returned during one item's turn (row #12): the tool name,
-    the error flag and the text, in order. The judge sees these results, as the model did (D6)."""
+    the error flag and the text. The judge sees these results, as the model did (D6).
+
+    Row #18 (the user's option 1, 2026-11-27): `taken()` gives them in the order the model asked
+    for them, not the order they finished. Parallel calls finish in any order, and the judge's
+    request is built from this list, so completion order made its bytes, and its replay, depend on
+    timing (EV-029's rescore miss). `order` is the CLI's MCP `progressToken`, which it assigns to
+    each call as it dispatches it, in `tool_use` order. Results with no number keep their arrival
+    order, after the numbered ones."""
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
-        self.results: list[tuple[str, bool, str]] = []
+        self.results: list[tuple[int | None, int, str, bool, str]] = []
         self.leak = False  # a result held internal content: refused before the model saw it
         # Row #16: set by `serve_catalog`; drops a session's carts, so each item starts empty.
         self.drop_cart: Callable[[str], None] | None = None
@@ -321,13 +328,24 @@ class CatalogLog:
         if session is not None and self.drop_cart is not None:
             self.drop_cart(session)
 
-    def add(self, tool: str, is_error: bool, text: str) -> None:
+    def add(self, tool: str, is_error: bool, text: str, order: int | None = None) -> None:
         with self._lock:
-            self.results.append((tool, is_error, text))
+            self.results.append((order, len(self.results), tool, is_error, text))
 
     def taken(self) -> list[tuple[str, bool, str]]:
         with self._lock:
-            return list(self.results)
+            ranked = sorted(self.results, key=lambda r: (r[0] is None, r[0] or 0, r[1]))
+        return [(tool, is_error, text) for _order, _arrival, tool, is_error, text in ranked]
+
+
+def dispatch_order(params: Any) -> int | None:
+    """The CLI's `progressToken` for one MCP call: its dispatch number, in `tool_use` order. The
+    server sees it as `progress_token` (measured on the bundled CLI, 2026-11-27)."""
+    meta = getattr(params, "meta", None)
+    if not isinstance(meta, Mapping):
+        return None
+    token = meta.get("progress_token")
+    return token if isinstance(token, int) and not isinstance(token, bool) else None
 
 
 _LIVE_FIELDS = (
@@ -592,7 +610,7 @@ def serve_catalog(
                 log.leak = True
                 result = error_result(tool_failed())
                 text = joined(result)
-            log.add(str(params.name), bool(result.is_error), text)
+            log.add(str(params.name), bool(result.is_error), text, dispatch_order(params))
             return result
 
     server = Recording(FixtureCatalog(), key=key, tools=TOOLS)
