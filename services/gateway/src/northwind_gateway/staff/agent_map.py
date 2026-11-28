@@ -6,8 +6,10 @@ What each part comes from:
   to one line, "+ cart write tools", named from `catalog_tool.CART_TOOL_NAMES` less the read
   `get_cart`.
 - Each AI agent's model: the `northwind_common.llm` constant its own module imports and uses (an AST
-  read of the module, nothing executed), labelled by the constant's value: `claude-sonnet-5-5` is
-  "Sonnet". The eval-only judge is `llm.JUDGE_MODEL`.
+  read of the module's source), labelled by the constant's value: `claude-sonnet-5-5` is "Sonnet".
+  The eval-only judge is `llm.JUDGE_MODEL`. The module itself is not run, but finding its source
+  (`importlib.util.find_spec`) imports its parent packages, as the gateway's own imports already do
+  for most of them (security review I2); the paths are constants, never request input.
 - Every other edge: an import that must be in the code (`Evidence`). Remove the call from the code
   and its edge leaves the map, and the portal's layout test fails until the layout follows.
 The text on each box (titles, one-line descriptions) is presentation; which boxes and lines exist,

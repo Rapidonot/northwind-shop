@@ -39,6 +39,7 @@ from northwind_gateway.staff import agent_map, traces
 
 STARTED = datetime.now(UTC)
 LATEST = 10
+EVENT_LIMIT = 500
 SCAN_STATUSES = ("picked_up", "in_transit", "out_for_delivery", "delivered")
 _OUTCOMES = {"placed": OrderStatus.CONFIRMED, "escalated": OrderStatus.ESCALATED}
 # Reference fields an audit event may carry, in the order a row names one.
@@ -90,7 +91,17 @@ def sources() -> Sources:
 
 
 def _iso(at: datetime) -> str:
-    return at.astimezone(UTC).isoformat().replace("+00:00", "Z")
+    """UTC to the second, `Z`-suffixed. Whole seconds matter: `10:15:30.123456+00:00` reads as a
+    16-digit run to the card check and could be withheld as card data (security review L3)."""
+    return at.astimezone(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _iso_text(at: str) -> str:
+    """An audit event's `at` (ISO 8601 text), shown as `_iso` shows a time."""
+    try:
+        return _iso(datetime.fromisoformat(at))
+    except ValueError:
+        return ""
 
 
 def _jsonl(path: Path) -> list[dict[str, Any]]:
@@ -321,7 +332,7 @@ def activity_events(src: Sources) -> list[dict[str, Any]]:
     events.sort(key=lambda e: (e.at, e.seq), reverse=True)
     return [
         {
-            "time": e.at,
+            "time": _iso_text(e.at),
             "actor": e.actor,
             "action": e.action,
             "ref": _ref(e),
@@ -333,7 +344,10 @@ def activity_events(src: Sources) -> list[dict[str, Any]]:
 
 
 def activity_view(src: Sources) -> dict[str, Any]:
-    return {"started_at": _iso(STARTED), "events": activity_events(src)}
+    """The newest EVENT_LIMIT events, with the total, so a long-running demo stays cheap to read
+    (security review L4); the overview counts them all."""
+    events = activity_events(src)
+    return {"started_at": _iso(STARTED), "events": events[:EVENT_LIMIT], "total": len(events)}
 
 
 # -- stock and holds --------------------------------------------------------------------------

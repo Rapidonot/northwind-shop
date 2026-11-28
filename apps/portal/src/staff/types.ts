@@ -79,7 +79,9 @@ export interface ActivityEvent {
 
 export interface ActivityView {
   started_at: string;
+  /** The newest events, at most 500; `total` counts them all. */
   events: ActivityEvent[];
+  total: number;
 }
 
 export interface Money {

@@ -98,6 +98,11 @@ export function ActivityViewPage({ view }: { view: ActivityView }) {
         <SearchField label="Search order, session, action" value={query} onChange={setQuery} />
       </Toolbar>
       {shown.length > 0 ? <EventTable events={shown} /> : <Empty>{view.events.length === 0 ? `No agent events ${since(view.started_at)}.` : "No events match these filters."}</Empty>}
+      {view.total > view.events.length && (
+        <p className="muted">
+          Showing the newest {count(view.events.length)} of {count(view.total)} events.
+        </p>
+      )}
     </>
   );
 }

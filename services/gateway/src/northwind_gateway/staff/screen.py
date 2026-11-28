@@ -16,7 +16,7 @@ import json
 import re
 import unicodedata
 from collections.abc import Mapping
-from functools import cache
+from functools import cache, lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -43,16 +43,36 @@ KEY_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
 )
 
 
+class ScreenUnavailable(RuntimeError):
+    """The answer key cannot be read, so the canary screen cannot run: the console fails closed
+    (security review L5), as the repo's own scans do (`load_canaries(..., required=True)`)."""
+
+
 @cache
-def canaries(path: Path = ANSWER_KEY) -> frozenset[str]:
-    """The answer key's internal-only canaries. A missing key file is no canaries: the stores the
-    console reads never hold internal documents; this is the last line, not the only one."""
-    if not path.exists():
-        return frozenset()
-    entries = json.loads(path.read_text(encoding="utf-8")).get("internal_only", [])
-    return frozenset(str(e["canary"]) for e in entries)
+def _canaries(path: Path) -> frozenset[str]:
+    try:
+        entries = json.loads(path.read_text(encoding="utf-8")).get("internal_only", [])
+        found = frozenset(str(e["canary"]) for e in entries)
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        raise ScreenUnavailable(f"the answer key cannot be read: {type(error).__name__}") from None
+    if not found:
+        raise ScreenUnavailable("the answer key lists no canaries")
+    return found
 
 
+def canaries() -> frozenset[str]:
+    """The answer key's internal-only canaries; ScreenUnavailable if it cannot be read."""
+    return _canaries(ANSWER_KEY)
+
+
+def ready() -> None:
+    """Raises ScreenUnavailable unless every part of the screen can run. Each route asks first."""
+    canaries()
+
+
+# Strings repeat across requests (order IDs, statuses, names), so a screened string is kept: the
+# screen is a pure function of its text while the process runs (security review L4).
+@lru_cache(maxsize=1 << 16)
 def screen_text(text: str) -> str:
     if contains_card_data(text) or contains_card_data(unicodedata.normalize("NFKC", text)):
         return CARD_WITHHELD

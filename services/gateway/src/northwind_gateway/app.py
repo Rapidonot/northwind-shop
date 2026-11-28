@@ -39,6 +39,7 @@ from northwind_gateway.settings import database_url
 from northwind_gateway.shop import router as shop_router
 from northwind_gateway.signin import router as signin_router
 from northwind_gateway.staff import views as staff_views
+from northwind_gateway.staff.routes import StaffGate
 from northwind_gateway.staff.routes import router as staff_router
 
 # SA-01 PR 1 (security review F1): no query string in uvicorn's access log, so card data typed
@@ -83,7 +84,13 @@ def _checkout_stores() -> staff_views.CheckoutStores:
 
 
 staff_views.use_checkout(_checkout_stores)
+# Built once here, on import, before any request (security review L2): the console's reads run in
+# the threadpool, and `functools.cache` would let two threads each build a desk, losing Pay's
+# idempotency record on the first.
+checkout.checkout_desk()
 app.add_middleware(SessionMiddleware)
+# OPS-1 (security review L1): outermost, so a staff path is decided before any routing.
+app.add_middleware(StaffGate)
 app.add_exception_handler(RequestValidationError, invalid_request)
 app.add_exception_handler(CardNumberRefused, card_refused)
 

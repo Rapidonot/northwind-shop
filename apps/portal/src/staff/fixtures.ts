@@ -77,7 +77,7 @@ export const FIXTURE: StaffViews = {
     latest: EVENTS,
   },
   system: SYSTEM,
-  activity: { started_at: STARTED, events: EVENTS },
+  activity: { started_at: STARTED, events: EVENTS, total: EVENTS.length },
   handoffs: {
     started_at: STARTED,
     handoffs: [

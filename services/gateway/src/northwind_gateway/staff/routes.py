@@ -14,14 +14,22 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from northwind_gateway.staff import views
 from northwind_gateway.staff.flag import staff_enabled
-from northwind_gateway.staff.screen import screen
+from northwind_gateway.staff.screen import ScreenUnavailable, ready, screen
 
 STAFF_PREFIX = "/api/staff"
 ALL_METHODS = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
 NO_STORE = {"Cache-Control": "no-store"}
+VIEW_PATHS = frozenset(f"{STAFF_PREFIX}/{view}" for view in views.VIEWS)
+UNAVAILABLE = {
+    "isError": True,
+    "errorCategory": "transient",
+    "isRetryable": False,
+    "message": "The demo console is unavailable.",
+}
 
 router = APIRouter()
 Src = Annotated[views.Sources, Depends(views.sources)]
@@ -45,6 +53,10 @@ def staff_route(view: str, build: Callable[[views.Sources], dict[str, Any]]) -> 
         dependencies=[Depends(guard)],
     )
     def read(src: Src) -> JSONResponse:
+        try:
+            ready()
+        except ScreenUnavailable:
+            return JSONResponse(status_code=503, content=UNAVAILABLE, headers=NO_STORE)
         return JSONResponse(content=screen(build(src)), headers=NO_STORE)
 
     read.__name__ = f"staff_{view}"
@@ -52,3 +64,26 @@ def staff_route(view: str, build: Callable[[views.Sources], dict[str, Any]]) -> 
 
 for _view, _build in views.VIEWS.items():
     staff_route(_view, _build)
+
+
+class StaffGate:
+    """ASGI, in front of routing (security review L1): any path that is /api/staff or under it gets
+    exactly the unknown-path 404, under any method, unless the console is on, the method is GET and
+    the path is exactly a view. So with the flag off nothing answers differently from a path that
+    does not exist: no trailing-slash redirect to a staff route, no 405 or Allow header for an
+    unlisted method. The route guard stays behind it."""
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] == "http":
+            path = str(scope.get("path", ""))
+            if path == STAFF_PREFIX or path.startswith(f"{STAFF_PREFIX}/"):
+                allowed = staff_enabled() and scope.get("method") == "GET" and path in VIEW_PATHS
+                if not allowed:
+                    await JSONResponse({"detail": "Not Found"}, status_code=404)(
+                        scope, receive, send
+                    )
+                    return
+        await self.app(scope, receive, send)

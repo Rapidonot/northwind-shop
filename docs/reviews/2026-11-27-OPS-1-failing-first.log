@@ -52,3 +52,346 @@ AssertionError: expected 1 to be greater than 1
    Start at  21:36:29
    Duration  553ms (environment 72%, setup 13%, transform 6%, tests 6%, import 2%, worker 1%)
 
+
+# OPS-1 failing-first, security fixes (2026-11-28): test_ops1_security_fixes.py at 0488b9d's gateway src (the fixes reverted; a temporary copy with UNAVAILABLE inlined so it collects)
+
+FFFFFFFFFFFFF                                                            [100%]
+=================================== FAILURES ===================================
+___________ test_off_no_redirect_and_no_405_reveal_the_console[None] ___________
+
+client = <starlette.testclient.TestClient object at 0x109f67830>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x109f717f0>
+flag = None
+
+    @pytest.mark.parametrize("flag", [None, "0"])
+    def test_off_no_redirect_and_no_405_reveal_the_console(
+        client: TestClient, monkeypatch: pytest.MonkeyPatch, flag: str | None
+    ) -> None:
+        if flag is None:
+            monkeypatch.delenv(DEMO_STAFF_ENV, raising=False)
+        else:
+            monkeypatch.setenv(DEMO_STAFF_ENV, flag)
+        for path, unknown in (
+            ("/api/staff/overview/", "/api/no-such-path/"),
+            ("/api/staff", "/api/no-such-path"),
+            ("/api/staff/", "/api/no-such-path/"),
+            ("/api/staff/orders", "/api/no-such-path"),
+        ):
+            for method in ("GET", "HEAD", "POST", "TRACE", "PROPFIND", "FROB"):
+>               _same_as_unknown(client, method, path, unknown)
+
+services/gateway/tests/test_ops1_security_fixes.py:96: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+client = <starlette.testclient.TestClient object at 0x109f67830>, method = 'GET'
+path = '/api/staff/overview/', unknown = '/api/no-such-path/'
+
+    def _same_as_unknown(client: TestClient, method: str, path: str, unknown: str) -> None:
+        mine = client.request(method, path)
+        theirs = client.request(method, unknown)
+>       assert (mine.status_code, mine.headers.get("allow"), mine.headers.get("location")) == (
+            theirs.status_code,
+            theirs.headers.get("allow"),
+            theirs.headers.get("location"),
+        ), (method, path)
+E       AssertionError: ('GET', '/api/staff/overview/')
+E       assert (307, None, '...aff/overview') == (404, None, None)
+E         
+E         At index 0 diff: 307 != 404
+E         Use -v to get more diff
+
+services/gateway/tests/test_ops1_security_fixes.py:71: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+gateway: database northwind
+____________ test_off_no_redirect_and_no_405_reveal_the_console[0] _____________
+
+client = <starlette.testclient.TestClient object at 0x10ab29520>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10ab2ab70>
+flag = '0'
+
+    @pytest.mark.parametrize("flag", [None, "0"])
+    def test_off_no_redirect_and_no_405_reveal_the_console(
+        client: TestClient, monkeypatch: pytest.MonkeyPatch, flag: str | None
+    ) -> None:
+        if flag is None:
+            monkeypatch.delenv(DEMO_STAFF_ENV, raising=False)
+        else:
+            monkeypatch.setenv(DEMO_STAFF_ENV, flag)
+        for path, unknown in (
+            ("/api/staff/overview/", "/api/no-such-path/"),
+            ("/api/staff", "/api/no-such-path"),
+            ("/api/staff/", "/api/no-such-path/"),
+            ("/api/staff/orders", "/api/no-such-path"),
+        ):
+            for method in ("GET", "HEAD", "POST", "TRACE", "PROPFIND", "FROB"):
+>               _same_as_unknown(client, method, path, unknown)
+
+services/gateway/tests/test_ops1_security_fixes.py:96: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+client = <starlette.testclient.TestClient object at 0x10ab29520>, method = 'GET'
+path = '/api/staff/overview/', unknown = '/api/no-such-path/'
+
+    def _same_as_unknown(client: TestClient, method: str, path: str, unknown: str) -> None:
+        mine = client.request(method, path)
+        theirs = client.request(method, unknown)
+>       assert (mine.status_code, mine.headers.get("allow"), mine.headers.get("location")) == (
+            theirs.status_code,
+            theirs.headers.get("allow"),
+            theirs.headers.get("location"),
+        ), (method, path)
+E       AssertionError: ('GET', '/api/staff/overview/')
+E       assert (307, None, '...aff/overview') == (404, None, None)
+E         
+E         At index 0 diff: 307 != 404
+E         Use -v to get more diff
+
+services/gateway/tests/test_ops1_security_fixes.py:71: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+gateway: database northwind
+________________ test_on_only_get_on_an_exact_view_gets_through ________________
+
+client = <starlette.testclient.TestClient object at 0x10ac77080>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10ac7c710>
+
+    def test_on_only_get_on_an_exact_view_gets_through(
+        client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv(DEMO_STAFF_ENV, "1")
+        for view in VIEWS:
+            assert client.get(f"/api/staff/{view}").status_code == 200, view
+>           _same_as_unknown(client, "GET", f"/api/staff/{view}/", "/api/no-such-path/")
+
+services/gateway/tests/test_ops1_security_fixes.py:105: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+client = <starlette.testclient.TestClient object at 0x10ac77080>, method = 'GET'
+path = '/api/staff/overview/', unknown = '/api/no-such-path/'
+
+    def _same_as_unknown(client: TestClient, method: str, path: str, unknown: str) -> None:
+        mine = client.request(method, path)
+        theirs = client.request(method, unknown)
+>       assert (mine.status_code, mine.headers.get("allow"), mine.headers.get("location")) == (
+            theirs.status_code,
+            theirs.headers.get("allow"),
+            theirs.headers.get("location"),
+        ), (method, path)
+E       AssertionError: ('GET', '/api/staff/overview/')
+E       assert (307, None, '...aff/overview') == (404, None, None)
+E         
+E         At index 0 diff: 307 != 404
+E         Use -v to get more diff
+
+services/gateway/tests/test_ops1_security_fixes.py:71: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+gateway: database northwind
+_________________________ test_the_gate_is_on_the_app __________________________
+
+    def test_the_gate_is_on_the_app() -> None:
+>       from northwind_gateway.staff.routes import StaffGate
+E       ImportError: cannot import name 'StaffGate' from 'northwind_gateway.staff.routes' (/Users/rapido/Projects/northwind-shop-b/services/gateway/src/northwind_gateway/staff/routes.py)
+
+services/gateway/tests/test_ops1_security_fixes.py:111: ImportError
+_________________ test_app_builds_the_checkout_desk_on_import __________________
+
+    def test_app_builds_the_checkout_desk_on_import() -> None:
+        tree = ast.parse(APP.read_text(encoding="utf-8"))
+        calls = [
+            node.value
+            for node in tree.body
+            if isinstance(node, ast.Expr) and isinstance(node.value, ast.Call)
+        ]
+>       assert any(
+            isinstance(c.func, ast.Attribute)
+            and c.func.attr == "checkout_desk"
+            and isinstance(c.func.value, ast.Name)
+            and c.func.value.id == "checkout"
+            for c in calls
+        )
+E       assert False
+E        +  where False = any(<generator object test_app_builds_the_checkout_desk_on_import.<locals>.<genexpr> at 0x10a99f220>)
+
+services/gateway/tests/test_ops1_security_fixes.py:126: AssertionError
+__________ test_importing_the_app_builds_the_desk_without_a_database ___________
+
+    def test_importing_the_app_builds_the_desk_without_a_database() -> None:
+        """The user's question on L2: building the desk at import opens no database connection. The
+        import runs in a fresh process with DATABASE_URL on a port nothing listens on (9, discard)."""
+        env = {
+            **os.environ,
+            "DATABASE_URL": "postgresql://nw:nw@127.0.0.1:9/northwind?connect_timeout=1",
+        }
+        env.pop(DEMO_STAFF_ENV, None)
+        # A fixed probe from this file, never input.
+        done = subprocess.run(  # noqa: S603
+            [sys.executable, "-c", _IMPORT_PROBE], env=env, capture_output=True, text=True, timeout=60
+        )
+>       assert done.returncode == 0, done.stderr[-2000:]
+E       AssertionError: Traceback (most recent call last):
+E           File "<string>", line 6, in <module>
+E         AssertionError: CacheInfo(hits=0, misses=0, maxsize=None, currsize=0)
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['/Users/rapido/Projects/northwind-shop-b/.venv/bin/python', '-c', '\nimport northwind_gateway.a...st):\n  File "<string>", line 6, in <module>\nAssertionError: CacheInfo(hits=0, misses=0, maxsize=None, currsize=0)\n').returncode
+
+services/gateway/tests/test_ops1_security_fixes.py:158: AssertionError
+_______________ test_a_clock_time_is_never_withheld_as_card_data _______________
+
+    def test_a_clock_time_is_never_withheld_as_card_data() -> None:
+        base = datetime(2026, 11, 27, 10, 15, 30, tzinfo=UTC)
+        raw = next(
+            text
+            for micro in range(0, 1_000_000, 7)
+            if staff_screen.screen_text(text := base.replace(microsecond=micro).isoformat())
+            == staff_screen.CARD_WITHHELD
+        )
+>       shown = views._iso_text(raw)
+                ^^^^^^^^^^^^^^^
+E       AttributeError: module 'northwind_gateway.staff.views' has no attribute '_iso_text'
+
+services/gateway/tests/test_ops1_security_fixes.py:173: AttributeError
+____________ test_activity_times_from_a_real_clock_pass_the_screen _____________
+
+world = Sources(handoffs=None, checkout=CheckoutStores(orders=<northwind_backend.fakes.orders.OrderState object at 0x10ab06330...uditSink object at 0x10ab05760>), demo=DemoOrders(_by_shopper={}, _lock=<unlocked _thread.lock object at 0x10ab15bc0>))
+client = <starlette.testclient.TestClient object at 0x109ef2630>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x109ef3fe0>
+
+    def test_activity_times_from_a_real_clock_pass_the_screen(
+        world: views.Sources, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv(DEMO_STAFF_ENV, "1")
+        audit = AuditContext(world.checkout.audit, correlation_id="t", actor="portal-checkout")
+        for i in range(50):
+            action = audit.attempt("order.confirm", {"order_id": f"O{900000 + i}"})
+            audit.outcome(action, "order.confirm", {"order_id": f"O{900000 + i}"}, {"ok": True})
+        events = client.get("/api/staff/activity").json()["events"]
+        assert len(events) == 50
+        for event in events:
+>           assert event["time"].endswith("Z") and "." not in event["time"], event["time"]
+E           AssertionError: [withheld: card data]
+E           assert (False)
+E            +  where False = <built-in method endswith of str object at 0x109f530f0>('Z')
+E            +    where <built-in method endswith of str object at 0x109f530f0> = '[withheld: card data]'.endswith
+
+services/gateway/tests/test_ops1_security_fixes.py:189: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+gateway: database northwind
+_____________ test_activity_sends_the_newest_events_and_the_total ______________
+
+world = Sources(handoffs=None, checkout=CheckoutStores(orders=<northwind_backend.fakes.orders.OrderState object at 0x109ef2ed0...uditSink object at 0x109ef3020>), demo=DemoOrders(_by_shopper={}, _lock=<unlocked _thread.lock object at 0x10aa247c0>))
+client = <starlette.testclient.TestClient object at 0x10af66900>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10af68290>
+
+    def test_activity_sends_the_newest_events_and_the_total(
+        world: views.Sources, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv(DEMO_STAFF_ENV, "1")
+        audit = AuditContext(world.checkout.audit, correlation_id="t", actor="portal-checkout")
+>       for i in range(views.EVENT_LIMIT + 100):
+                       ^^^^^^^^^^^^^^^^^
+E       AttributeError: module 'northwind_gateway.staff.views' has no attribute 'EVENT_LIMIT'
+
+services/gateway/tests/test_ops1_security_fixes.py:201: AttributeError
+---------------------------- Captured stderr setup -----------------------------
+gateway: database northwind
+_______________________ test_a_screened_string_is_cached _______________________
+
+    def test_a_screened_string_is_cached() -> None:
+>       before = staff_screen.screen_text.cache_info().hits
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'function' object has no attribute 'cache_info'
+
+services/gateway/tests/test_ops1_security_fixes.py:213: AttributeError
+___________ test_no_readable_answer_key_is_a_503_on_every_view[None] ___________
+
+client = <starlette.testclient.TestClient object at 0x10af303e0>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10af2eb40>
+tmp_path = PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-1803/test_no_readable_answer_key_is0')
+content = None
+
+    @pytest.mark.parametrize("content", [None, "not json", '{"internal_only": []}'])
+    def test_no_readable_answer_key_is_a_503_on_every_view(
+        client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, content: str | None
+    ) -> None:
+        monkeypatch.setenv(DEMO_STAFF_ENV, "1")
+        key = tmp_path / "_answer_key.json"
+        if content is not None:
+            key.write_text(content, encoding="utf-8")
+        monkeypatch.setattr(staff_screen, "ANSWER_KEY", key)
+        for view in VIEWS:
+            reply = client.get(f"/api/staff/{view}")
+>           assert reply.status_code == 503, view
+E           AssertionError: overview
+E           assert 200 == 503
+E            +  where 200 = <Response [200 OK]>.status_code
+
+services/gateway/tests/test_ops1_security_fixes.py:233: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+gateway: database northwind
+_________ test_no_readable_answer_key_is_a_503_on_every_view[not json] _________
+
+client = <starlette.testclient.TestClient object at 0x10addda60>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10addf080>
+tmp_path = PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-1803/test_no_readable_answer_key_is1')
+content = 'not json'
+
+    @pytest.mark.parametrize("content", [None, "not json", '{"internal_only": []}'])
+    def test_no_readable_answer_key_is_a_503_on_every_view(
+        client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, content: str | None
+    ) -> None:
+        monkeypatch.setenv(DEMO_STAFF_ENV, "1")
+        key = tmp_path / "_answer_key.json"
+        if content is not None:
+            key.write_text(content, encoding="utf-8")
+        monkeypatch.setattr(staff_screen, "ANSWER_KEY", key)
+        for view in VIEWS:
+            reply = client.get(f"/api/staff/{view}")
+>           assert reply.status_code == 503, view
+E           AssertionError: overview
+E           assert 200 == 503
+E            +  where 200 = <Response [200 OK]>.status_code
+
+services/gateway/tests/test_ops1_security_fixes.py:233: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+gateway: database northwind
+__ test_no_readable_answer_key_is_a_503_on_every_view[{"internal_only": []}] ___
+
+client = <starlette.testclient.TestClient object at 0x10b067020>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10b0686b0>
+tmp_path = PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-1803/test_no_readable_answer_key_is2')
+content = '{"internal_only": []}'
+
+    @pytest.mark.parametrize("content", [None, "not json", '{"internal_only": []}'])
+    def test_no_readable_answer_key_is_a_503_on_every_view(
+        client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, content: str | None
+    ) -> None:
+        monkeypatch.setenv(DEMO_STAFF_ENV, "1")
+        key = tmp_path / "_answer_key.json"
+        if content is not None:
+            key.write_text(content, encoding="utf-8")
+        monkeypatch.setattr(staff_screen, "ANSWER_KEY", key)
+        for view in VIEWS:
+            reply = client.get(f"/api/staff/{view}")
+>           assert reply.status_code == 503, view
+E           AssertionError: overview
+E           assert 200 == 503
+E            +  where 200 = <Response [200 OK]>.status_code
+
+services/gateway/tests/test_ops1_security_fixes.py:233: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+gateway: database northwind
+=========================== short test summary info ============================
+FAILED services/gateway/tests/test_ops1_security_fixes.py::test_off_no_redirect_and_no_405_reveal_the_console[None]
+FAILED services/gateway/tests/test_ops1_security_fixes.py::test_off_no_redirect_and_no_405_reveal_the_console[0]
+FAILED services/gateway/tests/test_ops1_security_fixes.py::test_on_only_get_on_an_exact_view_gets_through
+FAILED services/gateway/tests/test_ops1_security_fixes.py::test_the_gate_is_on_the_app
+FAILED services/gateway/tests/test_ops1_security_fixes.py::test_app_builds_the_checkout_desk_on_import
+FAILED services/gateway/tests/test_ops1_security_fixes.py::test_importing_the_app_builds_the_desk_without_a_database
+FAILED services/gateway/tests/test_ops1_security_fixes.py::test_a_clock_time_is_never_withheld_as_card_data
+FAILED services/gateway/tests/test_ops1_security_fixes.py::test_activity_times_from_a_real_clock_pass_the_screen
+FAILED services/gateway/tests/test_ops1_security_fixes.py::test_activity_sends_the_newest_events_and_the_total
+FAILED services/gateway/tests/test_ops1_security_fixes.py::test_a_screened_string_is_cached
+FAILED services/gateway/tests/test_ops1_security_fixes.py::test_no_readable_answer_key_is_a_503_on_every_view[None]
+FAILED services/gateway/tests/test_ops1_security_fixes.py::test_no_readable_answer_key_is_a_503_on_every_view[not json]
+FAILED services/gateway/tests/test_ops1_security_fixes.py::test_no_readable_answer_key_is_a_503_on_every_view[{"internal_only": []}]
+13 failed in 2.75s

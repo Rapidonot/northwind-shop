@@ -278,9 +278,22 @@ describe("[OPS-1] the table views", () => {
   });
 
   it("every empty store reads as empty, never as an error", async () => {
-    renderConsole("activity", { activity: { started_at: FIXTURE.activity.started_at, events: [] } });
+    renderConsole("activity", { activity: { started_at: FIXTURE.activity.started_at, events: [], total: 0 } });
     expect(await screen.findByText(/No agent events since this server started/)).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+});
+
+describe("[OPS-1] activity is capped, and says so", () => {
+  it("shows the newest events and the total when the gateway sends fewer than it has", async () => {
+    renderConsole("activity", { activity: { ...FIXTURE.activity, total: 600 } });
+    expect(await screen.findByText(`Showing the newest ${FIXTURE.activity.events.length} of 600 events.`)).toBeInTheDocument();
+  });
+
+  it("says nothing extra when every event is shown", async () => {
+    renderConsole("activity");
+    await screen.findByRole("heading", { name: "Agent activity" });
+    expect(screen.queryByText(/Showing the newest/)).not.toBeInTheDocument();
   });
 });
 
