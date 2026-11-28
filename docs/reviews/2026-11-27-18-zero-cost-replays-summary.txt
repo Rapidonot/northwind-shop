@@ -1,0 +1,16 @@
+head 8c500dd61ec60b8df8365d7fba826ce8147952d0, freeze 2ca787e, 2026-11-27T09:44:50Z
+backend-orchestrator exit=0 misses_mentioned=0 :: 5 passed, 12390 deselected in 11.25s
+backend-care exit=0 misses_mentioned=0 :: 9 passed, 12386 deselected in 10.33s
+query-understanding exit=0 misses_mentioned=0 :: 2 passed, 12393 deselected in 3.61s
+assistant-smoke exit=0 misses_mentioned=0 :: 16 passed, 12379 deselected in 26.06s
+assistant-cart exit=1 misses_mentioned=9 :: 1 failed, 12394 deselected, 1 error in 56.32s
+assistant-orders exit=0 misses_mentioned=0 :: 11 passed, 12384 deselected in 21.64s
+assistant-intents exit=1 misses_mentioned=10 :: 1 failed, 1 passed, 12393 deselected, 1 error in 472.91s (0:07:52)
+assistant-redteam exit=1 misses_mentioned=21 :: 3 failed, 25 passed, 12367 deselected, 3 errors in 186.89s (0:03:06)
+a2a-05-partner exit=0 misses_mentioned=0 :: 
+backend-replay exit=0 misses_mentioned=0 :: 2 passed, 12393 deselected in 256.70s (0:04:16)
+done
+rerun with FASTEMBED_CACHE_PATH=$HOME/.cache/fastembed, 2026-11-27T10:02:45Z
+assistant-cart (rerun) exit=1 download_errors=0 misses=1 :: 1 failed, 12394 deselected, 1 error in 58.40s
+assistant-intents (rerun) exit=0 download_errors=0 misses=0 :: 2 passed, 12393 deselected in 62.02s (0:01:02)
+assistant-redteam (rerun) exit=0 download_errors=0 misses=0 :: 28 passed, 12367 deselected in 47.50s

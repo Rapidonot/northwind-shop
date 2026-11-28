@@ -8,6 +8,7 @@ from __future__ import annotations
 import ast
 import asyncio
 import json
+import re
 from collections import defaultdict
 from collections.abc import Iterator
 from pathlib import Path
@@ -523,22 +524,70 @@ def test_the_set_tools_are_not_reachable_over_mcp(url: str) -> None:
         assert_envelope(outcome, "permission", False, "not_allowed")
 
 
+# Row #18 step 0, the user's option B (2026-11-27): the one module allowed a database driver, to
+# read BE-04's live holds. Every table it names must be one of BE-04's (test below).
+DRIVER_ALLOWED = "holds.py"
+
+
+def _imports(text: str) -> set[str]:
+    imported: set[str] = set()
+    for node in ast.walk(ast.parse(text)):
+        if isinstance(node, ast.Import):
+            imported |= {a.name.split(".")[0] for a in node.names}
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            imported.add(node.module.split(".")[0])
+    return imported
+
+
 @pytest.mark.req("RAG-09")
 def test_the_catalog_source_never_touches_the_index() -> None:
     sources = sorted(SRC.rglob("*.py"))
     assert sources
-    imported: set[str] = set()
+    assert DRIVER_ALLOWED in {p.name for p in sources}
     for path in sources:
         text = path.read_text(encoding="utf-8")
         assert "rag_chunks" not in text, path
         assert "northwind_rag" not in text, path
-        assert "psycopg" not in text, path
-        for node in ast.walk(ast.parse(text)):
-            if isinstance(node, ast.Import):
-                imported |= {a.name.split(".")[0] for a in node.names}
-            elif isinstance(node, ast.ImportFrom) and node.module:
-                imported.add(node.module.split(".")[0])
-    assert not {"northwind_rag", "psycopg"} & imported
+        assert "northwind_rag" not in _imports(text), path
+        if path.name != DRIVER_ALLOWED:
+            assert "psycopg" not in text, path
+            assert "psycopg" not in _imports(text), path
+
+
+@pytest.mark.req("RAG-09")
+def test_the_one_database_module_names_only_inventory_tables() -> None:
+    """Every table named in `holds.py`'s strings (any case, quoted or not) is a BE-04 table, and no
+    string holds a write statement. Docstrings are prose and are skipped; the code's strings, SQL
+    included, are all read (option B's security read, L2)."""
+    tree = ast.parse((SRC / "northwind_mcp_catalog" / DRIVER_ALLOWED).read_text(encoding="utf-8"))
+    docstrings = {
+        id(body[0].value)
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Module | ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef)
+        and (body := node.body)
+        and isinstance(body[0], ast.Expr)
+        and isinstance(body[0].value, ast.Constant)
+    }
+    strings = [
+        node.value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Constant)
+        and isinstance(node.value, str)
+        and id(node) not in docstrings
+    ]
+    code = "\n".join(strings)
+    named = re.findall(r'(?i)\b(?:JOIN|INTO|UPDATE|TABLE)\s+"?([A-Za-z_][\w.]*)"?', code)
+    # Every table of a FROM list, comma joins included (option B's re-review N-L2).
+    clause_end = r"\b(?:WHERE|JOIN|GROUP|ORDER|LIMIT|LEFT|RIGHT|INNER|OUTER|CROSS)\b|;|$"
+    for found in re.finditer(rf"(?is)\bFROM\s+(.*?)(?={clause_end})", code):
+        for item in found.group(1).split(","):
+            first = item.strip().split()
+            if first:
+                named.append(first[0].strip('"'))
+    assert named, "the reader names its tables"
+    assert set(named) <= {"inventory_holds", "inventory_reservations", "inventory_stock"}, named
+    writes = r"(?i)\b(?:INSERT|UPDATE|DELETE|DROP|ALTER|TRUNCATE|CREATE|GRANT|COPY)\b"
+    assert not re.search(writes, code), "the reader only reads"
 
 
 def test_stock_is_summed_per_region_from_the_fixture_rows() -> None:

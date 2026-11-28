@@ -2,16 +2,14 @@
   "a2a05_use": "answer",
   "answer": {
     "citations": [
-      "P0164",
-      "P0175",
-      "P0165"
+      "P0164"
     ],
     "outcome": "answered",
     "resets": 0,
-    "sent": "No. The Larchpell Highland Wool Throw is dry clean only, so don't machine wash it [P0164].\n\nIf you want a throw you can machine wash, two options are listed as machine washable on a cold, gentle cycle:\n- Larchpell Heath Blanket Throw, in cotton waffle knit [P0175]\n- Emberquay Cosy Wool-Blend Throw, in 60% wool and 40% acrylic [P0165]",
-    "shown": "No. The Larchpell Highland Wool Throw is dry clean only, so don't machine wash it [P0164].\n\nIf you want a throw you can machine wash, two options are listed as machine washable on a cold, gentle cycle:\n- Larchpell Heath Blanket Throw, in cotton waffle knit [P0175]\n- Emberquay Cosy Wool-Blend Throw, in 60% wool and 40% acrylic [P0165]"
+    "sent": "No. The Larchpell Highland Wool Throw is dry clean only, so it shouldn't be machine washed [P0164].",
+    "shown": "No. The Larchpell Highland Wool Throw is dry clean only, so it shouldn't be machine washed [P0164]."
   },
-  "assistant_id": "assistant:v1:claude-sonnet-5-5:prompt-eb39dcf5:check-0cb61e75",
+  "assistant_id": "assistant:v1:claude-sonnet-5-5:prompt-26740a49:check-ba8577ea",
   "context": [
     {
       "chunk_id": "product:P0164:0",
@@ -54,13 +52,14 @@
   "name": "pq-07-highland-throw-care",
   "note": "A2A-05 replays this text by name; never when assistant_id is not current.",
   "provisional": true,
-  "recorded": "2026-11-13",
+  "recorded": "2026-11-27",
   "refinements": [],
   "region": "US",
   "script_sha256": "2ca30e4d19077f4463ad672bb8afc05bc239be181cb5682ef4fe0f168eacf235",
   "suite": "a2a-05-partner",
   "upstream_calls": [
     {
+      "cassette": "83e3beb0604c55b3c4b8ee16ab6475199ede3317a4b7bd769c59535fc231e5e0",
       "model": "claude-sonnet-5-5",
       "stop_reason": "end_turn"
     }

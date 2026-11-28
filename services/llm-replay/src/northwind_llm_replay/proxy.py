@@ -444,12 +444,21 @@ class Proxy:
                 self._log(entry)
                 return self._replay(hit)
             if self.cfg.mode == "replay":
-                diff = self.store.miss_diff(key, test_id)
+                # Row #18: the miss is logged and counted in arrival order (security L2), then
+                # its diff is built off the event loop, so a miss never holds the requests beside
+                # it; the diff's cost is bounded in `CassetteStore.miss_diff` (a thread alone is
+                # not enough under the GIL).
                 entry["outcome"] = "miss"
                 self._log(entry)
-                self.state.misses.append(
-                    {"hash": h, "path": full_path, "test_id": test_id, "diff": diff}
-                )
+                missed: dict[str, Any] = {
+                    "hash": h,
+                    "path": full_path,
+                    "test_id": test_id,
+                    "diff": "",
+                }
+                self.state.misses.append(missed)
+                diff = await anyio.to_thread.run_sync(lambda: self.store.miss_diff(key, test_id))
+                missed["diff"] = diff
                 return error_response(
                     400,
                     "validation",

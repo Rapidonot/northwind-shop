@@ -1,0 +1,356 @@
+HEAD before: 2ca787e1154186f0b4ad1528f5cba6c7200cf24c
+2026-11-27T09:11:19Z
+make: stat: .env: Operation not permitted
+uv run ruff check
+All checks passed!
+uv run ruff format --check
+831 files already formatted
+uv run mypy services data evals
+Success: no issues found in 499 source files
+corepack pnpm -r lint
+$ eslint .
+corepack pnpm -r typecheck
+$ tsc --noEmit
+uv run python -m northwind_llm_replay.cli scan ${CASSETTES_DIR:+--cassettes-dir "$CASSETTES_DIR"}
+scan clean: 0 finding(s) in evals/contexts, evals/fixtures, evals/baselines, docs/reviews/RAG-12-eval-review.md, data/enrichment, data/embeddings, cassettes, /Users/rapido/.northwind/ledger.jsonl, .llm-proxy-log [regex only (no readable key file), 7 canaries]
+make test: ship tests skipped, nothing they cover differs from origin/main; GitHub CI runs them
+LLM_MODE=replay PYTEST_ADDOPTS="$PYTEST_ADDOPTS $(base=$(git merge-base origin/main HEAD 2>/dev/null) && git diff --quiet "$base" -- tools tests/ship .github Makefile 2>/dev/null && untracked=$(git ls-files --others --exclude-standard -- tools tests/ship .github Makefile 2>/dev/null) && [[ -z "$untracked" ]] && echo '-m "not integration and not e2e and not ship"')" uv run pytest -n auto --dist loadgroup
+============================= test session starts ==============================
+platform darwin -- Python 3.12.16, pytest-9.2.0, pluggy-1.7.0
+rootdir: /Users/rapido/Projects/northwind-shop
+configfile: pyproject.toml
+testpaths: services, data, evals, tests
+plugins: northwind-llm-replay-0.0.0, xdist-3.8.0, Faker-40.44.0, anyio-4.16.0
+created: 10/10 workers
+10 workers [11242 items]
+
+........................................................................ [  0%]
+........................................................................ [  1%]
+........................................................................ [  1%]
+........................................................................ [  2%]
+........................................................................ [  3%]
+............................x...x.................x....x......xx.x...... [  3%]
+........................................................................ [  4%]
+.......................x................................................ [  5%]
+......................................................x.x.x.xxxxxxxxx.x. [  5%]
+.....x..x.........x...........x......................................x.. [  6%]
+..x................xx.xx................................................ [  7%]
+.x.............................................xx.........xx............ [  7%]
+........................................................................ [  8%]
+........................................................................ [  8%]
+.................................................x...................... [  9%]
+........................................................................ [ 10%]
+........................................................................ [ 10%]
+........................................................................ [ 11%]
+........................................................................ [ 12%]
+........................................................................ [ 12%]
+........................................................................ [ 13%]
+........................................................................ [ 14%]
+........................................................................ [ 14%]
+........................................................................ [ 15%]
+........................................................................ [ 16%]
+........................................................................ [ 16%]
+........................................................................ [ 17%]
+..................................x............x........................ [ 17%]
+........................................................................ [ 18%]
+.........................................x.............................. [ 19%]
+......xx..x............................x................................ [ 19%]
+........................................................................ [ 20%]
+........................................................................ [ 21%]
+........................................................................ [ 21%]
+........................................................................ [ 22%]
+........................................................................ [ 23%]
+........................................................................ [ 23%]
+........................................................................ [ 24%]
+........................................................................ [ 24%]
+........................................................................ [ 25%]
+........................................................................ [ 26%]
+........................................................................ [ 26%]
+........................................................................ [ 27%]
+........................................................................ [ 28%]
+........................................................................ [ 28%]
+........................................................................ [ 29%]
+........................................................................ [ 30%]
+........................................................................ [ 30%]
+........................................................................ [ 31%]
+........................................................................ [ 32%]
+........................................................................ [ 32%]
+........................................................................ [ 33%]
+........................................................................ [ 33%]
+........................................................................ [ 34%]
+........................................................................ [ 35%]
+........................................................................ [ 35%]
+........................................................................ [ 36%]
+........................................................................ [ 37%]
+........................................................................ [ 37%]
+........................................................................ [ 38%]
+........................................................................ [ 39%]
+........................................................................ [ 39%]
+........................................................................ [ 40%]
+........................................................................ [ 40%]
+........................................................................ [ 41%]
+........................................................................ [ 42%]
+........................................................................ [ 42%]
+........................................................................ [ 43%]
+........................................................................ [ 44%]
+........................................................................ [ 44%]
+........................................................................ [ 45%]
+........................................................................ [ 46%]
+........................................................................ [ 46%]
+........................................................................ [ 47%]
+........................................................................ [ 48%]
+........................................................................ [ 48%]
+........................................................................ [ 49%]
+........................................................................ [ 49%]
+........................................................................ [ 50%]
+........................................................................ [ 51%]
+........................................................................ [ 51%]
+........................................................................ [ 52%]
+........................................................................ [ 53%]
+........................................................................ [ 53%]
+........................................................................ [ 54%]
+........................................................................ [ 55%]
+........................................................................ [ 55%]
+........................................................................ [ 56%]
+........................................................................ [ 57%]
+........................................................................ [ 57%]
+........................................................................ [ 58%]
+........................................................................ [ 58%]
+........................................................................ [ 59%]
+........................................................................ [ 60%]
+........................................................................ [ 60%]
+........................................................................ [ 61%]
+........................................................................ [ 62%]
+........................................................................ [ 62%]
+........................................................................ [ 63%]
+........................................................................ [ 64%]
+........................................................................ [ 64%]
+........................................................................ [ 65%]
+........................................................................ [ 65%]
+........................................................................ [ 66%]
+........................................................................ [ 67%]
+........................................................................ [ 67%]
+........................................................................ [ 68%]
+........................................................................ [ 69%]
+........................................................................ [ 69%]
+........................................................................ [ 70%]
+........................................................................ [ 71%]
+........................................................................ [ 71%]
+...........x.....................x...............................x...... [ 72%]
+....................x................................................... [ 73%]
+...........................................x............................ [ 73%]
+........................................................................ [ 74%]
+........................................................................ [ 74%]
+........................................................................ [ 75%]
+........................................................................ [ 76%]
+........................................................................ [ 76%]
+........................................................................ [ 77%]
+........................................................................ [ 78%]
+......................................................s.ss...s.....ss..s [ 78%]
+......s.s............................................................... [ 79%]
+........................................................................ [ 80%]
+........................................................................ [ 80%]
+........................................................................ [ 81%]
+........................................................................ [ 81%]
+........................................................................ [ 82%]
+........................................................................ [ 83%]
+........................................................................ [ 83%]
+........................................................................ [ 84%]
+........................................................................ [ 85%]
+........................................................................ [ 85%]
+........................................................................ [ 86%]
+........................................................................ [ 87%]
+........................................................................ [ 87%]
+........................................................................ [ 88%]
+........................................................................ [ 89%]
+........................................................................ [ 89%]
+........................................................................ [ 90%]
+...........................................x.x.......................... [ 90%]
+........................................................................ [ 91%]
+........................................................................ [ 92%]
+........................................................................ [ 92%]
+........................................................................ [ 93%]
+........................................................................ [ 94%]
+.............................................xxxx.xx.xxxxxxxxxxxxxxx.... [ 94%]
+.................................................x...................... [ 95%]
+........................................................................ [ 96%]
+........................................................................ [ 96%]
+........................................................................ [ 97%]
+........................................................................ [ 97%]
+........................................................................ [ 98%]
+........................................................................ [ 99%]
+........................................................................ [ 99%]
+..........                                                               [100%]
+=========== 11160 passed, 9 skipped, 73 xfailed in 233.41s (0:03:53) ===========
+corepack pnpm -r test
+$ vitest run
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+
+ RUN  v5.0.5 /Users/rapido/Projects/northwind-shop/apps/portal
+
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+
+ Test Files  12 passed (12)
+      Tests  155 passed (155)
+   Start at  13:15:53
+   Duration  2.26s (environment 57%, tests 26%, setup 12%, import 3%, transform 1%)
+
+Environment  jsdom was created 12 times · 9.14s total, 57% of tracked time
+             create it once per worker with pool: 'vmThreads' (keeps per-file isolation) or isolate: false (shares it across files)
+             learn more: https://vitest.dev/guide/improving-performance#test-environments
+
+LLM_MODE=replay uv run pytest -m integration
+============================= test session starts ==============================
+platform darwin -- Python 3.12.16, pytest-9.2.0, pluggy-1.7.0
+rootdir: /Users/rapido/Projects/northwind-shop
+configfile: pyproject.toml
+testpaths: services, data, evals, tests
+plugins: northwind-llm-replay-0.0.0, xdist-3.8.0, Faker-40.44.0, anyio-4.16.0
+collected 12395 items / 11996 deselected / 399 selected
+
+services/assistant/tests/test_context.py .....                           [  1%]
+services/assistant/tests/test_rag11_model_context.py ................... [  6%]
+.......................................                                  [ 15%]
+services/backend/tests/inventory/test_18_live_holds_guard.py .....       [ 17%]
+services/backend/tests/inventory/test_18_live_holds_guard_tw.py ........ [ 19%]
+..........                                                               [ 21%]
+services/backend/tests/inventory/test_be04_contract.py ................. [ 25%]
+..........................................                               [ 36%]
+services/backend/tests/inventory/test_be04_race.py .......               [ 38%]
+services/backend/tests/orders_place/test_be05_replay_recorded.py ..      [ 38%]
+services/backend/tests/orders_place/test_be05_replay_rule_driven.py .    [ 38%]
+services/gateway/tests/test_healthz.py .                                 [ 39%]
+services/mcp-catalog/tests/test_18_postgres_holds.py ......              [ 40%]
+services/mcp-rag/tests/test_canary.py ......                             [ 42%]
+services/mcp-rag/tests/test_manifest.py .........                        [ 44%]
+services/rag/tests/test_drift_extra.py ................................. [ 52%]
+                                                                         [ 52%]
+services/rag/tests/test_enriched_index.py ..........                     [ 55%]
+services/rag/tests/test_exact_rerank.py ..........                       [ 57%]
+services/rag/tests/test_frozen_vectors.py .........                      [ 59%]
+services/rag/tests/test_hybrid.py ...............                        [ 63%]
+services/rag/tests/test_hybrid_filters.py ...............                [ 67%]
+services/rag/tests/test_index.py ......................................  [ 76%]
+services/rag/tests/test_ingest_verify.py ..........                      [ 79%]
+services/rag/tests/test_rag04_filtered_retrieval.py ......               [ 80%]
+services/rag/tests/test_rag11_access.py ...................              [ 85%]
+services/rag/tests/test_retrieval.py ..........                          [ 88%]
+services/rag/tests/test_retrieve_context.py .......................      [ 93%]
+services/rag/tests/test_retrieve_context_isolation.py .........          [ 96%]
+evals/tests/test_a2a05_partner.py s                                      [ 96%]
+evals/tests/test_drift_extra.py .......                                  [ 98%]
+evals/tests/test_enrichment_e1.py .                                      [ 98%]
+evals/tests/test_rag03_compare.py .                                      [ 98%]
+evals/tests/test_rag03_drift.py .....                                    [100%]
+
+========= 398 passed, 1 skipped, 11996 deselected in 990.81s (0:16:30) =========
+uv run python -m northwind_evals.cli integrity
+eval-integrity passed against origin/main
+uv run python -m northwind_rag.cli --fixtures data/fixtures
+{
+  "index_version": "3a89123f2aaf586f",
+  "data_version": 3,
+  "chunks": 2355,
+  "inserted": 0,
+  "updated": 0,
+  "deleted": 0,
+  "unchanged": 2355,
+  "embedded": 0
+}
+LLM_MODE=replay EVAL_ALLOW_STALE= uv run python -m northwind_evals.cli gate
+  retrieval mrr 0.889114
+  retrieval recall@10 0.966667
+  retrieval recall@5 0.930233
+  retrieval top-k sha256 b5bc42db9fb7b39b66636d52aa4f12a7ad5304c458d50333dc5e737e889d8051
+  groundedness overall 0.990 (Gate 1 target 0.95)
+  refused 0 item(s), 0 response(s)
+  payload mentions 1 (counted, not gated)
+  citation_ok 303/308; counting live-backed claims 302/308 (reported, not gated)
+  ok   recall@5      baseline 0.930  current 0.930
+  ok   mrr           baseline 0.889  current 0.889
+  ok   groundedness  baseline 0.990  current 0.990
+  ok   relevance     baseline 0.922  current 0.922
+  ok   false_refusal baseline 0.014  current 0.014
+  ok   behaviour_ok  baseline 0.977  current 0.977
+  ok   citation_ok   baseline 0.984  current 0.984
+  answers replayed 308/308, stale 0
+eval-gate passed
+make ci exit: 0
+2026-11-27T09:36:08Z
+HEAD after: 2ca787e1154186f0b4ad1528f5cba6c7200cf24c

@@ -852,6 +852,7 @@ version = "0.0.0"
 source = { editable = "services/mcp-catalog" }
 dependencies = [
     { name = "mcp" },
+    { name = "northwind-backend" },
     { name = "northwind-common" },
     { name = "northwind-data" },
     { name = "uvicorn", extra = ["standard"] },
@@ -860,6 +861,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "mcp", specifier = ">=2.3,<3" },
+    { name = "northwind-backend", editable = "services/backend" },
     { name = "northwind-common", editable = "services/common" },
     { name = "northwind-data", editable = "data" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.54.0" },

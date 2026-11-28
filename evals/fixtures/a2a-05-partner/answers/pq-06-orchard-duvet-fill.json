@@ -6,10 +6,10 @@
     ],
     "outcome": "answered",
     "resets": 0,
-    "sent": "The Larchpell Orchard Duvet is filled with washable wool and has a cotton percale shell [P0138]. Its warmth rating is \"all-season,\" so it's designed for year-round use [P0138].\n\nHow warm it feels depends on you and your bedroom. For current details on a specific size or colour, check the live product page.",
-    "shown": "The Larchpell Orchard Duvet is filled with washable wool and has a cotton percale shell [P0138]. Its warmth rating is \"all-season,\" so it's designed for year-round use [P0138].\n\nHow warm it feels depends on you and your bedroom. For current details on a specific size or colour, check the live product page."
+    "sent": "The Larchpell Orchard Duvet is filled with washable wool [P0138]. It's rated all-season for warmth [P0138], so it's meant for year-round use. The sources don't say how it feels in extreme heat or cold.",
+    "shown": "The Larchpell Orchard Duvet is filled with washable wool [P0138]. It's rated all-season for warmth [P0138], so it's meant for year-round use. The sources don't say how it feels in extreme heat or cold."
   },
-  "assistant_id": "assistant:v1:claude-sonnet-5-5:prompt-eb39dcf5:check-0cb61e75",
+  "assistant_id": "assistant:v1:claude-sonnet-5-5:prompt-26740a49:check-ba8577ea",
   "context": [
     {
       "chunk_id": "product:P0138:0",
@@ -52,13 +52,14 @@
   "name": "pq-06-orchard-duvet-fill",
   "note": "A2A-05 replays this text by name; never when assistant_id is not current.",
   "provisional": true,
-  "recorded": "2026-11-13",
+  "recorded": "2026-11-27",
   "refinements": [],
   "region": "US",
   "script_sha256": "2ca30e4d19077f4463ad672bb8afc05bc239be181cb5682ef4fe0f168eacf235",
   "suite": "a2a-05-partner",
   "upstream_calls": [
     {
+      "cassette": "09c9c0bb1072817ed88ade529557e8be50f31e0e7344d700856726080fd8aada",
       "model": "claude-sonnet-5-5",
       "stop_reason": "end_turn"
     }

@@ -37,6 +37,9 @@ ASSISTANT_SUITES = {
     "assistant-redteam",
     "assistant-smoke",
     "eval-answers",
+    # Row #18 (RECORD-ALL): the variance runs record assistant turns into their own suites.
+    "eval-answers-r2",
+    "eval-answers-r3",
 }
 
 

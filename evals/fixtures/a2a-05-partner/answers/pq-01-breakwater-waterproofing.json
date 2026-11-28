@@ -6,10 +6,10 @@
     ],
     "outcome": "answered",
     "resets": 0,
-    "sent": "I'm an AI shopping assistant for Northwind Outfitters, not a person.\n\nFor the Corvane Breakwater Shell:\n- **Waterproof rating:** 15,000 mm, using the StormVeil 2.5-layer membrane [P0003].\n- **Seams:** Yes, it's fully waterproof with taped seams [P0003]. The product data also lists it as seam-sealed [P0003].\n\nFor current price, stock and sizes available right now, check the live product page.",
-    "shown": "I'm an AI shopping assistant for Northwind Outfitters, not a person.\n\nFor the Corvane Breakwater Shell:\n- **Waterproof rating:** 15,000 mm, using the StormVeil 2.5-layer membrane [P0003].\n- **Seams:** Yes, it's fully waterproof with taped seams [P0003]. The product data also lists it as seam-sealed [P0003].\n\nFor current price, stock and sizes available right now, check the live product page."
+    "sent": "I'm an AI shopping assistant, not a person.\n\nThe Corvane Breakwater Shell has a StormVeil 2.5-layer membrane rated to 15,000 mm. It is fully waterproof, and its seams are taped [P0003].",
+    "shown": "I'm an AI shopping assistant, not a person.\n\nThe Corvane Breakwater Shell has a StormVeil 2.5-layer membrane rated to 15,000 mm. It is fully waterproof, and its seams are taped [P0003]."
   },
-  "assistant_id": "assistant:v1:claude-sonnet-5-5:prompt-eb39dcf5:check-0cb61e75",
+  "assistant_id": "assistant:v1:claude-sonnet-5-5:prompt-26740a49:check-ba8577ea",
   "context": [
     {
       "chunk_id": "product:P0003:0",
@@ -52,13 +52,14 @@
   "name": "pq-01-breakwater-waterproofing",
   "note": "A2A-05 replays this text by name; never when assistant_id is not current.",
   "provisional": true,
-  "recorded": "2026-11-13",
+  "recorded": "2026-11-27",
   "refinements": [],
   "region": "US",
   "script_sha256": "2ca30e4d19077f4463ad672bb8afc05bc239be181cb5682ef4fe0f168eacf235",
   "suite": "a2a-05-partner",
   "upstream_calls": [
     {
+      "cassette": "f57e6944619a8bdf5a2581085d99256fb846227d2b0dc6e8833aa64d6f1c38d8",
       "model": "claude-sonnet-5-5",
       "stop_reason": "end_turn"
     }
