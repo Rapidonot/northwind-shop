@@ -528,3 +528,23 @@ services/gateway/tests/test_chk01_gateway_criteria.py:139: AssertionError
 =========================== short test summary info ============================
 FAILED services/gateway/tests/test_chk01_gateway_criteria.py::test_the_gateway_has_exactly_the_approved_order_and_cart_write_routes
 1 failed, 22 passed in 1.27s
+
+# 2026-11-28: the user's look fix (the "Escalated orders" tile counted 50 over a note of 100). New tests, before the fix, at 39a1534
+
+$ uv run pytest -q services/gateway/tests/test_ops1_counts_add_up.py
+E       KeyError: 'other_exceptions'
+E       KeyError: 'other_exceptions'
+E       KeyError: 'other_exceptions'
+FAILED services/gateway/tests/test_ops1_counts_add_up.py::test_the_seeded_orders_add_up_and_match_an_independent_recount
+FAILED services/gateway/tests/test_ops1_counts_add_up.py::test_pay_demo_orders_still_add_up_including_an_escalation_with_no_code
+FAILED services/gateway/tests/test_ops1_counts_add_up.py::test_the_overview_tiles_add_up
+3 failed in 0.80s
+
+$ vitest run src/staff/staff.test.tsx
+     × orders: escalated first, and the filters keep only their rows
+     × the escalated-orders tile shows its number and 'of N orders with an exception', and lists no reason
+     × orders: the reason chips add up to Escalated; Escalated, Other exceptions and Processed add up to All
+     × orders: the stats bar shows only parts of the total, no per-reason stats
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  4 failed | 28 passed (32)
+(The 5th new test, "each overview breakdown adds up to its tile's number", passes before the fix: Agent events and Open handoffs already added up; it guards them.)

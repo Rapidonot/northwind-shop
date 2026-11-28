@@ -12,7 +12,12 @@ export const REASONS: Record<string, string> = {
   fraud_review: "Fraud review",
   out_of_stock: "Out of stock",
   placement_error: "Placement error",
+  // An escalated order with no recorded reason (the gateway's order counts).
+  unrecorded: "No reason recorded",
 };
+
+/** The gateway's code for an escalated order with no recorded reason. */
+export const UNRECORDED = "unrecorded";
 
 export function reasonLabel(code: string | null): string {
   if (code === null) return "None";

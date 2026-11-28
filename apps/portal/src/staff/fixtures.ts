@@ -2,8 +2,9 @@
 // models (llm.py), order rows (data/backend/orders.jsonl), intents and labels (the handoff desk) and
 // action names (views.py) are copied from the repo; the events, holds and stock numbers are
 // illustrative. It is a fixture: the console shows the gateway's data, never this.
+import { UNRECORDED } from "./format";
 import SYSTEM_JSON from "./system.json";
-import type { ActivityEvent, AgentMap, OrderRow, StaffViews, SystemView } from "./types";
+import type { ActivityEvent, AgentMap, OrderCounts, OrderRow, StaffViews, SystemView } from "./types";
 
 const STARTED = "2026-11-27T14:00:00Z";
 
@@ -39,11 +40,22 @@ export const ORDER_ROWS: OrderRow[] = [
   order("O000127", "2026-10-10", "S0098", "EU", "EU-3426", 1, 1, "soft_decline", "confirmed", false),
 ];
 
-const tally = (rows: OrderRow[]) => {
-  const by_reason: Record<string, number> = {};
-  for (const row of rows) if (row.reason) by_reason[row.reason] = (by_reason[row.reason] ?? 0) + 1;
+const tally = (rows: OrderRow[]): OrderCounts => {
+  const escalated_by_reason: Record<string, number> = {};
+  for (const row of rows.filter((r) => r.escalated)) {
+    const code = row.reason ?? UNRECORDED;
+    escalated_by_reason[code] = (escalated_by_reason[code] ?? 0) + 1;
+  }
   const escalated = rows.filter((r) => r.escalated).length;
-  return { total: rows.length, escalated, processed: rows.filter((r) => !r.reason && !r.escalated).length, by_reason };
+  const other_exceptions = rows.filter((r) => r.reason !== null && !r.escalated).length;
+  return {
+    total: rows.length,
+    exceptions: escalated + other_exceptions,
+    escalated,
+    other_exceptions,
+    processed: rows.filter((r) => !r.reason && !r.escalated).length,
+    escalated_by_reason,
+  };
 };
 
 const event = (time: string, actor: string, action: string, ref: string, outcome: ActivityEvent["outcome"], detail: string): ActivityEvent => ({

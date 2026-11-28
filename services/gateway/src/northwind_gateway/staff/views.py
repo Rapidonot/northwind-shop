@@ -215,13 +215,24 @@ def demo_rows(src: Sources) -> list[dict[str, Any]]:
     return out
 
 
+UNRECORDED = "unrecorded"
+
+
 def order_counts(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
-    reasons = Counter(str(r["reason"]) for r in rows if r["reason"])
+    """Every part adds up to the whole it sits under (the user's look fix, 2026-11-28):
+    total = escalated + other_exceptions + processed; exceptions = escalated + other_exceptions;
+    the escalated orders' reasons add up to escalated. An exception is a recorded reason or an
+    escalation; an escalated order with no recorded reason is counted as `unrecorded`."""
+    escalated = [r for r in rows if r["escalated"]]
+    reasons = Counter(str(r["reason"]) if r["reason"] else UNRECORDED for r in escalated)
+    other = sum(1 for r in rows if r["reason"] and not r["escalated"])
     return {
         "total": len(rows),
-        "escalated": sum(1 for r in rows if r["escalated"]),
+        "exceptions": len(escalated) + other,
+        "escalated": len(escalated),
+        "other_exceptions": other,
         "processed": sum(1 for r in rows if not r["reason"] and not r["escalated"]),
-        "by_reason": dict(sorted(reasons.items())),
+        "escalated_by_reason": dict(sorted(reasons.items())),
     }
 
 

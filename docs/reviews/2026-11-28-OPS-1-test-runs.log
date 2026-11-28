@@ -144,3 +144,29 @@ src/theme.test.ts: rc=0  Tests 14 passed (14)
 src/App.test.tsx: rc=0  Tests 3 passed (3)
 src/shop.test.tsx: rc=0  Tests 33 passed (33)
 src/shopSecurity.test.tsx: rc=0  Tests 41 passed (41)
+
+# 2026-11-28: the look fix (the counts add up), uncommitted on 39a1534
+
+$ uv run ruff check services/gateway: rc=0 All checks passed!
+$ uv run ruff format --check services/gateway: rc=0 70 files already formatted
+$ uv run mypy services/gateway: rc=0 Success: no issues found in 70 source files
+$ tsc --noEmit (apps/portal): rc=0
+$ eslint src/staff src/App.tsx src/main.tsx src/router.ts: rc=0
+services/gateway/tests/test_ops1_agent_map.py: rc=0 16 passed in 0.81s
+services/gateway/tests/test_ops1_flag.py: rc=0 14 passed in 0.84s
+services/gateway/tests/test_ops1_readonly.py: rc=0 9 passed in 0.06s
+services/gateway/tests/test_ops1_screen.py: rc=0 6 passed in 0.87s
+services/gateway/tests/test_ops1_security_fixes.py: rc=0 14 passed in 2.10s
+services/gateway/tests/test_ops1_tw_counts.py: rc=0 9 passed in 0.96s
+services/gateway/tests/test_ops1_tw_gate.py: rc=0 12 passed in 1.21s
+services/gateway/tests/test_ops1_tw_screen.py: rc=0 24 passed in 0.89s
+services/gateway/tests/test_ops1_views.py: rc=0 17 passed in 0.93s
+services/gateway/tests/sa01_checkout/test_ops1_staff_wiring.py: rc=0 4 passed in 2.44s
+services/gateway/tests/test_ops1_counts_add_up.py: rc=0 3 passed in 0.76s
+services/gateway/tests/test_chk01_gateway_criteria.py: rc=0 23 passed in 1.12s
+src/staff/staff.test.tsx: rc=0  Tests 32 passed (32)
+src/staff/mapLayout.test.ts: rc=0  Tests 18 passed (18)
+src/theme.test.ts: rc=0  Tests 14 passed (14)
+src/App.test.tsx: rc=0  Tests 3 passed (3)
+src/shop.test.tsx: rc=0  Tests 33 passed (33)
+src/shopSecurity.test.tsx: rc=0  Tests 41 passed (41)

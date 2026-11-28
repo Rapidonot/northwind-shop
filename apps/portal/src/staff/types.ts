@@ -123,11 +123,18 @@ export interface OrderRow {
   source: "store" | "demo";
 }
 
+/** Every part adds up to the whole it sits under: total = escalated + other_exceptions + processed;
+ * exceptions = escalated + other_exceptions; escalated_by_reason adds up to escalated. */
 export interface OrderCounts {
   total: number;
+  /** Orders with a recorded reason or an escalation. */
+  exceptions: number;
   escalated: number;
+  /** Orders with a recorded reason that did not escalate. */
+  other_exceptions: number;
   processed: number;
-  by_reason: Record<string, number>;
+  /** The escalated orders only, by reason; `unrecorded` when an escalation has no reason. */
+  escalated_by_reason: Record<string, number>;
 }
 
 export interface OrdersView {

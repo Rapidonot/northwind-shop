@@ -103,7 +103,7 @@ def test_a_fraud_review_shows_escalated_with_its_reason(w: World) -> None:
     assert (row["status"], row["escalated"]) == ("on_hold", True)
     assert row["reason"] == checkout_desk().orders.orders[order_id].escalation
     assert row["reason"]  # the checkout's own code, never a guessed one
-    assert orders["counts"]["by_reason"].get(row["reason"]) == 1
+    assert orders["counts"]["escalated_by_reason"].get(row["reason"]) == 1
 
 
 def test_the_desk_the_app_builds_registers_the_stores_the_console_reads(

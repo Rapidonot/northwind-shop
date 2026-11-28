@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { Root } from "../App";
 import { href, parseHash } from "../router";
 import { FIXTURE } from "./fixtures";
-import { KIND_LABEL } from "./format";
+import { count, KIND_LABEL, REASONS } from "./format";
 import { CONSOLE_NOTICE, StaffConsole } from "./StaffConsole";
 import { STAFF_UNAVAILABLE } from "./StaffGate";
 import type { Loader, StaffViews, ViewName } from "./types";
@@ -243,10 +243,13 @@ describe("[OPS-1] the table views", () => {
     const escalated = FIXTURE.orders.rows.filter((r) => r.escalated).length;
     expect(firstCells().slice(0, escalated).every((id) => FIXTURE.orders.rows.find((r) => r.order_id === id)?.escalated)).toBe(true);
 
-    fireEvent.click(screen.getByRole("button", { name: "Address problem" }));
-    expect(firstCells().sort()).toEqual(FIXTURE.orders.rows.filter((r) => r.reason === "address_error").map((r) => r.order_id).sort());
+    fireEvent.click(screen.getByRole("button", { name: /^Fraud review/ }));
+    expect(firstCells().sort()).toEqual(FIXTURE.orders.rows.filter((r) => r.escalated && r.reason === "fraud_flag").map((r) => r.order_id).sort());
 
-    fireEvent.click(screen.getByRole("button", { name: "Processed" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Other exceptions/ }));
+    expect(firstCells().sort()).toEqual(FIXTURE.orders.rows.filter((r) => r.reason !== null && !r.escalated).map((r) => r.order_id).sort());
+
+    fireEvent.click(screen.getByRole("button", { name: /^Processed/ }));
     expect(firstCells().sort()).toEqual(FIXTURE.orders.rows.filter((r) => r.reason === null).map((r) => r.order_id).sort());
   });
 
@@ -281,6 +284,83 @@ describe("[OPS-1] the table views", () => {
     renderConsole("activity", { activity: { started_at: FIXTURE.activity.started_at, events: [], total: 0 } });
     expect(await screen.findByText(/No agent events since this server started/)).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+});
+
+// The user's look fix (2026-11-28): a tile's value and its note, and a filter chip and the chips
+// under it, count the same whole.
+const number = (text: string) => Number(text.replace(/,/g, ""));
+
+function chips(group: HTMLElement): Map<string, number> {
+  return new Map(
+    within(group)
+      .getAllByRole("button")
+      .map((button) => {
+        const found = /^(.*\S)\s+([\d,]+)$/.exec(button.textContent ?? "");
+        if (!found) throw new Error(`a filter chip without a count: ${button.textContent}`);
+        return [found[1]!, number(found[2]!)] as [string, number];
+      }),
+  );
+}
+
+function tile(title: string): { value: number; note: string } {
+  const box = screen.getByText(title).closest(".tile-stat") as HTMLElement;
+  return { value: number(box.querySelector(".tile-stat-value")!.textContent!), note: box.querySelector(".muted")!.textContent! };
+}
+
+describe("[OPS-1] every count adds up to the whole it sits under", () => {
+  it("the escalated-orders tile shows its number and 'of N orders with an exception', and lists no reason", async () => {
+    renderConsole("overview");
+    await screen.findByText("Escalated orders");
+    const { value, note } = tile("Escalated orders");
+    expect(value).toBe(FIXTURE.overview.orders.escalated);
+    expect(note).toBe(`of ${count(FIXTURE.overview.orders.exceptions)} orders with an exception`);
+    for (const label of Object.values(REASONS)) expect(note.toLowerCase()).not.toContain(label.toLowerCase());
+    expect(note).not.toContain("·");
+  });
+
+  it("each overview breakdown adds up to its tile's number", async () => {
+    renderConsole("overview");
+    await screen.findByText("Escalated orders");
+    for (const title of ["Agent events", "Open handoffs"]) {
+      const { value, note } = tile(title);
+      const parts = note === "none yet" ? [] : note.split(" · ").map((part) => number(part.split(" ")[0]!));
+      expect(parts.reduce((a, b) => a + b, 0), title).toBe(value);
+    }
+  });
+
+  it("orders: the reason chips add up to Escalated; Escalated, Other exceptions and Processed add up to All", async () => {
+    renderConsole("orders");
+    await screen.findByRole("heading", { name: "Orders & escalations" });
+    const shown = chips(screen.getByRole("group", { name: "Orders" }));
+    const whole = ["All", "Escalated", "Other exceptions", "Processed"];
+    const reasons = [...shown].filter(([label]) => !whole.includes(label));
+    expect(reasons.length).toBeGreaterThan(0);
+    expect(reasons.reduce((sum, [, n]) => sum + n, 0)).toBe(shown.get("Escalated"));
+    expect(shown.get("Escalated")! + shown.get("Other exceptions")! + shown.get("Processed")!).toBe(shown.get("All"));
+    expect(shown.get("All")).toBe(FIXTURE.orders.counts.total);
+    // Only escalated orders are broken down: a reason that never escalates has no chip.
+    expect(shown.has(REASONS.address_error!)).toBe(false);
+    // Each chip's count is the rows it keeps.
+    for (const [label, n] of shown) {
+      fireEvent.click(screen.getByRole("button", { name: new RegExp(`^${label}\\s`) }));
+      expect(screen.queryAllByRole("row").slice(1).length, label).toBe(n);
+    }
+  });
+
+  it("orders: the stats bar shows only parts of the total, no per-reason stats", async () => {
+    renderConsole("orders");
+    await screen.findByRole("heading", { name: "Orders & escalations" });
+    const bar = document.querySelector(".stats-bar") as HTMLElement;
+    for (const label of Object.values(REASONS)) expect(bar.textContent).not.toContain(label);
+    const stats = new Map(
+      [...bar.querySelectorAll(".stat")].map((stat) => {
+        const [label, value] = (stat.textContent ?? "").split(": ");
+        return [label!, number(value!)] as [string, number];
+      }),
+    );
+    expect([...stats.keys()]).toEqual(["Total orders", "Escalated", "Other exceptions", "Processed"]);
+    expect(stats.get("Escalated")! + stats.get("Other exceptions")! + stats.get("Processed")!).toBe(stats.get("Total orders"));
   });
 });
 

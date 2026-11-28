@@ -1,7 +1,7 @@
 // OPS-1: the staff console's table views (docs/design/staff/). Every number is counted by the
 // gateway from the real stores; only the traces on the "Agent system" view are sample data.
 import { useState } from "react";
-import { clock, count, items, matches, money, reasonLabel, REASONS, shortClock, since } from "./format";
+import { clock, count, items, matches, money, reasonLabel, shortClock, since, UNRECORDED } from "./format";
 import { Empty, More, OutcomePill, PAGE, Picker, SearchField, Segmented, Stat, StatusPill, Toolbar, ViewHead } from "./parts";
 import type { ActivityEvent, ActivityView, HandoffsView, Outcome, OrdersView, Overview, StockView } from "./types";
 
@@ -55,14 +55,13 @@ function Tile({ title, value, note, alert = false }: { title: string; value: num
 
 export function OverviewView({ view }: { view: Overview }) {
   const outcome = (name: Outcome) => view.agent_events.by_outcome[name] ?? 0;
-  const reasons = Object.entries(view.orders.by_reason).map(([code, n]): [string, number] => [reasonLabel(code).toLowerCase(), n]);
   return (
     <>
       <ViewHead title="Overview" note={`Live read-only snapshot of the shop's agents, handoffs, orders and stock holds. Agent events, handoffs and holds are ${since(view.started_at)}.`} />
       <div className="tiles">
         <Tile title="Agent events" value={view.agent_events.total} note={breakdown(OUTCOMES.map((o) => [o, outcome(o)]))} />
         <Tile title="Open handoffs" value={view.handoffs.open} note={breakdown(Object.entries(view.handoffs.by_status))} alert />
-        <Tile title="Escalated orders" value={view.orders.escalated} note={breakdown(reasons)} alert />
+        <Tile title="Escalated orders" value={view.orders.escalated} note={`of ${count(view.orders.exceptions)} ${view.orders.exceptions === 1 ? "order" : "orders"} with an exception`} alert />
         <Tile title="Live stock holds" value={view.holds.count} note={`${count(view.holds.units)} units held${view.holds.nodes.length > 0 ? ` across ${view.holds.nodes.join(" & ")}` : ""}`} />
       </div>
       <div className="section-head">
@@ -173,7 +172,11 @@ export function HandoffsViewPage({ view }: { view: HandoffsView }) {
   );
 }
 
-type OrderFilter = "all" | "escalated" | "processed" | keyof typeof REASONS;
+// A reason chip is a part of "Escalated": `reason:<label>` keeps the escalated orders whose reason
+// has that label (seeded fraud_flag and Pay (demo)'s fraud_review are both "Fraud review").
+type OrderFilter = "all" | "escalated" | "other" | "processed" | `reason:${string}`;
+
+const escalatedLabel = (row: OrdersView["rows"][number]) => reasonLabel(row.reason ?? UNRECORDED);
 
 export function OrdersViewPage({ view }: { view: OrdersView }) {
   const [filter, setFilter] = useState<OrderFilter>("all");
@@ -182,21 +185,24 @@ export function OrdersViewPage({ view }: { view: OrdersView }) {
   const [limit, setLimit] = useState(PAGE);
   const { counts } = view;
   const regions = [...new Set(view.rows.map((r) => r.region))].sort();
-  const reasons = Object.keys(counts.by_reason);
+  const byLabel = new Map<string, number>();
+  for (const [code, n] of Object.entries(counts.escalated_by_reason)) byLabel.set(reasonLabel(code), (byLabel.get(reasonLabel(code)) ?? 0) + n);
   const keep = (filterValue: OrderFilter, row: OrdersView["rows"][number]) => {
     if (filterValue === "all") return true;
     if (filterValue === "escalated") return row.escalated;
+    if (filterValue === "other") return row.reason !== null && !row.escalated;
     if (filterValue === "processed") return row.reason === null && !row.escalated;
-    return row.reason === filterValue;
+    return row.escalated && `reason:${escalatedLabel(row)}` === filterValue;
   };
   const shown = view.rows
     .filter((r) => keep(filter, r) && (region === "" || r.region === region) && matches(query, [r.order_id, r.shopper_id, r.postal_code, r.status]))
     .sort((a, b) => Number(b.escalated) - Number(a.escalated) || b.placed_on.localeCompare(a.placed_on) || a.order_id.localeCompare(b.order_id));
-  const options: { value: OrderFilter; label: string }[] = [
-    { value: "all", label: "All" },
-    { value: "escalated", label: "Escalated" },
-    ...reasons.map((code) => ({ value: code, label: reasonLabel(code) })),
-    { value: "processed", label: "Processed" },
+  const options: { value: OrderFilter; label: string; count: number }[] = [
+    { value: "all", label: "All", count: counts.total },
+    { value: "escalated", label: "Escalated", count: counts.escalated },
+    ...[...byLabel].map(([label, n]) => ({ value: `reason:${label}` as const, label, count: n })),
+    { value: "other", label: "Other exceptions", count: counts.other_exceptions },
+    { value: "processed", label: "Processed", count: counts.processed },
   ];
   return (
     <>
@@ -204,9 +210,7 @@ export function OrdersViewPage({ view }: { view: OrdersView }) {
       <div className="stats-bar">
         <Stat label="Total orders" value={count(counts.total)} />
         <Stat label="Escalated" value={count(counts.escalated)} strong />
-        {reasons.map((code) => (
-          <Stat key={code} label={reasonLabel(code)} value={count(counts.by_reason[code] ?? 0)} />
-        ))}
+        <Stat label="Other exceptions" value={count(counts.other_exceptions)} />
         <Stat label="Processed" value={count(counts.processed)} />
       </div>
       <Toolbar>

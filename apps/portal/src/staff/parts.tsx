@@ -21,7 +21,7 @@ export function Segmented<T extends string>({
   onChange,
 }: {
   label: string;
-  options: readonly { value: T; label: string }[];
+  options: readonly { value: T; label: string; count?: number }[];
   value: T;
   onChange: (value: T) => void;
 }) {
@@ -30,6 +30,12 @@ export function Segmented<T extends string>({
       {options.map((option) => (
         <button key={option.value} type="button" aria-pressed={option.value === value} onClick={() => onChange(option.value)}>
           {option.label}
+          {option.count !== undefined && (
+            <>
+              {" "}
+              <span className="chip-count">{option.count.toLocaleString("en-US")}</span>
+            </>
+          )}
         </button>
       ))}
     </div>

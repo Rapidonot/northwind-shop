@@ -79,8 +79,19 @@ def test_order_counts_are_an_independent_recount_of_the_store(client: TestClient
     assert counts["escalated"] == sum(
         1 for r in labels.values() if r["expected_outcome"] == "escalated"
     )
-    assert counts["by_reason"] == dict(
-        sorted(Counter(o["exception"] for o in orders if o["exception"]).items())
+    assert counts["escalated_by_reason"] == dict(
+        sorted(
+            Counter(
+                o["exception"]
+                for o in orders
+                if labels[o["order_id"]]["expected_outcome"] == "escalated"
+            ).items()
+        )
+    )
+    assert counts["other_exceptions"] == sum(
+        1
+        for o in orders
+        if o["exception"] and labels[o["order_id"]]["expected_outcome"] != "escalated"
     )
     assert counts["processed"] == sum(
         1
