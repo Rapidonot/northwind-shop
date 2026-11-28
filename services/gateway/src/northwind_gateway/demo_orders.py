@@ -9,6 +9,7 @@ pay or confirm anything.
 
 from __future__ import annotations
 
+import copy
 import threading
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
@@ -55,6 +56,17 @@ class DemoOrders:
         }
         with self._lock:
             self._by_shopper.setdefault(shopper, []).append(entry)
+
+    def everyone(self) -> list[tuple[str, dict[str, Any]]]:
+        """OPS-1: every shopper's demo orders, as (shopper, copy of the entry), for the read-only
+        demo staff console. Deep copies (lines and total too), so a reader cannot change the
+        history."""
+        with self._lock:
+            return [
+                (shopper, copy.deepcopy(entry))
+                for shopper, entries in self._by_shopper.items()
+                for entry in entries
+            ]
 
     def of(self, shopper: str) -> list[dict[str, Any]]:
         with self._lock:

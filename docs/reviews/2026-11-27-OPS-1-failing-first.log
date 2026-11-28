@@ -1,0 +1,596 @@
+# OPS-1 failing-first, look fix (2026-11-27): mapLayout.test.ts before the fix, at e46ffe2 plus the new tests
+
+
+ RUN  v5.0.5 /Users/rapido/Projects/northwind-shop-b/apps/portal
+
+ ❯ src/staff/mapLayout.test.ts (16 tests | 2 failed) 27ms
+   ❯ [OPS-1] every text line fits its box's width (2)
+     × fits every title, description and tool line inside its box, at the size it renders 11ms
+     × breaks a tool name too long for its box after an underscore, losing nothing 0ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/staff/mapLayout.test.ts > [OPS-1] every text line fits its box's width > fits every title, description and tool line inside its box, at the size it renders
+AssertionError: expected [ …(4) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "northwind-catalog tool line \"search_products, get_product,\" at 13px: 226.2 > 223",
++   "northwind-catalog tool line \"get_variant, check_stock, get_price,\" at 13px: 280.8 > 223",
++   "northwind-orders tool line \"get_order, request_return\" at 13px: 195.0 > 191",
++   "northwind-policy tool line \"evaluate_return_eligibility\" at 13px: 210.6 > 189",
++ ]
+
+ ❯ src/staff/mapLayout.test.ts:199:23
+    197|       fit(t.tools, rendered("map-node-tools", TYPE.tools), MONO_EM, "t…
+    198|     }
+    199|     expect(overflows).toEqual([]);
+       |                       ^
+    200|   });
+    201|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  src/staff/mapLayout.test.ts > [OPS-1] every text line fits its box's width > breaks a tool name too long for its box after an underscore, losing nothing
+AssertionError: expected 1 to be greater than 1
+ ❯ src/staff/mapLayout.test.ts:205:26
+    203|     const name = "evaluate_return_eligibility";
+    204|     const lines = wrap(name, 100, TYPE.tools, true);
+    205|     expect(lines.length).toBeGreaterThan(1);
+       |                          ^
+    206|     expect(lines.join("")).toBe(name);
+    207|     for (const line of lines.slice(0, -1)) expect(line.endsWith("_")).…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 14 passed (16)
+   Start at  21:36:29
+   Duration  553ms (environment 72%, setup 13%, transform 6%, tests 6%, import 2%, worker 1%)
+
+
+# OPS-1 failing-first, security fixes (2026-11-28): test_ops1_security_fixes.py at 0488b9d's gateway src (the fixes reverted; a temporary copy with UNAVAILABLE inlined so it collects)
+
+FFFFFFFFFFFFF                                                            [100%]
+=================================== FAILURES ===================================
+___________ test_off_no_redirect_and_no_405_reveal_the_console[None] ___________
+
+client = <starlette.testclient.TestClient object at 0x109f67830>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x109f717f0>
+flag = None
+
+    @pytest.mark.parametrize("flag", [None, "0"])
+    def test_off_no_redirect_and_no_405_reveal_the_console(
+        client: TestClient, monkeypatch: pytest.MonkeyPatch, flag: str | None
+    ) -> None:
+        if flag is None:
+            monkeypatch.delenv(DEMO_STAFF_ENV, raising=False)
+        else:
+            monkeypatch.setenv(DEMO_STAFF_ENV, flag)
+        for path, unknown in (
+            ("/api/staff/overview/", "/api/no-such-path/"),
+            ("/api/staff", "/api/no-such-path"),
+            ("/api/staff/", "/api/no-such-path/"),
+            ("/api/staff/orders", "/api/no-such-path"),
+        ):
+            for method in ("GET", "HEAD", "POST", "TRACE", "PROPFIND", "FROB"):
+>               _same_as_unknown(client, method, path, unknown)
+
+services/gateway/tests/test_ops1_security_fixes.py:96: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+client = <starlette.testclient.TestClient object at 0x109f67830>, method = 'GET'
+path = '/api/staff/overview/', unknown = '/api/no-such-path/'
+
+    def _same_as_unknown(client: TestClient, method: str, path: str, unknown: str) -> None:
+        mine = client.request(method, path)
+        theirs = client.request(method, unknown)
+>       assert (mine.status_code, mine.headers.get("allow"), mine.headers.get("location")) == (
+            theirs.status_code,
+            theirs.headers.get("allow"),
+            theirs.headers.get("location"),
+        ), (method, path)
+E       AssertionError: ('GET', '/api/staff/overview/')
+E       assert (307, None, '...aff/overview') == (404, None, None)
+E         
+E         At index 0 diff: 307 != 404
+E         Use -v to get more diff
+
+services/gateway/tests/test_ops1_security_fixes.py:71: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+gateway: database northwind
+____________ test_off_no_redirect_and_no_405_reveal_the_console[0] _____________
+
+client = <starlette.testclient.TestClient object at 0x10ab29520>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10ab2ab70>
+flag = '0'
+
+    @pytest.mark.parametrize("flag", [None, "0"])
+    def test_off_no_redirect_and_no_405_reveal_the_console(
+        client: TestClient, monkeypatch: pytest.MonkeyPatch, flag: str | None
+    ) -> None:
+        if flag is None:
+            monkeypatch.delenv(DEMO_STAFF_ENV, raising=False)
+        else:
+            monkeypatch.setenv(DEMO_STAFF_ENV, flag)
+        for path, unknown in (
+            ("/api/staff/overview/", "/api/no-such-path/"),
+            ("/api/staff", "/api/no-such-path"),
+            ("/api/staff/", "/api/no-such-path/"),
+            ("/api/staff/orders", "/api/no-such-path"),
+        ):
+            for method in ("GET", "HEAD", "POST", "TRACE", "PROPFIND", "FROB"):
+>               _same_as_unknown(client, method, path, unknown)
+
+services/gateway/tests/test_ops1_security_fixes.py:96: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+client = <starlette.testclient.TestClient object at 0x10ab29520>, method = 'GET'
+path = '/api/staff/overview/', unknown = '/api/no-such-path/'
+
+    def _same_as_unknown(client: TestClient, method: str, path: str, unknown: str) -> None:
+        mine = client.request(method, path)
+        theirs = client.request(method, unknown)
+>       assert (mine.status_code, mine.headers.get("allow"), mine.headers.get("location")) == (
+            theirs.status_code,
+            theirs.headers.get("allow"),
+            theirs.headers.get("location"),
+        ), (method, path)
+E       AssertionError: ('GET', '/api/staff/overview/')
+E       assert (307, None, '...aff/overview') == (404, None, None)
+E         
+E         At index 0 diff: 307 != 404
+E         Use -v to get more diff
+
+services/gateway/tests/test_ops1_security_fixes.py:71: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+gateway: database northwind
+________________ test_on_only_get_on_an_exact_view_gets_through ________________
+
+client = <starlette.testclient.TestClient object at 0x10ac77080>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10ac7c710>
+
+    def test_on_only_get_on_an_exact_view_gets_through(
+        client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv(DEMO_STAFF_ENV, "1")
+        for view in VIEWS:
+            assert client.get(f"/api/staff/{view}").status_code == 200, view
+>           _same_as_unknown(client, "GET", f"/api/staff/{view}/", "/api/no-such-path/")
+
+services/gateway/tests/test_ops1_security_fixes.py:105: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+client = <starlette.testclient.TestClient object at 0x10ac77080>, method = 'GET'
+path = '/api/staff/overview/', unknown = '/api/no-such-path/'
+
+    def _same_as_unknown(client: TestClient, method: str, path: str, unknown: str) -> None:
+        mine = client.request(method, path)
+        theirs = client.request(method, unknown)
+>       assert (mine.status_code, mine.headers.get("allow"), mine.headers.get("location")) == (
+            theirs.status_code,
+            theirs.headers.get("allow"),
+            theirs.headers.get("location"),
+        ), (method, path)
+E       AssertionError: ('GET', '/api/staff/overview/')
+E       assert (307, None, '...aff/overview') == (404, None, None)
+E         
+E         At index 0 diff: 307 != 404
+E         Use -v to get more diff
+
+services/gateway/tests/test_ops1_security_fixes.py:71: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+gateway: database northwind
+_________________________ test_the_gate_is_on_the_app __________________________
+
+    def test_the_gate_is_on_the_app() -> None:
+>       from northwind_gateway.staff.routes import StaffGate
+E       ImportError: cannot import name 'StaffGate' from 'northwind_gateway.staff.routes' (/Users/rapido/Projects/northwind-shop-b/services/gateway/src/northwind_gateway/staff/routes.py)
+
+services/gateway/tests/test_ops1_security_fixes.py:111: ImportError
+_________________ test_app_builds_the_checkout_desk_on_import __________________
+
+    def test_app_builds_the_checkout_desk_on_import() -> None:
+        tree = ast.parse(APP.read_text(encoding="utf-8"))
+        calls = [
+            node.value
+            for node in tree.body
+            if isinstance(node, ast.Expr) and isinstance(node.value, ast.Call)
+        ]
+>       assert any(
+            isinstance(c.func, ast.Attribute)
+            and c.func.attr == "checkout_desk"
+            and isinstance(c.func.value, ast.Name)
+            and c.func.value.id == "checkout"
+            for c in calls
+        )
+E       assert False
+E        +  where False = any(<generator object test_app_builds_the_checkout_desk_on_import.<locals>.<genexpr> at 0x10a99f220>)
+
+services/gateway/tests/test_ops1_security_fixes.py:126: AssertionError
+__________ test_importing_the_app_builds_the_desk_without_a_database ___________
+
+    def test_importing_the_app_builds_the_desk_without_a_database() -> None:
+        """The user's question on L2: building the desk at import opens no database connection. The
+        import runs in a fresh process with DATABASE_URL on a port nothing listens on (9, discard)."""
+        env = {
+            **os.environ,
+            "DATABASE_URL": "postgresql://nw:nw@127.0.0.1:9/northwind?connect_timeout=1",
+        }
+        env.pop(DEMO_STAFF_ENV, None)
+        # A fixed probe from this file, never input.
+        done = subprocess.run(  # noqa: S603
+            [sys.executable, "-c", _IMPORT_PROBE], env=env, capture_output=True, text=True, timeout=60
+        )
+>       assert done.returncode == 0, done.stderr[-2000:]
+E       AssertionError: Traceback (most recent call last):
+E           File "<string>", line 6, in <module>
+E         AssertionError: CacheInfo(hits=0, misses=0, maxsize=None, currsize=0)
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['/Users/rapido/Projects/northwind-shop-b/.venv/bin/python', '-c', '\nimport northwind_gateway.a...st):\n  File "<string>", line 6, in <module>\nAssertionError: CacheInfo(hits=0, misses=0, maxsize=None, currsize=0)\n').returncode
+
+services/gateway/tests/test_ops1_security_fixes.py:158: AssertionError
+_______________ test_a_clock_time_is_never_withheld_as_card_data _______________
+
+    def test_a_clock_time_is_never_withheld_as_card_data() -> None:
+        base = datetime(2026, 11, 27, 10, 15, 30, tzinfo=UTC)
+        raw = next(
+            text
+            for micro in range(0, 1_000_000, 7)
+            if staff_screen.screen_text(text := base.replace(microsecond=micro).isoformat())
+            == staff_screen.CARD_WITHHELD
+        )
+>       shown = views._iso_text(raw)
+                ^^^^^^^^^^^^^^^
+E       AttributeError: module 'northwind_gateway.staff.views' has no attribute '_iso_text'
+
+services/gateway/tests/test_ops1_security_fixes.py:173: AttributeError
+____________ test_activity_times_from_a_real_clock_pass_the_screen _____________
+
+world = Sources(handoffs=None, checkout=CheckoutStores(orders=<northwind_backend.fakes.orders.OrderState object at 0x10ab06330...uditSink object at 0x10ab05760>), demo=DemoOrders(_by_shopper={}, _lock=<unlocked _thread.lock object at 0x10ab15bc0>))
+client = <starlette.testclient.TestClient object at 0x109ef2630>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x109ef3fe0>
+
+    def test_activity_times_from_a_real_clock_pass_the_screen(
+        world: views.Sources, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv(DEMO_STAFF_ENV, "1")
+        audit = AuditContext(world.checkout.audit, correlation_id="t", actor="portal-checkout")
+        for i in range(50):
+            action = audit.attempt("order.confirm", {"order_id": f"O{900000 + i}"})
+            audit.outcome(action, "order.confirm", {"order_id": f"O{900000 + i}"}, {"ok": True})
+        events = client.get("/api/staff/activity").json()["events"]
+        assert len(events) == 50
+        for event in events:
+>           assert event["time"].endswith("Z") and "." not in event["time"], event["time"]
+E           AssertionError: [withheld: card data]
+E           assert (False)
+E            +  where False = <built-in method endswith of str object at 0x109f530f0>('Z')
+E            +    where <built-in method endswith of str object at 0x109f530f0> = '[withheld: card data]'.endswith
+
+services/gateway/tests/test_ops1_security_fixes.py:189: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+gateway: database northwind
+_____________ test_activity_sends_the_newest_events_and_the_total ______________
+
+world = Sources(handoffs=None, checkout=CheckoutStores(orders=<northwind_backend.fakes.orders.OrderState object at 0x109ef2ed0...uditSink object at 0x109ef3020>), demo=DemoOrders(_by_shopper={}, _lock=<unlocked _thread.lock object at 0x10aa247c0>))
+client = <starlette.testclient.TestClient object at 0x10af66900>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10af68290>
+
+    def test_activity_sends_the_newest_events_and_the_total(
+        world: views.Sources, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv(DEMO_STAFF_ENV, "1")
+        audit = AuditContext(world.checkout.audit, correlation_id="t", actor="portal-checkout")
+>       for i in range(views.EVENT_LIMIT + 100):
+                       ^^^^^^^^^^^^^^^^^
+E       AttributeError: module 'northwind_gateway.staff.views' has no attribute 'EVENT_LIMIT'
+
+services/gateway/tests/test_ops1_security_fixes.py:201: AttributeError
+---------------------------- Captured stderr setup -----------------------------
+gateway: database northwind
+_______________________ test_a_screened_string_is_cached _______________________
+
+    def test_a_screened_string_is_cached() -> None:
+>       before = staff_screen.screen_text.cache_info().hits
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'function' object has no attribute 'cache_info'
+
+services/gateway/tests/test_ops1_security_fixes.py:213: AttributeError
+___________ test_no_readable_answer_key_is_a_503_on_every_view[None] ___________
+
+client = <starlette.testclient.TestClient object at 0x10af303e0>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10af2eb40>
+tmp_path = PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-1803/test_no_readable_answer_key_is0')
+content = None
+
+    @pytest.mark.parametrize("content", [None, "not json", '{"internal_only": []}'])
+    def test_no_readable_answer_key_is_a_503_on_every_view(
+        client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, content: str | None
+    ) -> None:
+        monkeypatch.setenv(DEMO_STAFF_ENV, "1")
+        key = tmp_path / "_answer_key.json"
+        if content is not None:
+            key.write_text(content, encoding="utf-8")
+        monkeypatch.setattr(staff_screen, "ANSWER_KEY", key)
+        for view in VIEWS:
+            reply = client.get(f"/api/staff/{view}")
+>           assert reply.status_code == 503, view
+E           AssertionError: overview
+E           assert 200 == 503
+E            +  where 200 = <Response [200 OK]>.status_code
+
+services/gateway/tests/test_ops1_security_fixes.py:233: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+gateway: database northwind
+_________ test_no_readable_answer_key_is_a_503_on_every_view[not json] _________
+
+client = <starlette.testclient.TestClient object at 0x10addda60>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10addf080>
+tmp_path = PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-1803/test_no_readable_answer_key_is1')
+content = 'not json'
+
+    @pytest.mark.parametrize("content", [None, "not json", '{"internal_only": []}'])
+    def test_no_readable_answer_key_is_a_503_on_every_view(
+        client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, content: str | None
+    ) -> None:
+        monkeypatch.setenv(DEMO_STAFF_ENV, "1")
+        key = tmp_path / "_answer_key.json"
+        if content is not None:
+            key.write_text(content, encoding="utf-8")
+        monkeypatch.setattr(staff_screen, "ANSWER_KEY", key)
+        for view in VIEWS:
+            reply = client.get(f"/api/staff/{view}")
+>           assert reply.status_code == 503, view
+E           AssertionError: overview
+E           assert 200 == 503
+E            +  where 200 = <Response [200 OK]>.status_code
+
+services/gateway/tests/test_ops1_security_fixes.py:233: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+gateway: database northwind
+__ test_no_readable_answer_key_is_a_503_on_every_view[{"internal_only": []}] ___
+
+client = <starlette.testclient.TestClient object at 0x10b067020>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10b0686b0>
+tmp_path = PosixPath('/private/tmp/claude-502/pytest-of-rapido/pytest-1803/test_no_readable_answer_key_is2')
+content = '{"internal_only": []}'
+
+    @pytest.mark.parametrize("content", [None, "not json", '{"internal_only": []}'])
+    def test_no_readable_answer_key_is_a_503_on_every_view(
+        client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, content: str | None
+    ) -> None:
+        monkeypatch.setenv(DEMO_STAFF_ENV, "1")
+        key = tmp_path / "_answer_key.json"
+        if content is not None:
+            key.write_text(content, encoding="utf-8")
+        monkeypatch.setattr(staff_screen, "ANSWER_KEY", key)
+        for view in VIEWS:
+            reply = client.get(f"/api/staff/{view}")
+>           assert reply.status_code == 503, view
+E           AssertionError: overview
+E           assert 200 == 503
+E            +  where 200 = <Response [200 OK]>.status_code
+
+services/gateway/tests/test_ops1_security_fixes.py:233: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+gateway: database northwind
+=========================== short test summary info ============================
+FAILED services/gateway/tests/test_ops1_security_fixes.py::test_off_no_redirect_and_no_405_reveal_the_console[None]
+FAILED services/gateway/tests/test_ops1_security_fixes.py::test_off_no_redirect_and_no_405_reveal_the_console[0]
+FAILED services/gateway/tests/test_ops1_security_fixes.py::test_on_only_get_on_an_exact_view_gets_through
+FAILED services/gateway/tests/test_ops1_security_fixes.py::test_the_gate_is_on_the_app
+FAILED services/gateway/tests/test_ops1_security_fixes.py::test_app_builds_the_checkout_desk_on_import
+FAILED services/gateway/tests/test_ops1_security_fixes.py::test_importing_the_app_builds_the_desk_without_a_database
+FAILED services/gateway/tests/test_ops1_security_fixes.py::test_a_clock_time_is_never_withheld_as_card_data
+FAILED services/gateway/tests/test_ops1_security_fixes.py::test_activity_times_from_a_real_clock_pass_the_screen
+FAILED services/gateway/tests/test_ops1_security_fixes.py::test_activity_sends_the_newest_events_and_the_total
+FAILED services/gateway/tests/test_ops1_security_fixes.py::test_a_screened_string_is_cached
+FAILED services/gateway/tests/test_ops1_security_fixes.py::test_no_readable_answer_key_is_a_503_on_every_view[None]
+FAILED services/gateway/tests/test_ops1_security_fixes.py::test_no_readable_answer_key_is_a_503_on_every_view[not json]
+FAILED services/gateway/tests/test_ops1_security_fixes.py::test_no_readable_answer_key_is_a_503_on_every_view[{"internal_only": []}]
+13 failed in 2.75s
+
+# OPS-1 failing-first, advisor-reviewer fixes (2026-11-28): findings 1 and 5, with views.py and app.py at 34ae255
+
+FF                                                                       [100%]
+=================================== FAILURES ===================================
+_____________ test_a_fraud_review_shows_escalated_with_its_reason ______________
+
+w = World(store=<northwind_mcp_catalog.live.FixtureCatalog object at 0x10ae66ab0>, catalog_url='http://127.0.0.1:60093/mcp', orders_url='http://127.0.0.1:60094/mcp')
+
+    def test_a_fraud_review_shows_escalated_with_its_reason(w: World) -> None:
+        checkout_desk().fraud.flagged = frozenset({f"O{checkout_module.FIRST_ORDER_NUMBER}"})
+        cookie = signed_in(A)
+    
+        async def go(c: httpx.AsyncClient) -> tuple[httpx.Response, dict]:  # type: ignore[type-arg]
+            shown = await bag_then_summary(c, cookie)
+            paid = await pay(c, cookie, shown["digest"])
+            return paid, (await c.get("/api/staff/orders")).json()
+    
+        paid, orders = w.run(go)
+        assert paid.status_code == 409 and paid.json()["code"] == "on_hold"
+        order_id = f"O{checkout_module.FIRST_ORDER_NUMBER}"
+        row = next(r for r in orders["rows"] if r["order_id"] == order_id)
+        assert (row["status"], row["escalated"]) == ("on_hold", True)
+>       assert row["reason"] == checkout_desk().orders.orders[order_id].escalation
+E       AssertionError: assert None == 'fraud_review'
+E        +  where 'fraud_review' = Order(order_id='O900001', shopper_id='S0188', region='US', lines=(OrderLine(product_id='P0004', variant_id='P0004-BLK-... currency=None, escalation='fraud_review', address_on_file=False, dry_run=False, payment_status=None, captured_minor=0).escalation
+
+services/gateway/tests/sa01_checkout/test_ops1_staff_wiring.py:104: AssertionError
+_______________ test_app_builds_the_demo_order_history_on_import _______________
+
+    def test_app_builds_the_demo_order_history_on_import() -> None:
+        """The same race as L2, on the Pay (demo) history (advisor-reviewer finding 5)."""
+        tree = ast.parse(APP.read_text(encoding="utf-8"))
+        calls = [
+            n.value for n in tree.body if isinstance(n, ast.Expr) and isinstance(n.value, ast.Call)
+        ]
+>       assert any(isinstance(c.func, ast.Name) and c.func.id == "demo_orders" for c in calls)
+E       assert False
+E        +  where False = any(<generator object test_app_builds_the_demo_order_history_on_import.<locals>.<genexpr> at 0x10ac88740>)
+
+services/gateway/tests/test_ops1_security_fixes.py:125: AssertionError
+=========================== short test summary info ============================
+FAILED services/gateway/tests/sa01_checkout/test_ops1_staff_wiring.py::test_a_fraud_review_shows_escalated_with_its_reason
+FAILED services/gateway/tests/test_ops1_security_fixes.py::test_app_builds_the_demo_order_history_on_import
+2 failed in 1.29s
+
+# OPS-1 failing-first, advisor-reviewer finding 3 (2026-11-28): the gate and screen tests against mutated code (each mutation reverted with git checkout right after)
+
+## Mutation 1: staff_enabled() always True (the flag ignored)
+FAILED services/gateway/tests/test_ops1_flag.py::test_off_unless_exactly_1[None]
+FAILED services/gateway/tests/test_ops1_flag.py::test_off_unless_exactly_1[]
+FAILED services/gateway/tests/test_ops1_flag.py::test_off_unless_exactly_1[0]
+FAILED services/gateway/tests/test_ops1_flag.py::test_off_unless_exactly_1[true]
+FAILED services/gateway/tests/test_ops1_flag.py::test_off_unless_exactly_1[yes]
+FAILED services/gateway/tests/test_ops1_flag.py::test_off_unless_exactly_1[TRUE]
+FAILED services/gateway/tests/test_ops1_flag.py::test_off_unless_exactly_1[ 1]
+FAILED services/gateway/tests/test_ops1_flag.py::test_off_unless_exactly_1[1 ]
+FAILED services/gateway/tests/test_ops1_flag.py::test_off_every_path_and_method_is_the_unknown_path_404[None]
+FAILED services/gateway/tests/test_ops1_flag.py::test_off_every_path_and_method_is_the_unknown_path_404[0]
+FAILED services/gateway/tests/test_ops1_flag.py::test_off_every_path_and_method_is_the_unknown_path_404[true]
+11 failed, 3 passed in 1.31s
+FAILED services/gateway/tests/test_ops1_tw_gate.py::test_off_odd_paths_match_unknown_in_status_body_and_headers[None]
+FAILED services/gateway/tests/test_ops1_tw_gate.py::test_off_odd_paths_match_unknown_in_status_body_and_headers[0]
+FAILED services/gateway/tests/test_ops1_tw_gate.py::test_off_odd_paths_match_unknown_in_status_body_and_headers[true]
+FAILED services/gateway/tests/test_ops1_tw_gate.py::test_off_odd_paths_match_unknown_in_status_body_and_headers[ 1]
+FAILED services/gateway/tests/test_ops1_tw_gate.py::test_the_flag_is_read_on_each_request
+5 failed, 7 passed in 1.80s
+
+## Mutation 2: screen_text returns its text unchanged (the screen off)
+FAILED services/gateway/tests/test_ops1_screen.py::test_every_string_the_scanner_flags_is_withheld
+FAILED services/gateway/tests/test_ops1_screen.py::test_planted_card_data_and_keys_never_reach_a_response
+2 failed, 4 passed in 0.80s
+FAILED services/gateway/tests/test_ops1_tw_screen.py::test_screen_text_withholds[\uff14\uff11\uff11\uff11\uff11\uff11\uff11\uff11\uff11\uff11\uff11\uff11\uff11\uff11\uff11\uff11-[withheld: card data]]
+FAILED services/gateway/tests/test_ops1_tw_screen.py::test_screen_text_withholds[pay with \uff14\uff11\uff11\uff11\uff11\uff11\uff11\uff11\uff11\uff11\uff11\uff11\uff11\uff11\uff11\uff11 ok-[withheld: card data]]
+FAILED services/gateway/tests/test_ops1_tw_screen.py::test_screen_text_withholds[card 4111 1111 1111 1111-[withheld: card data]]
+FAILED services/gateway/tests/test_ops1_tw_screen.py::test_screen_text_withholds[4111_1111_1111_1111-[withheld: card data]]
+FAILED services/gateway/tests/test_ops1_tw_screen.py::test_screen_text_withholds[CVV: 123-[withheld: card data]]
+FAILED services/gateway/tests/test_ops1_tw_screen.py::test_screen_text_withholds[cvc 456-[withheld: card data]]
+FAILED services/gateway/tests/test_ops1_tw_screen.py::test_screen_text_withholds[line one\nline two sk-ant-api03-abcdefghijklmnop-[withheld: secret]]
+FAILED services/gateway/tests/test_ops1_tw_screen.py::test_screen_text_withholds[a\nAuthorization: Bearer abcdefghijklmnopqrstuvwxyz\nb-[withheld: secret]]
+FAILED services/gateway/tests/test_ops1_tw_screen.py::test_screen_text_withholds[X-API-KEY: abc-[withheld: secret]]
+FAILED services/gateway/tests/test_ops1_tw_screen.py::test_screen_text_withholds[x-api-key=abc-[withheld: secret]]
+FAILED services/gateway/tests/test_ops1_tw_screen.py::test_screen_text_withholds[sk-A1_-A1_-A1_-A1_-A1_-A1_--[withheld: secret]]
+FAILED services/gateway/tests/test_ops1_tw_screen.py::test_screen_text_withholds_every_canary_anywhere_in_a_string
+FAILED services/gateway/tests/test_ops1_tw_screen.py::test_screen_covers_keys_nesting_tuples_and_leaves_other_values
+FAILED services/gateway/tests/test_ops1_tw_screen.py::test_planted_values_in_every_field_never_reach_any_response
+FAILED services/gateway/tests/test_ops1_tw_screen.py::test_planted_values_are_withheld_not_dropped
+15 failed, 9 passed in 0.89s
+
+# CHK-01 route pin tightened (2026-11-28, the user's change for advisor-reviewer finding 6)
+
+## 1. The new hidden-route test against the pin as it was (reading app.openapi())
+
+.....F.................                                                  [100%]
+=================================== FAILURES ===================================
+_______________ test_a_hidden_non_get_order_route_fails_the_pin ________________
+
+    def test_a_hidden_non_get_order_route_fails_the_pin() -> None:
+        """OPS-1 (advisor-reviewer finding 6, the user's tightening): a route kept out of the OpenAPI
+        schema is still served, so the pin must see it."""
+        sneaky = FastAPI()
+    
+        @sneaky.post("/api/orders/cancel", include_in_schema=False)
+        def cancel() -> None: ...
+    
+>       assert order_route_problems(sneaky) == ["/api/orders/cancel ['post']"]
+E       assert [] == ["/api/orders...cel ['post']"]
+E         
+E         Right contains one more item: "/api/orders/cancel ['post']"
+E         Use -v to get more diff
+
+services/gateway/tests/test_chk01_gateway_criteria.py:131: AssertionError
+=========================== short test summary info ============================
+FAILED services/gateway/tests/test_chk01_gateway_criteria.py::test_a_hidden_non_get_order_route_fails_the_pin
+1 failed, 22 passed in 1.21s
+
+## 2. The pin reading app.routes, against the staff routes registered for every method (as at bd438d3)
+
+....F..................                                                  [100%]
+=================================== FAILURES ===================================
+____ test_the_gateway_has_exactly_the_approved_order_and_cart_write_routes _____
+
+    def test_the_gateway_has_exactly_the_approved_order_and_cart_write_routes() -> None:
+>       assert order_route_problems(app) == []
+E       assert ["/api/staff/...ost', 'put']"] == []
+E         
+E         Left contains one more item: "/api/staff/orders ['delete', 'get', 'options', 'patch', 'post', 'put']"
+E         Use -v to get more diff
+
+services/gateway/tests/test_chk01_gateway_criteria.py:139: AssertionError
+=========================== short test summary info ============================
+FAILED services/gateway/tests/test_chk01_gateway_criteria.py::test_the_gateway_has_exactly_the_approved_order_and_cart_write_routes
+1 failed, 22 passed in 1.27s
+
+# 2026-11-28: the user's look fix (the "Escalated orders" tile counted 50 over a note of 100). New tests, before the fix, at 39a1534
+
+$ uv run pytest -q services/gateway/tests/test_ops1_counts_add_up.py
+E       KeyError: 'other_exceptions'
+E       KeyError: 'other_exceptions'
+E       KeyError: 'other_exceptions'
+FAILED services/gateway/tests/test_ops1_counts_add_up.py::test_the_seeded_orders_add_up_and_match_an_independent_recount
+FAILED services/gateway/tests/test_ops1_counts_add_up.py::test_pay_demo_orders_still_add_up_including_an_escalation_with_no_code
+FAILED services/gateway/tests/test_ops1_counts_add_up.py::test_the_overview_tiles_add_up
+3 failed in 0.80s
+
+$ vitest run src/staff/staff.test.tsx
+     × orders: escalated first, and the filters keep only their rows
+     × the escalated-orders tile shows its number and 'of N orders with an exception', and lists no reason
+     × orders: the reason chips add up to Escalated; Escalated, Other exceptions and Processed add up to All
+     × orders: the stats bar shows only parts of the total, no per-reason stats
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  4 failed | 28 passed (32)
+(The 5th new test, "each overview breakdown adds up to its tile's number", passes before the fix: Agent events and Open handoffs already added up; it guards them.)
+
+# 2026-11-28: advisor re-review finding 5, the look fix failing on the logic, not a missing key: mutants at b3c23cb
+## Mutant G: order_counts breaks down every exception (the old tile note), not only escalated orders
+$ uv run pytest -q services/gateway/tests/test_ops1_counts_add_up.py
+E       AssertionError: assert 100 == 50
+E        +  where 100 = sum(dict_values([25, 25, 25, 25]))
+E        +    where dict_values([25, 25, 25, 25]) = <built-in method values of dict object at 0x10fa37340>()
+E        +      where <built-in method values of dict object at 0x10fa37340> = {'address_error': 25, 'fraud_flag': 25, 'soft_decline': 25, 'stock_out': 25}.values
+E       AssertionError: assert 100 == 51
+E        +  where 100 = sum(dict_values([25, 25, 25, 25]))
+E        +    where dict_values([25, 25, 25, 25]) = <built-in method values of dict object at 0x10f91ec80>()
+E        +      where <built-in method values of dict object at 0x10f91ec80> = {'address_error': 25, 'fraud_flag': 25, 'soft_decline': 25, 'stock_out': 25}.values
+E       AssertionError: assert 100 == 50
+E        +  where 100 = sum(dict_values([25, 25, 25, 25]))
+E        +    where dict_values([25, 25, 25, 25]) = <built-in method values of dict object at 0x10fc1d180>()
+E        +      where <built-in method values of dict object at 0x10fc1d180> = {'address_error': 25, 'fraud_flag': 25, 'soft_decline': 25, 'stock_out': 25}.values
+FAILED services/gateway/tests/test_ops1_counts_add_up.py::test_the_seeded_orders_add_up_and_match_an_independent_recount
+FAILED services/gateway/tests/test_ops1_counts_add_up.py::test_pay_demo_orders_still_add_up_including_an_escalation_with_no_code
+FAILED services/gateway/tests/test_ops1_counts_add_up.py::test_the_overview_tiles_add_up
+3 failed in 0.88s
+## Mutant P: the tile note lists the reasons again; each reason chip counts one too many
+$ vitest run src/staff/staff.test.tsx
+     × the escalated-orders tile shows its number and 'of N orders with an exception', and lists no reason 11ms
+     × orders: the reason chips add up to Escalated; Escalated, Other exceptions and Processed add up to All 11ms
+AssertionError: expected '2 fraud review · 1 stock out' to be 'of 8 orders with an exception' // Object.is equality
+Expected: "of 8 orders with an exception"
+Received: "2 fraud review · 1 stock out"
+AssertionError: expected 5 to be 3 // Object.is equality
+- Expected
++ Received
+  × "pnpm recursive exec" failed in /Users/rapido/Projects/northwind-shop-b/
+
+# 2026-11-28: advisor re-review finding 6, everyone() copies only one level, before the fix
+$ uv run pytest -q services/gateway/tests/test_ops1_views.py -k reader_cannot
+E       At index 0 diff: {'product_id': 'P0001', 'variant_id': 'P0001-BLK-REG-L', 'quantity': 99} != {... 'quantity': 1}
+E       Left contains one more item: {'product_id': 'P0002'}
+1 failed, 17 deselected
+
+# 2026-11-28: advisor re-review finding 3, the new chip test against a mutant (chips keyed by code, not label)
+$ vitest run src/staff/staff.test.tsx
+     × orders: escalated first, and the filters keep only their rows
+     × orders: the reason chips add up to Escalated; Escalated, Other exceptions and Processed add up to All
+     × orders: codes that share a label are one chip, and an escalation with no code is a chip of its own
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  3 failed | 30 passed (33)
+  × "pnpm recursive exec" failed in /Users/rapido/Projects/northwind-shop-b/

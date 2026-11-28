@@ -1,0 +1,696 @@
+{
+  "_comment": "OPS-1: the agent map's layout table, measured from the reference mockup (docs/design/staff/staff-01-agent-system.png): one SVG, viewBox 0 0 1160 778. `slots` gives each generated node's box (x, y, w, h); `routes` gives each generated edge's elbow path, from a point on its source box's edge to a point on its target box's edge, and where its label sits (null: the label is the line's tooltip only). Positions only: which nodes and edges exist comes from the gateway, generated from the code. Every generated node needs a slot and every slot must name a generated node; the same for edges and routes (mapLayout.test.ts; the gateway's generator test reads this file too).",
+  "view_box": [
+    1160,
+    778
+  ],
+  "min_width": 960,
+  "separators": [
+    292,
+    416,
+    532,
+    696
+  ],
+  "lane_titles": [
+    {
+      "text": "Handoff path",
+      "x": 16,
+      "y": 316
+    },
+    {
+      "text": "Checkout · no AI on this path",
+      "x": 16,
+      "y": 436
+    }
+  ],
+  "slots": {
+    "shopper-chat": [
+      16,
+      34,
+      176,
+      64
+    ],
+    "query-understanding": [
+      224,
+      26,
+      200,
+      80
+    ],
+    "shopper-assistant": [
+      456,
+      26,
+      196,
+      80
+    ],
+    "output-check": [
+      684,
+      20,
+      286,
+      92
+    ],
+    "answer": [
+      1002,
+      34,
+      124,
+      64
+    ],
+    "northwind-catalog": [
+      224,
+      150,
+      246,
+      128
+    ],
+    "northwind-rag": [
+      482,
+      150,
+      194,
+      128
+    ],
+    "northwind-orders": [
+      688,
+      150,
+      214,
+      128
+    ],
+    "northwind-policy": [
+      914,
+      150,
+      212,
+      128
+    ],
+    "talk-to-person": [
+      16,
+      328,
+      176,
+      74
+    ],
+    "handoff-trigger": [
+      224,
+      328,
+      206,
+      74
+    ],
+    "handoff-desk": [
+      462,
+      328,
+      162,
+      74
+    ],
+    "care-subagent": [
+      656,
+      328,
+      264,
+      74
+    ],
+    "case-queue": [
+      952,
+      328,
+      174,
+      74
+    ],
+    "pay-demo": [
+      16,
+      446,
+      176,
+      72
+    ],
+    "checkout-validate": [
+      216,
+      446,
+      100,
+      72
+    ],
+    "checkout-hold": [
+      332,
+      446,
+      124,
+      72
+    ],
+    "checkout-fraud": [
+      472,
+      446,
+      96,
+      72
+    ],
+    "checkout-authorize": [
+      584,
+      446,
+      120,
+      72
+    ],
+    "checkout-commit": [
+      720,
+      446,
+      122,
+      72
+    ],
+    "checkout-capture": [
+      858,
+      446,
+      120,
+      72
+    ],
+    "checkout-confirm": [
+      994,
+      446,
+      132,
+      72
+    ],
+    "staff-request": [
+      16,
+      574,
+      176,
+      80
+    ],
+    "orchestrator": [
+      224,
+      572,
+      214,
+      84
+    ],
+    "orders-subagent": [
+      470,
+      540,
+      194,
+      84
+    ],
+    "returns-subagent": [
+      470,
+      632,
+      194,
+      56
+    ],
+    "order-fraud": [
+      698,
+      552,
+      126,
+      56
+    ],
+    "order-payment": [
+      836,
+      552,
+      126,
+      56
+    ],
+    "order-carrier": [
+      698,
+      620,
+      126,
+      56
+    ],
+    "escalated-order": [
+      994,
+      540,
+      132,
+      56
+    ],
+    "escalation": [
+      994,
+      612,
+      132,
+      64
+    ],
+    "judge": [
+      16,
+      706,
+      360,
+      60
+    ]
+  },
+  "routes": {
+    "shopper-chat->query-understanding": {
+      "points": [
+        [
+          192,
+          66
+        ],
+        [
+          224,
+          66
+        ]
+      ],
+      "label": null
+    },
+    "query-understanding->shopper-assistant": {
+      "points": [
+        [
+          424,
+          66
+        ],
+        [
+          456,
+          66
+        ]
+      ],
+      "label": null
+    },
+    "query-understanding->northwind-catalog": {
+      "points": [
+        [
+          300,
+          106
+        ],
+        [
+          300,
+          150
+        ]
+      ],
+      "label": [
+        294,
+        133,
+        "end"
+      ]
+    },
+    "shopper-assistant->northwind-catalog": {
+      "points": [
+        [
+          554,
+          106
+        ],
+        [
+          554,
+          128
+        ],
+        [
+          420,
+          128
+        ],
+        [
+          420,
+          150
+        ]
+      ],
+      "label": null
+    },
+    "shopper-assistant->northwind-rag": {
+      "points": [
+        [
+          554,
+          106
+        ],
+        [
+          554,
+          128
+        ],
+        [
+          579,
+          128
+        ],
+        [
+          579,
+          150
+        ]
+      ],
+      "label": null
+    },
+    "shopper-assistant->northwind-orders": {
+      "points": [
+        [
+          554,
+          106
+        ],
+        [
+          554,
+          128
+        ],
+        [
+          795,
+          128
+        ],
+        [
+          795,
+          150
+        ]
+      ],
+      "label": null
+    },
+    "shopper-assistant->northwind-policy": {
+      "points": [
+        [
+          554,
+          106
+        ],
+        [
+          554,
+          128
+        ],
+        [
+          1020,
+          128
+        ],
+        [
+          1020,
+          150
+        ]
+      ],
+      "label": null
+    },
+    "shopper-assistant->output-check": {
+      "points": [
+        [
+          652,
+          66
+        ],
+        [
+          684,
+          66
+        ]
+      ],
+      "label": null
+    },
+    "output-check->answer": {
+      "points": [
+        [
+          970,
+          66
+        ],
+        [
+          1002,
+          66
+        ]
+      ],
+      "label": null
+    },
+    "talk-to-person->handoff-trigger": {
+      "points": [
+        [
+          192,
+          365
+        ],
+        [
+          224,
+          365
+        ]
+      ],
+      "label": null
+    },
+    "handoff-trigger->northwind-catalog": {
+      "points": [
+        [
+          327,
+          328
+        ],
+        [
+          327,
+          278
+        ]
+      ],
+      "label": [
+        331,
+        306,
+        "start"
+      ]
+    },
+    "handoff-trigger->handoff-desk": {
+      "points": [
+        [
+          430,
+          365
+        ],
+        [
+          462,
+          365
+        ]
+      ],
+      "label": null
+    },
+    "handoff-desk->care-subagent": {
+      "points": [
+        [
+          624,
+          365
+        ],
+        [
+          656,
+          365
+        ]
+      ],
+      "label": null
+    },
+    "care-subagent->case-queue": {
+      "points": [
+        [
+          920,
+          365
+        ],
+        [
+          952,
+          365
+        ]
+      ],
+      "label": null
+    },
+    "pay-demo->checkout-validate": {
+      "points": [
+        [
+          192,
+          482
+        ],
+        [
+          216,
+          482
+        ]
+      ],
+      "label": null
+    },
+    "pay-demo->northwind-catalog": {
+      "points": [
+        [
+          192,
+          460
+        ],
+        [
+          208,
+          460
+        ],
+        [
+          208,
+          286
+        ],
+        [
+          236,
+          286
+        ],
+        [
+          236,
+          278
+        ]
+      ],
+      "label": null
+    },
+    "checkout-validate->checkout-hold": {
+      "points": [
+        [
+          316,
+          482
+        ],
+        [
+          332,
+          482
+        ]
+      ],
+      "label": null
+    },
+    "checkout-hold->checkout-fraud": {
+      "points": [
+        [
+          456,
+          482
+        ],
+        [
+          472,
+          482
+        ]
+      ],
+      "label": null
+    },
+    "checkout-fraud->checkout-authorize": {
+      "points": [
+        [
+          568,
+          482
+        ],
+        [
+          584,
+          482
+        ]
+      ],
+      "label": null
+    },
+    "checkout-authorize->checkout-commit": {
+      "points": [
+        [
+          704,
+          482
+        ],
+        [
+          720,
+          482
+        ]
+      ],
+      "label": null
+    },
+    "checkout-commit->checkout-capture": {
+      "points": [
+        [
+          842,
+          482
+        ],
+        [
+          858,
+          482
+        ]
+      ],
+      "label": null
+    },
+    "checkout-capture->checkout-confirm": {
+      "points": [
+        [
+          978,
+          482
+        ],
+        [
+          994,
+          482
+        ]
+      ],
+      "label": null
+    },
+    "staff-request->orchestrator": {
+      "points": [
+        [
+          192,
+          614
+        ],
+        [
+          224,
+          614
+        ]
+      ],
+      "label": null
+    },
+    "orchestrator->orders-subagent": {
+      "points": [
+        [
+          438,
+          600
+        ],
+        [
+          470,
+          600
+        ]
+      ],
+      "label": null
+    },
+    "orchestrator->returns-subagent": {
+      "points": [
+        [
+          438,
+          644
+        ],
+        [
+          454,
+          644
+        ],
+        [
+          454,
+          660
+        ],
+        [
+          470,
+          660
+        ]
+      ],
+      "label": null
+    },
+    "orders-subagent->order-fraud": {
+      "points": [
+        [
+          664,
+          580
+        ],
+        [
+          698,
+          580
+        ]
+      ],
+      "label": [
+        700,
+        546,
+        "start"
+      ]
+    },
+    "orders-subagent->order-payment": {
+      "points": [
+        [
+          664,
+          614
+        ],
+        [
+          899,
+          614
+        ],
+        [
+          899,
+          608
+        ]
+      ],
+      "label": null
+    },
+    "returns-subagent->order-carrier": {
+      "points": [
+        [
+          664,
+          654
+        ],
+        [
+          698,
+          654
+        ]
+      ],
+      "label": null
+    },
+    "escalated-order->escalation": {
+      "points": [
+        [
+          1060,
+          596
+        ],
+        [
+          1060,
+          612
+        ]
+      ],
+      "label": null
+    },
+    "escalation->care-subagent": {
+      "points": [
+        [
+          1126,
+          644
+        ],
+        [
+          1148,
+          644
+        ],
+        [
+          1148,
+          312
+        ],
+        [
+          820,
+          312
+        ],
+        [
+          820,
+          328
+        ]
+      ],
+      "label": [
+        984,
+        307,
+        "middle"
+      ]
+    }
+  }
+}

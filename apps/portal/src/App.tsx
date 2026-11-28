@@ -13,6 +13,7 @@ import {
   SearchPage,
 } from "./pages";
 import { href, type Route, useRoute } from "./router";
+import { StaffGate } from "./staff/StaffGate";
 import { type Departments, fetchDepartments, type Loaded } from "./shopApi";
 import { SUGGESTIONS } from "./suggestions";
 
@@ -66,6 +67,8 @@ function Page({ route, cart, onCartChanged }: { route: Route; cart: CartState; o
       return <OrdersPage />;
     case "not-found":
       return <NotFoundPage />;
+    case "staff":
+      return null; // `Root` renders the staff console instead of the shop (OPS-1)
   }
 }
 
@@ -168,4 +171,11 @@ export function App() {
       </button>
     </div>
   );
+}
+
+/** OPS-1: the staff console has its own chrome and opens no shopper session, so it replaces the shop
+ * (and its chat panel) instead of rendering inside it. */
+export function Root() {
+  const route = useRoute();
+  return route.page === "staff" ? <StaffGate view={route.view} /> : <App />;
 }
