@@ -259,3 +259,26 @@ def test_internal_products_never_appear(client: TestClient) -> None:
     overview = client.get("/api/staff/overview").json()
     public = sum(1 for p in _jsonl(FIXTURES / "products.jsonl") if p["visibility"] == "public")
     assert overview["catalog"]["products"] == public
+
+
+def test_a_reader_cannot_change_the_demo_order_history() -> None:
+    """advisor-reviewer re-review finding 6: `everyone()` hands out copies all the way down, so
+    the console cannot change a Pay (demo) entry's lines or total through what it reads."""
+    demo = DemoOrders()
+    demo.record(
+        shopper="S0188",
+        order_id="O900001",
+        placed_on="2026-11-28",
+        status="confirmed",
+        lines=[{"product_id": "P0001", "variant_id": "P0001-BLK-REG-L", "quantity": 1}],
+        total={"amount": "89.00", "currency": "USD"},
+    )
+    ((_, entry),) = demo.everyone()
+    entry["lines"][0]["quantity"] = 99
+    entry["lines"].append({"product_id": "P0002"})
+    entry["total"]["amount"] = "0.00"
+    ((_, again),) = demo.everyone()
+    assert again["lines"] == [
+        {"product_id": "P0001", "variant_id": "P0001-BLK-REG-L", "quantity": 1}
+    ]
+    assert again["total"] == {"amount": "89.00", "currency": "USD"}

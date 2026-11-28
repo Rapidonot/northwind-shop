@@ -548,3 +548,49 @@ $ vitest run src/staff/staff.test.tsx
 ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
       Tests  4 failed | 28 passed (32)
 (The 5th new test, "each overview breakdown adds up to its tile's number", passes before the fix: Agent events and Open handoffs already added up; it guards them.)
+
+# 2026-11-28: advisor re-review finding 5, the look fix failing on the logic, not a missing key: mutants at b3c23cb
+## Mutant G: order_counts breaks down every exception (the old tile note), not only escalated orders
+$ uv run pytest -q services/gateway/tests/test_ops1_counts_add_up.py
+E       AssertionError: assert 100 == 50
+E        +  where 100 = sum(dict_values([25, 25, 25, 25]))
+E        +    where dict_values([25, 25, 25, 25]) = <built-in method values of dict object at 0x10fa37340>()
+E        +      where <built-in method values of dict object at 0x10fa37340> = {'address_error': 25, 'fraud_flag': 25, 'soft_decline': 25, 'stock_out': 25}.values
+E       AssertionError: assert 100 == 51
+E        +  where 100 = sum(dict_values([25, 25, 25, 25]))
+E        +    where dict_values([25, 25, 25, 25]) = <built-in method values of dict object at 0x10f91ec80>()
+E        +      where <built-in method values of dict object at 0x10f91ec80> = {'address_error': 25, 'fraud_flag': 25, 'soft_decline': 25, 'stock_out': 25}.values
+E       AssertionError: assert 100 == 50
+E        +  where 100 = sum(dict_values([25, 25, 25, 25]))
+E        +    where dict_values([25, 25, 25, 25]) = <built-in method values of dict object at 0x10fc1d180>()
+E        +      where <built-in method values of dict object at 0x10fc1d180> = {'address_error': 25, 'fraud_flag': 25, 'soft_decline': 25, 'stock_out': 25}.values
+FAILED services/gateway/tests/test_ops1_counts_add_up.py::test_the_seeded_orders_add_up_and_match_an_independent_recount
+FAILED services/gateway/tests/test_ops1_counts_add_up.py::test_pay_demo_orders_still_add_up_including_an_escalation_with_no_code
+FAILED services/gateway/tests/test_ops1_counts_add_up.py::test_the_overview_tiles_add_up
+3 failed in 0.88s
+## Mutant P: the tile note lists the reasons again; each reason chip counts one too many
+$ vitest run src/staff/staff.test.tsx
+     × the escalated-orders tile shows its number and 'of N orders with an exception', and lists no reason 11ms
+     × orders: the reason chips add up to Escalated; Escalated, Other exceptions and Processed add up to All 11ms
+AssertionError: expected '2 fraud review · 1 stock out' to be 'of 8 orders with an exception' // Object.is equality
+Expected: "of 8 orders with an exception"
+Received: "2 fraud review · 1 stock out"
+AssertionError: expected 5 to be 3 // Object.is equality
+- Expected
++ Received
+  × "pnpm recursive exec" failed in /Users/rapido/Projects/northwind-shop-b/
+
+# 2026-11-28: advisor re-review finding 6, everyone() copies only one level, before the fix
+$ uv run pytest -q services/gateway/tests/test_ops1_views.py -k reader_cannot
+E       At index 0 diff: {'product_id': 'P0001', 'variant_id': 'P0001-BLK-REG-L', 'quantity': 99} != {... 'quantity': 1}
+E       Left contains one more item: {'product_id': 'P0002'}
+1 failed, 17 deselected
+
+# 2026-11-28: advisor re-review finding 3, the new chip test against a mutant (chips keyed by code, not label)
+$ vitest run src/staff/staff.test.tsx
+     × orders: escalated first, and the filters keep only their rows
+     × orders: the reason chips add up to Escalated; Escalated, Other exceptions and Processed add up to All
+     × orders: codes that share a label are one chip, and an escalation with no code is a chip of its own
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  3 failed | 30 passed (33)
+  × "pnpm recursive exec" failed in /Users/rapido/Projects/northwind-shop-b/

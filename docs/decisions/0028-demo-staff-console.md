@@ -1,8 +1,10 @@
 # 0028: A read-only demo staff console, behind DEMO_STAFF_DASHBOARD (OPS-1, part 1)
 
 Status: accepted by the user, 2026-11-27 (the OPS-1 plan, with the approval changes: the screen's patterns copied, not
-imported; the full RECORD-ALL freeze list pinned; no `make ci` and no ship until RECORD-ALL has shipped; D1–D3; the look
-approvals, and "what runs today" for the order band).
+imported; the full RECORD-ALL freeze list pinned while it ran, the pin deleted once RECORD-ALL shipped; no `make ci` and no
+ship until RECORD-ALL had shipped; D1–D3; the look approvals, and "what runs today" for the order band). Amended
+2026-11-28: the staff routes are registered GET only, and CHK-01's order-route pin reads `app.routes` with
+`/api/staff/orders` on its approved list as GET only; every count adds up to the whole it sits under (§6).
 
 ## Context
 For live demos on the hosted site, the user wants a staff console that shows how the shop's agents are wired and what they
@@ -42,7 +44,9 @@ criteria. RECORD-ALL (#18) runs in window A with the assistant, the agent runtim
    (command)"; an escalated order's case is "Escalated order (command)" → escalation → Care agent. Neither runs from the shop.
 6. **Real numbers only.** Orders are the 1,000 seeded ones, seeded as northwind-orders seeds them, each with the shopper
    status northwind-orders shows (pinned equal, order by order) and its exception as the reason, plus Pay (demo) orders,
-   an escalated one with the checkout's own escalation code as its reason. The handoff desk's escalation cases are shown
+   an escalated one with the checkout's own escalation code as its reason. Every count adds up to the whole it sits under:
+   total = escalated + other exceptions + processed, and only escalated orders are broken down by reason (an escalation
+   with no code is "unrecorded"). The overview's tile shows the escalated count "of N orders with an exception". The handoff desk's escalation cases are shown
    as part of each handoff, not as a list of their own.
    Handoffs, agent activity and holds are this process's in-memory stores, shown "since this server started". A handoff has
    no time: the queue keeps none, so none is shown. The four sample traces are marked sample, carry no timings, and walk the

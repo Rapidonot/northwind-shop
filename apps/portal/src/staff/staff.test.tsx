@@ -244,13 +244,14 @@ describe("[OPS-1] the table views", () => {
     expect(firstCells().slice(0, escalated).every((id) => FIXTURE.orders.rows.find((r) => r.order_id === id)?.escalated)).toBe(true);
 
     fireEvent.click(screen.getByRole("button", { name: /^Fraud review/ }));
-    expect(firstCells().sort()).toEqual(FIXTURE.orders.rows.filter((r) => r.escalated && r.reason === "fraud_flag").map((r) => r.order_id).sort());
+    // Every escalated order whose reason is labelled "Fraud review" (seeded fraud_flag, Pay (demo)'s fraud_review).
+    expect(firstCells().sort()).toEqual(FIXTURE.orders.rows.filter((r) => r.escalated && r.reason !== null && REASONS[r.reason] === "Fraud review").map((r) => r.order_id).sort());
 
     fireEvent.click(screen.getByRole("button", { name: /^Other exceptions/ }));
     expect(firstCells().sort()).toEqual(FIXTURE.orders.rows.filter((r) => r.reason !== null && !r.escalated).map((r) => r.order_id).sort());
 
     fireEvent.click(screen.getByRole("button", { name: /^Processed/ }));
-    expect(firstCells().sort()).toEqual(FIXTURE.orders.rows.filter((r) => r.reason === null).map((r) => r.order_id).sort());
+    expect(firstCells().sort()).toEqual(FIXTURE.orders.rows.filter((r) => r.reason === null && !r.escalated).map((r) => r.order_id).sort());
   });
 
   it("orders: shows a page at a time", async () => {
@@ -346,6 +347,47 @@ describe("[OPS-1] every count adds up to the whole it sits under", () => {
       fireEvent.click(screen.getByRole("button", { name: new RegExp(`^${label}\\s`) }));
       expect(screen.queryAllByRole("row").slice(1).length, label).toBe(n);
     }
+  });
+
+  it("orders: codes that share a label are one chip, and an escalation with no code is a chip of its own", async () => {
+    // advisor-reviewer re-review finding 3: a seeded fraud_flag and a Pay (demo) fraud_review, an
+    // on-hold Pay (demo) order with no escalation code, an exception that did not escalate, and a
+    // processed order.
+    const base = FIXTURE.orders.rows[0]!;
+    const rows = [
+      { ...base, order_id: "O000002", reason: "fraud_flag", status: "on_hold", escalated: true, source: "store" as const },
+      { ...base, order_id: "O900001", reason: "fraud_review", status: "on_hold", escalated: true, source: "demo" as const },
+      { ...base, order_id: "O900002", reason: null, status: "on_hold", escalated: true, source: "demo" as const },
+      { ...base, order_id: "O000024", reason: "soft_decline", status: "confirmed", escalated: false, source: "store" as const },
+      { ...base, order_id: "O000001", reason: null, status: "picked_up", escalated: false, source: "store" as const },
+    ];
+    const counts = {
+      total: 5,
+      exceptions: 4,
+      escalated: 3,
+      other_exceptions: 1,
+      processed: 1,
+      escalated_by_reason: { fraud_flag: 1, fraud_review: 1, unrecorded: 1 },
+    };
+    renderConsole("orders", { orders: { counts, rows } });
+    await screen.findByRole("heading", { name: "Orders & escalations" });
+    const shown = chips(screen.getByRole("group", { name: "Orders" }));
+    expect([...shown]).toEqual([
+      ["All", 5],
+      ["Escalated", 3],
+      ["Fraud review", 2],
+      ["No reason recorded", 1],
+      ["Other exceptions", 1],
+      ["Processed", 1],
+    ]);
+    const kept = (label: RegExp) => {
+      fireEvent.click(screen.getByRole("button", { name: label }));
+      return screen.getAllByRole("row").slice(1).map((row) => within(row).getAllByRole("cell")[0]!.textContent!.replace("Pay (demo)", "")).sort();
+    };
+    expect(kept(/^Fraud review\s/)).toEqual(["O000002", "O900001"]);
+    expect(kept(/^No reason recorded\s/)).toEqual(["O900002"]);
+    expect(kept(/^Processed\s/)).toEqual(["O000001"]);
+    expect(kept(/^Other exceptions\s/)).toEqual(["O000024"]);
   });
 
   it("orders: the stats bar shows only parts of the total, no per-reason stats", async () => {
