@@ -314,3 +314,34 @@ Mutants (each restored; tools.py back at amendment 2's 3172127e..., portal.py un
   M-h1 check_stock's model-visible description changed in tools.py   -> 1 failed, 1 passed (killed)
   M-h2 get_price slipped into PORTAL_SPECS (portal.py)               -> 2 failed (killed)
   M-h3 the pin over all of TOOLS again (the old pin)                  -> 1 failed (killed)
+
+==== Row #18 after ship's e2e failure: a replay miss never blocks the proxy (the user's stop-8 yes, 2026-11-28) ====
+Before the fix (services/llm-replay/tests/test_18_miss_diff_bounded.py, 5 tests):
+E       AssertionError: the hit waited 3.01 s behind the miss's diff
+E       assert 3.008914250007365 < 1.0
+E       AttributeError: module 'northwind_llm_replay.cassette' has no attribute 'MAX_DIFF_CHARS'
+E       AssertionError: a full SequenceMatcher match ran while choosing the nearest
+E       AttributeError: module 'northwind_llm_replay.cassette' has no attribute 'NEAREST_SHORTLIST'
+FAILED services/llm-replay/tests/test_18_miss_diff_bounded.py::test_a_hit_is_served_while_a_slow_miss_is_being_diffed
+FAILED services/llm-replay/tests/test_18_miss_diff_bounded.py::test_a_diff_above_the_cap_is_skipped_and_never_computed
+FAILED services/llm-replay/tests/test_18_miss_diff_bounded.py::test_the_nearest_cassette_is_chosen_without_a_full_sequence_match
+FAILED services/llm-replay/tests/test_18_miss_diff_bounded.py::test_choosing_the_nearest_of_many_candidates_reads_few_of_them_in_full
+4 failed, 1 passed in 3.58s
+  (The hit test fails on behaviour: the hit waited 3.01 s behind a 3 s miss diff. The nearest-selection test fails
+  on behaviour: a full SequenceMatcher match ran. The cap and shortlist tests fail on their missing constants.)
+After: 5 passed; services/llm-replay/tests: 1,229 passed.
+Mutants (each restored):
+  M-m1 the diff back on the event loop (no asyncio.to_thread)        -> 1 failed, 4 passed (killed)
+  M-m2 the cap removed (if False:)                                    -> 1 failed, 4 passed (killed; rerun after the mypy fix: killed)
+  M-m3 the nearest chosen by full ratio() again                       -> 2 failed, 3 passed, 171 s (killed)
+  M-m4 no shortlist (quick_ratio on every candidate)                  -> 1 failed, 4 passed (killed)
+The real case at $0 ($TMPDIR/w13script/proxy_block.py: an in-process replay proxy on assistant-smoke, a
+backend-care request that misses, and 0.5 s later the care suggestion's exact recorded request):
+  before: care miss 23.5 s; chat hit 23.0 s (0.0 s alone)
+  after:  care miss 0.0 s;  chat hit 0.0 s  (0.0 s alone)
+Security read (docs/reviews/2026-11-28-18-missdiff-security.md): no medium or above; L1-L3 (low) fixed:
+  L1 a line cap too (MAX_DIFF_LINES 20,000; the largest recorded match is 708 lines); L2 a miss is counted before
+  its diff is built; L3 anyio.to_thread.run_sync, as the ledger calls. 7 tests pass.
+  M-m1 again on the anyio line (the diff on the event loop)          -> 1 failed, 6 passed (killed)
+  M-m5 the line cap removed                                           -> 1 failed, 6 passed (killed)
+  M-m6 the miss counted after its diff (the old order)                -> 1 failed, 6 passed (killed)
