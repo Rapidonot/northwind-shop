@@ -52,3 +52,40 @@ src/theme.test.ts:  Tests 14 passed (14)
 src/App.test.tsx:  Tests 3 passed (3)
 src/shop.test.tsx:  Tests 33 passed (33)
 src/shopSecurity.test.tsx:  Tests 41 passed (41)
+
+# After the user's answers (finding 6 tightening, staff routes GET only, PR body), parent bd438d3
+
+## Lint
+$ uv run ruff check services/gateway: All checks passed!
+$ uv run ruff format --check services/gateway: 70 files already formatted
+$ uv run mypy services/gateway: Success: no issues found in 70 source files
+
+## Test files, each on its own
+services/gateway/tests/test_ops1_agent_map.py: 16 passed in 0.86s
+services/gateway/tests/test_ops1_flag.py: 14 passed in 0.93s
+services/gateway/tests/test_ops1_frozen.py: 10 passed in 0.11s
+services/gateway/tests/test_ops1_readonly.py: 9 passed in 0.07s
+services/gateway/tests/test_ops1_screen.py: 6 passed in 0.94s
+services/gateway/tests/test_ops1_security_fixes.py: 14 passed in 1.99s
+services/gateway/tests/test_ops1_tw_counts.py: 9 passed in 1.03s
+services/gateway/tests/test_ops1_tw_gate.py: 12 passed in 1.34s
+services/gateway/tests/test_ops1_tw_screen.py: 24 passed in 0.91s
+services/gateway/tests/test_ops1_views.py: 17 passed in 0.98s
+services/gateway/tests/sa01_checkout/test_ops1_staff_wiring.py: 4 passed in 2.13s
+services/gateway/tests/sa01_checkout/test_sa01_pr2_cart_writes.py: 19 passed in 9.01s
+services/gateway/tests/sa01_checkout/test_sa01_pr2_checkout.py: 21 passed in 10.31s
+services/gateway/tests/sa01_checkout/test_sa01_pr2_checkout_pins.py: 3 passed in 0.38s
+services/gateway/tests/sa01_checkout/test_sa01_pr2_orders.py: 7 passed in 3.31s
+services/gateway/tests/sa01_checkout/test_sa01_pr2_security_fixes.py: 20 passed in 7.27s
+services/gateway/tests/sa01_checkout/test_sa01_pr2_tw_cart_boundaries.py: 120 passed in 53.29s
+services/gateway/tests/sa01_checkout/test_sa01_pr2_tw_checkout_edges.py: 47 passed in 21.91s
+services/gateway/tests/sa01_checkout/test_sa01_pr2_tw_orders_edges.py: 5 passed in 2.87s
+services/gateway/tests/test_chk01_gateway_criteria.py: 23 passed in 1.12s
+services/mcp-catalog/tests/test_chk01_criteria.py: 84 passed in 3.38s
+services/assistant/tests/test_chk01_assistant_criteria.py: 14 passed in 5.84s
+services/gateway/tests/test_healthz.py: 3 passed, 1 deselected in 0.62s
+services/gateway/tests/test_sa06_endpoint.py: 25 passed in 0.73s
+services/gateway/tests/test_sa06_acceptance_tw.py: 15 passed in 6.80s
+services/gateway/tests/test_sa06_content_type.py: 8 passed in 0.61s
+services/backend/tests/test_be05_prerequisites.py: 49 passed in 0.73s
+tests/governance/test_citations.py: 37 passed in 0.25s

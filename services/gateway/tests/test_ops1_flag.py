@@ -102,7 +102,8 @@ def test_every_staff_route_carries_the_guard() -> None:
     assert {r.path for r in routes} == {f"{STAFF_PREFIX}/{v}" for v in VIEWS}
     for route in routes:
         assert any(dep.call is guard for dep in route.dependant.dependencies), route.path
-        assert set(route.methods or ()) >= {"GET", "POST", "PUT", "PATCH", "DELETE"}, route.path
+        # GET only (CHK-01's route pin): every other method is StaffGate's unknown-path 404.
+        assert set(route.methods or ()) == {"GET"}, route.path
 
 
 def test_no_other_route_mentions_staff() -> None:

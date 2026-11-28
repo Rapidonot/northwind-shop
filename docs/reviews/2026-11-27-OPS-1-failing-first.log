@@ -483,3 +483,48 @@ FAILED services/gateway/tests/test_ops1_tw_screen.py::test_screen_covers_keys_ne
 FAILED services/gateway/tests/test_ops1_tw_screen.py::test_planted_values_in_every_field_never_reach_any_response
 FAILED services/gateway/tests/test_ops1_tw_screen.py::test_planted_values_are_withheld_not_dropped
 15 failed, 9 passed in 0.89s
+
+# CHK-01 route pin tightened (2026-11-28, the user's change for advisor-reviewer finding 6)
+
+## 1. The new hidden-route test against the pin as it was (reading app.openapi())
+
+.....F.................                                                  [100%]
+=================================== FAILURES ===================================
+_______________ test_a_hidden_non_get_order_route_fails_the_pin ________________
+
+    def test_a_hidden_non_get_order_route_fails_the_pin() -> None:
+        """OPS-1 (advisor-reviewer finding 6, the user's tightening): a route kept out of the OpenAPI
+        schema is still served, so the pin must see it."""
+        sneaky = FastAPI()
+    
+        @sneaky.post("/api/orders/cancel", include_in_schema=False)
+        def cancel() -> None: ...
+    
+>       assert order_route_problems(sneaky) == ["/api/orders/cancel ['post']"]
+E       assert [] == ["/api/orders...cel ['post']"]
+E         
+E         Right contains one more item: "/api/orders/cancel ['post']"
+E         Use -v to get more diff
+
+services/gateway/tests/test_chk01_gateway_criteria.py:131: AssertionError
+=========================== short test summary info ============================
+FAILED services/gateway/tests/test_chk01_gateway_criteria.py::test_a_hidden_non_get_order_route_fails_the_pin
+1 failed, 22 passed in 1.21s
+
+## 2. The pin reading app.routes, against the staff routes registered for every method (as at bd438d3)
+
+....F..................                                                  [100%]
+=================================== FAILURES ===================================
+____ test_the_gateway_has_exactly_the_approved_order_and_cart_write_routes _____
+
+    def test_the_gateway_has_exactly_the_approved_order_and_cart_write_routes() -> None:
+>       assert order_route_problems(app) == []
+E       assert ["/api/staff/...ost', 'put']"] == []
+E         
+E         Left contains one more item: "/api/staff/orders ['delete', 'get', 'options', 'patch', 'post', 'put']"
+E         Use -v to get more diff
+
+services/gateway/tests/test_chk01_gateway_criteria.py:139: AssertionError
+=========================== short test summary info ============================
+FAILED services/gateway/tests/test_chk01_gateway_criteria.py::test_the_gateway_has_exactly_the_approved_order_and_cart_write_routes
+1 failed, 22 passed in 1.27s

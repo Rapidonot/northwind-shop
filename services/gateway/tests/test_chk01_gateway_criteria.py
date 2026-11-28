@@ -11,10 +11,11 @@ from __future__ import annotations
 
 import asyncio
 import re
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from typing import Any
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from northwind_assistant.caller import Caller
@@ -91,18 +92,65 @@ ORDER_AND_CART_WRITE_ROUTES = {
     "/api/cart/items": {"post"},
     "/api/cart/quantity": {"post"},
     "/api/cart/remove": {"post"},
+    # OPS-1 (decision 0028): the demo staff console's read of the orders, GET only, and only with
+    # DEMO_STAFF_DASHBOARD=1; out of the OpenAPI schema, which is why the pin reads the routes.
+    "/api/staff/orders": {"get"},
 }
 
 
-def test_the_gateway_has_exactly_the_approved_order_and_cart_write_routes() -> None:
-    schema = app.openapi()["paths"]
-    for path in schema:
-        if path in ORDER_AND_CART_WRITE_ROUTES:
-            assert set(schema[path]) == ORDER_AND_CART_WRITE_ROUTES[path], path
+def _routes(routes: Iterable[Any]) -> Iterator[Any]:
+    """Every route, included routers opened up (FastAPI 0.16x nests them as `_IncludedRouter`)."""
+    for route in routes:
+        inner = getattr(route, "original_router", None)
+        if inner is not None:
+            yield from _routes(inner.routes)
         else:
-            assert not re.search(r"order|checkout|payment|purchase|cart/", path), path
-    assert set(ORDER_AND_CART_WRITE_ROUTES) <= set(schema)
-    assert set(schema["/api/cart"]) == {"get"}
+            yield route
+
+
+def route_methods(application: FastAPI) -> dict[str, set[str]]:
+    """Each path the app serves and its methods, lower case, read from the routes themselves, so a
+    route kept out of the OpenAPI schema (`include_in_schema=False`) is seen too (OPS-1, the
+    user's tightening). HEAD is GET without a body, so it is not counted apart from GET."""
+    served: dict[str, set[str]] = {}
+    for route in _routes(application.routes):
+        methods = getattr(route, "methods", None)
+        if methods:
+            served.setdefault(route.path, set()).update(m.lower() for m in methods)
+    for methods in served.values():
+        if "get" in methods:
+            methods.discard("head")
+    return served
+
+
+def order_route_problems(application: FastAPI) -> list[str]:
+    """Every order, checkout, payment, purchase or cart-write route that is not exactly approved."""
+    problems = []
+    for path, methods in route_methods(application).items():
+        if path in ORDER_AND_CART_WRITE_ROUTES:
+            if methods != ORDER_AND_CART_WRITE_ROUTES[path]:
+                problems.append(f"{path} {sorted(methods)}")
+        elif re.search(r"order|checkout|payment|purchase|cart/", path):
+            problems.append(f"{path} {sorted(methods)}")
+    return problems
+
+
+def test_the_gateway_has_exactly_the_approved_order_and_cart_write_routes() -> None:
+    assert order_route_problems(app) == []
+    served = route_methods(app)
+    assert set(ORDER_AND_CART_WRITE_ROUTES) <= set(served)
+    assert served["/api/cart"] == {"get"}
+
+
+def test_a_hidden_non_get_order_route_fails_the_pin() -> None:
+    """OPS-1 (advisor-reviewer finding 6, the user's tightening): a route kept out of the OpenAPI
+    schema is still served, so the pin must see it."""
+    sneaky = FastAPI()
+
+    @sneaky.post("/api/orders/cancel", include_in_schema=False)
+    def cancel() -> None: ...
+
+    assert order_route_problems(sneaky) == ["/api/orders/cancel ['post']"]
 
 
 def test_the_session_paths_are_the_chat_the_cart_the_sign_in_and_the_handoff() -> None:

@@ -21,6 +21,7 @@ from northwind_gateway.staff.flag import staff_enabled
 from northwind_gateway.staff.screen import ScreenUnavailable, ready, screen
 
 STAFF_PREFIX = "/api/staff"
+# The methods the tests try on every staff path: each but GET is the unknown-path 404 (StaffGate).
 ALL_METHODS = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
 NO_STORE = {"Cache-Control": "no-store"}
 VIEW_PATHS = frozenset(f"{STAFF_PREFIX}/{view}" for view in views.VIEWS)
@@ -48,7 +49,9 @@ def guard(request: Request) -> None:
 def staff_route(view: str, build: Callable[[views.Sources], dict[str, Any]]) -> None:
     @router.api_route(
         f"{STAFF_PREFIX}/{view}",
-        methods=ALL_METHODS,
+        # GET only: StaffGate turns every other method into the unknown-path 404 before routing,
+        # and CHK-01's route pin sees only GET on /api/staff/orders.
+        methods=["GET"],
         include_in_schema=False,
         dependencies=[Depends(guard)],
     )
