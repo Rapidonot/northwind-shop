@@ -31,7 +31,9 @@ criteria. RECORD-ALL (#18) runs in window A with the assistant, the agent runtim
 4. **The agent map is generated, never hand-written.** MCP servers, their tools and the assistant's and query
    understanding's edges come from `tool_scopes.AGENT_TOOLS`; the catalog's cart writes collapse to "+ cart write tools",
    named from `catalog_tool.CART_TOOL_NAMES` less `get_cart`. Each AI agent's model is the `llm.py` constant its own module
-   imports and uses, read by AST (nothing executed), labelled from the constant's value. Every other edge stands on an import
+   imports and uses, read from its source by AST, labelled from the constant's value. The module itself is not run, but
+   finding its source imports its parent packages. The eval-only judge comes from `llm.JUDGE_MODEL`, and a test checks that
+   `northwind_evals/judge.py` uses that constant (the judge's module is not a gateway dependency). Every other edge stands on an import
    that must be in the code. Positions are the portal's layout table (`apps/portal/src/staff/layout.json`, measured from the
    reference mockup); generated nodes and edges match its boxes and routes both ways, and the portal's snapshot
    (`system.json`) is pinned equal to what the gateway serves.
@@ -39,7 +41,9 @@ criteria. RECORD-ALL (#18) runs in window A with the assistant, the agent runtim
    ports → escalation) matched no path in the code. The orchestrator serves a read-only staff request, "Staff request
    (command)"; an escalated order's case is "Escalated order (command)" → escalation → Care agent. Neither runs from the shop.
 6. **Real numbers only.** Orders are the 1,000 seeded ones, seeded as northwind-orders seeds them, each with the shopper
-   status northwind-orders shows (pinned equal, order by order) and its exception as the reason, plus Pay (demo) orders.
+   status northwind-orders shows (pinned equal, order by order) and its exception as the reason, plus Pay (demo) orders,
+   an escalated one with the checkout's own escalation code as its reason. The handoff desk's escalation cases are shown
+   as part of each handoff, not as a list of their own.
    Handoffs, agent activity and holds are this process's in-memory stores, shown "since this server started". A handoff has
    no time: the queue keeps none, so none is shown. The four sample traces are marked sample, carry no timings, and walk the
    map's lines from their entry point.

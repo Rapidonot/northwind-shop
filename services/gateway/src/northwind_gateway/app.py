@@ -31,6 +31,7 @@ from northwind_gateway.chat import (
     invalid_request,
     router,
 )
+from northwind_gateway.demo_orders import demo_orders
 from northwind_gateway.handoff import handoff_desk
 from northwind_gateway.handoff import router as handoff_router
 from northwind_gateway.orders import router as orders_router
@@ -88,6 +89,9 @@ staff_views.use_checkout(_checkout_stores)
 # the threadpool, and `functools.cache` would let two threads each build a desk, losing Pay's
 # idempotency record on the first.
 checkout.checkout_desk()
+# The same for the Pay (demo) order history, which the console's reads also reach from the
+# threadpool (advisor-reviewer finding 5).
+demo_orders()
 app.add_middleware(SessionMiddleware)
 # OPS-1 (security review L1): outermost, so a staff path is decided before any routing.
 app.add_middleware(StaffGate)

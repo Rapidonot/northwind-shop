@@ -59,6 +59,53 @@ describe("[OPS-1] the agent map's layout table", () => {
   });
 });
 
+describe("[OPS-1] the layout table is the reviewer's measured spec", () => {
+  // The look review's spec (x, y, w, h), measured from the reference mockup. The order band was
+  // re-packed by the user's choice ("what runs today"): there the boxes keep the spec's sizes.
+  const SPEC: Record<string, [number, number, number, number]> = {
+    "shopper-chat": [16, 34, 176, 64],
+    "query-understanding": [224, 26, 200, 80],
+    "shopper-assistant": [456, 26, 196, 80],
+    "output-check": [684, 20, 286, 92],
+    answer: [1002, 34, 124, 64],
+    "northwind-catalog": [224, 150, 246, 128],
+    "northwind-rag": [482, 150, 194, 128],
+    "northwind-orders": [688, 150, 214, 128],
+    "northwind-policy": [914, 150, 212, 128],
+    "talk-to-person": [16, 328, 176, 74],
+    "handoff-trigger": [224, 328, 206, 74],
+    "handoff-desk": [462, 328, 162, 74],
+    "care-subagent": [656, 328, 264, 74],
+    "case-queue": [952, 328, 174, 74],
+    "pay-demo": [16, 446, 176, 72],
+    "checkout-validate": [216, 446, 100, 72],
+    "checkout-hold": [332, 446, 124, 72],
+    "checkout-fraud": [472, 446, 96, 72],
+    "checkout-authorize": [584, 446, 120, 72],
+    "checkout-commit": [720, 446, 122, 72],
+    "checkout-capture": [858, 446, 120, 72],
+    "checkout-confirm": [994, 446, 132, 72],
+    "staff-request": [16, 574, 176, 80], // the spec's "order events" box
+    orchestrator: [224, 572, 214, 84],
+    "order-fraud": [698, 552, 126, 56],
+    "order-payment": [836, 552, 126, 56],
+    judge: [16, 706, 360, 60],
+  };
+  const SIZES: Record<string, [number, number]> = { "orders-subagent": [194, 84], escalation: [132, 64], "order-carrier": [126, 56] };
+
+  it("keeps every measured box where the spec put it", () => {
+    for (const [id, [x, y, w, h]] of Object.entries(SPEC)) expect(SLOTS[id], id).toEqual({ x, y, w, h });
+  });
+
+  it("keeps the spec's sizes for the boxes the order band moved, inside the 532–696 band", () => {
+    for (const [id, [w, h]] of Object.entries(SIZES)) {
+      const box = SLOTS[id]!;
+      expect([box.w, box.h], id).toEqual([w, h]);
+      expect(box.y >= 532 && box.y + box.h <= 696, id).toBe(true);
+    }
+  });
+});
+
 describe("[OPS-1] the agent map's connector lines", () => {
   it("starts each route on its source box and ends it on its target box, turning only at right angles", () => {
     for (const edge of MAP.edges) {

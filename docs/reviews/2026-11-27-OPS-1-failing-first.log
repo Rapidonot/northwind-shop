@@ -395,3 +395,91 @@ FAILED services/gateway/tests/test_ops1_security_fixes.py::test_no_readable_answ
 FAILED services/gateway/tests/test_ops1_security_fixes.py::test_no_readable_answer_key_is_a_503_on_every_view[not json]
 FAILED services/gateway/tests/test_ops1_security_fixes.py::test_no_readable_answer_key_is_a_503_on_every_view[{"internal_only": []}]
 13 failed in 2.75s
+
+# OPS-1 failing-first, advisor-reviewer fixes (2026-11-28): findings 1 and 5, with views.py and app.py at 34ae255
+
+FF                                                                       [100%]
+=================================== FAILURES ===================================
+_____________ test_a_fraud_review_shows_escalated_with_its_reason ______________
+
+w = World(store=<northwind_mcp_catalog.live.FixtureCatalog object at 0x10ae66ab0>, catalog_url='http://127.0.0.1:60093/mcp', orders_url='http://127.0.0.1:60094/mcp')
+
+    def test_a_fraud_review_shows_escalated_with_its_reason(w: World) -> None:
+        checkout_desk().fraud.flagged = frozenset({f"O{checkout_module.FIRST_ORDER_NUMBER}"})
+        cookie = signed_in(A)
+    
+        async def go(c: httpx.AsyncClient) -> tuple[httpx.Response, dict]:  # type: ignore[type-arg]
+            shown = await bag_then_summary(c, cookie)
+            paid = await pay(c, cookie, shown["digest"])
+            return paid, (await c.get("/api/staff/orders")).json()
+    
+        paid, orders = w.run(go)
+        assert paid.status_code == 409 and paid.json()["code"] == "on_hold"
+        order_id = f"O{checkout_module.FIRST_ORDER_NUMBER}"
+        row = next(r for r in orders["rows"] if r["order_id"] == order_id)
+        assert (row["status"], row["escalated"]) == ("on_hold", True)
+>       assert row["reason"] == checkout_desk().orders.orders[order_id].escalation
+E       AssertionError: assert None == 'fraud_review'
+E        +  where 'fraud_review' = Order(order_id='O900001', shopper_id='S0188', region='US', lines=(OrderLine(product_id='P0004', variant_id='P0004-BLK-... currency=None, escalation='fraud_review', address_on_file=False, dry_run=False, payment_status=None, captured_minor=0).escalation
+
+services/gateway/tests/sa01_checkout/test_ops1_staff_wiring.py:104: AssertionError
+_______________ test_app_builds_the_demo_order_history_on_import _______________
+
+    def test_app_builds_the_demo_order_history_on_import() -> None:
+        """The same race as L2, on the Pay (demo) history (advisor-reviewer finding 5)."""
+        tree = ast.parse(APP.read_text(encoding="utf-8"))
+        calls = [
+            n.value for n in tree.body if isinstance(n, ast.Expr) and isinstance(n.value, ast.Call)
+        ]
+>       assert any(isinstance(c.func, ast.Name) and c.func.id == "demo_orders" for c in calls)
+E       assert False
+E        +  where False = any(<generator object test_app_builds_the_demo_order_history_on_import.<locals>.<genexpr> at 0x10ac88740>)
+
+services/gateway/tests/test_ops1_security_fixes.py:125: AssertionError
+=========================== short test summary info ============================
+FAILED services/gateway/tests/sa01_checkout/test_ops1_staff_wiring.py::test_a_fraud_review_shows_escalated_with_its_reason
+FAILED services/gateway/tests/test_ops1_security_fixes.py::test_app_builds_the_demo_order_history_on_import
+2 failed in 1.29s
+
+# OPS-1 failing-first, advisor-reviewer finding 3 (2026-11-28): the gate and screen tests against mutated code (each mutation reverted with git checkout right after)
+
+## Mutation 1: staff_enabled() always True (the flag ignored)
+FAILED services/gateway/tests/test_ops1_flag.py::test_off_unless_exactly_1[None]
+FAILED services/gateway/tests/test_ops1_flag.py::test_off_unless_exactly_1[]
+FAILED services/gateway/tests/test_ops1_flag.py::test_off_unless_exactly_1[0]
+FAILED services/gateway/tests/test_ops1_flag.py::test_off_unless_exactly_1[true]
+FAILED services/gateway/tests/test_ops1_flag.py::test_off_unless_exactly_1[yes]
+FAILED services/gateway/tests/test_ops1_flag.py::test_off_unless_exactly_1[TRUE]
+FAILED services/gateway/tests/test_ops1_flag.py::test_off_unless_exactly_1[ 1]
+FAILED services/gateway/tests/test_ops1_flag.py::test_off_unless_exactly_1[1 ]
+FAILED services/gateway/tests/test_ops1_flag.py::test_off_every_path_and_method_is_the_unknown_path_404[None]
+FAILED services/gateway/tests/test_ops1_flag.py::test_off_every_path_and_method_is_the_unknown_path_404[0]
+FAILED services/gateway/tests/test_ops1_flag.py::test_off_every_path_and_method_is_the_unknown_path_404[true]
+11 failed, 3 passed in 1.31s
+FAILED services/gateway/tests/test_ops1_tw_gate.py::test_off_odd_paths_match_unknown_in_status_body_and_headers[None]
+FAILED services/gateway/tests/test_ops1_tw_gate.py::test_off_odd_paths_match_unknown_in_status_body_and_headers[0]
+FAILED services/gateway/tests/test_ops1_tw_gate.py::test_off_odd_paths_match_unknown_in_status_body_and_headers[true]
+FAILED services/gateway/tests/test_ops1_tw_gate.py::test_off_odd_paths_match_unknown_in_status_body_and_headers[ 1]
+FAILED services/gateway/tests/test_ops1_tw_gate.py::test_the_flag_is_read_on_each_request
+5 failed, 7 passed in 1.80s
+
+## Mutation 2: screen_text returns its text unchanged (the screen off)
+FAILED services/gateway/tests/test_ops1_screen.py::test_every_string_the_scanner_flags_is_withheld
+FAILED services/gateway/tests/test_ops1_screen.py::test_planted_card_data_and_keys_never_reach_a_response
+2 failed, 4 passed in 0.80s
+FAILED services/gateway/tests/test_ops1_tw_screen.py::test_screen_text_withholds[\uff14\uff11\uff11\uff11\uff11\uff11\uff11\uff11\uff11\uff11\uff11\uff11\uff11\uff11\uff11\uff11-[withheld: card data]]
+FAILED services/gateway/tests/test_ops1_tw_screen.py::test_screen_text_withholds[pay with \uff14\uff11\uff11\uff11\uff11\uff11\uff11\uff11\uff11\uff11\uff11\uff11\uff11\uff11\uff11\uff11 ok-[withheld: card data]]
+FAILED services/gateway/tests/test_ops1_tw_screen.py::test_screen_text_withholds[card 4111 1111 1111 1111-[withheld: card data]]
+FAILED services/gateway/tests/test_ops1_tw_screen.py::test_screen_text_withholds[4111_1111_1111_1111-[withheld: card data]]
+FAILED services/gateway/tests/test_ops1_tw_screen.py::test_screen_text_withholds[CVV: 123-[withheld: card data]]
+FAILED services/gateway/tests/test_ops1_tw_screen.py::test_screen_text_withholds[cvc 456-[withheld: card data]]
+FAILED services/gateway/tests/test_ops1_tw_screen.py::test_screen_text_withholds[line one\nline two sk-ant-api03-abcdefghijklmnop-[withheld: secret]]
+FAILED services/gateway/tests/test_ops1_tw_screen.py::test_screen_text_withholds[a\nAuthorization: Bearer abcdefghijklmnopqrstuvwxyz\nb-[withheld: secret]]
+FAILED services/gateway/tests/test_ops1_tw_screen.py::test_screen_text_withholds[X-API-KEY: abc-[withheld: secret]]
+FAILED services/gateway/tests/test_ops1_tw_screen.py::test_screen_text_withholds[x-api-key=abc-[withheld: secret]]
+FAILED services/gateway/tests/test_ops1_tw_screen.py::test_screen_text_withholds[sk-A1_-A1_-A1_-A1_-A1_-A1_--[withheld: secret]]
+FAILED services/gateway/tests/test_ops1_tw_screen.py::test_screen_text_withholds_every_canary_anywhere_in_a_string
+FAILED services/gateway/tests/test_ops1_tw_screen.py::test_screen_covers_keys_nesting_tuples_and_leaves_other_values
+FAILED services/gateway/tests/test_ops1_tw_screen.py::test_planted_values_in_every_field_never_reach_any_response
+FAILED services/gateway/tests/test_ops1_tw_screen.py::test_planted_values_are_withheld_not_dropped
+15 failed, 9 passed in 0.89s

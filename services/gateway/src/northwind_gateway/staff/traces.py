@@ -5,7 +5,8 @@ kind passes through, in order; a test walks every trace along the generated map'
 
 Their references are real: P0001 is a public product; O000800 is the demo shopper's (S0188) only
 delivered order, so it can have arrived damaged and `get_order` answers for it once signed in;
-O000002 is in the order store, read by the staff request's subagents."""
+O000002 is in the order store, read by the staff request's subagents; O900001 is the first number
+the checkout gives a Pay (demo) order (`checkout.FIRST_ORDER_NUMBER`)."""
 
 from __future__ import annotations
 
@@ -85,7 +86,7 @@ TRACES: tuple[dict[str, Any], ...] = (
         "pay-demo",
         "Web checkout",
         "Pay (demo) on a 2-line bag → order shown in history",
-        ["O001001"],
+        ["O900001"],
         "ok",
         True,
         [

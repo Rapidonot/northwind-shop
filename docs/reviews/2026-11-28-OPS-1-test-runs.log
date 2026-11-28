@@ -1,0 +1,54 @@
+# OPS-1 test runs and lint, 2026-11-28, the working tree committed with this log (parent 34ae255); single files only, LLM_MODE=replay
+
+## Lint
+$ uv run ruff check services/gateway
+[*] 1 fixable with `--fix`.   (I001, app.py's import order; fixed with --fix before the commit, then:)
+$ uv run ruff check services/gateway
+All checks passed!
+$ uv run ruff format --check services/gateway
+70 files already formatted
+$ uv run mypy services/gateway
+Success: no issues found in 70 source files
+$ (apps/portal) tsc --noEmit; eslint src
+tsc exit 0
+eslint exit 0
+
+## Gateway and other Python test files
+services/gateway/tests/test_ops1_agent_map.py: 16 passed in 0.87s
+services/gateway/tests/test_ops1_flag.py: 14 passed in 0.91s
+services/gateway/tests/test_ops1_frozen.py: 10 passed in 0.12s
+services/gateway/tests/test_ops1_readonly.py: 9 passed in 0.07s
+services/gateway/tests/test_ops1_screen.py: 6 passed in 0.92s
+services/gateway/tests/test_ops1_security_fixes.py: 14 passed in 1.91s
+services/gateway/tests/test_ops1_tw_counts.py: 9 passed in 1.00s
+services/gateway/tests/test_ops1_tw_gate.py: 12 passed in 1.28s
+services/gateway/tests/test_ops1_tw_screen.py: 24 passed in 0.88s
+services/gateway/tests/test_ops1_views.py: 17 passed in 0.94s
+services/gateway/tests/sa01_checkout/test_ops1_staff_wiring.py: 4 passed in 2.10s
+services/gateway/tests/sa01_checkout/test_sa01_pr2_cart_writes.py: 19 passed in 8.96s
+services/gateway/tests/sa01_checkout/test_sa01_pr2_checkout.py: 21 passed in 10.16s
+services/gateway/tests/sa01_checkout/test_sa01_pr2_checkout_pins.py: 3 passed in 0.38s
+services/gateway/tests/sa01_checkout/test_sa01_pr2_orders.py: 7 passed in 3.28s
+services/gateway/tests/sa01_checkout/test_sa01_pr2_security_fixes.py: 20 passed in 7.26s
+services/gateway/tests/sa01_checkout/test_sa01_pr2_tw_cart_boundaries.py: 120 passed in 53.36s
+services/gateway/tests/sa01_checkout/test_sa01_pr2_tw_checkout_edges.py: 47 passed in 22.05s
+services/gateway/tests/sa01_checkout/test_sa01_pr2_tw_orders_edges.py: 5 passed in 2.89s
+services/gateway/tests/test_chk01_gateway_criteria.py: 22 passed in 1.16s
+services/mcp-catalog/tests/test_chk01_criteria.py: 84 passed in 3.60s
+services/assistant/tests/test_chk01_assistant_criteria.py: 14 passed in 6.06s
+services/gateway/tests/test_healthz.py: 3 passed, 1 deselected in 0.64s
+services/gateway/tests/test_sa06_endpoint.py: 25 passed in 0.72s
+services/gateway/tests/test_sa06_acceptance_tw.py: 15 passed in 7.21s
+services/gateway/tests/test_sa06_phase_b_tw.py: 17 passed in 10.21s
+services/gateway/tests/test_sa06_content_type.py: 8 passed in 0.64s
+services/backend/tests/test_be05_prerequisites.py: 49 passed in 0.76s
+services/assistant/tests/test_sa06_no_case_tool.py: 8 passed in 0.54s
+tests/governance/test_citations.py: 37 passed in 0.24s
+
+## Portal test files
+src/staff/staff.test.tsx:  Tests 28 passed (28)
+src/staff/mapLayout.test.ts:  Tests 18 passed (18)
+src/theme.test.ts:  Tests 14 passed (14)
+src/App.test.tsx:  Tests 3 passed (3)
+src/shop.test.tsx:  Tests 33 passed (33)
+src/shopSecurity.test.tsx:  Tests 41 passed (41)

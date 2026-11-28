@@ -3,10 +3,15 @@ import type { Money, NodeKind } from "./types";
 
 /** The order store's exception codes, in the words staff read. An unknown code shows as itself. */
 export const REASONS: Record<string, string> = {
+  // The seeded orders' exceptions.
   fraud_flag: "Fraud review",
   address_error: "Address problem",
   soft_decline: "Soft decline",
   stock_out: "Stock out",
+  // Pay (demo)'s escalation codes (the checkout's order store).
+  fraud_review: "Fraud review",
+  out_of_stock: "Out of stock",
+  placement_error: "Placement error",
 };
 
 export function reasonLabel(code: string | null): string {

@@ -56,14 +56,14 @@ const event = (time: string, actor: string, action: string, ref: string, outcome
 });
 
 export const EVENTS: ActivityEvent[] = [
-  event("15:04:18", "portal-checkout", "order.confirm", "O001001", "ok", "Order confirmed after capture"),
-  event("15:04:17", "portal-checkout", "payment.capture", "O001001", "ok", "Captured the authorized amount"),
-  event("15:04:16", "portal-checkout", "inventory.commit", "O001001", "ok", "Committed 2 lines at DC-EAST"),
-  event("15:04:15", "portal-checkout", "payment.authorize", "O001001", "ok", "Authorized with a sandbox token"),
-  event("15:04:14", "portal-checkout", "fraud.assess", "O001001", "ok", "Low risk"),
-  event("15:04:13", "portal-checkout", "inventory.reserve", "O001001", "ok", "Held 2 lines for 15 minutes"),
+  event("15:04:18", "portal-checkout", "order.confirm", "O900001", "ok", "Order confirmed after capture"),
+  event("15:04:17", "portal-checkout", "payment.capture", "O900001", "ok", "Captured the authorized amount"),
+  event("15:04:16", "portal-checkout", "inventory.commit", "O900001", "ok", "Committed 2 lines at DC-EAST"),
+  event("15:04:15", "portal-checkout", "payment.authorize", "O900001", "ok", "Authorized with a sandbox token"),
+  event("15:04:14", "portal-checkout", "fraud.assess", "O900001", "ok", "Low risk"),
+  event("15:04:13", "portal-checkout", "inventory.reserve", "O900001", "ok", "Held 2 lines for 15 minutes"),
   event("14:58:42", "handoff-desk", "case.create", "H000001", "escalated", "Queued with a Care summary"),
-  event("14:51:09", "portal-checkout", "order.escalate", "O001000", "escalated", "Stock lost to another shopper"),
+  event("14:51:09", "portal-checkout", "order.escalate", "O900000", "escalated", "Stock lost to another shopper"),
 ];
 
 export const FIXTURE: StaffViews = {
@@ -99,7 +99,7 @@ export const FIXTURE: StaffViews = {
     nodes: ["DC-EAST", "DC-WEST"],
     holds: [
       {
-        order_id: "O001002",
+        order_id: "O900002",
         variant_id: "P0001-BLK-REG-L",
         product: "Tidewick Harbor Rain Jacket",
         node: "DC-EAST",

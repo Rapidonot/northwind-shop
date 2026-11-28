@@ -116,6 +116,15 @@ def test_the_gate_is_on_the_app() -> None:
 # -- L2 --------------------------------------------------------------------------------------------
 
 
+def test_app_builds_the_demo_order_history_on_import() -> None:
+    """The same race as L2, on the Pay (demo) history (advisor-reviewer finding 5)."""
+    tree = ast.parse(APP.read_text(encoding="utf-8"))
+    calls = [
+        n.value for n in tree.body if isinstance(n, ast.Expr) and isinstance(n.value, ast.Call)
+    ]
+    assert any(isinstance(c.func, ast.Name) and c.func.id == "demo_orders" for c in calls)
+
+
 def test_app_builds_the_checkout_desk_on_import() -> None:
     tree = ast.parse(APP.read_text(encoding="utf-8"))
     calls = [
@@ -133,12 +142,28 @@ def test_app_builds_the_checkout_desk_on_import() -> None:
 
 
 _IMPORT_PROBE = """
+import psycopg
+
+attempts = []
+
+
+def refuse(*args, **kwargs):
+    attempts.append(1)
+    raise AssertionError("a database connection was attempted while importing app.py")
+
+
+# Any connection attempt at import is recorded, so a swallowed failure still fails the probe
+# (advisor-reviewer finding 10).
+psycopg.connect = refuse
+psycopg.Connection.connect = classmethod(refuse)
+psycopg.AsyncConnection.connect = classmethod(refuse)
 import northwind_gateway.app as app_module
 from northwind_backend.inventory import InventoryState
 from northwind_gateway import checkout
 info = checkout.checkout_desk.cache_info()
 assert info.currsize == 1, info
 assert type(checkout.checkout_desk().inventory) is InventoryState
+assert attempts == [], attempts
 print("imported")
 """
 

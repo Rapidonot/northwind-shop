@@ -206,7 +206,9 @@ def demo_rows(src: Sources) -> list[dict[str, Any]]:
                 "units": sum(int(line["quantity"]) for line in lines),
                 "status": str(entry["status"]),
                 "escalated": entry["status"] == "on_hold",
-                "reason": None,
+                # The checkout's own escalation code (fraud_review, out_of_stock, placement_error,
+                # ...), from its order store; advisor-reviewer finding 1.
+                "reason": order.escalation if order and order.escalation else None,
                 "source": "demo",
             }
         )

@@ -633,7 +633,7 @@
       "kind": "Web checkout",
       "title": "Pay (demo) on a 2-line bag → order shown in history",
       "refs": [
-        "O001001"
+        "O900001"
       ],
       "outcome": "ok",
       "no_ai": true,
