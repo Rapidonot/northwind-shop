@@ -87,6 +87,10 @@ W=~/Projects/northwind-shop; R=~/.northwind/runner
 - **After each window, run every test file that reads the suite's fixtures and cassettes** (`git grep -l "<suite>"
   -- '*.py'`), not just the recorder's. The user's rule, 2026-11-27, after W11: `make record` exited 0, but
   `test_a2a05_partner_criteria.py`, which the recorder does not run, failed on the fresh `order-01`.
+- **Also run the whole unit stage once after any window that adds, removes or moves cassettes** (`make test`, or `make
+  check` at least). Some tests read every cassette or a cited cassette path and never name a suite. The final `make ci`
+  (2026-11-27, `71cae92`) failed on two of them: `test_rag10_rounds.py`'s suite list lacked r2/r3, and
+  `docs/governance/data-flow.md` cited two `eval-judge-repeat` cassettes that W13 removed.
 
 ## 3. The order, with budgets
 Cheapest and least coupled first: the backend suites don't see the assistant's prompt, so a freeze slip there costs
